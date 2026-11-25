@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, jest, spyOn, test } from "bun:test";
 import { ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -25,12 +25,14 @@ const withTempDir = async (run: (root: string) => Promise<void>): Promise<void> 
 type CommandChildFixture = {
   args: string[];
   ready: Promise<void>;
+  stopAttempted: Promise<void>;
+  stopSignals: readonly (NodeJS.Signals | number | undefined)[];
   readonly child: ChildProcess | undefined;
   readonly closed: boolean;
 };
 
 const withCommandChild = async (
-  failTermination: boolean,
+  termination: "fail" | "escalate" | "graceful",
   run: (fixture: CommandChildFixture) => Promise<void>,
 ): Promise<void> => {
   const marker = randomUUID();
@@ -41,6 +43,8 @@ const withCommandChild = async (
   const ready = new Promise<void>((resolve) => {
     onReady = resolve;
   });
+  const stopAttempted = Promise.withResolvers<void>();
+  const stopSignals: (NodeJS.Signals | number | undefined)[] = [];
   let resolveClose!: () => void;
   const closure = new Promise<void>((resolve) => {
     resolveClose = resolve;
@@ -61,18 +65,29 @@ const withCommandChild = async (
     child = this;
     this.once("close", onClose);
     this.stdout?.once("data", onReady);
-    if (failTermination) this.kill = () => false;
+    if (termination !== "graceful") {
+      const kill = this.kill.bind(this);
+      this.kill = (signal) => {
+        stopSignals.push(signal);
+        stopAttempted.resolve();
+        return termination === "escalate" && kill(signal);
+      };
+    }
     return result;
   });
   let teardownTimeout: ReturnType<typeof setTimeout> | undefined;
+  if (termination !== "graceful") jest.useFakeTimers();
   try {
+    const ignoreTerm = termination === "escalate" ? "process.on('SIGTERM',()=>{});" : "";
     await run({
       args: [
         "-e",
-        "process.on('SIGTERM',()=>{});process.stdout.write('ready');setInterval(()=>{process.stdout.write('x');process.stderr.write('y')},10);setTimeout(()=>process.exit(0),4000)",
+        `${ignoreTerm}process.stdout.write('ready');setInterval(()=>{process.stdout.write('x');process.stderr.write('y')},10);setTimeout(()=>process.exit(0),4000)`,
         marker,
       ],
       ready,
+      stopAttempted: stopAttempted.promise,
+      stopSignals,
       get child() {
         return child;
       },
@@ -81,6 +96,7 @@ const withCommandChild = async (
       },
     });
   } finally {
+    if (termination !== "graceful") jest.useRealTimers();
     try {
       if (child && !closed) {
         ChildProcess.prototype.kill.call(child, "SIGKILL");
@@ -103,10 +119,18 @@ const withCommandChild = async (
   }
 };
 
+const expireStopDeadlines = async (fixture: CommandChildFixture): Promise<void> => {
+  await fixture.stopAttempted;
+  jest.advanceTimersByTime(500);
+  // Let the first expired deadline resume the process cleanup before expiring the second.
+  await Promise.resolve();
+  jest.advanceTimersByTime(500);
+};
+
 describe("createSystemCommandRunner", () => {
   test("isolates termination failure and awaits emergency child closure", async () => {
     let ownedPid: number | undefined;
-    await withCommandChild(true, async (fixture) => {
+    await withCommandChild("fail", async (fixture) => {
       const unrelated = spawn(process.execPath, ["-e", "setTimeout(()=>process.exit(0),4000)"], {
         stdio: "ignore",
       });
@@ -120,11 +144,13 @@ describe("createSystemCommandRunner", () => {
         ChildProcess.prototype.kill.call(unrelated, "SIGKILL");
         await unrelatedClosed;
       }
-      const exit = await Effect.runPromiseExit(
+      const command = Effect.runPromiseExit(
         createSystemCommandRunner().runCommandAllowFailure(process.execPath, fixture.args, {
           maxStdoutBytes: 8,
         }),
       );
+      await expireStopDeadlines(fixture);
+      const exit = await command;
       expect(Exit.isFailure(exit)).toBe(true);
       ownedPid = fixture.child?.pid;
       expect(ownedPid).toBeDefined();
@@ -135,9 +161,10 @@ describe("createSystemCommandRunner", () => {
 
   for (const path of ["timeout", "interruption", "overflow"] as const) {
     test(`awaits process and stream closure after ${path}`, async () => {
-      await withCommandChild(false, async (fixture) => {
+      await withCommandChild(path === "overflow" ? "escalate" : "graceful", async (fixture) => {
         const options: SystemCommandRunOptions = { timeoutMs: path === "timeout" ? 300 : 3000 };
         if (path === "overflow") options.maxStdoutBytes = 8;
+        if (path === "timeout") jest.useFakeTimers();
         const fiber = Effect.runFork(
           createSystemCommandRunner().runCommandAllowFailure(
             process.execPath,
@@ -148,9 +175,19 @@ describe("createSystemCommandRunner", () => {
         try {
           await fixture.ready;
           const { child } = fixture;
+          if (path === "timeout") jest.advanceTimersByTime(300);
           if (path === "interruption") await Effect.runPromise(Fiber.interrupt(fiber));
+          if (path === "overflow") {
+            await fixture.stopAttempted;
+            jest.advanceTimersByTime(500);
+          }
           const exit = await Effect.runPromise(Fiber.await(fiber));
           expect(Exit.isFailure(exit)).toBe(true);
+          if (path === "overflow") {
+            expect(fixture.stopSignals).toEqual(
+              process.platform === "win32" ? ["SIGTERM"] : ["SIGTERM", "SIGKILL"],
+            );
+          }
           expect(fixture.closed).toBe(true);
           expect(child?.stdout?.destroyed).toBe(true);
           expect(child?.stderr?.destroyed).toBe(true);
@@ -160,7 +197,11 @@ describe("createSystemCommandRunner", () => {
           expect(child?.listenerCount("close")).toBe(0);
           expect(() => process.kill(child!.pid!, 0)).toThrow();
         } finally {
-          await Effect.runPromise(Fiber.interrupt(fiber));
+          try {
+            await Effect.runPromise(Fiber.interrupt(fiber));
+          } finally {
+            if (path === "timeout") jest.useRealTimers();
+          }
         }
       });
     });
@@ -172,7 +213,7 @@ describe("createSystemCommandRunner", () => {
     ["interruption", "interrupted"],
   ] as const) {
     test(`reports ${failurePath} and cleanup failure to the host caller`, async () => {
-      await withCommandChild(true, async (fixture) => {
+      await withCommandChild("fail", async (fixture) => {
         const options: SystemCommandRunOptions = {
           timeoutMs: failurePath === "timeout" ? 100 : 3000,
         };
@@ -189,7 +230,9 @@ describe("createSystemCommandRunner", () => {
         if (failurePath === "interruption") {
           const fiber = Effect.runFork(effectRouter.invoke("system_get_platform"));
           await fixture.ready;
-          await Effect.runPromise(Fiber.interrupt(fiber));
+          const interrupted = Effect.runPromise(Fiber.interrupt(fiber));
+          await expireStopDeadlines(fixture);
+          await interrupted;
           const exit = await Effect.runPromise(Fiber.await(fiber));
           expect(Exit.isFailure(exit)).toBe(true);
           if (Exit.isFailure(exit)) {
@@ -197,12 +240,18 @@ describe("createSystemCommandRunner", () => {
             error = causeToHostBoundaryError(exit.cause);
           }
         } else {
-          error = await toPromiseHostCommandRouter(effectRouter)
+          const failure = toPromiseHostCommandRouter(effectRouter)
             .invoke("system_get_platform")
             .then(
               () => null,
               (cause: unknown) => cause,
             );
+          if (failurePath === "timeout") {
+            await fixture.ready;
+            jest.advanceTimersByTime(100);
+          }
+          await expireStopDeadlines(fixture);
+          error = await failure;
         }
         expect(error).toBeInstanceOf(HostOperationError);
         if (error instanceof HostOperationError) {

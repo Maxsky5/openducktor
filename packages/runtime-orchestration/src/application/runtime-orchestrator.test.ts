@@ -46,6 +46,12 @@ const createHarness = (saved: RuntimeSettings) => {
   const changes: RuntimeStatusChange[] = [];
   const sessions: AgentSessionLiveSnapshot[] = [];
   const invalidExecutables = new Set<string>();
+  const ready = {
+    opencode: Promise.withResolvers<void>(),
+    codex: Promise.withResolvers<void>(),
+    claude: Promise.withResolvers<void>(),
+    antigravity: Promise.withResolvers<void>(),
+  };
   let starts = 0;
   const driverFor = (kind: RuntimeKind): RuntimeDriver<TestError> => ({
     descriptor: RUNTIME_DESCRIPTORS_BY_KIND[kind],
@@ -94,18 +100,13 @@ const createHarness = (saved: RuntimeSettings) => {
     },
     liveSessions: { listAffectedSessions: () => Effect.succeed(sessions) },
     observer: {
-      statusChanged: (change) => changes.push(change),
+      statusChanged: (change) => {
+        changes.push(change);
+        if (change.status.state === "ready") ready[change.status.kind].resolve();
+      },
       backgroundFailure: (message) => failures.push(message),
     },
   });
-  const waitForReady = async (kind: RuntimeKind) => {
-    for (let attempt = 0; attempt < 50; attempt += 1) {
-      const status = await Effect.runPromise(orchestrator.status(kind));
-      if (status.state === "ready") return status;
-      await Effect.runPromise(Effect.sleep("1 millis"));
-    }
-    throw new Error(`The ${kind} runtime did not become ready.`);
-  };
   return {
     orchestrator,
     events,
@@ -113,7 +114,7 @@ const createHarness = (saved: RuntimeSettings) => {
     changes,
     sessions,
     invalidExecutables,
-    waitForReady,
+    waitForReady: (kind: RuntimeKind) => ready[kind].promise,
     failSettings: (message: string) => {
       settings = new TestError({ message });
     },

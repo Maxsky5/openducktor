@@ -62,26 +62,6 @@ test("stream deltas match full snapshot replay without rebuilding idle sessions"
         .map((event) => (event.type === "assistant_delta" ? event.delta : event.type)),
     ).toEqual(Array.from({ length: 100 }, (_, index) => `${index},`));
 
-    let baselineBuilds = 0;
-    let baselineEqualityBytes = 0;
-    for (let index = 0; index < 100; index++) {
-      const full = adapter.listLiveSessionSnapshots("runtime-live");
-      baselineBuilds += full.length;
-      for (const snapshot of full) {
-        baselineEqualityBytes += Buffer.byteLength(
-          JSON.stringify(projected.get(snapshot.ref.externalSessionId)),
-        );
-        baselineEqualityBytes += Buffer.byteLength(JSON.stringify(snapshot));
-      }
-    }
-    expect(baselineBuilds).toBe(5_000);
-    expect(rootBuild).toHaveBeenCalledTimes(5_000);
-    expect(baselineEqualityBytes).toBeGreaterThan(0);
-    console.info(
-      `Codex text replay: snapshot builds ${baselineBuilds} -> 0; snapshot equality bytes ${baselineEqualityBytes} -> 0`,
-    );
-    rootBuild.mockClear();
-
     const assertReplay = async (expectedChangedIds: string[]) => {
       await flushCodexAdapterWork();
       expect(failures).toEqual([]);

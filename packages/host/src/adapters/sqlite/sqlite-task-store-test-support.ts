@@ -96,6 +96,31 @@ export const openHostDatabaseTestConnection: OpenHostDatabaseConnection = (datab
     );
   });
 
+let emptyTestDatabase: Promise<ArrayBuffer> | undefined;
+
+async function createEmptyTestDatabase(): Promise<ArrayBuffer> {
+  const directory = await makeTempDirectory();
+  const databasePath = path.join(directory, "database.sqlite");
+  try {
+    const connection = await Effect.runPromise(openHostDatabaseTestConnection(databasePath));
+    await Effect.runPromise(connection.release);
+    return await Bun.file(databasePath).arrayBuffer();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+const openSqliteTaskStoreFixture: OpenHostDatabaseConnection = (databasePath) =>
+  Effect.tryPromise({
+    try: async () => {
+      const database = Bun.file(databasePath);
+      if (!(await database.exists())) {
+        await Bun.write(database, await (emptyTestDatabase ??= createEmptyTestDatabase()));
+      }
+    },
+    catch: (cause) => toHostOperationError(cause, "test.copySqliteFixture", { databasePath }),
+  }).pipe(Effect.andThen(openHostDatabaseTestConnection(databasePath)));
+
 export type SqliteTaskStoreTestHarness = {
   readonly cleanup: () => Promise<void>;
   readonly configDir: string;
@@ -112,11 +137,13 @@ export type SqliteTaskStoreTestHarness = {
 
 export const createSqliteTaskStoreHarness = async ({
   now = createClock(),
+  openConnection = openSqliteTaskStoreFixture,
   repoPath = "/repos/Fair Nest",
   taskWorkflows = builtinTaskWorkflows,
   workspaceId = "fairnest",
 }: {
   readonly now?: () => Date;
+  readonly openConnection?: OpenHostDatabaseConnection;
   readonly repoPath?: string;
   readonly taskWorkflows?: TaskWorkflowVersionCache;
   readonly workspaceId?: string;
@@ -127,7 +154,7 @@ export const createSqliteTaskStoreHarness = async ({
     taskWorkflows,
     configDir,
     openConnection: (databasePath) =>
-      openHostDatabaseTestConnection(databasePath).pipe(
+      openConnection(databasePath).pipe(
         Effect.tap(({ session }) =>
           Effect.gen(function* () {
             const [host] = yield* session.execute(

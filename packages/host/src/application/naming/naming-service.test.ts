@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { NAMING_PROMPT_TEMPLATES } from "@openducktor/workflows";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { HostOperationError } from "../../effect/host-errors";
 import { createModelNamingService } from "../../test-support/naming-test-doubles";
 import { repoConfigFixture } from "../../test-support/repo-config-fixture";
@@ -71,9 +72,16 @@ describe("naming service", () => {
 
   test("gives up after the deadline", async () => {
     const { service } = createModelNamingService(() => Effect.never);
-    expect(await Effect.runPromise(service.generate(request("title")))).toEqual({
-      status: "timed_out",
-    });
+    const outcome = await Effect.runPromise(
+      Effect.gen(function* () {
+        const running = yield* Effect.forkChild(service.generate(request("title")));
+        yield* TestClock.adjust("49 millis");
+        expect(running.pollUnsafe()).toBeUndefined();
+        yield* TestClock.adjust("1 millis");
+        return yield* Fiber.join(running);
+      }).pipe(Effect.provide(TestClock.layer())),
+    );
+    expect(outcome).toEqual({ status: "timed_out" });
   });
 
   test.each([

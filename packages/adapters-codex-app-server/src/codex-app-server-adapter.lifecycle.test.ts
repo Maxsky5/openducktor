@@ -9,7 +9,6 @@ import {
   codexTurnFixture,
   codexUserMessageInput,
   createHarness,
-  createDeferred,
   createRuntimeStreamSubscription,
   defaultCodexEffectivePolicy,
   defaultCodexRuntimeConfig,
@@ -88,8 +87,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
     }
 
     test(`does not create a ${sessionScope.kind} thread after cancellation during preparation`, async () => {
-      const entered = createDeferred<void>();
-      const release = createDeferred<void>();
+      const entered = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
       const cancellation = new Error("Launch canceled");
       let canceled = false;
       const { adapter, transports } = createHarness({

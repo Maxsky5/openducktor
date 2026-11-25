@@ -7,7 +7,12 @@ import { terminateProcessTree } from "../infrastructure/process/process-tree";
 import { createTerminalLaunchEnvironment } from "../infrastructure/terminals/terminal-launch-environment";
 import type { TerminalNativeFixture } from "./terminal-action-native.fixture";
 
-export async function checkClose({ root, shell, wait }: TerminalNativeFixture) {
+export async function checkClose({
+  root,
+  shell,
+  wait,
+  notifyTerminalChange,
+}: TerminalNativeFixture) {
   let rejectClose = true;
   const engine = createTerminalSessionEngine({
     hostInstanceId: "native-test-host",
@@ -36,8 +41,9 @@ export async function checkClose({ root, shell, wait }: TerminalNativeFixture) {
     }),
     readUserShell: () => shell,
   });
+  // The shell can stop on SIGTERM once the injected close failure is past.
   const lines = [
-    "print COMMAND_READY; read answer; print COMMAND_DONE",
+    "trap 'exit 0' TERM; print COMMAND_READY; read answer; print COMMAND_DONE",
     "print LATER_LINE",
   ] as const;
   let output = "";
@@ -45,6 +51,7 @@ export async function checkClose({ root, shell, wait }: TerminalNativeFixture) {
   const stop = engine.observeActivity((message) => {
     if (message.type === "activity_updated") command = message.activity.command;
     else if (message.type === "activity_removed") command = null;
+    notifyTerminalChange();
   });
   try {
     const plans = await Effect.runPromise(environment.command(lines));
@@ -74,7 +81,10 @@ export async function checkClose({ root, shell, wait }: TerminalNativeFixture) {
         attachmentId: "close",
         lastConsumedSequence: 0,
         sink: (event, data) => {
-          if (event.type === "output") output += new TextDecoder().decode(data);
+          if (event.type === "output") {
+            output += new TextDecoder().decode(data);
+            notifyTerminalChange();
+          }
         },
       }),
     );

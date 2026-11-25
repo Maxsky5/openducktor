@@ -67,6 +67,13 @@ describe("browser tools", () => {
       format: "uuid",
       description: "From odt_browser_list or odt_browser_open.",
     });
+    const type = tools.find((tool) => tool.name === "odt_browser_type");
+    expect(type?.inputSchema.properties?.text).toEqual({ type: "string" });
+    expect(type?.inputSchema.properties?.ref).toEqual({
+      type: "string",
+      minLength: 1,
+      description: "Ref from the latest odt_browser_snapshot, such as e12.",
+    });
     expect(
       tools.filter((tool) => tool.annotations?.readOnlyHint === true).map((tool) => tool.name),
     ).toEqual([

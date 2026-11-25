@@ -3,7 +3,7 @@ import { unexpectedTextGeneration } from "../../test-support/text-generation-tes
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RUNTIME_DESCRIPTORS_BY_KIND, type RuntimeInstanceSummary } from "@openducktor/contracts";
@@ -12,10 +12,7 @@ import { TestClock } from "effect/testing";
 import { HostOperationError } from "../../effect/host-errors";
 import { terminateProcessTree } from "../../infrastructure/process/process-tree";
 import type { AgentSessionLiveAdapterPort } from "../../ports/agent-session-live-adapter-port";
-import type {
-  PreparedRuntimeLiveSessionAdapter,
-  RuntimeLiveSessionLifecyclePort,
-} from "../../ports/runtime-live-session-lifecycle-port";
+import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { RuntimeStartInput } from "../../ports/runtime-registry-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryId, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
@@ -108,39 +105,12 @@ const createOpenCodeRuntimeStarter = (input: OpenCodeRuntimeStarterTestInput) =>
     liveSessionLifecycle: liveSessionLifecycle ?? defaultLifecycle,
     prepareLiveSessionAdapter:
       prepareLiveSessionAdapter ??
-      ((runtime) => {
-        const adapter: AgentSessionLiveAdapterPort = {
-          queries: unexpectedRuntimeQueries,
-          sessionImport: unexpectedSessionImport,
-          textGeneration: unexpectedTextGeneration,
-          supportsSessionControl: false,
-          beginGeneratedImageBatch: () =>
-            Effect.die(new Error("Unexpected beginGeneratedImageBatch")),
-          releaseGeneratedImageBatch: () =>
-            Effect.die(new Error("Unexpected releaseGeneratedImageBatch")),
-          describeGeneratedImages: () =>
-            Effect.die(new Error("Unexpected describeGeneratedImages")),
-          resolveGeneratedImageSource: () =>
-            Effect.die(new Error("Unexpected generated image read")),
-          binding: new AgentSessionLiveRegistration(
-            { runtimeId: runtime.runtimeId, runtimeKind: runtime.kind },
-            (mutation) => Effect.map(mutation, ({ value }) => value),
-          ),
-          listSnapshots: () => Effect.succeed([]),
-          readSnapshot: (ref) => Effect.succeed({ type: "missing", ref }),
-          loadContext: () => Effect.succeed(null),
-          resolvePendingApproval: () =>
-            Effect.die(new Error("unexpected pending approval resolution")),
-          replyApproval: () => Effect.void,
-          replyQuestion: () => Effect.void,
-          releaseRuntime: () => Effect.succeed([]),
-        };
-        return Effect.succeed({
-          adapter,
+      ((runtime) =>
+        Effect.succeed({
+          adapter: createLiveAdapter(runtime),
           startForwarding: () => Effect.void,
           discard: () => Effect.void,
-        } satisfies PreparedRuntimeLiveSessionAdapter);
-      }),
+        })),
     ...starterInput,
   };
   if (readEnv !== undefined) {
@@ -267,7 +237,6 @@ const createFakeOpenCode = async (
   root: string,
   options: {
     childPidPath?: string;
-    configCapturePath?: string;
     environmentCapturePath?: string;
     silent?: boolean;
     /** A file that the script writes when it runs. */
@@ -294,12 +263,7 @@ if (Number(args[portFlagIndex + 1]) !== 0 || !args.includes("--stdio")) {
 const startedPath = ${JSON.stringify(options.startedPath ?? null)};
 if (startedPath) writeFileSync(startedPath, "");
 const childPidPath = ${JSON.stringify(options.childPidPath ?? null)};
-const configCapturePath = ${JSON.stringify(options.configCapturePath ?? null)};
 const environmentCapturePath = ${JSON.stringify(options.environmentCapturePath ?? null)};
-if (configCapturePath) {
-  writeFileSync(configCapturePath + ".tmp", process.env.OPENCODE_CONFIG_CONTENT ?? "");
-  renameSync(configCapturePath + ".tmp", configCapturePath);
-}
 if (environmentCapturePath) {
   writeFileSync(environmentCapturePath + ".tmp", JSON.stringify({
     password: process.env.OPENCODE_SERVER_PASSWORD ?? null,
@@ -314,7 +278,8 @@ if (childPidPath) {
   const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000);"], {
     stdio: "ignore",
   });
-  writeFileSync(childPidPath, String(child.pid));
+  writeFileSync(childPidPath + ".tmp", String(child.pid));
+  renameSync(childPidPath + ".tmp", childPidPath);
 }
 const silent = ${JSON.stringify(options.silent ?? false)};
 const server = createServer(async (req, res) => {
@@ -375,15 +340,11 @@ describe("createOpenCodeRuntimeStarter", () => {
   test("starts one shared OpenCode runtime without workspace binding and stops it", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-starter-"));
     try {
-      const repo = join(root, "repo");
       // Windows locks the working directory of a process until it is fully gone, so the runtime
       // must not run inside the folder that this test deletes.
       const launchDirectory = tmpdir();
-      const configCapturePath = join(root, "opencode-config.json");
       const environmentCapturePath = join(root, "opencode-environment.json");
-      await mkdir(repo);
       const opencodeBinary = await createFakeOpenCode(root, {
-        configCapturePath,
         environmentCapturePath,
       });
       const starter = createOpenCodeRuntimeStarter({
@@ -449,10 +410,7 @@ describe("createOpenCodeRuntimeStarter", () => {
   test("registers the live adapter before forwarding and returning the runtime handle", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-live-order-"));
     try {
-      const repo = join(root, "repo");
-      const configCapturePath = join(root, "opencode-config.json");
-      await mkdir(repo);
-      const opencodeBinary = await createFakeOpenCode(root, { configCapturePath });
+      const opencodeBinary = await createFakeOpenCode(root);
       const order: string[] = [];
       const releasedRuntimeIds: string[] = [];
       const lifecycle: RuntimeLiveSessionLifecyclePort = {
@@ -512,8 +470,6 @@ describe("createOpenCodeRuntimeStarter", () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-live-timeout-"));
     const preparing = Promise.withResolvers<void>();
     try {
-      const repo = join(root, "repo");
-      await mkdir(repo);
       const opencodeBinary = await createFakeOpenCode(root);
       const starter = createOpenCodeRuntimeStarter({
         systemCommands: createSystemCommands(),
@@ -586,83 +542,92 @@ describe("createOpenCodeRuntimeStarter", () => {
     }
   });
 
-  test("bounds native readiness by the startup deadline", async () => {
+  test("enforces the native readiness deadline and stops the timed-out process tree", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-readiness-timeout-"));
     const acquired = Promise.withResolvers<void>();
     const ownedCleanups: OwnedCleanup[] = [];
+    let childPid: number | null = null;
     try {
-      const repo = join(root, "repo");
-      const startedPath = join(root, "started");
-      await mkdir(repo);
-      const opencodeBinary = await createFakeOpenCode(root, { silent: true, startedPath });
+      const childPidPath = join(root, "child.pid");
+      const opencodeBinary = await createFakeOpenCode(root, { silent: true, childPidPath });
       const starter = createOpenCodeRuntimeStarter({
-        systemCommands: createSystemCommands(),
         toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
         startupTimeoutMs: 40,
       });
 
-      const result = await Effect.runPromise(
-        Effect.gen(function* () {
-          let completed = false;
-          const startup = yield* Effect.forkChild(
-            Effect.result(
-              starter.startRuntime({
-                ...startInput(opencodeBinary),
-                ownCleanup: (cleanup) => {
-                  ownedCleanups.push(cleanup);
-                  acquired.resolve();
-                },
-              }),
-            ).pipe(
-              Effect.tap(() =>
-                Effect.sync(() => {
-                  completed = true;
-                }),
-              ),
-            ),
-          );
-          return yield* Effect.gen(function* () {
-            yield* Effect.promise(() => acquired.promise);
-            // On Windows, `taskkill /t` misses a script that `cmd.exe` has not started yet, and
-            // the script then keeps the output pipes open. The deadline passes after it runs.
-            yield* Effect.promise(() =>
-              waitFor(() => existsSync(startedPath), PROCESS_START_TIMEOUT_MS),
-            );
-            yield* TestClock.adjust("39 millis");
-            expect(completed).toBe(false);
-            yield* TestClock.adjust("1 milli");
-            expect(completed).toBe(true);
-            return yield* Fiber.join(startup);
-          }).pipe(Effect.ensuring(Fiber.interrupt(startup)));
-        }).pipe(Effect.provide(TestClock.layer())),
-      );
-      expect(result._tag).toBe("Failure");
-      if (result._tag === "Failure")
-        expect(result.failure.message).toContain(
-          "did not start. It was not ready within 0.04 seconds.",
-        );
-    } finally {
       try {
-        if (ownedCleanups.length > 0) await Effect.runPromise(runOwnedCleanup(ownedCleanups));
+        const result = await Effect.runPromise(
+          Effect.gen(function* () {
+            let completed = false;
+            const startup = yield* Effect.forkChild(
+              Effect.result(
+                starter.startRuntime({
+                  ...startInput(opencodeBinary),
+                  ownCleanup: (cleanup) => {
+                    ownedCleanups.push(cleanup);
+                    acquired.resolve();
+                  },
+                }),
+              ).pipe(
+                Effect.tap(() =>
+                  Effect.sync(() => {
+                    completed = true;
+                  }),
+                ),
+              ),
+            );
+            return yield* Effect.gen(function* () {
+              yield* Effect.promise(() => acquired.promise);
+              // Wait until the fixture has spawned its descendant before advancing the deadline.
+              yield* Effect.promise(() =>
+                waitFor(() => existsSync(childPidPath), PROCESS_START_TIMEOUT_MS),
+              );
+              const pid = Number(yield* Effect.promise(() => readFile(childPidPath, "utf8")));
+              expect(pid).toBeGreaterThan(0);
+              childPid = pid;
+              expect(processIsAlive(pid)).toBe(true);
+              yield* TestClock.adjust("39 millis");
+              expect(completed).toBe(false);
+              yield* TestClock.adjust("1 milli");
+              expect(completed).toBe(true);
+              return yield* Fiber.join(startup);
+            }).pipe(Effect.ensuring(Fiber.interrupt(startup)));
+          }).pipe(Effect.provide(TestClock.layer())),
+        );
+        expect(result).toMatchObject({
+          _tag: "Failure",
+          failure: {
+            message: expect.stringContaining(
+              "did not start. It was not ready within 0.04 seconds.",
+            ),
+          },
+        });
       } finally {
-        await removeTestDirectory(root);
+        if (ownedCleanups.length > 0) await Effect.runPromise(runOwnedCleanup(ownedCleanups));
       }
+
+      const timedOutPid = childPid;
+      if (timedOutPid === null) throw new Error("The fake OpenCode child did not start.");
+      await waitFor(() => !processIsAlive(timedOutPid), PROCESS_CLEANUP_TIMEOUT_MS);
+    } finally {
+      if (childPid !== null && processIsAlive(childPid)) process.kill(childPid, "SIGKILL");
+      await removeTestDirectory(root);
     }
   });
 
   test("releases its live runtime and reports the exit once when the OpenCode process crashes", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-live-close-"));
     try {
-      const repo = join(root, "repo");
-      await mkdir(repo);
       const opencodeBinary = await createFakeOpenCode(root);
       const connected = Promise.withResolvers<OpenCodeRuntimeConnection>();
+      const released = Promise.withResolvers<void>();
       const releasedRuntimeIds: string[] = [];
       const lifecycle: RuntimeLiveSessionLifecyclePort = {
         registerRuntimeAdapter: () => Effect.void,
         releaseRuntime: (runtimeId) =>
           Effect.sync(() => {
             releasedRuntimeIds.push(runtimeId);
+            released.resolve();
             return [];
           }),
         createRuntimeRegistration: (binding) =>
@@ -688,12 +653,16 @@ describe("createOpenCodeRuntimeStarter", () => {
       const handle = await Effect.runPromise(
         starter.startRuntime(startInput(opencodeBinary, (message) => exits.push(message))),
       );
-      await crashFakeRuntime(await connected.promise);
-      await waitFor(() => releasedRuntimeIds.length === 1, PROCESS_CLEANUP_TIMEOUT_MS);
-      await waitFor(() => exits.length === 1, PROCESS_CLEANUP_TIMEOUT_MS);
-      expect(releasedRuntimeIds).toEqual(["runtime-unexpected-close"]);
-      expect(exits).toEqual(["process exited with code 0"]);
-      await Effect.runPromise(handle.stop());
+      try {
+        await crashFakeRuntime(await connected.promise);
+        await Effect.runPromise(
+          Effect.promise(() => released.promise).pipe(Effect.timeout(PROCESS_CLEANUP_TIMEOUT_MS)),
+        );
+        expect(releasedRuntimeIds).toEqual(["runtime-unexpected-close"]);
+        expect(exits).toEqual(["process exited with code 0"]);
+      } finally {
+        await Effect.runPromise(handle.stop());
+      }
       expect(releasedRuntimeIds).toEqual(["runtime-unexpected-close"]);
       expect(exits).toHaveLength(1);
     } finally {
@@ -704,8 +673,6 @@ describe("createOpenCodeRuntimeStarter", () => {
   test("reports a failed live release after a crash as a cleanup failure", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-live-close-cleanup-"));
     try {
-      const repo = join(root, "repo");
-      await mkdir(repo);
       const opencodeBinary = await createFakeOpenCode(root);
       const connected = Promise.withResolvers<OpenCodeRuntimeConnection>();
       let releaseAttempts = 0;
@@ -740,23 +707,25 @@ describe("createOpenCodeRuntimeStarter", () => {
       });
 
       const exits: string[] = [];
-      const cleanupFailures: string[] = [];
+      const cleanupFailure = Promise.withResolvers<string>();
       const handle = await Effect.runPromise(
         starter.startRuntime(
-          startInput(
-            opencodeBinary,
-            (message) => exits.push(message),
-            (cause) => cleanupFailures.push(cause),
-          ),
+          startInput(opencodeBinary, (message) => exits.push(message), cleanupFailure.resolve),
         ),
       );
-      await crashFakeRuntime(await connected.promise);
-      await waitFor(() => cleanupFailures.length === 1, PROCESS_CLEANUP_TIMEOUT_MS);
-      expect(exits).toHaveLength(1);
-      expect(cleanupFailures[0]).toContain("adapter busy");
-
-      // The failed release stays owned. The explicit stop retries it.
-      await Effect.runPromise(handle.stop());
+      try {
+        await crashFakeRuntime(await connected.promise);
+        const failure = await Effect.runPromise(
+          Effect.promise(() => cleanupFailure.promise).pipe(
+            Effect.timeout(PROCESS_CLEANUP_TIMEOUT_MS),
+          ),
+        );
+        expect(exits).toHaveLength(1);
+        expect(failure).toContain("adapter busy");
+      } finally {
+        // The failed release stays owned. The explicit stop retries it.
+        await Effect.runPromise(handle.stop());
+      }
       expect(releaseAttempts).toBe(2);
     } finally {
       await removeTestDirectory(root);
@@ -857,8 +826,6 @@ describe("createOpenCodeRuntimeStarter", () => {
   test("discards prepared observation when live-adapter registration fails", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-live-register-failure-"));
     try {
-      const repo = join(root, "repo");
-      await mkdir(repo);
       const opencodeBinary = await createFakeOpenCode(root);
       let discardCalls = 0;
       const starter = createOpenCodeRuntimeStarter({
@@ -908,8 +875,6 @@ describe("createOpenCodeRuntimeStarter", () => {
   test("removes a registered live adapter when forwarding startup fails", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-live-forward-failure-"));
     try {
-      const repo = join(root, "repo");
-      await mkdir(repo);
       const opencodeBinary = await createFakeOpenCode(root);
       const registeredRuntimeIds = new Set<string>();
       const releasedRuntimeIds: string[] = [];
@@ -967,9 +932,7 @@ describe("createOpenCodeRuntimeStarter", () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-starter-tree-"));
     let childPid: number | null = null;
     try {
-      const repo = join(root, "repo");
       const childPidPath = join(root, "child.pid");
-      await mkdir(repo);
       const opencodeBinary = await createFakeOpenCode(root, { childPidPath });
       const starter = createOpenCodeRuntimeStarter({
         systemCommands: createSystemCommands(),
@@ -997,101 +960,11 @@ describe("createOpenCodeRuntimeStarter", () => {
     }
   });
 
-  test("cleans up a spawned OpenCode process tree after startup timeout", async () => {
-    const root = await mkdtemp(join(tmpdir(), "odt-opencode-timeout-cleanup-"));
-    let childPid: number | null = null;
-    try {
-      const repo = join(root, "repo");
-      const childPidPath = join(root, "child.pid");
-      const startupTimeoutMs = 2_000;
-      await mkdir(repo);
-      const opencodeBinary = await createFakeOpenCode(root, { childPidPath, silent: true });
-      const starter = createOpenCodeRuntimeStarter({
-        systemCommands: createSystemCommands(),
-        toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
-        startupTimeoutMs,
-      });
-
-      const ownedCleanups: OwnedCleanup[] = [];
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const startup = yield* Effect.forkChild(
-            Effect.result(
-              starter.startRuntime(startInput(opencodeBinary, undefined, undefined, ownedCleanups)),
-            ),
-          );
-          yield* Effect.gen(function* () {
-            yield* Effect.promise(() =>
-              waitFor(() => existsSync(childPidPath), PROCESS_START_TIMEOUT_MS),
-            );
-            childPid = Number(yield* Effect.promise(() => readFile(childPidPath, "utf8")));
-            const timedOutPid = childPid;
-            expect(processIsAlive(timedOutPid)).toBe(true);
-
-            yield* TestClock.adjust(`${startupTimeoutMs} millis`);
-            const result = yield* Fiber.join(startup);
-            expect(result._tag).toBe("Failure");
-            if (result._tag === "Failure") {
-              expect(result.failure.message).toContain("did not start. It was not ready within");
-            }
-          }).pipe(Effect.ensuring(Fiber.interrupt(startup)));
-        }).pipe(Effect.provide(TestClock.layer())),
-      );
-      // The host runs the owned cleanup, which stops the timed-out process tree.
-      await Effect.runPromise(runOwnedCleanup(ownedCleanups));
-      const timedOutPid = childPid;
-      if (timedOutPid === null) throw new Error("The fake OpenCode child did not start.");
-      await waitFor(() => !processIsAlive(timedOutPid), PROCESS_CLEANUP_TIMEOUT_MS);
-    } finally {
-      if (childPid !== null && processIsAlive(childPid)) {
-        process.kill(childPid, "SIGKILL");
-      }
-      await removeTestDirectory(root);
-    }
-  });
-
-  test("reports OpenCode process-tree cleanup failures", async () => {
-    const root = await mkdtemp(join(tmpdir(), "odt-opencode-cleanup-failure-"));
-    let runtimePid: number | null = null;
-    try {
-      const repo = join(root, "repo");
-      const configCapturePath = join(root, "opencode-config.json");
-      await mkdir(repo);
-      const opencodeBinary = await createFakeOpenCode(root, { configCapturePath });
-      const starter = createOpenCodeRuntimeStarter({
-        systemCommands: createSystemCommands(),
-        toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
-        // The child must own its working directory before cleanup tests stop it on Windows.
-        runtimeId: () => "runtime-failure",
-        processTreeTerminator: ({ pid }) => {
-          runtimePid = pid;
-          return Effect.fail(
-            new HostOperationError({
-              operation: "test.processTreeTerminator",
-              message: "process tree stayed alive",
-            }),
-          );
-        },
-      });
-
-      const handle = await Effect.runPromise(starter.startRuntime(startInput(opencodeBinary)));
-
-      const stopFailure = await Effect.runPromise(Effect.flip(handle.stop()));
-      expect(stopFailure.message).toContain("process tree stayed alive");
-    } finally {
-      if (runtimePid !== null && processIsAlive(runtimePid)) {
-        await Effect.runPromise(forceStopProcessTree(runtimePid));
-      }
-      await removeTestDirectory(root);
-    }
-  });
-
   test("retries a failed process-tree stop instead of reporting a false success", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-cleanup-retry-"));
     let runtimePid: number | null = null;
     try {
-      const configCapturePath = join(root, "opencode-config.json");
-      const opencodeBinary = await createFakeOpenCode(root, { configCapturePath });
+      const opencodeBinary = await createFakeOpenCode(root);
       let terminations = 0;
       const releases: string[] = [];
       const starter = createOpenCodeRuntimeStarter({
@@ -1147,8 +1020,6 @@ describe("createOpenCodeRuntimeStarter", () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-timeout-cleanup-failure-"));
     let runtimePid: number | null = null;
     try {
-      const repo = join(root, "repo");
-      await mkdir(repo);
       const opencodeBinary = await createFakeOpenCode(root, { silent: true });
       const starter = createOpenCodeRuntimeStarter({
         systemCommands: createSystemCommands(),
@@ -1193,35 +1064,33 @@ describe("createOpenCodeRuntimeStarter", () => {
   });
 
   // Windows starts a cmd shim and stops the resulting process tree.
-  test("starts a Windows cmd OpenCode runtime from its saved path", async () => {
-    if (process.platform !== "win32") {
-      return;
-    }
-
-    const root = await mkdtemp(join(tmpdir(), "odt-opencode-path-starter-"));
-    try {
-      const repo = join(root, "repo");
-      await mkdir(repo);
-      const startupPath = join(root, "opencode-started.json");
-      const opencodeBinary = await createFakeOpenCode(root, { configCapturePath: startupPath });
-      const pathWithFakeRuntime = `${root};${process.env.PATH ?? ""}`;
-      const starter = createOpenCodeRuntimeStarter({
-        systemCommands: createSystemCommandRunner({
+  test.skipIf(process.platform !== "win32")(
+    "starts a Windows cmd OpenCode runtime from its saved path",
+    async () => {
+      const root = await mkdtemp(join(tmpdir(), "odt-opencode-path-starter-"));
+      try {
+        const startupPath = join(root, "opencode-started.json");
+        const opencodeBinary = await createFakeOpenCode(root, { startedPath: startupPath });
+        const pathWithFakeRuntime = `${root};${process.env.PATH ?? ""}`;
+        const starter = createOpenCodeRuntimeStarter({
+          systemCommands: createSystemCommandRunner({
+            readEnv: () => ({ ...process.env, PATH: pathWithFakeRuntime, PATHEXT: ".CMD" }),
+            platform: "win32",
+          }),
           readEnv: () => ({ ...process.env, PATH: pathWithFakeRuntime, PATHEXT: ".CMD" }),
-          platform: "win32",
-        }),
-        readEnv: () => ({ ...process.env, PATH: pathWithFakeRuntime, PATHEXT: ".CMD" }),
-        runtimeId: () => "runtime-path",
-      });
+          runtimeId: () => "runtime-path",
+        });
 
-      expect(opencodeBinary.endsWith(".cmd")).toBe(true);
-      const handle = await Effect.runPromise(starter.startRuntime(startInput(opencodeBinary)));
+        expect(opencodeBinary.endsWith(".cmd")).toBe(true);
+        const handle = await Effect.runPromise(starter.startRuntime(startInput(opencodeBinary)));
 
-      expect(handle.runtime.runtimeId).toBe("runtime-path");
-      expect(existsSync(startupPath)).toBe(true);
-      expect(await Effect.runPromise(handle.stop())).toBeUndefined();
-    } finally {
-      await removeTestDirectory(root);
-    }
-  }, 10_000);
+        expect(handle.runtime.runtimeId).toBe("runtime-path");
+        expect(existsSync(startupPath)).toBe(true);
+        expect(await Effect.runPromise(handle.stop())).toBeUndefined();
+      } finally {
+        await removeTestDirectory(root);
+      }
+    },
+    10_000,
+  );
 });

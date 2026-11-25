@@ -189,17 +189,13 @@ describe("createChromeForTestingInstallation", () => {
   });
 
   test("an interrupted download leaves no file behind", async () => {
-    let requested: () => void = () => {};
-    const started = new Promise<void>((resolve) => {
-      requested = resolve;
-    });
-    const { root, install } = await setUp({
+    const written = Promise.withResolvers<void>();
+    const { root, installation } = await setUp({
       fetch: async (_url, init) => {
-        requested();
         return new Response(
           new ReadableStream<Uint8Array>({
             start(controller) {
-              controller.enqueue(ARCHIVE_BYTES.slice(0, 1024));
+              controller.enqueue(ARCHIVE_BYTES.subarray(0, 1024 * 1024));
               init.signal.addEventListener("abort", () => controller.error(init.signal.reason));
             },
           }),
@@ -207,10 +203,19 @@ describe("createChromeForTestingInstallation", () => {
       },
     });
 
-    const fiber = Effect.runFork(install());
-    await started;
-    await Bun.sleep(20);
-    await Effect.runPromise(Fiber.interrupt(fiber));
+    const fiber = Effect.runFork(
+      installation.install((state) => {
+        if (state.kind === "downloading" && state.receivedBytes > 0) written.resolve();
+      }),
+    );
+    try {
+      await Effect.promise(() => written.promise).pipe(
+        Effect.timeout("2 seconds"),
+        Effect.runPromise,
+      );
+    } finally {
+      await Effect.runPromise(Fiber.interrupt(fiber));
+    }
     const exit = await Effect.runPromise(Fiber.await(fiber));
 
     expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);

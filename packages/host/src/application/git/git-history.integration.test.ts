@@ -7,47 +7,56 @@ import type { GitHistoryPage, GitHistoryPageRequest } from "@openducktor/contrac
 import { Effect } from "effect";
 import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
 import { GIT_HISTORY_PAGE_SIZE } from "../../infrastructure/git/git-history";
+import { gitFixtureCommand, gitFixtureEnv } from "../../test-support/git-repository-fixture";
 import { createGitService } from "./git-service";
 
 // These tests start real Git processes, because the commit graph belongs to Git.
 // Real Git processes start slowly on Windows runners, so each test gets more time.
 const GIT_TEST_TIMEOUT_MS = 30_000;
 const service = createGitService(
-  createGitCliAdapter({ resolveCommand: () => Effect.succeed("git") }),
+  createGitCliAdapter({
+    resolveCommand: () => Effect.succeed(gitFixtureCommand),
+    readEnv: () => gitFixtureEnv,
+  }),
 );
 
 let repo = "";
-const git = (args: string[], input?: string) =>
-  execFileSync("git", args, {
+let emptyTree = "";
+const git = (args: string[], input?: string, env = gitFixtureEnv) =>
+  execFileSync(gitFixtureCommand, args, {
     cwd: repo,
     encoding: "utf8",
+    env,
     input,
     stdio: ["pipe", "pipe", "pipe"],
   }).trim();
-const commit = async (file: string, message: string) => {
+const commitFile = async (file: string, message: string) => {
   await writeFile(path.join(repo, file), `${message}\n`);
   git(["add", file]);
   git(["commit", "-m", message]);
   return git(["rev-parse", "HEAD"]);
 };
 
-/** A commit with its own author and commit times, so a test can tell the two orders apart. */
-const commitAt = async (file: string, message: string, authorDate: string, commitDate: string) => {
-  await writeFile(path.join(repo, file), `${message}\n`);
-  git(["add", file]);
-  execFileSync("git", ["commit", "-m", message], {
-    cwd: repo,
-    env: { ...process.env, GIT_AUTHOR_DATE: authorDate, GIT_COMMITTER_DATE: commitDate },
-    stdio: "ignore",
-  });
-  return git(["rev-parse", "HEAD"]);
+// These graph fixtures only need commit objects and refs.
+const graphCommit = (message: string, parents: string[] = [], env = gitFixtureEnv) =>
+  git(
+    ["commit-tree", emptyTree, ...parents.flatMap((oid) => ["-p", oid]), "-m", message],
+    undefined,
+    env,
+  );
+
+const createRefs = (refs: Record<string, string>): void => {
+  const input = Object.entries(refs)
+    .map(([ref, oid]) => `create ${ref} ${oid}\n`)
+    .join("");
+  git(["update-ref", "--stdin"], input);
 };
 
-const history = async (
+const history = (
   targetReference: string,
+  expectedBranch: GitHistoryPageRequest["expectedBranch"],
   page?: GitHistoryPageRequest["page"],
 ): Promise<GitHistoryPage> => {
-  const expectedBranch = await Effect.runPromise(service.getCurrentBranch({ repoPath: repo }));
   const request: GitHistoryPageRequest = { repoPath: repo, targetReference, expectedBranch };
   if (page) request.page = page;
   return Effect.runPromise(service.getHistoryPage(request));
@@ -78,8 +87,18 @@ beforeAll(async () => {
     ["config", "user.email", "history@example.invalid"],
     ["config", "commit.gpgsign", "false"],
   ]) {
-    execFileSync("git", args, { cwd: template, stdio: "ignore" });
+    execFileSync(gitFixtureCommand, args, {
+      cwd: template,
+      env: gitFixtureEnv,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
   }
+  emptyTree = execFileSync(gitFixtureCommand, ["mktree"], {
+    cwd: template,
+    env: gitFixtureEnv,
+    input: "",
+    encoding: "utf8",
+  }).trim();
 }, GIT_TEST_TIMEOUT_MS);
 
 afterAll(async () => {
@@ -97,23 +116,32 @@ afterEach(async () => {
 
 describe("branch history", () => {
   test(
-    "shows both sides, merge parents, and the shared boundary",
+    "shows both sides, merge parents, the shared boundary, and commit metadata",
     async () => {
-      const older = await commit("base.txt", "older shared");
-      const base = await commit("base.txt", "shared base");
-      git(["checkout", "-b", "feature"]);
-      const featureA = await commit("a.txt", "feature a");
-      git(["checkout", "main"]);
-      const mainM = await commit("m.txt", "main m");
-      git(["checkout", "feature"]);
-      git(["merge", "--no-edit", "main"]);
-      const merge = git(["rev-parse", "HEAD"]);
-      const featureB = await commit("b.txt", "feature b\n\nLonger body line.");
-      git(["checkout", "main"]);
-      const mainN = await commit("n.txt", "main n");
-      git(["checkout", "feature"]);
+      const older = graphCommit("older shared");
+      const base = graphCommit("shared base", [older]);
+      const featureA = graphCommit("feature a", [base]);
+      const mainM = graphCommit("main m", [base]);
+      const merge = graphCommit("merge main", [featureA, mainM]);
+      const subject = "feature \u001e b";
+      const message = `${subject}\n\nLonger body line.`;
+      const featureB = graphCommit(message, [merge]);
+      const mainN = graphCommit("main n", [mainM]);
+      createRefs({
+        "refs/heads/main": mainN,
+        "refs/heads/feature": featureB,
+        "refs/heads/feature-copy": featureB,
+        "refs/heads/boundary": mainM,
+        "refs/remotes/origin/feature": featureB,
+        "refs/tags/light": mainM,
+      });
+      git(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/feature"]);
+      git(["tag", "-a", "v1.0.0", mainM, "-m", "Release"]);
+      git(["symbolic-ref", "HEAD", "refs/heads/feature"]);
 
-      const page = requirePage(await history("refs/heads/main"));
+      const page = requirePage(
+        await history("refs/heads/main", { name: "feature", detached: false }),
+      );
 
       expect(page.comparison).toEqual({
         currentTip: featureB,
@@ -132,10 +160,23 @@ describe("branch history", () => {
       expect(byOid.get(mainN)?.membership).toBe("target");
       expect(byOid.get(featureB)).toMatchObject({
         membership: "current",
-        subject: "feature b",
-        message: "feature b\n\nLonger body line.",
+        subject,
+        message,
         authorName: "History Test",
       });
+      expect(new Set(page.commits.map((entry) => entry.authorEmail))).toEqual(
+        new Set(["history@example.invalid"]),
+      );
+      expect(byOid.get(featureB)?.refs).toEqual([
+        { name: "feature", kind: "local", isHead: true },
+        { name: "feature-copy", kind: "local", isHead: false },
+        { name: "origin/feature", kind: "remote", isHead: false },
+      ]);
+      expect(byOid.get(mainM)?.refs).toEqual([
+        { name: "boundary", kind: "local", isHead: false },
+        { name: "light", kind: "tag", isHead: false },
+        { name: "v1.0.0", kind: "tag", isHead: false },
+      ]);
       // Git writes `Z` for a UTC offset, as on CI runners.
       expect(byOid.get(featureB)?.authorDate).toMatch(
         /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})$/u,
@@ -152,21 +193,28 @@ describe("branch history", () => {
   test(
     "sorts the commits of both branches by author date, newest first",
     async () => {
-      const base = await commitAt(
-        "base.txt",
-        "base",
-        "2026-01-01T10:00:00Z",
-        "2026-01-01T10:00:00Z",
-      );
-      git(["checkout", "-b", "feature"]);
-      const f1 = await commitAt("f.txt", "f1", "2026-01-02T10:00:00Z", "2026-01-02T10:00:00Z");
-      const f2 = await commitAt("f.txt", "f2", "2026-01-04T10:00:00Z", "2026-01-03T10:00:00Z");
-      git(["checkout", "main"]);
-      const m1 = await commitAt("m.txt", "m1", "2026-01-03T10:00:00Z", "2026-01-04T10:00:00Z");
-      const m2 = await commitAt("m.txt", "m2", "2026-01-05T10:00:00Z", "2026-01-05T10:00:00Z");
-      git(["checkout", "feature"]);
+      const datedCommit = (
+        message: string,
+        parents: string[],
+        authorDay: string,
+        commitDay: string,
+      ) =>
+        graphCommit(message, parents, {
+          ...gitFixtureEnv,
+          GIT_AUTHOR_DATE: `2026-01-${authorDay}T10:00:00Z`,
+          GIT_COMMITTER_DATE: `2026-01-${commitDay}T10:00:00Z`,
+        });
+      const base = datedCommit("base", [], "01", "01");
+      const f1 = datedCommit("f1", [base], "02", "02");
+      const f2 = datedCommit("f2", [f1], "04", "03");
+      const m1 = datedCommit("m1", [base], "03", "04");
+      const m2 = datedCommit("m2", [m1], "05", "05");
+      createRefs({ "refs/heads/main": m2, "refs/heads/feature": f2 });
+      git(["symbolic-ref", "HEAD", "refs/heads/feature"]);
 
-      const page = requirePage(await history("refs/heads/main"));
+      const page = requirePage(
+        await history("refs/heads/main", { name: "feature", detached: false }),
+      );
 
       // The branches mix by the date that each row shows, and every parent stays below its child.
       expect(page.commits.map((entry) => entry.oid)).toEqual([m2, f2, m1, f1, base]);
@@ -177,17 +225,30 @@ describe("branch history", () => {
   test(
     "follows a rebase that stops on a conflict, as a Git tree does",
     async () => {
-      const base = await commit("a.txt", "base");
+      const base = await commitFile("a.txt", "base");
       git(["checkout", "-b", "feature"]);
-      const f1 = await commit("b.txt", "f1");
-      const f2 = await commit("a.txt", "f2 conflicts");
-      const f3 = await commit("c.txt", "f3");
+      const f1 = await commitFile("b.txt", "f1");
+      const f2 = await commitFile("a.txt", "f2 conflicts");
+      const f3 = await commitFile("c.txt", "f3");
       git(["branch", "--set-upstream-to=main", "feature"]);
       git(["checkout", "main"]);
-      const m1 = await commit("a.txt", "m1 conflicts");
+      const m1 = await commitFile("a.txt", "m1 conflicts");
       git(["checkout", "feature"]);
-      expect(() => git(["rebase", "main"])).toThrow();
+      expect(() => git(["rebase", "--merge", "main"])).toThrow();
       const replayed = git(["rev-parse", "HEAD"]);
+
+      const status = await Effect.runPromise(
+        service.getWorktreeStatus({
+          repoPath: repo,
+          targetBranch: "HEAD",
+          diffScope: "uncommitted",
+        }),
+      );
+      expect(status.gitConflict).toMatchObject({
+        currentBranch: "feature",
+        targetBranch: m1,
+        conflictedFiles: ["a.txt"],
+      });
 
       // Tracked upstream keeps the upstream of the branch that the rebase rewrites.
       await expect(
@@ -196,7 +257,7 @@ describe("branch history", () => {
         ),
       ).resolves.toEqual({ kind: "available", reference: "refs/heads/main" });
 
-      const page = requirePage(await history("refs/heads/main"));
+      const page = requirePage(await history("refs/heads/main", { detached: true }));
       expect(page.comparison.currentTip).toBe(replayed);
       expect(page.comparison.boundaryOids).toEqual([base]);
       const byOid = new Map(page.commits.map((entry) => [entry.oid, entry]));
@@ -220,25 +281,21 @@ describe("branch history", () => {
   test(
     "reads the newest commit of the branch after a commit that the panel did not read",
     async () => {
-      await commit("base.txt", "base");
-      git(["checkout", "-b", "feature"]);
-      await commit("a.txt", "first");
-      const expectedBranch = await Effect.runPromise(service.getCurrentBranch({ repoPath: repo }));
-      const newest = await commit("a.txt", "second");
-      const read = (branch: typeof expectedBranch) =>
-        Effect.runPromise(
-          service.getHistoryPage({
-            repoPath: repo,
-            targetReference: "refs/heads/main",
-            expectedBranch: branch,
-          }),
-        );
+      const base = graphCommit("base");
+      const first = graphCommit("first", [base]);
+      createRefs({ "refs/heads/main": base, "refs/heads/feature": first });
+      git(["symbolic-ref", "HEAD", "refs/heads/feature"]);
+      const expectedBranch = { name: "feature", detached: false, revision: first };
+      const newest = graphCommit("second", [first]);
+      git(["update-ref", "refs/heads/feature", newest, first]);
 
       // The panel still holds the older commit. The read follows the branch to its newest commit.
-      expect(requirePage(await read(expectedBranch)).comparison.currentTip).toBe(newest);
+      expect(
+        requirePage(await history("refs/heads/main", expectedBranch)).comparison.currentTip,
+      ).toBe(newest);
 
-      git(["checkout", "main"]);
-      expect(await failure(read(expectedBranch))).toBe(
+      git(["symbolic-ref", "HEAD", "refs/heads/main"]);
+      expect(await failure(history("refs/heads/main", expectedBranch))).toBe(
         "The branch changed. Refresh to read its History.",
       );
     },
@@ -246,75 +303,21 @@ describe("branch history", () => {
   );
 
   test(
-    "reads a commit message that holds the record separator byte",
-    async () => {
-      await commit("base.txt", "base");
-      git(["checkout", "-b", "feature"]);
-      const message = "feature \u001e subject";
-      const oid = await commit("a.txt", message);
-
-      const page = requirePage(await history("refs/heads/main"));
-
-      expect(page.commits.find((entry) => entry.oid === oid)).toMatchObject({
-        subject: message,
-        message,
-      });
-    },
-    GIT_TEST_TIMEOUT_MS,
-  );
-
-  test(
-    "lists the author email and the branches and tags of each commit",
-    async () => {
-      const base = await commit("base.txt", "shared base");
-      git(["tag", "-a", "v1.0.0", "-m", "Release"]);
-      git(["tag", "light"]);
-      git(["checkout", "-b", "feature"]);
-      const tip = await commit("a.txt", "feature a");
-      git(["branch", "feature-copy"]);
-      // A remote-tracking branch and the symbolic remote HEAD that repeats it.
-      git(["update-ref", "refs/remotes/origin/feature", tip]);
-      git(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/feature"]);
-
-      const page = requirePage(await history("main"));
-      const refsOf = (oid: string) => page.commits.find((entry) => entry.oid === oid)?.refs;
-
-      expect(page.commits.map((entry) => entry.authorEmail)).toEqual([
-        "history@example.invalid",
-        "history@example.invalid",
-      ]);
-      // The checked-out branch comes first, then local branches, remote branches, and tags.
-      expect(refsOf(tip)).toEqual([
-        { name: "feature", kind: "local", isHead: true },
-        { name: "feature-copy", kind: "local", isHead: false },
-        { name: "origin/feature", kind: "remote", isHead: false },
-      ]);
-      // The annotated tag peels to its commit.
-      expect(refsOf(base)).toEqual([
-        { name: "main", kind: "local", isHead: false },
-        { name: "light", kind: "tag", isHead: false },
-        { name: "v1.0.0", kind: "tag", isHead: false },
-      ]);
-    },
-    GIT_TEST_TIMEOUT_MS,
-  );
-
-  test(
     "handles matching tips and a target that is ahead only",
     async () => {
-      const shared = await commit("base.txt", "shared");
-      git(["branch", "target"]);
+      const shared = graphCommit("shared");
+      createRefs({ "refs/heads/main": shared, "refs/heads/target": shared });
+      const expectedBranch = { name: "main", detached: false };
 
-      const same = requirePage(await history("refs/heads/target"));
+      const same = requirePage(await history("refs/heads/target", expectedBranch));
       expect(same.commits.map((entry) => [entry.oid, entry.membership])).toEqual([
         [shared, "boundary"],
       ]);
       expect(same.comparison.aheadBehind).toEqual({ ahead: 0, behind: 0 });
 
-      git(["checkout", "target"]);
-      const missing = await commit("t.txt", "missing on main");
-      git(["checkout", "main"]);
-      const behind = requirePage(await history("refs/heads/target"));
+      const missing = graphCommit("missing on main", [shared]);
+      git(["update-ref", "refs/heads/target", missing, shared]);
+      const behind = requirePage(await history("refs/heads/target", expectedBranch));
       expect(behind.commits.map((entry) => [entry.oid, entry.membership])).toEqual([
         [missing, "target"],
         [shared, "boundary"],
@@ -327,20 +330,21 @@ describe("branch history", () => {
   test(
     "pages with pinned tips and rejects a page after a tip moves",
     async () => {
-      await commit("base.txt", "base");
-      git(["checkout", "-b", "feature"]);
+      const base = graphCommit("base");
+      git(["update-ref", "refs/heads/main", base]);
       // Fast import writes many commits in one Git process.
       const count = GIT_HISTORY_PAGE_SIZE + 5;
-      const stream = [`reset refs/heads/feature\nfrom ${git(["rev-parse", "HEAD"])}\n`];
+      const stream = [`reset refs/heads/feature\nfrom ${base}\n`];
       for (let index = 0; index < count; index += 1) {
         stream.push(
           `commit refs/heads/feature\ncommitter T <t@example.invalid> ${1_700_000_000 + index} +0000\ndata ${`c${index}`.length}\nc${index}\n\n`,
         );
       }
       git(["fast-import", "--quiet"], stream.join(""));
-      git(["reset", "--hard", "-q", "feature"]);
+      git(["symbolic-ref", "HEAD", "refs/heads/feature"]);
+      const expectedBranch = { name: "feature", detached: false };
 
-      const first = requirePage(await history("refs/heads/main"));
+      const first = requirePage(await history("refs/heads/main", expectedBranch));
       expect(first.commits).toHaveLength(GIT_HISTORY_PAGE_SIZE);
       expect(first.nextOffset).toBe(GIT_HISTORY_PAGE_SIZE);
       const pageInput = {
@@ -348,14 +352,15 @@ describe("branch history", () => {
         targetTip: first.comparison.targetTip,
         offset: GIT_HISTORY_PAGE_SIZE,
       };
-      const second = requirePage(await history("refs/heads/main", pageInput));
+      const second = requirePage(await history("refs/heads/main", expectedBranch, pageInput));
       // The remaining feature commits, then the boundary commit.
       expect(second.commits).toHaveLength(count - GIT_HISTORY_PAGE_SIZE + 1);
       expect(second.nextOffset).toBeNull();
       expect(second.commits.at(-1)?.membership).toBe("boundary");
 
-      await commit("later.txt", "later");
-      expect(await failure(history("refs/heads/main", pageInput))).toContain(
+      const later = graphCommit("later", [pageInput.currentTip]);
+      git(["update-ref", "refs/heads/feature", later, pageInput.currentTip]);
+      expect(await failure(history("refs/heads/main", expectedBranch, pageInput))).toContain(
         "The branches changed while History loaded",
       );
     },
@@ -365,17 +370,19 @@ describe("branch history", () => {
   test(
     "reports a branch without commits, a missing target, and unrelated histories",
     async () => {
-      expect(await history("refs/heads/main")).toEqual({ outcome: "no_commits" });
+      const main = { name: "main", detached: false };
+      expect(await history("refs/heads/main", main)).toEqual({ outcome: "no_commits" });
 
-      const mainTip = await commit("base.txt", "main");
-      expect(await failure(history("refs/heads/missing"))).toContain(
+      const mainTip = graphCommit("main");
+      git(["update-ref", "refs/heads/main", mainTip]);
+      expect(await failure(history("refs/heads/missing", main))).toContain(
         "Comparison branch refs/heads/missing is unavailable",
       );
 
-      git(["checkout", "--orphan", "lonely"]);
-      git(["rm", "-rfq", "."]);
-      const lonelyTip = await commit("lonely.txt", "lonely");
-      expect(await history("refs/heads/main")).toEqual({
+      const lonelyTip = graphCommit("lonely");
+      git(["update-ref", "refs/heads/lonely", lonelyTip]);
+      git(["symbolic-ref", "HEAD", "refs/heads/lonely"]);
+      expect(await history("refs/heads/main", { name: "lonely", detached: false })).toEqual({
         outcome: "no_common_ancestor",
         currentTip: lonelyTip,
         targetTip: mainTip,

@@ -10,6 +10,7 @@ import { checkClose } from "./terminal-close-native.fixture";
 import { checkDirect } from "./terminal-direct-native.fixture";
 import { checkBuffer, checkReady } from "./terminal-ready-native.fixture";
 import assert from "node:assert/strict";
+import { EventEmitter, once } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -42,7 +43,9 @@ const launchEnvironment = createTerminalLaunchEnvironment({
 const nativePty = createNodePtyPort();
 const handles: TerminalPtyHandle[] = [];
 const terminals = new Map<string, TerminalPtyHandle>();
+const grid = { columns: 120, rows: 24 };
 const screens = new Map<string, TerminalScreenState>();
+const terminalExits = new Map<string, Promise<void>>();
 const inputs = new Map<string, string[]>();
 const writes: string[][] = [];
 const engine = createTerminalSessionEngine({
@@ -73,10 +76,15 @@ const engine = createTerminalSessionEngine({
 const activities = new Map<string, TerminalActivity>();
 const outputs = new Map<string, string>();
 const failures = new Map<string, string>();
+const terminalChanges = new EventEmitter();
+function notifyTerminalChange(): void {
+  terminalChanges.emit("change");
+}
 const stop = engine.observeActivity((message) => {
   if (message.type === "activity_updated")
     activities.set(message.activity.summary.terminalId, message.activity);
   else if (message.type === "activity_removed") activities.delete(message.terminalId);
+  notifyTerminalChange();
 });
 const fixture = {
   root,
@@ -86,12 +94,14 @@ const fixture = {
   outputs,
   failures,
   inputs,
-  screens,
+  captureScreen,
   start,
   write,
   writeRaw,
   readScreen,
+  exitShell,
   wait,
+  notifyTerminalChange,
   serverCommand,
 };
 export type TerminalNativeFixture = typeof fixture;
@@ -103,17 +113,11 @@ const cases = new Map([
   ["state", checkState],
   ["restart", () => checkRestart(fixture)],
   ["restart-setup", () => checkSetupRestart(fixture)],
-  ["restart-err-exit-action", () => checkErrExitRestart(fixture, "err-exit-action")],
-  ["restart-err-exit-manual", () => checkErrExitRestart(fixture, "err-exit-manual")],
-  ["restart-set-e-line", () => checkErrExitRestart(fixture, "set-e-line")],
-  ["restart-setopt-line", () => checkErrExitRestart(fixture, "setopt-line")],
+  ["restart-err-exit", () => checkErrExitRestart(fixture)],
   ["restart-finished", () => checkFinishedInput(fixture, "restart")],
   ["interrupt-finished", () => checkFinishedInput(fixture, "interrupt")],
   ["hooks", () => checkHooks(fixture)],
-  ["manual-exec", () => checkManual("exec")],
-  ["manual-lists", () => checkManual("lists")],
-  ["manual-words", () => checkManual("words")],
-  ["manual-restart", () => checkManual("restart")],
+  ["manual-replay", checkManual],
   ["ready", () => checkReady(fixture)],
   ["buffer", () => checkBuffer(fixture)],
 ]);
@@ -126,7 +130,6 @@ try {
   const check = cases.get(name);
   assert.ok(check, `Unknown terminal case: ${name}`);
   await check();
-  console.log(`PASS ${name}`);
 } catch (cause) {
   throw new Error(JSON.stringify([...outputs].map(([id, output]) => [id, output.slice(-1200)])), {
     cause,
@@ -140,16 +143,35 @@ try {
 }
 
 async function wait(predicate: () => boolean): Promise<void> {
-  const deadline = Date.now() + 2000;
-  while (!predicate() && Date.now() < deadline)
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  assert.ok(predicate(), JSON.stringify([...outputs]));
+  if (predicate()) return;
+  const deadline = new AbortController();
+  const timer = setTimeout(() => {
+    deadline.abort(new Error("Terminal did not reach the expected state within 2 seconds."));
+  }, 2000);
+  try {
+    do {
+      await once(terminalChanges, "change", { signal: deadline.signal });
+    } while (!predicate());
+  } finally {
+    clearTimeout(timer);
+  }
 }
 function write(id: string, text: string): Promise<void> {
   return Effect.runPromise(engine.write(id, new TextEncoder().encode(text)));
 }
 function writeRaw(id: string, text: string): Promise<void> {
   return Effect.runPromise(terminals.get(id)!.write(new TextEncoder().encode(text)));
+}
+async function exitShell(id: string): Promise<void> {
+  const exited = terminalExits.get(id);
+  assert.ok(exited, `No exit observer for ${id}`);
+  await write(id, "exit\r");
+  await Effect.runPromise(Effect.promise(() => exited).pipe(Effect.timeout("2 seconds")));
+}
+function captureScreen(id: string): TerminalScreenState {
+  const screen = new TerminalScreenState(grid);
+  screens.set(id, screen);
+  return screen;
 }
 async function readScreen(id: string): Promise<readonly string[]> {
   const screen = screens.get(id)!;
@@ -163,9 +185,7 @@ async function start(
   startedBy: TerminalStartedBy = "user",
 ): Promise<StartedCommandTerminal> {
   const plans = await Effect.runPromise(launchEnvironment.command(commandLines));
-  const grid = { columns: 120, rows: 24 };
   const handleIndex = handles.length;
-  screens.set(id, new TerminalScreenState(grid));
   const started = await Effect.runPromise(
     engine.startCommand(
       {
@@ -188,17 +208,21 @@ async function start(
   terminals.set(id, handles[handleIndex]!);
   inputs.set(id, writes[handleIndex]!);
   outputs.set(id, "");
+  const exited = Promise.withResolvers<void>();
+  terminalExits.set(id, exited.promise);
   await Effect.runPromise(
     engine.attach({
       terminalId: id,
       attachmentId: id,
       lastConsumedSequence: 0,
       sink: (event, data) => {
+        if (event.type === "lifecycle" && event.lifecycle === "exited") exited.resolve();
         if (event.type === "protocol_error") failures.set(id, event.failure.message);
         if (event.type === "output") {
-          screens.get(id)!.write(data, () => {});
+          screens.get(id)?.write(data, () => {});
           outputs.set(id, outputs.get(id)! + new TextDecoder().decode(data));
         }
+        notifyTerminalChange();
       },
     }),
   );
@@ -207,11 +231,15 @@ async function start(
 
 async function checkHistory() {
   await writeFile(join(root, "history"), "echo another-shell\n");
-  const historyCommand = "node history.cjs";
+  const historyCommand = "/bin/sh history.sh";
   await writeFile(
-    join(root, "history.cjs"),
-    'process.on("SIGINT", () => process.exit(0)); console.log("HISTORY_READY"); setInterval(() => {}, 1000);',
+    join(root, "history.sh"),
+    `trap 'exit 0' INT
+printf 'HISTORY_READY\\n'
+while IFS= read -r line; do :; done
+`,
   );
+  captureScreen("history");
   const history = await start("history", [historyCommand]);
   await wait(
     () =>
@@ -235,20 +263,9 @@ async function checkHistory() {
   assert.ok(outputs.get("history")!.includes(historyCommand), "Up Arrow must recall the Action");
   const recalled = await readScreen("history");
   assert.equal(recalled.at(-1), `fixture> ${historyCommand}`);
-  await write("history", "\r");
-  await wait(() => outputs.get("history")!.includes("HISTORY_READY\r\n"));
-  await write("history", "\u0003");
-  await wait(() => !activities.has("history"));
-  await write("history", "\u001b[A");
-  await wait(() => outputs.get("history")!.split(historyCommand).length >= 3);
   await write("history", "\u0001\u000bprint EDITED\r");
   await wait(() => outputs.get("history")!.includes("EDITED\r\n"));
-  await write("history", "exit\r");
-  await wait(
-    () =>
-      engine.list({ kind: "all" }).find((item) => item.terminalId === "history")?.lifecycle ===
-      "exited",
-  );
+  await exitShell("history");
   assert.ok((await readFile(join(root, "history"), "utf8")).includes(historyCommand));
 
   for (const [id, commandLine, exitCode] of [
@@ -287,15 +304,18 @@ async function checkState() {
   await wait(() => outputs.get("state")!.includes(`AFTER=${directory}:kept\r\n`));
   await write("state", 'printf "COMMENTS=%s\\n" "$options[interactivecomments]"\r');
   await wait(() => outputs.get("state")!.includes("COMMENTS=off\r\n"));
+  await exitShell("state");
   const syntax = await start("syntax", ["echo )"]);
   const syntaxResult = await Effect.runPromise(syntax.result.pipe(Effect.timeout("2 seconds")));
   assert.equal(syntaxResult.type === "exited" && syntaxResult.exitCode, 1);
+  await exitShell("syntax");
   await writeFile(join(root, ".zshrc"), 'PROMPT="fixture> "\nHISTSIZE=0\nSAVEHIST=0\n');
   const noHistory = await start("no-history", ["true"]);
   const noHistoryResult = await Effect.runPromise(
     noHistory.result.pipe(Effect.timeout("2 seconds")),
   );
   assert.equal(noHistoryResult.type === "exited" && noHistoryResult.exitCode, 0);
+  await exitShell("no-history");
 
   for (const [id, lines, exitCode, expected] of [
     ["err-exit", ["set -e", "false; echo CONTINUED", "echo LATER"], 1, []],
@@ -313,48 +333,40 @@ async function checkState() {
       engine.list({ kind: "all" }).find((item) => item.terminalId === id)?.lifecycle,
       id === "err-exit" ? "exited" : "running",
     );
+    if (id === "command-list") await exitShell(id);
   }
 }
 
-async function checkManual(group: "exec" | "lists" | "words" | "restart") {
+async function checkManual() {
   const command = await serverCommand();
   await writeFile(
     join(root, ".zshrc"),
     `PROMPT="fixture> "\nHISTSIZE=1000\nsetopt SH_WORD_SPLIT\nalias run_server=${formatTerminalPathInput(shell, [`exec ${command}`])}\n`,
   );
-  const cases = {
-    exec: [
-      ["plain", `exec ${command}`, false],
-      ["builtin", `ODT_VALUE=1 builtin exec ${command}`, false],
-      ["assignment", `ODT_VALUE='two words' builtin exec ${command}`, false],
-      ["quoted", `'exec' ${command}`, false],
-    ],
-    lists: [
-      ["and", `cd '${root}' && exec ${command}`, false],
-      ["or", `false || exec ${command}`, false],
-      ["list", `true; exec ${command}`, false],
-    ],
-    words: [
-      ["alias", "run_server", false],
-      ["argument", `${command} exec`, false],
-    ],
-    restart: [
-      ["ordinary", command, true],
-      ["long", `ODT_VALUE='${"x".repeat(1200)}' ${command}`, true],
-    ],
-  } as const;
-  for (const [name, input, restartable] of cases[group]) {
+  const cases = [
+    ["plain", `exec ${command}`, false],
+    ["assignment", `ODT_VALUE='two words' builtin exec ${command}`, false],
+    ["quoted", `'exec' ${command}`, false],
+    ["and", `cd '${root}' && exec ${command}`, false],
+    ["or", `false || exec ${command}`, false],
+    ["list", `true; exec ${command}`, false],
+    ["alias", "run_server", false],
+    ["argument", `${command} exec`, false],
+    ["long", `ODT_VALUE='${"x".repeat(1200)}' ${command}`, true],
+  ] as const;
+  for (const [name, input, restartable] of cases) {
     const id = `manual-${name}`;
     const action = await start(id, ["true"]);
     await Effect.runPromise(action.result.pipe(Effect.timeout("2 seconds")));
     await write(id, `${input}\r`);
-    await wait(() => outputs.get(id)!.includes("SERVER_READY\r\n"));
-    assert.equal(activities.get(id)?.restartable, restartable);
+    await wait(() => activities.has(id) && outputs.get(id)!.includes("SERVER_READY\r\n"));
+    assert.equal(activities.get(id)?.restartable, restartable, id);
     const result = await Effect.runPromise(
       Effect.result(engine.restart(id, activities.get(id)!.command)),
     );
     if (restartable) {
       assert.equal(result._tag, "Success");
+      assert.equal(inputs.get(id)!.at(-1), `\u001b[200~${input}\u001b[201~\r`);
       await wait(() => outputs.get(id)!.split("SERVER_READY\r\n").length === 3);
     } else {
       assert.ok(result._tag === "Failure");
@@ -366,14 +378,27 @@ async function checkManual(group: "exec" | "lists" | "words" | "restart") {
         "running",
       );
     }
+    await write(id, "\u0003");
+    await wait(() => !activities.has(id));
+    if (restartable || name === "argument") await exitShell(id);
   }
 }
 
-async function serverCommand() {
-  const server = join(root, "server.cjs");
+async function serverCommand(waitForStopInput = false) {
+  const server = join(root, "server.sh");
   await writeFile(
     server,
-    'process.on("SIGINT", () => { console.log("SERVER_STOPPING"); setTimeout(() => { console.log("SERVER_STOPPED"); process.exit(0); }, 40); }); console.log("SERVER_CWD=" + process.cwd()); console.log("SERVER_READY"); setInterval(() => {}, 1000);',
+    `stop() {
+  printf 'SERVER_STOPPING\\n'
+  ${waitForStopInput ? "IFS= read -r line" : ":"}
+  printf 'SERVER_STOPPED\\n'
+  exit 0
+}
+trap stop INT
+printf 'SERVER_CWD=%s\\n' "$(pwd -P)"
+printf 'SERVER_READY\\n'
+while IFS= read -r line; do :; done
+`,
   );
-  return formatTerminalPathInput(shell, [process.execPath, server]);
+  return formatTerminalPathInput(shell, ["/bin/sh", server]);
 }

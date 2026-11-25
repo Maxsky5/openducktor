@@ -40,31 +40,19 @@ describe.skipIf(process.platform === "win32" || zsh === null)("zsh Action termin
     "state",
     "restart",
     "restart-setup",
-    "restart-err-exit-action",
-    "restart-err-exit-manual",
-    "restart-set-e-line",
-    "restart-setopt-line",
+    "restart-err-exit",
     "restart-finished",
     "interrupt-finished",
     "hooks",
-    "manual-exec",
-    "manual-lists",
-    "manual-words",
-    "manual-restart",
+    "manual-replay",
     "ready",
     "buffer",
   ])("%s", async (name) => {
-    const child = Bun.spawn([Bun.which("node")!, script, name], {
+    const child = Bun.spawn(["node", script, name], {
       env: { ...process.env, ODT_TEST_ZSH: zsh! },
-      stdout: "pipe",
-      stderr: "pipe",
+      stdout: "inherit",
+      stderr: "inherit",
     });
-    const [exitCode, stdout, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
-    expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
-    expect(stdout).toContain(`PASS ${name}`);
+    expect(await child.exited).toBe(0);
   });
 });

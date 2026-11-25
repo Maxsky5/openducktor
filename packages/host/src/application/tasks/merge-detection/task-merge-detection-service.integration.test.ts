@@ -1,7 +1,7 @@
 import { specPlanBuildReference } from "@openducktor/workflows/test-support";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, realpath, stat, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, realpath, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -11,7 +11,7 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createGitCliAdapter } from "../../../adapters/git/git-cli-adapter";
-import { gitFixtureEnv } from "../../../test-support/git-repository-fixture";
+import { gitFixtureCommand, gitFixtureEnv } from "../../../test-support/git-repository-fixture";
 import { createSettingsConfigTestDouble } from "../../../test-support/service-test-doubles";
 import { removeTestDirectory } from "../../../test-support/temp-directory";
 import { createRemoteFetchService } from "../../git/remote-fetch-service";
@@ -20,7 +20,7 @@ import { repoConfigFixture } from "../../../test-support/repo-config-fixture";
 
 const run = (cwd: string, ...args: string[]) =>
   execFileSync(
-    "git",
+    gitFixtureCommand,
     [
       "-c",
       "user.name=Merge Detection Test",
@@ -65,6 +65,7 @@ const taskCard = (id: string): TaskCard => ({
   createdAt: "2026-10-01T00:00:00.000Z",
 });
 
+let templateRoot: string;
 let root: string;
 let repo: string;
 let worktreeBase: string;
@@ -77,7 +78,7 @@ const commitFile = async (cwd: string, name: string, content: string) => {
 
 const createService = (tasks: TaskCard[]) => {
   const gitPort = createGitCliAdapter({
-    resolveCommand: () => Effect.succeed("git"),
+    resolveCommand: () => Effect.succeed(gitFixtureCommand),
     readEnv: () => gitFixtureEnv,
   });
   const snapshots: TaskMergeStatusSnapshot[] = [];
@@ -146,6 +147,18 @@ const resultsByTask = (snapshot: TaskMergeStatusSnapshot) =>
     ]),
   );
 
+beforeAll(async () => {
+  templateRoot = await mkdtemp(path.join(tmpdir(), "merge-detection-template-"));
+  const seed = path.join(templateRoot, "seed");
+  run(templateRoot, "init", "--template=", "--initial-branch=main", seed);
+  await commitFile(seed, "base.txt", "base\n");
+  run(templateRoot, "clone", "--bare", "--template=", seed, path.join(templateRoot, "origin.git"));
+});
+
+afterAll(async () => {
+  await removeTestDirectory(templateRoot);
+});
+
 beforeEach(async () => {
   root = await realpath(await mkdtemp(path.join(tmpdir(), "merge-detection-")));
   repo = path.join(root, "repo");
@@ -154,11 +167,8 @@ beforeEach(async () => {
 
 const createRepository = async () => {
   const origin = path.join(root, "origin.git");
-  run(root, "init", "--bare", "--initial-branch=main", origin);
-  run(root, "init", "--initial-branch=main", repo);
-  await commitFile(repo, "base.txt", "base\n");
-  run(repo, "remote", "add", "origin", origin);
-  run(repo, "push", "-u", "origin", "main");
+  await cp(path.join(templateRoot, "origin.git"), origin, { recursive: true });
+  run(root, "clone", "--template=", "--origin=origin", origin, repo);
 };
 
 afterEach(async () => {
@@ -167,30 +177,37 @@ afterEach(async () => {
 
 describe("merge detection with real Git", () => {
   // Each case creates repositories and starts many Git processes, which can exceed 5 seconds.
-  test("finds each merge type and tells branches without commits apart", async () => {
+  test("finds merge types as branches advance and after Git expires reflogs", async () => {
     await createRepository();
-    const other = path.join(root, "other");
-    run(root, "clone", path.join(root, "origin.git"), other);
+    run(repo, "branch", "odt/t-idle", "origin/main");
     for (const taskId of ["t-merge", "t-ff", "t-squash", "t-rebase", "t-open"]) {
       run(repo, "checkout", "-b", `odt/${taskId}`, "origin/main");
       await commitFile(repo, `${taskId}.txt`, `${taskId}\n`);
     }
+    // A new task starts with the same tree as release, but has no commit of its own.
+    run(repo, "branch", "odt/t-cherry", "odt/t-ff");
+    run(repo, "checkout", "-b", "release", "origin/main");
+    run(repo, "cherry-pick", "-x", "odt/t-ff");
+
+    // Publish the merged target without moving the checkout's main or its tracking refs.
+    run(repo, "checkout", "-b", "merged-main", "origin/main");
+    run(repo, "merge", "--ff-only", "odt/t-ff");
+    run(repo, "merge", "--no-ff", "-m", "Merge t-merge", "odt/t-merge");
+    run(repo, "merge", "--squash", "odt/t-squash");
+    run(repo, "commit", "-m", "Squash t-squash");
+    run(repo, "cherry-pick", "odt/t-rebase");
+    run(repo, "push", path.join(root, "origin.git"), "merged-main:refs/heads/main", "release");
     run(repo, "checkout", "main");
+
     // A branch without commits that a Git panel pull moved forward.
-    run(repo, "worktree", "add", "-b", "odt/t-empty", path.join(worktreeBase, "t-empty"), "main");
-    run(repo, "push", "origin", "odt/t-merge", "odt/t-ff", "odt/t-squash", "odt/t-rebase");
+    const empty = path.join(worktreeBase, "t-empty");
+    run(repo, "worktree", "add", "-b", "odt/t-empty", empty, "main");
+    run(empty, "merge", "--ff-only", "merged-main");
 
-    run(other, "fetch", "origin");
-    run(other, "merge", "--ff-only", "origin/odt/t-ff");
-    run(other, "merge", "--no-ff", "-m", "Merge t-merge", "origin/odt/t-merge");
-    run(other, "merge", "--squash", "origin/odt/t-squash");
-    run(other, "commit", "-m", "Squash t-squash");
-    run(other, "cherry-pick", "origin/odt/t-rebase");
-    run(other, "push", "origin", "main");
-    run(repo, "fetch", "origin");
-    run(path.join(worktreeBase, "t-empty"), "merge", "--ff-only", "origin/main");
-
-    const tasks = ["t-merge", "t-ff", "t-squash", "t-rebase", "t-open", "t-empty"].map(taskCard);
+    const tasks = [
+      ...["t-merge", "t-ff", "t-squash", "t-rebase", "t-open", "t-empty"].map(taskCard),
+      { ...taskCard("t-cherry"), targetBranch: { remote: "origin", branch: "release" } },
+    ];
     const { service, snapshots, logs } = createService(tasks);
     const first = await Effect.runPromise(service.runPass({ workspaceId: "repo", repoPath: repo }));
 
@@ -202,8 +219,13 @@ describe("merge detection with real Git", () => {
       "t-rebase": "merged",
       "t-open": "not_merged:1",
       "t-empty": "not_merged:0",
+      "t-cherry": "not_merged:0",
     });
     expect(first.tasks.find((status) => status.taskId === "t-empty")?.branch).toBe("odt/t-empty");
+    expect(first.tasks.find((status) => status.taskId === "t-cherry")?.targetBranch).toEqual({
+      remote: "origin",
+      branch: "release",
+    });
     expect(snapshots).toEqual([first]);
 
     // A new commit on a merged branch makes it not merged again.
@@ -214,28 +236,16 @@ describe("merge detection with real Git", () => {
       service.runPass({ workspaceId: "repo", repoPath: repo }),
     );
     expect(resultsByTask(second)).toMatchObject({ "t-ff": "not_merged:1", "t-merge": "merged" });
-  }, 30_000);
 
-  test("checks branches whose reflog Git maintenance expired, without a failure", async () => {
-    await createRepository();
-    run(repo, "branch", "odt/t-idle", "origin/main");
-    for (const taskId of ["t-squash", "t-open"]) {
-      run(repo, "checkout", "-b", `odt/${taskId}`, "origin/main");
-      await commitFile(repo, `${taskId}.txt`, `${taskId}\n`);
-    }
-    run(repo, "checkout", "main");
-    run(repo, "merge", "--squash", "odt/t-squash");
-    run(repo, "commit", "-m", "Squash t-squash");
-    run(repo, "push", "origin", "main");
     // `git gc` expires old reflog entries in the same way, and leaves empty reflog files.
     run(repo, "reflog", "expire", "--expire=now", "--all");
 
-    const { service, logs } = createService(["t-idle", "t-squash", "t-open"].map(taskCard));
+    const expired = createService(["t-idle", "t-squash", "t-open"].map(taskCard));
     const snapshot = await Effect.runPromise(
-      service.runPass({ workspaceId: "repo", repoPath: repo }),
+      expired.service.runPass({ workspaceId: "repo", repoPath: repo }),
     );
 
-    expect(logs).toEqual([]);
+    expect(expired.logs).toEqual([]);
     expect(snapshot.tasks.every((status) => status.failure === undefined)).toBe(true);
     expect(resultsByTask(snapshot)).toEqual({
       "t-idle": "not_merged:0",
@@ -317,30 +327,6 @@ describe("merge detection with real Git", () => {
     expect(resultsByTask(snapshot)).toEqual({
       "t-rebase": "merged",
       "t-forward": "merged",
-    });
-  }, 30_000);
-
-  test("keeps a branch without its own commit unmerged against an equivalent release tree", async () => {
-    await createRepository();
-    // A release branch gets the change of main by cherry-pick. A task branch that starts at main
-    // and gets no commit leaves the release tree unchanged, but it is not merged.
-    await commitFile(repo, "shared.txt", "shared\n");
-    run(repo, "checkout", "-b", "release", "main~1");
-    // The source line makes a distinct commit even when both commits have the same timestamp.
-    run(repo, "cherry-pick", "-x", "main");
-    run(repo, "push", "origin", "release");
-    run(repo, "branch", "odt/t-cherry", "main");
-
-    const { service, logs } = createService([
-      { ...taskCard("t-cherry"), targetBranch: { remote: "origin", branch: "release" } },
-    ]);
-    const snapshot = await Effect.runPromise(
-      service.runPass({ workspaceId: "repo", repoPath: repo }),
-    );
-
-    expect(logs).toEqual([]);
-    expect(resultsByTask(snapshot)).toEqual({
-      "t-cherry": "not_merged:0",
     });
   }, 30_000);
 

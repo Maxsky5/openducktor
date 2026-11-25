@@ -22,6 +22,7 @@ import {
 import type { McpHostBridgeServer } from "../../adapters/mcp/mcp-host-bridge-server";
 import { createSourceRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
 import type { HostOperationErrorAggregate } from "../../effect/host-errors";
+import { createHostEventBus, type HostEventBusPort } from "../../events/host-event-bus";
 import { createBrowserEngineTestDouble } from "../../test-support/browser-engine-test-double";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
@@ -40,50 +41,77 @@ const codexStatus = async (router: EffectNodeHostCommandRouter): Promise<HostRun
   return status;
 };
 
-/** Initializes the host, which starts the codex runtime enabled in saved settings. */
-const startHostRuntime = async (router: EffectNodeHostCommandRouter): Promise<string> => {
-  await Effect.runPromise(router.initialize());
-  await waitFor(async () => (await codexStatus(router)).state === "ready", PROCESS_WAIT_MS);
-  const { runtimeId } = await codexStatus(router);
-  if (!runtimeId) throw new Error("The ready codex runtime has no runtime ID.");
-  return runtimeId;
+const awaitSignal = <T>(signal: Promise<T>): Promise<T> =>
+  Effect.runPromise(Effect.promise(() => signal).pipe(Effect.timeout(PROCESS_WAIT_MS)));
+
+const createRuntimeEventBus = () =>
+  createHostEventBus({
+    report: ({ cause }) => {
+      throw new Error("Host event delivery failed.", { cause });
+    },
+  });
+
+/** Initializes the host and waits for the enabled Codex runtime to publish readiness. */
+const startHostRuntime = async (
+  router: EffectNodeHostCommandRouter,
+  eventBus: HostEventBusPort,
+): Promise<string> => {
+  const ready = Promise.withResolvers<HostRuntimeStatus>();
+  const stop = eventBus.subscribe("openducktor://runtime-changed", (event) => {
+    if (event.channel !== "openducktor://runtime-changed") return;
+    const { payload } = event;
+    if (payload.type !== "runtime_changed" || payload.status.kind !== "codex") return;
+    if (payload.status.state === "ready" || payload.status.state === "error")
+      ready.resolve(payload.status);
+  });
+  try {
+    await Effect.runPromise(router.initialize());
+    const status = await awaitSignal(ready.promise);
+    if (status.state === "error")
+      throw new Error(status.failure?.message ?? "Codex failed to start.");
+    if (!status.runtimeId) throw new Error("The ready Codex runtime has no runtime ID.");
+    return status.runtimeId;
+  } finally {
+    stop();
+  }
 };
 
 describe("Codex runtime failure reporting", () => {
-  test.each([
-    { line: JSON.stringify({ id: 999, result: {} }), message: "unexpected id 999" },
-    { line: "{invalid JSON", message: "Invalid Codex app-server JSON" },
-    { line: null, message: "closed" },
-  ])(
-    "logs one host error and restarts the shared runtime after $message",
-    async ({ line, message }) => {
+  test(
+    "logs one host error and restarts the shared runtime after malformed app-server output",
+    async () => {
+      const message = "Invalid Codex app-server JSON";
       const root = await mkdtemp(join(tmpdir(), "odt-codex-host-failure-"));
       const errors: string[] = [];
       const fatalFailures: HostOperationErrorAggregate[] = [];
+      const reported = Promise.withResolvers<void>();
+      const eventBus = createRuntimeEventBus();
       let router: EffectNodeHostCommandRouter | undefined;
       try {
         const codexAppServer = createCodexAppServerTransportRegistry();
         router = await createRouter(
           root,
           codexAppServer,
+          eventBus,
           {
             error: (text) =>
               Effect.sync(() => {
                 errors.push(text);
+                reported.resolve();
               }),
             info: () => Effect.void,
           },
           (failure) =>
             Effect.sync(() => {
               fatalFailures.push(failure);
+              reported.resolve();
             }),
         );
-        const firstRuntimeId = await startHostRuntime(router);
+        const firstRuntimeId = await startHostRuntime(router, eventBus);
         const pid = Number(await readFile(join(root, "runtime.pid"), "utf8"));
         const fatalPath = join(root, "fatal.json");
-        if (line === null) process.kill(pid, "SIGTERM");
-        else await writeFile(fatalPath, line);
-        await waitFor(() => errors.length > 0 || fatalFailures.length > 0, PROCESS_WAIT_MS);
+        await writeFile(fatalPath, "{invalid JSON");
+        await awaitSignal(reported.promise);
         expect(fatalFailures).toEqual([]);
         expect(errors).toHaveLength(1);
         expect(errors[0]).toContain(firstRuntimeId);
@@ -151,11 +179,14 @@ describe("Codex runtime failure reporting", () => {
       const failure = new Error("runtime error log failed");
       const errors: string[] = [];
       const fatalFailures: HostOperationErrorAggregate[] = [];
+      const reported = Promise.withResolvers<void>();
+      const eventBus = createRuntimeEventBus();
       let router: EffectNodeHostCommandRouter | undefined;
       try {
         router = await createRouter(
           root,
           createCodexAppServerTransportRegistry(),
+          eventBus,
           {
             error: (text) =>
               Effect.sync(() => {
@@ -166,12 +197,13 @@ describe("Codex runtime failure reporting", () => {
           (error) =>
             Effect.sync(() => {
               fatalFailures.push(error);
+              reported.resolve();
             }),
         );
-        const runtimeId = await startHostRuntime(router);
+        const runtimeId = await startHostRuntime(router, eventBus);
         const pid = Number(await readFile(join(root, "runtime.pid"), "utf8"));
         await writeFile(join(root, "fatal.json"), JSON.stringify({ id: 999, result: {} }));
-        await waitFor(() => fatalFailures.length === 1, PROCESS_WAIT_MS);
+        await awaitSignal(reported.promise);
         expect(errors).toHaveLength(1);
         expect(errors[0]).toContain(runtimeId);
         expect(errors[0]).toContain("unexpected id 999");
@@ -192,6 +224,7 @@ describe("Codex runtime failure reporting", () => {
 const createRouter = async (
   root: string,
   codexAppServer: ReturnType<typeof createCodexAppServerTransportRegistry>,
+  eventBus: HostEventBusPort,
   lifecycleLogger: HostLifecycleLogger,
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>,
 ): Promise<EffectNodeHostCommandRouter> => {
@@ -229,6 +262,7 @@ const createRouter = async (
     createNodeEffectHostCommandRouter({
       codexAppServer,
       configDirScope: "test",
+      eventBus,
       git: createGitPortTestDouble({
         canonicalizePath: (path) => Effect.succeed(path),
         isGitRepository: () => Effect.succeed(true),

@@ -1,4 +1,5 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, jest, mock, test } from "bun:test";
+import { setImmediate } from "node:timers/promises";
 import {
   agentSessionTranscriptEventSchema,
   type CodexAppServerTurnStartResult,
@@ -16,7 +17,6 @@ import {
   codexThreadStartResultFixture,
   codexTurnFixture,
   codexUserMessageInput,
-  createDeferred,
   createHarness,
   createRuntimeStreamSubscription,
   flushCodexAdapterWork,
@@ -1042,7 +1042,7 @@ describe("CodexAppServerAdapter streaming", () => {
       await emitThreadIdle();
       expect(idleCount()).toBe(1);
 
-      const answer = createDeferred<CodexAppServerTurnStartResult>();
+      const answer = Promise.withResolvers<CodexAppServerTurnStartResult>();
       transport.turnStartAnswer = () => answer.promise;
       const second = send("Second");
       await flushCodexAdapterWork();
@@ -1351,6 +1351,15 @@ describe("CodexAppServerAdapter streaming", () => {
     const ref = codexSessionRuntimeRef("thread/start-runtime-live");
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
     const hostEvents: AgentEvent[] = [];
+    const outputs = () =>
+      hostEvents.flatMap((event) =>
+        event.type === "assistant_part" &&
+        event.part.kind === "tool" &&
+        event.part.callId === "command-1" &&
+        event.part.output != null
+          ? [event.part.output]
+          : [],
+      );
     let emptyMutations = 0;
     const { adapter } = createHarness({
       subscribeEvents,
@@ -1364,44 +1373,46 @@ describe("CodexAppServerAdapter streaming", () => {
     await adapter.startSession(codexStartSessionInput());
     await flushCodexAdapterWork();
 
-    emitNotification({
-      method: "item/started",
-      params: {
-        threadId: ref.externalSessionId,
-        turnId: "turn-live",
-        startedAtMs: 1_783_196_401_000,
-        item: codexCommandExecutionItemFixture({
-          id: "command-1",
-          status: "inProgress",
-          exitCode: null,
-          aggregatedOutput: null,
-        }),
-      },
-    });
-    for (const delta of ["one\n", "two\n", "three\n"]) {
+    jest.useFakeTimers();
+    try {
       emitNotification({
-        method: "item/commandExecution/outputDelta",
+        method: "item/started",
         params: {
           threadId: ref.externalSessionId,
           turnId: "turn-live",
-          itemId: "command-1",
-          delta,
+          startedAtMs: 1_783_196_401_000,
+          item: codexCommandExecutionItemFixture({
+            id: "command-1",
+            status: "inProgress",
+            exitCode: null,
+            aggregatedOutput: null,
+          }),
         },
       });
-    }
-    await new Promise((resolve) => setTimeout(resolve, LIVE_COMMAND_OUTPUT_INTERVAL_MS + 50));
-    await flushCodexAdapterWork();
+      for (const delta of ["one\n", "two\n", "three\n"]) {
+        emitNotification({
+          method: "item/commandExecution/outputDelta",
+          params: {
+            threadId: ref.externalSessionId,
+            turnId: "turn-live",
+            itemId: "command-1",
+            delta,
+          },
+        });
+      }
+      await setImmediate();
+      jest.advanceTimersByTime(LIVE_COMMAND_OUTPUT_INTERVAL_MS - 1);
+      await setImmediate();
+      expect(outputs()).toEqual(["one\n"]);
 
-    const outputs = hostEvents.flatMap((event) =>
-      event.type === "assistant_part" &&
-      event.part.kind === "tool" &&
-      event.part.callId === "command-1"
-        ? [event.part.output ?? null]
-        : [],
-    );
-    expect(outputs.at(-1)).toBe("one\ntwo\nthree\n");
-    // A chunk that waits for the interval changes nothing on the host, so it sends no update.
-    expect(emptyMutations).toBe(0);
+      jest.advanceTimersByTime(1);
+      await setImmediate();
+      expect(outputs()).toEqual(["one\n", "one\ntwo\nthree\n"]);
+      // A chunk that waits for the interval changes nothing on the host, so it sends no update.
+      expect(emptyMutations).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test("shows no running output of a command that runs on after its turn", async () => {
@@ -1715,8 +1726,8 @@ describe("CodexAppServerAdapter streaming", () => {
 
   test("late old turn completion does not clear a newer active turn", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
-    const firstTurnStart = createDeferred<CodexAppServerTurnStartResult>();
-    const secondTurnStart = createDeferred<CodexAppServerTurnStartResult>();
+    const firstTurnStart = Promise.withResolvers<CodexAppServerTurnStartResult>();
+    const secondTurnStart = Promise.withResolvers<CodexAppServerTurnStartResult>();
     const pendingTurnStarts = [firstTurnStart, secondTurnStart];
     const calls: CodexJsonRpcRequest[] = [];
     const transport: CodexJsonRpcTransport = {

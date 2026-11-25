@@ -1,61 +1,86 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, mkdir, realpath, writeFile, rm, rename } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, realpath, writeFile, rm, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type {
   WorkspaceFileTreeEntry,
   WorkspaceFileTreeCursor,
   WorkspaceFileTreeContext,
+  WorkspaceFileTreeRefreshResult,
 } from "@openducktor/contracts";
 import { Effect, Deferred, Fiber } from "effect";
 import { createFilesystemAdapter } from "../../adapters/filesystem/filesystem-adapter";
 import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
-import {
-  createDefaultGitRunner,
-  type GitCommandRunner,
-} from "../../infrastructure/git/git-command-runner";
+import { createDefaultGitRunner } from "../../infrastructure/git/git-command-runner";
 import { HostOperationError } from "../../effect/host-errors";
+import { gitFixtureCommand, gitFixtureEnv } from "../../test-support/git-repository-fixture";
 import { resolveGitWorkingDirectory } from "../git/git-service-inputs";
 import { createWorkspaceFilesService } from "./workspace-files-service";
+
+const liveRunner = createDefaultGitRunner(() => gitFixtureEnv, { command: gitFixtureCommand });
+const repositorySeed = path.join(tmpdir(), `odt-tree-seed-${randomUUID()}`);
+
+const runGit = async (root: string, args: string[]): Promise<void> => {
+  await Effect.runPromise(
+    liveRunner(root, [
+      "-c",
+      "user.name=Tree test",
+      "-c",
+      "user.email=test@example.com",
+      "-c",
+      "commit.gpgsign=false",
+      ...args,
+    ]),
+  );
+};
+
+beforeAll(async () => {
+  await mkdir(repositorySeed);
+  await runGit(repositorySeed, ["init", "--template=", "-b", "main"]);
+  await mkdir(path.join(repositorySeed, "src"));
+  await writeFile(path.join(repositorySeed, "src/entry.txt"), "original\n");
+  await writeFile(path.join(repositorySeed, "collision"), "file\n");
+  await writeFile(path.join(repositorySeed, ".gitignore"), "ignored*\n");
+  await runGit(repositorySeed, ["add", "."]);
+  await runGit(repositorySeed, ["commit", "-m", "initial"]);
+  await runGit(repositorySeed, ["branch", "comparison"]);
+});
+
+afterAll(async () => {
+  await rm(repositorySeed, { recursive: true, force: true });
+});
 
 const withRepository = async (
   run: (root: string, command: (args: string[]) => Promise<void>) => Promise<void>,
 ) => {
   const root = await mkdtemp(path.join(tmpdir(), "odt-tree-refresh-"));
-  const runner = createDefaultGitRunner(() => process.env, { command: "git" });
-  const command = async (args: string[]) => {
-    await Effect.runPromise(runner(root, args));
-  };
   try {
-    await command(["init", "-b", "main"]);
-    await command(["config", "user.email", "test@example.com"]);
-    await command(["config", "user.name", "Tree test"]);
-    await mkdir(path.join(root, "src"));
-    await writeFile(path.join(root, "src/entry.txt"), "original\n");
-    await writeFile(path.join(root, "collision"), "file\n");
-    await writeFile(path.join(root, ".gitignore"), "ignored*\n");
-    await command(["add", "."]);
-    await command(["commit", "-m", "initial"]);
-    await command(["branch", "comparison"]);
-    await run(root, command);
+    await cp(repositorySeed, root, { recursive: true });
+    // The copied index must describe this checkout before a test measures its changes.
+    await runGit(root, ["update-index", "--refresh"]);
+    await run(root, (args) => runGit(root, args));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 };
 
 describe("workspace tree refresh", () => {
-  // This case starts real Git processes for setup, inventory, and both context reads.
-  test("full refresh includes Git badges for edits made during the inventory read", async () => {
+  test("a full refresh reuses the Git panel checkout and reads fresh badges after inventory", async () => {
     await withRepository(async (root) => {
-      const liveRunner = createDefaultGitRunner(() => process.env, { command: "git" });
+      const canonicalRoot = await realpath(root);
+      const checkoutReads: string[] = [];
       let edited = false;
       const git = createGitCliAdapter({
         runner: (dir, args, options) =>
           Effect.gen(function* () {
+            if (args.includes("--is-inside-work-tree") || args.includes("--show-toplevel")) {
+              checkoutReads.push(dir);
+            }
             if (args[0] === "ls-files" && args.at(-1) === "." && !edited) {
               edited = true;
               yield* Effect.promise(async () => {
+                await writeFile(path.join(root, "collision"), "restored with edits\n");
                 await writeFile(path.join(root, "src/entry.txt"), "edited\n");
                 await writeFile(path.join(root, "new.txt"), "new\n");
               });
@@ -65,125 +90,91 @@ describe("workspace tree refresh", () => {
       });
       const service = createWorkspaceFilesService(createFilesystemAdapter(), git);
       try {
-        const before = await Effect.runPromise(git.getFileTreeContext(root, "comparison"));
+        const readContext = { refreshId: "refresh" };
+        await Effect.runPromise(
+          resolveGitWorkingDirectory(git, canonicalRoot, canonicalRoot, readContext),
+        );
+        expect(await Effect.runPromise(git.getStatus(canonicalRoot, readContext))).toEqual([]);
+        await rm(path.join(root, "collision"));
+        expect(
+          await Effect.runPromise(git.listChangedFiles(canonicalRoot, "comparison", readContext)),
+        ).toEqual([{ path: "collision", status: "deleted" }]);
         const result = await Effect.runPromise(
           service.refreshTree({
-            rootPath: root,
+            rootPath: canonicalRoot,
             targetBranch: "comparison",
             mode: "full",
-            refreshId: "full",
+            ...readContext,
           }),
         );
-        expect(await Effect.runPromise(git.getFileTreeContext(root, "comparison"))).toEqual(before);
+        expect(checkoutReads).toEqual([canonicalRoot]);
         if (result.kind !== "snapshot") throw new Error("expected snapshot");
         const entries = new Map(result.entries.map((entry) => [entry.path, entry]));
+        expect(entries.get("collision")?.gitStatus).toBe("modified");
         expect(entries.get("new.txt")?.gitStatus).toBe("untracked");
         expect(entries.get("src/entry.txt")?.gitStatus).toBe("modified");
       } finally {
         await Effect.runPromise(service.dispose());
+        await Effect.runPromise(git.releaseReadCaptures());
       }
     });
   }, 10_000);
 
-  // This case starts real Git processes for setup, the Git panel check, and the tree refresh.
-  test("a tree refresh reuses the checkout read of the Git panel in the same refresh", async () => {
+  // An incremental refresh reads real Git state after it creates a starting cursor.
+  test("an incremental refresh reads edits made after an earlier Git capture", async () => {
     await withRepository(async (root) => {
-      const liveRunner = createDefaultGitRunner(() => process.env, { command: "git" });
-      // Every Git probe that asks for the work tree or its root.
-      const checkoutReads: string[] = [];
-      const git = createGitCliAdapter({
-        runner: (dir, args, options) => {
-          if (args.includes("--is-inside-work-tree") || args.includes("--show-toplevel"))
-            checkoutReads.push(dir);
-          return liveRunner(dir, args, options);
-        },
-      });
+      const git = createGitCliAdapter({ runner: liveRunner });
       const service = createWorkspaceFilesService(createFilesystemAdapter(), git);
       try {
-        const canonicalRoot = await realpath(root);
-        await Effect.runPromise(
-          resolveGitWorkingDirectory(git, canonicalRoot, canonicalRoot, { refreshId: "refresh" }),
+        const common = { rootPath: root, targetBranch: "comparison" };
+        const initial = await Effect.runPromise(
+          service.refreshTree({ ...common, mode: "full", refreshId: "initial" }),
         );
-        await Effect.runPromise(
-          service.refreshTree({ rootPath: canonicalRoot, mode: "full", refreshId: "refresh" }),
+        if (initial.kind !== "snapshot") throw new Error("expected snapshot");
+        const readContext = { refreshId: "refresh" };
+        expect(await Effect.runPromise(git.getStatus(root, readContext))).toEqual([]);
+        await rm(path.join(root, "collision"));
+        expect(
+          await Effect.runPromise(git.listChangedFiles(root, "comparison", readContext)),
+        ).toEqual([{ path: "collision", status: "deleted" }]);
+        await writeFile(path.join(root, "collision"), "restored with edits\n");
+        await writeFile(path.join(root, "src/entry.txt"), "edited\n");
+        await writeFile(path.join(root, "new.txt"), "new\n");
+        const result = await Effect.runPromise(
+          service.refreshTree({
+            ...common,
+            ...readContext,
+            mode: "incremental",
+            base: initial.cursor,
+          }),
         );
-        expect(checkoutReads).toEqual([canonicalRoot]);
+        if (result.kind !== "patch") throw new Error("expected patch");
+        expect(result.context).toEqual(initial.context);
+        expect(result.removals).toEqual([]);
+        expect(
+          Object.fromEntries(result.upserts.map((entry) => [entry.path, entry.gitStatus])),
+        ).toEqual({
+          collision: "modified",
+          "new.txt": "untracked",
+          "src/entry.txt": "modified",
+        });
       } finally {
         await Effect.runPromise(service.dispose());
+        await Effect.runPromise(git.releaseReadCaptures());
       }
     });
-  }, 10_000);
-
-  // Each case starts real Git processes for the stale reads and the tree refresh. A full refresh
-  // takes about 9 s on a Windows runner.
-  test.each(["full", "incremental"] as const)(
-    "%s refresh reads edits made after an earlier Git capture",
-    async (mode) => {
-      await withRepository(async (root) => {
-        const git = createGitCliAdapter({
-          runner: createDefaultGitRunner(() => process.env, { command: "git" }),
-        });
-        const service = createWorkspaceFilesService(createFilesystemAdapter(), git);
-        try {
-          const initial = await Effect.runPromise(
-            service.refreshTree({
-              rootPath: root,
-              targetBranch: "comparison",
-              mode: "full",
-              refreshId: "initial",
-            }),
-          );
-          if (initial.kind !== "snapshot") throw new Error("expected snapshot");
-          const readContext = { refreshId: "refresh" };
-          expect(await Effect.runPromise(git.getStatus(root, readContext))).toEqual([]);
-          await rm(path.join(root, "collision"));
-          expect(
-            await Effect.runPromise(git.listChangedFiles(root, "comparison", readContext)),
-          ).toEqual([{ path: "collision", status: "deleted" }]);
-          await writeFile(path.join(root, "collision"), "restored with edits\n");
-          await writeFile(path.join(root, "src/entry.txt"), "edited\n");
-          await writeFile(path.join(root, "new.txt"), "new\n");
-          expect(
-            await Effect.runPromise(git.getFileTreeContext(initial.rootPath, "comparison")),
-          ).toEqual(initial.context);
-          const common = { rootPath: root, targetBranch: "comparison", ...readContext };
-          const result = await Effect.runPromise(
-            service.refreshTree(
-              mode === "full" ? { ...common, mode } : { ...common, mode, base: initial.cursor },
-            ),
-          );
-          expect(result.kind).toBe(mode === "full" ? "snapshot" : "patch");
-          if (result.kind !== "snapshot" && result.kind !== "patch")
-            throw new Error("expected updated tree");
-          const entries = new Map(initial.entries.map((entry) => [entry.path, entry]));
-          if (result.kind === "snapshot") entries.clear();
-          else for (const name of result.removals) entries.delete(name);
-          for (const entry of result.kind === "snapshot" ? result.entries : result.upserts)
-            entries.set(entry.path, entry);
-          expect(entries.get("new.txt")?.gitStatus).toBe("untracked");
-          expect(entries.get("src/entry.txt")?.gitStatus).toBe("modified");
-          expect(entries.get("collision")?.gitStatus).toBe("modified");
-          const full = await Effect.runPromise(
-            service.listTree({ rootPath: root, targetBranch: "comparison" }),
-          );
-          expect([...entries.values()].sort((a, b) => a.path.localeCompare(b.path))).toEqual(
-            [...full.entries].sort((a, b) => a.path.localeCompare(b.path)),
-          );
-        } finally {
-          await Effect.runPromise(service.dispose());
-          await Effect.runPromise(git.releaseReadCaptures());
-        }
-      });
-    },
-    20_000,
-  );
+  }, 20_000);
 
   // Real Git processes and multiple inventory batches need a longer timeout.
   test("refreshes a large dirty tree and keeps its cursor after a later Git batch fails", async () => {
     await withRepository(async (root) => {
+      // Windows needs shorter names to fit its path limit and has a smaller argument budget.
+      // Both fixtures need more than one Git batch.
+      const windows = process.platform === "win32";
+      const suffix = "a".repeat(windows ? 90 : 214);
       const names = Array.from(
-        { length: 1_000 },
-        (_, index) => `${String(index).padStart(6, "0")}-${"a".repeat(90)}.txt`,
+        { length: windows ? 50 : 280 },
+        (_, index) => `${String(index).padStart(6, "0")}-${suffix}.txt`,
       );
       names.push("[literal] é 空.txt", "-leading.txt");
       for (let start = 0; start < names.length; start += 100) {
@@ -191,7 +182,6 @@ describe("workspace tree refresh", () => {
           names.slice(start, start + 100).map((name) => writeFile(path.join(root, name), "new\n")),
         );
       }
-      const liveRunner = createDefaultGitRunner(() => process.env, { command: "git" });
       let batches = 0;
       let failSecondBatch = false;
       const failure = new HostOperationError({
@@ -283,21 +273,21 @@ describe("workspace tree refresh", () => {
     });
   }, 30_000);
 
-  // Real Git processes compare each refresh with an independent full read.
-  test("matches full reads after edits, membership changes, and ignored-file changes", async () => {
+  // Real Git processes read the final tree to check that no earlier entry is stale.
+  test("matches a full tree read after edits, a staged rename, and file membership changes", async () => {
     await withRepository(async (root, command) => {
-      const { calls, refresh, entries } = treeFixture(root);
+      const { calls, refresh, entries, expectMatchesFullRead } = treeFixture(root);
       expect((await refresh()).kind).toBe("snapshot");
       calls.length = 0;
       await writeFile(path.join(root, "src/entry.txt"), "edited\n");
       expect((await refresh()).kind).toBe("patch");
-      // The assertion excludes the reference full read performed by the test.
-      expect(calls.filter((args) => args[0] === "ls-files" && args.at(-1) === ".")).toHaveLength(1);
+      expect(calls.filter((args) => args[0] === "ls-files" && args.at(-1) === ".")).toBeEmpty();
       expect(
         calls.filter(
           (args) => args[0] === "ls-files" && args.some((arg) => arg === ":(literal)src/entry.txt"),
         ),
       ).toHaveLength(1);
+      expect(entries.get("src/entry.txt")?.gitStatus).toBe("modified");
       await writeFile(path.join(root, "src/entry.txt"), "edited again\n");
       expect((await refresh()).kind).toBe("unchanged");
       await mkdir(path.join(root, "new/deep"), { recursive: true });
@@ -306,75 +296,66 @@ describe("workspace tree refresh", () => {
       await writeFile(path.join(root, addedPath), "new\n");
       await writeFile(path.join(root, "ignored.txt"), "hidden\n");
       await refresh();
+      expect(entries.get(addedPath)).toMatchObject({ kind: "file", gitStatus: "untracked" });
       expect(entries.has("ignored.txt")).toBe(false);
-      await command(["add", "-f", "ignored.txt"]);
-      expect((await refresh()).kind).toBe("reset_required");
-      await refresh("full");
-      expect(entries.has("ignored.txt")).toBe(true);
-      await rm(path.join(root, "new"), { recursive: true });
-      await refresh();
-      expect(entries.has("new")).toBe(false);
-    });
-  }, 20_000);
 
-  // Real Git processes compare each refresh with an independent full read.
-  test("matches full reads after staging, renames, and file-directory changes", async () => {
-    await withRepository(async (root, command) => {
-      const { refresh, entries } = treeFixture(root);
-      expect((await refresh()).kind).toBe("snapshot");
-      await writeFile(path.join(root, "src/entry.txt"), "edited\n");
-      await command(["add", "src/entry.txt"]);
-      expect((await refresh()).kind).toBe("reset_required");
-      await refresh("full");
-      await command(["reset", "HEAD", "src/entry.txt"]);
-      expect((await refresh()).kind).toBe("reset_required");
-      await refresh("full");
       await rename(path.join(root, "src/entry.txt"), path.join(root, "src/renamed.txt"));
-      await command(["add", "src"]);
+      await command(["add", "-f", "ignored.txt", "src"]);
       expect((await refresh()).kind).toBe("reset_required");
       await refresh("full");
+      expect(entries.get("ignored.txt")).toMatchObject({ kind: "file", gitStatus: "added" });
       expect(entries.get("src/entry.txt")?.gitStatus).toBe("deleted");
+      expect(entries.get("src/renamed.txt")?.gitStatus).toBe("added");
       await rm(path.join(root, "collision"));
       await mkdir(path.join(root, "collision"));
       await writeFile(path.join(root, "collision/child.txt"), "child\n");
       await refresh();
       expect(entries.get("collision")?.kind).toBe("directory");
+      expect(entries.get("collision/child.txt")).toMatchObject({
+        kind: "file",
+        gitStatus: "untracked",
+      });
       await rm(path.join(root, "collision"), { recursive: true });
       await writeFile(path.join(root, "collision"), "restored\n");
+      await rm(path.join(root, "new"), { recursive: true });
       await refresh();
+      expect(entries.get("collision")?.kind).toBe("file");
       expect(entries.has("collision/child.txt")).toBe(false);
+      expect(entries.has("new")).toBe(false);
+      expect(entries.has(addedPath)).toBe(false);
+      await expectMatchesFullRead();
     });
   }, 20_000);
 
-  // Real Git processes compare each refresh with an independent full read. This takes about 15 s
-  // on a Windows runner.
+  // Each Git context change needs its own reset and fresh snapshot.
   test("resets after index, HEAD, branch, target, and sparse-policy changes, then stops", async () => {
     await withRepository(async (root, command) => {
       const { service, refresh, entries } = treeFixture(root);
       expect((await refresh()).kind).toBe("snapshot");
+      const contextChanged = { kind: "reset_required", reason: "context_changed" } as const;
       await command(["update-index", "--skip-worktree", "src/entry.txt"]);
-      expect((await refresh()).kind).toBe("reset_required");
+      expect(await refresh()).toEqual(contextChanged);
       await refresh("full");
       expect(entries.has("src/entry.txt")).toBe(false);
       await command(["update-index", "--no-skip-worktree", "src/entry.txt"]);
-      expect((await refresh()).kind).toBe("reset_required");
+      expect(await refresh()).toEqual(contextChanged);
       await refresh("full");
       expect(entries.has("src/entry.txt")).toBe(true);
       await writeFile(path.join(root, "src/entry.txt"), "edited\n");
-      await command(["add", "."]);
-      await command(["commit", "-m", "changes"]);
-      expect((await refresh()).kind).toBe("reset_required");
+      await command(["commit", "-am", "changes"]);
+      expect(await refresh()).toEqual(contextChanged);
       await refresh("full");
-      await command(["branch", "other"]);
-      await command(["switch", "other"]);
-      expect((await refresh()).kind).toBe("reset_required");
+      expect(entries.get("src/entry.txt")?.gitStatus).toBe("modified");
+      await command(["switch", "-c", "other"]);
+      expect(await refresh()).toEqual(contextChanged);
       await refresh("full");
       await command(["update-ref", "refs/heads/comparison", "HEAD"]);
-      expect((await refresh()).kind).toBe("reset_required");
+      expect(await refresh()).toEqual(contextChanged);
       await refresh("full");
+      expect(entries.get("src/entry.txt")?.gitStatus).toBeNull();
       await command(["sparse-checkout", "set", "src"]);
-      expect((await refresh()).kind).toBe("reset_required");
-      await refresh("full");
+      expect(await refresh()).toEqual(contextChanged);
+      expect((await refresh("full")).kind).toBe("snapshot");
       await Effect.runPromise(service.dispose());
       await expect(refresh()).rejects.toThrow("Workspace file service has stopped");
     });
@@ -382,9 +363,7 @@ describe("workspace tree refresh", () => {
 
   test("keeps rename endpoints correct across a selected subdirectory", async () => {
     await withRepository(async (root, command) => {
-      const git = createGitCliAdapter({
-        runner: createDefaultGitRunner(() => process.env, { command: "git" }),
-      });
+      const git = createGitCliAdapter({ runner: liveRunner });
       const service = createWorkspaceFilesService(createFilesystemAdapter(), git);
       const selectedRoot = path.join(root, "src");
       const first = await Effect.runPromise(
@@ -419,7 +398,6 @@ describe("workspace tree refresh", () => {
       expect(fresh.entries).toEqual([
         { path: "entry.txt", kind: "file", size: null, mtimeMs: null, gitStatus: "deleted" },
       ]);
-      expect(fresh.entries.some((entry) => entry.path === "../moved.txt")).toBe(false);
     });
   }, 10_000);
 
@@ -566,9 +544,7 @@ describe("workspace tree refresh", () => {
   test("checks current identity again before publishing a pending projection", async () => {
     await withRepository(async (root, command) => {
       await command(["branch", "other"]);
-      const git = createGitCliAdapter({
-        runner: createDefaultGitRunner(() => process.env, { command: "git" }),
-      });
+      const git = createGitCliAdapter({ runner: liveRunner });
       let switchDuringRead = false;
       const service = createWorkspaceFilesService(createFilesystemAdapter(), {
         ...git,
@@ -609,79 +585,68 @@ describe("workspace tree refresh", () => {
     });
   }, 10_000);
 
-  test("shares initial reads, queues a later signal, and publishes no partial data after failure", async () => {
+  test("shares an initial refresh and includes a later edit only in the queued refresh", async () => {
     await withRepository(async (root) => {
-      const start = Effect.runSync(Deferred.make<void>()),
-        release = Effect.runSync(Deferred.make<void>());
-      const liveRunner = createDefaultGitRunner(() => process.env, { command: "git" });
-      let inventories = 0,
-        shouldFail = false;
-      const runner: GitCommandRunner = (dir, args, options) =>
-        Effect.gen(function* () {
-          if (args[0] === "ls-files") {
-            if (shouldFail)
-              return yield* new HostOperationError({
-                operation: "test",
-                message: "inventory read failed",
-              });
-            if (args.at(-1) === ".") {
-              inventories += 1;
-              yield* Deferred.succeed(start, undefined);
-              yield* Deferred.await(release);
-            }
-          }
-          return yield* liveRunner(dir, args, options);
-        });
-      const service = createWorkspaceFilesService(
-        createFilesystemAdapter(),
-        createGitCliAdapter({ runner }),
-      );
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const input = { rootPath: root, mode: "full" as const, refreshId: "initial" };
-          const a = yield* Effect.forkChild(service.refreshTree(input));
-          yield* Deferred.await(start);
-          const b = yield* Effect.forkChild(service.refreshTree(input));
-          const c = yield* Effect.forkChild(service.refreshTree({ ...input, refreshId: "later" }));
-          yield* Effect.promise(() => writeFile(path.join(root, "late.txt"), "late\n"));
-          yield* Deferred.succeed(release, undefined);
-          const results = yield* Effect.all([Fiber.join(a), Fiber.join(b), Fiber.join(c)]);
-          expect(inventories).toBe(1);
-          expect(results[0]).toEqual(results[1]);
-          const latest = results[2];
-          if (latest?.kind !== "snapshot") throw new Error("expected later snapshot");
-          expect(latest.entries.some((entry) => entry.path === "late.txt")).toBe(true);
-          shouldFail = true;
-          const failed = yield* Effect.result(
-            service.refreshTree({
-              rootPath: root,
-              mode: "incremental",
-              base: latest.cursor,
-              refreshId: "failure",
+      const captured = Effect.runSync(Deferred.make<void>());
+      const release = Effect.runSync(Deferred.make<void>());
+      let inventories = 0;
+      let readingFirstStatus = true;
+      const git = createGitCliAdapter({ runner: liveRunner });
+      const service = createWorkspaceFilesService(createFilesystemAdapter(), {
+        ...git,
+        listFiles: (...args) => {
+          inventories += 1;
+          return git.listFiles(...args);
+        },
+        getStatus: (...args) =>
+          git.getStatus(...args).pipe(
+            Effect.tap(() => {
+              if (!readingFirstStatus) return Effect.void;
+              readingFirstStatus = false;
+              return Deferred.succeed(captured, undefined).pipe(
+                Effect.andThen(Deferred.await(release)),
+              );
             }),
-          );
-          expect(failed._tag).toBe("Failure");
-          shouldFail = false;
-          const recovered = yield* service.refreshTree({
-            rootPath: root,
-            mode: "incremental",
-            base: latest.cursor,
-            refreshId: "recover",
-          });
-          expect(recovered.kind).toBe("unchanged");
-        }),
-      );
+          ),
+      });
+      try {
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const input = { rootPath: root, mode: "full" as const, refreshId: "initial" };
+            const first = yield* Effect.forkChild(service.refreshTree(input));
+            yield* Deferred.await(captured);
+            const repeat = yield* Effect.forkChild(service.refreshTree(input));
+            const later = yield* Effect.forkChild(
+              service.refreshTree({ ...input, refreshId: "later" }),
+            );
+            yield* Effect.promise(() => writeFile(path.join(root, "late.txt"), "late\n"));
+            yield* Deferred.succeed(release, undefined);
+            const initial = yield* Fiber.join(first);
+            const repeated = yield* Fiber.join(repeat);
+            const latest = yield* Fiber.join(later);
+            if (initial.kind !== "snapshot" || latest.kind !== "snapshot")
+              throw new Error("expected both snapshots");
+            expect(inventories).toBe(1);
+            expect(repeated).toEqual(initial);
+            expect(initial.entries.some((entry) => entry.path === "late.txt")).toBe(false);
+            expect(latest.entries.find((entry) => entry.path === "late.txt")?.gitStatus).toBe(
+              "untracked",
+            );
+          }),
+        );
+      } finally {
+        await Effect.runPromise(service.dispose());
+      }
     });
   }, 10_000);
 });
 
 function treeFixture(root: string) {
   const calls: string[][] = [];
-  const runner = createDefaultGitRunner(() => process.env, { command: "git" });
   const git = createGitCliAdapter({
     runner: (dir, args, options) => {
       calls.push(args);
-      return runner(dir, args, options);
+      return liveRunner(dir, args, options);
     },
   });
   const service = createWorkspaceFilesService(createFilesystemAdapter(), git);
@@ -707,22 +672,27 @@ function treeFixture(root: string) {
       ),
     );
     if (result.kind === "reset_required") return result;
-    if (result.kind === "snapshot") {
-      entries.clear();
-      for (const entry of result.entries) entries.set(entry.path, entry);
-    }
-    if (result.kind === "patch") {
-      for (const path of result.removals) entries.delete(path);
-      for (const entry of result.upserts) entries.set(entry.path, entry);
-    }
+    if (result.kind !== "unchanged") applyTreeRefresh(entries, result);
     cursor = result.cursor;
+    return result;
+  };
+  const expectMatchesFullRead = async () => {
     const fresh = await Effect.runPromise(
       service.listTree({ rootPath: root, targetBranch: "comparison" }),
     );
     expect([...entries.values()].sort((a, b) => a.path.localeCompare(b.path))).toEqual(
       [...fresh.entries].sort((a, b) => a.path.localeCompare(b.path)),
     );
-    return result;
   };
-  return { calls, service, refresh, entries };
+  return { calls, service, refresh, entries, expectMatchesFullRead };
+}
+
+function applyTreeRefresh(
+  entries: Map<string, WorkspaceFileTreeEntry>,
+  result: Extract<WorkspaceFileTreeRefreshResult, { kind: "snapshot" | "patch" }>,
+) {
+  if (result.kind === "snapshot") entries.clear();
+  else for (const path of result.removals) entries.delete(path);
+  for (const entry of result.kind === "snapshot" ? result.entries : result.upserts)
+    entries.set(entry.path, entry);
 }

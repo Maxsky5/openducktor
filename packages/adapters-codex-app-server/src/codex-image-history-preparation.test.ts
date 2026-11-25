@@ -9,7 +9,6 @@ import {
   codexThreadFixture,
   codexTurnFixture,
   createAdapterWithTransport,
-  createDeferred,
   RecordingTransport,
 } from "./codex-app-server-adapter.test-harness";
 
@@ -54,8 +53,8 @@ const createAdapter = (prepareImageGenerations: CodexImageGenerationPreparer) =>
 };
 
 test("renderer history waits for prepared images and maps them without hashing again", async () => {
-  const gate = createDeferred<typeof parts>();
-  const entered = createDeferred<void>();
+  const gate = Promise.withResolvers<typeof parts>();
+  const entered = Promise.withResolvers<void>();
   const prepare = mock<CodexImageGenerationPreparer>(async () => {
     entered.resolve();
     return gate.promise;

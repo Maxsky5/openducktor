@@ -235,7 +235,7 @@ test("invalidates the catalog of a repository that the runtime served without a 
   ]);
 });
 
-test("text deltas preserve transcript order with zero snapshot equality serializations", () => {
+test("delivers text deltas in order without serializing unchanged snapshots", () => {
   const transcript: string[] = [];
   const projection = createCodexLiveSessionProjection({
     runtime: { runtimeId: "runtime" },
@@ -258,21 +258,9 @@ test("text deltas preserve transcript order with zero snapshot equality serializ
   const base = { runtimeId: "runtime", transcriptEvents: [], catalogInvalidated: false };
   const sessions = Array.from({ length: 50 }, (_, index) => snapshot(`thread-${index}`));
   Effect.runSync(projection.applyMutation({ ...base, snapshotMode: "full", snapshots: sessions }));
-  const serialize = JSON.stringify;
   // This spy stays inside synchronous Effects, so another test cannot run while it is active.
   const stringify = spyOn(JSON, "stringify");
   try {
-    for (let index = 0; index < 100; index++) {
-      Effect.runSync(
-        projection.applyMutation({ ...base, snapshotMode: "full", snapshots: sessions }),
-      );
-    }
-    expect(stringify).toHaveBeenCalledTimes(10_000);
-    const baselineBytes = stringify.mock.calls.reduce(
-      (bytes, [value]) => bytes + Buffer.byteLength(serialize(value)),
-      0,
-    );
-    stringify.mockClear();
     for (let index = 0; index < 100; index++) {
       Effect.runSync(
         projection.applyMutation({
@@ -297,11 +285,8 @@ test("text deltas preserve transcript order with zero snapshot equality serializ
     const snapshotSerializations = stringify.mock.calls.filter(([value]) =>
       Object.hasOwn(value ?? {}, "ref"),
     );
-    expect(snapshotSerializations).toEqual([]);
+    expect(snapshotSerializations).toHaveLength(0);
     expect(transcript).toEqual(Array.from({ length: 100 }, (_, index) => `${index},`));
-    console.info(
-      `Codex host text replay: equality calls 10000 -> 0; serialized bytes ${baselineBytes} -> 0`,
-    );
   } finally {
     stringify.mockRestore();
   }

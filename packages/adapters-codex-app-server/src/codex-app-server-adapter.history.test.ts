@@ -14,7 +14,6 @@ import {
   codexThreadStartResultFixture,
   codexThreadFixture,
   codexTurnFixture,
-  createDeferred,
   createHarness,
   createRuntimeStreamSubscription,
   defaultCodexEffectivePolicy,
@@ -1520,8 +1519,8 @@ describe("CodexAppServerAdapter history loading", () => {
   test("prefers a live todo received during a restored history read", async () => {
     const runtimeStream = createRuntimeStreamSubscription();
     const baseTransport = new RecordingTransport("runtime-live", false);
-    const turnsRequested = createDeferred<void>();
-    const pendingTurns = createDeferred<ReturnType<typeof paginatedTurnsListResponse>>();
+    const turnsRequested = Promise.withResolvers<void>();
+    const pendingTurns = Promise.withResolvers<ReturnType<typeof paginatedTurnsListResponse>>();
     const adapter = createAdapterWithTransport(
       {
         request: async (request) => {

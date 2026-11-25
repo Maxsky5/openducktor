@@ -43,8 +43,9 @@ const failureOf = <A, E>(exit: Exit.Exit<A, E>) => {
   return exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error);
 };
 
-test("history chunks preserve revisions, Unicode boundaries, and native outcomes", async () => {
+test("bounded history chunks preserve Unicode, oversized revisions, and native outcomes", async () => {
   const splitUnicode = `${"x".repeat(1024 * 1024 - 1)}😀end`;
+  const oversized = image("x".repeat(45 * 1024 * 1024));
   const images = [
     image(),
     image(splitUnicode),
@@ -52,6 +53,10 @@ test("history chunks preserve revisions, Unicode boundaries, and native outcomes
     { ...image(), item: { ...image().item, status: "in_progress" } },
     image(""),
   ];
+  const oversizedRevision = createHash("sha256")
+    .update("inline\0")
+    .update(oversized.item.result)
+    .digest("hex");
   const lengths: number[] = [];
   const original = Worker.prototype.postMessage;
   const post = spyOn(Worker.prototype, "postMessage").mockImplementation(function (
@@ -65,9 +70,18 @@ test("history chunks preserve revisions, Unicode boundaries, and native outcomes
     return original.apply(this, args);
   });
   try {
-    expect(await workers.prepareHistory(images)).toEqual(
-      images.map(({ item, context }) => codexImageGenerationPart(item, context)),
-    );
+    expect(await workers.prepareHistory([...images, oversized])).toEqual([
+      ...images.map(({ item, context }) => codexImageGenerationPart(item, context)),
+      {
+        kind: "image_generation",
+        messageId: "image",
+        partId: "image",
+        itemId: "image",
+        turnId: "turn",
+        status: "completed",
+        output: { revision: oversizedRevision },
+      },
+    ]);
     expect(lengths.length).toBeGreaterThan(2);
     expect(Math.max(...lengths)).toBeLessThanOrEqual(1024 * 1024);
   } finally {
@@ -75,14 +89,7 @@ test("history chunks preserve revisions, Unicode boundaries, and native outcomes
   }
 });
 
-test("oversized inline output still gets history metadata without a full-payload message", async () => {
-  const oversized = image("x".repeat(45 * 1024 * 1024));
-  expect(await workers.prepareHistory([oversized])).toEqual([
-    codexImageGenerationPart(oversized.item, oversized.context),
-  ]);
-});
-
-test("success reuses one worker and inline responses do not copy base64 back", async () => {
+test("inline and file previews share a worker and transfer only the required bytes", async () => {
   const seen: Worker[] = [];
   const replies: unknown[] = [];
   const original = Worker.prototype.postMessage;
@@ -96,11 +103,26 @@ test("success reuses one worker and inline responses do not copy base64 back", a
   });
   try {
     expect((await Effect.runPromise(payload())).base64).toBe(png);
-    expect((await Effect.runPromise(payload())).base64).toBe(png);
+    const pngBytes = Buffer.from(png, "base64");
+    const bytes = Buffer.alloc(pngBytes.length);
+    pngBytes.copy(bytes);
+    const result = await Effect.runPromise(
+      workers.preparePayload(
+        Effect.succeed({
+          kind: "file",
+          bytes,
+          revision: createHash("sha256").update("saved_file\0").update(bytes).digest("hex"),
+          itemId: "file",
+        }),
+        "file",
+      ),
+    );
+    expect(result.base64).toBe(png);
+    expect(bytes.buffer.byteLength).toBe(0);
     expect(new Set(seen).size).toBe(1);
     expect(replies).toEqual([
       { id: 0, result: { kind: "inline", byteLength: 68 } },
-      { id: 1, result: { kind: "inline", byteLength: 68 } },
+      { id: 1, result: { kind: "payload", payload: result } },
     ]);
     await Effect.runPromise(workers.shutdown);
     expect(seen[0]!.threadId).toBe(-1);
@@ -109,34 +131,16 @@ test("success reuses one worker and inline responses do not copy base64 back", a
   }
 });
 
-test("file buffers transfer ownership to the worker", async () => {
-  const bytes = Buffer.alloc(Buffer.from(png, "base64").length);
-  Buffer.from(png, "base64").copy(bytes);
-  const result = await Effect.runPromise(
-    workers.preparePayload(
-      Effect.succeed({
-        kind: "file",
-        bytes,
-        revision: createHash("sha256").update("saved_file\0").update(bytes).digest("hex"),
-        itemId: "file",
-      }),
-      "file",
-    ),
-  );
-  expect(result.base64).toBe(png);
-  expect(bytes.buffer.byteLength).toBe(0);
-});
-
-for (const failure of [
-  "error",
-  "exit",
-  "messageerror",
-  "malformed",
-  "wrong-kind",
-  "wrong-id",
-  "send",
+for (const [failure, phase] of [
+  ["error", "worker"],
+  ["exit", "exit"],
+  ["messageerror", "message"],
+  ["malformed", "protocol"],
+  ["wrong-kind", "protocol"],
+  ["wrong-id", "protocol"],
+  ["send", "send"],
 ] as const) {
-  test(`${failure} preserves diagnostics, stops its worker, and permits later work`, async () => {
+  test(`${failure} reports a ${phase} failure and stops its worker`, async () => {
     const native = new Error("worker failure");
     const failed: Worker[] = [];
     const original = Worker.prototype.postMessage;
@@ -164,14 +168,16 @@ for (const failure of [
         {
           _tag: "HostOperationError",
           operation: "generated-image.read",
-          details: { itemId: "failure" },
+          details: { itemId: "failure", phase },
         },
       ]);
       if (["error", "messageerror", "send"].includes(failure))
         expect(failures[0]?.cause).toBe(native);
       if (failure === "exit") expect(failures[0]).toMatchObject({ details: { exitCode: 7 } });
       expect(failed[0]!.threadId).toBe(-1);
-      expect((await Effect.runPromise(payload())).base64).toBe(png);
+      // One protocol failure checks that a stopped worker is replaced. Every failure uses the
+      // same pool release path.
+      if (failure === "malformed") expect((await Effect.runPromise(payload())).base64).toBe(png);
     } finally {
       post.mockRestore();
     }
@@ -255,8 +261,9 @@ test("the Promise callback propagates abort and frees capacity", async () => {
   }
 });
 
-test("a deadline stops an unresponsive worker and releases its slot", async () => {
+test("replaces a worker after a job deadline and again after idle expiry", async () => {
   const started = Promise.withResolvers<Worker>();
+  const seen: Worker[] = [];
   const original = Worker.prototype.postMessage;
   const post = spyOn(Worker.prototype, "postMessage").mockImplementation(function (
     this: Worker,
@@ -264,6 +271,7 @@ test("a deadline stops an unresponsive worker and releases its slot", async () =
   ) {
     // SAFETY: The client sends the protocol envelope through this intercepted Worker method.
     const { request } = args[0] as GeneratedImageWorkerMessage;
+    seen.push(this);
     if (request.kind === "inline" && request.itemId === "deadline") {
       started.resolve(this);
       return;
@@ -274,6 +282,10 @@ test("a deadline stops an unresponsive worker and releases its slot", async () =
     await Effect.runPromise(
       Effect.gen(function* () {
         const timedWorkers = yield* createGeneratedImageWorkers(() => Effect.void);
+        const next = timedWorkers.preparePayload(
+          Effect.succeed({ kind: "inline", itemId: "next", base64: png }),
+          "next",
+        );
         return yield* Effect.gen(function* () {
           const job = yield* Effect.forkChild(
             timedWorkers.preparePayload(
@@ -286,12 +298,15 @@ test("a deadline stops an unresponsive worker and releases its slot", async () =
           const failures = failureOf(yield* Fiber.await(job));
           expect(failures[0]).toMatchObject({ details: { phase: "deadline" } });
           expect(worker.threadId).toBe(-1);
-          expect(
-            (yield* timedWorkers.preparePayload(
-              Effect.succeed({ kind: "inline", itemId: "next", base64: png }),
-              "next",
-            )).base64,
-          ).toBe(png);
+          expect((yield* next).base64).toBe(png);
+
+          const idle = seen[1]!;
+          const exited = new Promise<void>((resolve) => idle.once("exit", () => resolve()));
+          yield* TestClock.adjust("30 seconds");
+          yield* Effect.promise(() => exited);
+          expect(idle.threadId).toBe(-1);
+          expect((yield* next).base64).toBe(png);
+          expect(new Set(seen).size).toBe(3);
         }).pipe(Effect.ensuring(timedWorkers.shutdown.pipe(Effect.orDie)));
       }).pipe(Effect.provide(TestClock.layer())),
     );
@@ -412,40 +427,6 @@ test("idle worker errors stay visible and discard the failed worker", async () =
     expect(seen[0]!.threadId).toBe(-1);
     expect((await Effect.runPromise(payload())).base64).toBe(png);
     expect(new Set(seen).size).toBe(2);
-  } finally {
-    post.mockRestore();
-  }
-});
-
-test("idle workers expire and later jobs create a new worker", async () => {
-  const seen: Worker[] = [];
-  const original = Worker.prototype.postMessage;
-  const post = spyOn(Worker.prototype, "postMessage").mockImplementation(function (
-    this: Worker,
-    ...args: Parameters<Worker["postMessage"]>
-  ) {
-    seen.push(this);
-    return original.apply(this, args);
-  });
-  try {
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const timed = yield* createGeneratedImageWorkers(() => Effect.void);
-        yield* Effect.gen(function* () {
-          const request = timed.preparePayload(
-            Effect.succeed({ kind: "inline", itemId: "idle", base64: png }),
-            "idle",
-          );
-          yield* request;
-          const exited = new Promise<void>((resolve) => seen[0]!.once("exit", () => resolve()));
-          yield* TestClock.adjust("30 seconds");
-          yield* Effect.promise(() => exited);
-          expect(seen[0]!.threadId).toBe(-1);
-          yield* request;
-          expect(new Set(seen).size).toBe(2);
-        }).pipe(Effect.ensuring(timed.shutdown.pipe(Effect.orDie)));
-      }).pipe(Effect.provide(TestClock.layer())),
-    );
   } finally {
     post.mockRestore();
   }

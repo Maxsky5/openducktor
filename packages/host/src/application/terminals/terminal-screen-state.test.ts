@@ -891,20 +891,16 @@ describe("TerminalScreenState", () => {
     restored.dispose();
   });
 
-  test.each([
-    ["C1 CSI", [0xc2], [0x9b, 0x33, 0x31, 0x6d, 0x42]],
-    ["two-byte character", [0xc2], [0xa0, 0x42]],
-    ["three-byte character", [0xe2, 0x82], [0xac, 0x42]],
-  ])("restores split %s after ESC", async (_name, lead, continuation) => {
+  test("restores a split UTF-8 C1 CSI after ESC", async () => {
     const screen = new TerminalScreenState({ columns: 12, rows: 2 });
     const original = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
     const restored = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
-    const first = new Uint8Array([0x41, 0x1b, ...lead]);
+    const first = new Uint8Array([0x41, 0x1b, 0xc2]);
     await Promise.all([writeScreen(screen, first), write(original, first)]);
     const snapshot = screen.snapshot();
-    expect(snapshot.payload.slice(-lead.length - 1)).toEqual(new Uint8Array([0x1b, ...lead]));
+    expect(snapshot.payload.slice(-2)).toEqual(new Uint8Array([0x1b, 0xc2]));
     await write(restored, snapshot.payload);
-    const next = new Uint8Array(continuation);
+    const next = new Uint8Array([0x9b, 0x33, 0x31, 0x6d, 0x42]);
     await Promise.all([writeScreen(screen, next), write(original, next), write(restored, next)]);
     expect(visibleLines(original)[0]).toStartWith("AB");
     expect(visibleLines(restored)).toEqual(visibleLines(original));
@@ -912,6 +908,21 @@ describe("TerminalScreenState", () => {
     screen.dispose();
     original.dispose();
     restored.dispose();
+  });
+
+  test.each([
+    ["two-byte character", [0xc2]],
+    ["three-byte character", [0xe2, 0x82]],
+  ])("keeps the pending %s after ESC in a reconnect snapshot", async (_name, lead) => {
+    const screen = new TerminalScreenState({ columns: 12, rows: 2 });
+    try {
+      const pending = new Uint8Array([0x1b, ...lead]);
+      await writeScreen(screen, new Uint8Array([0x41, ...pending]));
+      // The client needs these bytes before it can parse the rest of the next write.
+      expect(screen.snapshot().payload.slice(-pending.length)).toEqual(pending);
+    } finally {
+      screen.dispose();
+    }
   });
 
   test("tracks a UTF-8 C1 CSI that replaces an unfinished CSI", async () => {
@@ -1297,10 +1308,10 @@ describe("TerminalScreenState", () => {
     try {
       const styledCells = Array.from(
         { length: 490 },
-        (_, column) => `\u001b[38;2;${column % 2 ? 255 : 0};0;0mX`,
+        (_, column) => `\u001b[38;2;${column % 2 ? 255 : 0};0;0;48;2;0;${column % 2 ? 0 : 255};0mX`,
       ).join("");
       const output = Array.from(
-        { length: 1300 },
+        { length: 700 },
         (_, row) => `ROW${String(row).padStart(4, "0")}:` + styledCells + "\r\n",
       ).join("");
       await writeScreen(screen, encoder.encode(output));
@@ -1314,9 +1325,9 @@ describe("TerminalScreenState", () => {
         { length: restored.buffer.normal.length },
         (_, row) => restored.buffer.normal.getLine(row)?.translateToString() ?? "",
       );
-      expect(retainedLines.some((line) => line.startsWith("ROW0000:"))).toBe(false);
-      expect(retainedLines.some((line) => line.startsWith("ROW1200:"))).toBe(true);
-      expect(visibleLines(restored).some((line) => line.startsWith("ROW1299:"))).toBe(true);
+      expect(retainedLines.some((line) => /^ROW000[01]:/.test(line))).toBe(false);
+      expect(retainedLines.some((line) => line.startsWith("ROW0600:"))).toBe(true);
+      expect(visibleLines(restored).some((line) => line.startsWith("ROW0699:"))).toBe(true);
     } finally {
       screen.dispose();
       restored.dispose();

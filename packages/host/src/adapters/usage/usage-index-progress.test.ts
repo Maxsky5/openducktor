@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, jest, test } from "bun:test";
 import path from "node:path";
 import type { UsageIndexProgress } from "@openducktor/contracts";
 import { createUsageProgressTracker } from "./usage-index-progress";
@@ -77,14 +77,21 @@ describe("createUsageProgressTracker", () => {
     expect(events.at(-1)?.phase).toBe("summarizing");
   });
 
-  test("sends at most one update per interval, and the last update of a burst later", async () => {
-    const events: UsageIndexProgress[] = [];
-    const tracker = createUsageProgressTracker(JOBS, true, (event) => events.push(event));
-    tracker.finished(0);
-    tracker.finished(1);
-    expect(events).toHaveLength(1);
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    expect(events).toHaveLength(2);
-    expect(events[1]?.runtimes[0]?.sessions).toEqual({ done: 1, total: 1 });
+  test("sends at most one update per interval, and the last update of a burst later", () => {
+    jest.useFakeTimers();
+    try {
+      const events: UsageIndexProgress[] = [];
+      const tracker = createUsageProgressTracker(JOBS, true, (event) => events.push(event));
+      tracker.finished(0);
+      tracker.finished(1);
+
+      jest.advanceTimersByTime(249);
+      expect(events).toHaveLength(1);
+      jest.advanceTimersByTime(1);
+      expect(events).toHaveLength(2);
+      expect(events[1]?.runtimes[0]?.sessions).toEqual({ done: 1, total: 1 });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

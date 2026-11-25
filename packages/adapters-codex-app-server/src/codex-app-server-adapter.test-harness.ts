@@ -1,6 +1,7 @@
 import type { ManagedMcpServer, WorkflowRolePolicyResolver } from "@openducktor/core";
 import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { expect, mock } from "bun:test";
+import { setImmediate } from "node:timers/promises";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
   type CodexAppServerProtocolMessage,
@@ -177,8 +178,6 @@ export const codexRpcError = (message: string): Error =>
   new Error(`Codex app-server request failed for runtime runtime-live: ${message}`, {
     cause: { code: -32600, message },
   });
-
-export const createDeferred = <T>(): PromiseWithResolvers<T> => Promise.withResolvers<T>();
 
 export const codexTurnFixture = (
   input: Pick<CodexAppServerTurn, "id" | "items" | "status"> & Partial<CodexAppServerTurn>,
@@ -421,7 +420,7 @@ export const requestThreadId = (params: { threadId: string }): string => params.
 
 export class RecordingTransport implements CodexJsonRpcTransport {
   readonly calls: CodexJsonRpcRequest[] = [];
-  readonly turnStartDeferred = createDeferred<CodexAppServerTurnStartResult | null>();
+  readonly turnStartDeferred = Promise.withResolvers<CodexAppServerTurnStartResult | null>();
   firstTurnStatus: "completed" | "inProgress" | "interrupted" | null = "completed";
   historyMode: "paginated" | "legacy" = "paginated";
   /** The failure of the next goal requests, like a JSON-RPC error answer of Codex. */
@@ -783,18 +782,13 @@ export async function waitForEvent<Event>(
   events: Event[],
   predicate: (event: Event) => boolean,
 ): Promise<Event> {
-  const deadline = Date.now() + 1_000;
-  while (Date.now() < deadline) {
-    const event = events.find(predicate);
-    if (event) {
-      return event;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
+  await flushCodexAdapterWork();
+  const event = events.find(predicate);
+  if (event === undefined) {
+    throw new Error("Expected a matching event after processing the fake Codex runtime's events.");
   }
-  throw new Error("Timed out waiting for Codex event.");
+  return event;
 }
 
-export const flushCodexAdapterWork = async (): Promise<void> => {
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await new Promise((resolve) => setTimeout(resolve, 0));
-};
+/** Yields to the promise queues that process the fake runtime's events. */
+export const flushCodexAdapterWork = (): Promise<void> => setImmediate();

@@ -13,7 +13,6 @@ import {
   codexTurnFixture,
   codexUserMessageInput,
   createAdapterWithTransport,
-  createDeferred,
   createHarness,
   RecordingTransport,
   waitForEvent,
@@ -252,7 +251,7 @@ describe("CodexAppServerAdapter approvals", () => {
   });
 
   test("surfaces and resolves Codex permission approvals with string request ids", async () => {
-    const requestResolved = createDeferred<void>();
+    const requestResolved = Promise.withResolvers<void>();
     const respondServerRequest = mock(async (_runtimeId: string, requestId: string | number) => {
       if (requestId === "permission-request-1") {
         requestResolved.resolve();
@@ -323,8 +322,8 @@ describe("CodexAppServerAdapter approvals", () => {
   });
 
   test("rejects a concurrent duplicate reply to one pending approval", async () => {
-    const firstReplyStarted = createDeferred<void>();
-    const allowFirstReply = createDeferred<void>();
+    const firstReplyStarted = Promise.withResolvers<void>();
+    const allowFirstReply = Promise.withResolvers<void>();
     let responseCount = 0;
     const respondServerRequest = mock(async () => {
       responseCount += 1;
@@ -453,8 +452,8 @@ describe("CodexAppServerAdapter approvals", () => {
   });
 
   test("rejects a concurrent duplicate reply to one pending question", async () => {
-    const firstReplyStarted = createDeferred<void>();
-    const allowFirstReply = createDeferred<void>();
+    const firstReplyStarted = Promise.withResolvers<void>();
+    const allowFirstReply = Promise.withResolvers<void>();
     let responseCount = 0;
     const respondServerRequest = mock(async () => {
       responseCount += 1;

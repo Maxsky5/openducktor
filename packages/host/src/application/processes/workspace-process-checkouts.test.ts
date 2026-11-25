@@ -13,13 +13,14 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { WorkspaceRecord } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Deferred, Effect } from "effect";
 import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { HostPathAccessError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import {
   addGitWorktree,
+  gitFixtureCommand,
   gitFixtureEnv,
   initGitRepository,
 } from "../../test-support/git-repository-fixture";
@@ -35,7 +36,7 @@ import {
 
 const git = createGitCliAdapter({
   readEnv: () => gitFixtureEnv,
-  resolveCommand: () => Effect.succeed("git"),
+  resolveCommand: () => Effect.succeed(gitFixtureCommand),
 });
 
 let root = "";
@@ -91,29 +92,17 @@ const pathExists = (path: string) =>
   );
 
 type CoverageOptions = {
-  slowWorkspaceId?: string;
   taskADirectories?: string[];
   sessionDirectory?: string | null;
   git?: GitPort;
 };
 
-const coverageOf = (
+const checkoutCoverageFixture = (
   workspaces: WorkspaceRecord[],
-  {
-    slowWorkspaceId,
-    taskADirectories = [],
-    sessionDirectory = null,
-    git: port = git,
-  }: CoverageOptions = {},
+  { taskADirectories = [], sessionDirectory = null, git: port = git }: CoverageOptions = {},
 ) => {
   const dependencies: ProcessCheckoutDependencies = {
-    git: {
-      ...port,
-      canonicalizePath: (path) =>
-        path === workspaces.find((entry) => entry.workspaceId === slowWorkspaceId)?.repoPath
-          ? Effect.sleep("100 millis").pipe(Effect.andThen(port.canonicalizePath(path)))
-          : port.canonicalizePath(path),
-    },
+    git: port,
     settingsConfig: createSettingsConfigTestDouble({
       readConfig: () =>
         Effect.succeed({
@@ -173,13 +162,12 @@ const coverageOf = (
     // The fixtures use real temporary folders, so their paths follow the platform of the host.
     pathPlatform: globalThis.process.platform === "win32" ? "windows" : "posix",
   };
-  return Effect.runPromise(
-    readCheckoutCoverage(
-      dependencies,
-      workspaces,
-      createProcessRead(dependencies, crypto.randomUUID()),
-    ),
-  );
+  return { dependencies, read: createProcessRead(dependencies, crypto.randomUUID()) };
+};
+
+const coverageOf = (workspaces: WorkspaceRecord[], options?: CoverageOptions) => {
+  const { dependencies, read } = checkoutCoverageFixture(workspaces, options);
+  return Effect.runPromise(readCheckoutCoverage(dependencies, workspaces, read));
 };
 
 test("never gives a task the worktree that its stale registration now leads to", async () => {
@@ -189,13 +177,25 @@ test("never gives a task the worktree that its stale registration now leads to",
 });
 
 test("keeps catalog order for a shared checkout when a later read finishes first", async () => {
-  const result = await coverageOf(
-    [workspace("first", join(repoPath, ".")), workspace("second", repoPath)],
-    { slowWorkspaceId: "first" },
+  const workspaces = [workspace("first", repoPath), workspace("second", repoPath)];
+  const { dependencies, read } = checkoutCoverageFixture(workspaces);
+  const result = await Effect.runPromise(
+    Effect.gen(function* () {
+      const secondFinished = yield* Deferred.make<void>();
+      return yield* readCheckoutCoverage(dependencies, workspaces, {
+        ...read,
+        readRoots: (entry) =>
+          entry.workspaceId === "first"
+            ? Deferred.await(secondFinished).pipe(Effect.andThen(read.readRoots(entry)))
+            : read
+                .readRoots(entry)
+                .pipe(Effect.tap(() => Deferred.succeed(secondFinished, undefined))),
+      });
+    }).pipe(Effect.timeout("3 seconds")),
   );
-  expect(result.checkouts.find((checkout) => checkout.kind === "repository")?.workspaceId).toBe(
-    "first",
-  );
+  expect(result.checkouts.filter((checkout) => checkout.kind === "repository")).toEqual([
+    expect.objectContaining({ workspaceId: "first", checkoutPath: repoPath }),
+  ]);
 });
 
 test("uses a registration branch only when its checkout has that branch now", async () => {

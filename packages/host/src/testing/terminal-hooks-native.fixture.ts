@@ -15,6 +15,8 @@ export async function checkHooks({
   write,
   wait,
   readScreen,
+  captureScreen,
+  exitShell,
   serverCommand,
 }: TerminalNativeFixture) {
   const command = await serverCommand();
@@ -51,6 +53,7 @@ export async function checkHooks({
     const named = output.lastIndexOf(`NAMED_STATUS=${exitCode}\r\n`);
     assert.ok(completed >= 0 && completed < named);
     if (hook === "array") assert.ok(named < output.lastIndexOf(`ARRAY_STATUS=${exitCode}\r\n`));
+    await exitShell(id);
   }
 
   for (const hook of ["named", "array"] as const) {
@@ -67,8 +70,10 @@ export async function checkHooks({
     );
     const id = `start-${hook}`;
     await start(id, [command]);
-    await wait(() => outputs.get(id)!.includes("SERVER_READY\r\n"));
-    assert.equal(activities.get(id)?.restartable, true);
+    await wait(
+      () =>
+        activities.get(id)?.restartable === true && outputs.get(id)!.includes("SERVER_READY\r\n"),
+    );
     const output = outputs.get(id)!;
     const started = output.indexOf("\u001b]633;E;");
     const named = output.indexOf("NAMED_ARGS=3\r\n");
@@ -77,6 +82,9 @@ export async function checkHooks({
     assert.ok(output.includes("parameter not set"));
     await Effect.runPromise(engine.restart(id, activities.get(id)!.command));
     await wait(() => outputs.get(id)!.split("SERVER_READY\r\n").length === 3);
+    await write(id, "\u0003");
+    await wait(() => !activities.has(id));
+    await exitShell(id);
   }
 
   for (const [id, input] of [
@@ -87,6 +95,7 @@ export async function checkHooks({
       join(root, ".zshrc"),
       'PROMPT="fixture> "\nprecmd() { print USER_PROMPT_HOOK; }\n',
     );
+    captureScreen(id);
     const action = await start(id, [input, "print SHOULD_NOT_RUN"], root, "host");
     const result = await Effect.runPromise(action.result.pipe(Effect.timeout("2 seconds")));
     assert.ok(result.type === "failed");
@@ -106,6 +115,7 @@ export async function checkHooks({
     await write(id, "print AFTER_HOOK_FAILURE\r");
     await wait(() => outputs.get(id)!.includes("AFTER_HOOK_FAILURE\r\n"));
     assert.deepEqual(await Effect.runPromise(action.result), result);
+    await exitShell(id);
   }
 
   await mkdir(join(root, "hooks"));
@@ -125,6 +135,7 @@ export async function checkHooks({
     autoloadOutput.lastIndexOf("\u001b]633;D;1;") < autoloadOutput.indexOf("AUTO_END=1\r\n"),
   );
   assert.ok(!autoloadOutput.includes("function definition file not found"));
+  await exitShell("autoload");
 
   await writeFile(
     join(root, ".zshrc"),
@@ -137,6 +148,7 @@ export async function checkHooks({
   assert.ok(!outputs.get("source-hook")!.includes("USER_SOURCE_FUNCTION\r\n"));
   await write("source-hook", "source any\r");
   await wait(() => outputs.get("source-hook")!.includes("USER_SOURCE_FUNCTION\r\n"));
+  await exitShell("source-hook");
 
   await writeFile(
     join(root, ".zshrc"),

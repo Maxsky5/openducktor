@@ -29,7 +29,8 @@ test("openSqliteDatabase supports the Node runtime adapter", async () => {
   await writeFile(
     entryPath,
     `
-      import { Effect } from "effect";
+      import { Effect, Fiber } from "effect";
+      import { TestClock } from "effect/testing";
       import { openSqliteDatabase } from "../src/infrastructure/sqlite/sqlite-driver.ts";
 
       const databasePath = process.argv[2];
@@ -45,11 +46,17 @@ test("openSqliteDatabase supports the Node runtime adapter", async () => {
         if (!await Effect.runPromise(database.inTransaction())) throw new Error("expected active transaction");
         const contender = await Effect.runPromise(openSqliteDatabase(databasePath, "node"));
         try {
-          const waiting = Effect.runPromise(contender.exec("BEGIN IMMEDIATE"));
-          await new Promise((resolve) => setTimeout(resolve, 20));
-          await Effect.runPromise(database.exec("ROLLBACK"));
-          await waiting;
-          await Effect.runPromise(contender.exec("ROLLBACK"));
+          await Effect.runPromise(Effect.gen(function* () {
+            const waiting = yield* Effect.forkChild(contender.exec("BEGIN IMMEDIATE"), {
+              startImmediately: true,
+            });
+            if (yield* contender.inTransaction()) throw new Error("contender acquired the locked database");
+            yield* database.exec("ROLLBACK");
+            yield* TestClock.adjust("1 second");
+            yield* Fiber.join(waiting);
+            if (!(yield* contender.inTransaction())) throw new Error("contender did not acquire the released database");
+            yield* contender.exec("ROLLBACK");
+          }).pipe(Effect.provide(TestClock.layer())));
         } finally {
           await Effect.runPromise(contender.close());
         }

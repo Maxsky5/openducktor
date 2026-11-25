@@ -127,7 +127,8 @@ describe("branch naming", () => {
 
   test("fails when a branch is a folder of the fallback", () =>
     expect(
-      name(Effect.never, {
+      name(Effect.succeed({ branch: "fix/login" }), {
+        model: false,
         refs: ["refs/heads/odt/task-1-fix-login-redirect/old", "refs/heads/odt"],
       }).named,
     ).rejects.toThrow(

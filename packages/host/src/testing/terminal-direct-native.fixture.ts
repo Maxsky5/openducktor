@@ -13,8 +13,8 @@ export async function checkDirect({
   wait,
   outputs,
   inputs,
-  screens,
-  readScreen,
+  captureScreen,
+  exitShell,
   activities,
   serverCommand,
 }: TerminalNativeFixture) {
@@ -37,8 +37,9 @@ export async function checkDirect({
     ].join("\n"),
   );
   const command = `ODT_VALUE='${"wrapped-é-".repeat(20)}' ${await serverCommand()}`;
+  const capturedScreen = captureScreen("direct");
   await start("direct", [command]);
-  await wait(() => outputs.get("direct")!.includes("SERVER_READY\r\n"));
+  await wait(() => activities.has("direct") && outputs.get("direct")!.includes("SERVER_READY\r\n"));
   assert.equal(inputs.get("direct")![0], `\u001b[200~${command}\u001b[201~\r`);
   for (const count of [2, 3]) {
     await write("direct", "\u0003");
@@ -60,11 +61,11 @@ export async function checkDirect({
       await readFile(join(root, "cursor"), "utf8"),
       `${Array.from(command).length + count - 2}\n${command}${" ".repeat(count - 2)}\n`,
     );
-    await readScreen("direct");
+    await capturedScreen.drained();
     const screen = new Terminal({ cols: 120, rows: 24, allowProposedApi: true });
     try {
       await new Promise<void>((resolve) =>
-        screen.write(screens.get("direct")!.snapshot().payload, resolve),
+        screen.write(capturedScreen.snapshot().payload, resolve),
       );
       const buffer = screen.buffer.active;
       const row = buffer.baseY + buffer.cursorY;
@@ -82,13 +83,21 @@ export async function checkDirect({
       screen.dispose();
     }
     await write("direct", " \r");
-    await wait(() => outputs.get("direct")!.split("SERVER_READY\r\n").length === count + 1);
+    await wait(
+      () =>
+        activities.has("direct") &&
+        outputs.get("direct")!.split("SERVER_READY\r\n").length === count + 1,
+    );
   }
   await Effect.runPromise(engine.restart("direct", activities.get("direct")!.command));
   await wait(() => outputs.get("direct")!.split("SERVER_READY\r\n").length === 5);
   assert.equal(inputs.get("direct")!.at(-1), `\u001b[200~${command}  \u001b[201~\r`);
   assert.equal(await readFile(join(root, "redraw"), "utf8"), "zle-line-pre-redraw:start\n");
   assert.equal(await readFile(join(root, "widget"), "utf8"), "zle-line-finish:start:0\n");
+  await write("direct", "\u0003");
+  await wait(() => !activities.has("direct"));
+  await exitShell("direct");
+
   await writeFile(
     join(root, ".zshrc"),
     [
@@ -100,11 +109,16 @@ export async function checkDirect({
   );
   const longCommand = `ODT_VALUE='${"x".repeat(1200)}' ${await serverCommand()}`;
   await start("widget-edit", [longCommand]);
-  await wait(() => outputs.get("widget-edit")!.includes("SERVER_READY\r\n"));
+  await wait(
+    () => activities.has("widget-edit") && outputs.get("widget-edit")!.includes("SERVER_READY\r\n"),
+  );
   await Effect.runPromise(engine.restart("widget-edit", activities.get("widget-edit")!.command));
   assert.equal(
     inputs.get("widget-edit")!.at(-1),
     `\u001b[200~${longCommand} widget-tail\u001b[201~\r`,
   );
   await wait(() => outputs.get("widget-edit")!.split("SERVER_READY\r\n").length === 3);
+  await write("widget-edit", "\u0003");
+  await wait(() => !activities.has("widget-edit"));
+  await exitShell("widget-edit");
 }

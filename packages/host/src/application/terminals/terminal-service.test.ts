@@ -179,8 +179,14 @@ describe("TerminalService", () => {
       }),
     );
     const messages: TerminalActivityMessage[] = [];
+    const started = Promise.withResolvers<void>();
+    const completed = Promise.withResolvers<void>();
     const stop = await Effect.runPromise(
-      service.observeActivity((message) => messages.push(message)),
+      service.observeActivity((message) => {
+        messages.push(message);
+        if (message.type === "activity_updated") started.resolve();
+        if (message.type === "activity_removed") completed.resolve();
+      }),
     );
     try {
       expect(messages.map((message) => message.type)).toEqual([
@@ -191,13 +197,12 @@ describe("TerminalService", () => {
       expect(nonce).toBeString();
       pty.emit(
         new TextEncoder().encode(
-          "\u001b]633;E;false command;another-shell\u0007\u001b]633;C\u0007",
+          "\u001b]633;E;false command;another-shell\u0007\u001b]633;C\u0007" +
+            `\u001b]633;E;sleep 30;${nonce}\u0007\u001b]633;C\u0007`,
         ),
       );
-      await Bun.sleep(10);
-      expect(messages).toHaveLength(2);
-      pty.emit(new TextEncoder().encode(`\u001b]633;E;sleep 30;${nonce}\u0007\u001b]633;C\u0007`));
-      await Bun.sleep(10);
+      await started.promise;
+      expect(messages).toHaveLength(3);
       expect(messages.at(-1)).toMatchObject({
         type: "activity_updated",
         activity: {
@@ -216,7 +221,7 @@ describe("TerminalService", () => {
         { type: "activity_snapshot_end" },
       ]);
       pty.emit(new TextEncoder().encode(`\u001b]633;D;0;${nonce}\u0007`));
-      await Bun.sleep(10);
+      await completed.promise;
       expect(messages.at(-1)).toMatchObject({
         type: "activity_removed",
         terminalId: terminal.ref.terminalId,
@@ -240,8 +245,12 @@ describe("TerminalService", () => {
       }),
     );
     const messages: TerminalActivityMessage[] = [];
+    const started = Promise.withResolvers<void>();
     const stop = await Effect.runPromise(
-      service.observeActivity((message) => messages.push(message)),
+      service.observeActivity((message) => {
+        messages.push(message);
+        if (message.type === "activity_updated") started.resolve();
+      }),
     );
     try {
       expect(messages).toMatchObject([
@@ -253,7 +262,7 @@ describe("TerminalService", () => {
           `\u001b]633;E;bun test;${pty.launches[0]?.commandNonce}\u0007\u001b]633;C\u0007`,
         ),
       );
-      await Bun.sleep(10);
+      await started.promise;
       pty.emit(new TextEncoder().encode("ordinary command output\r\n"));
       settleTitles();
       expect(messages).toHaveLength(3);
@@ -298,13 +307,8 @@ describe("TerminalService", () => {
   test("keeps failed stops visible and isolates broken observers from process cleanup", async () => {
     const { service, pty } = await makeService();
     const terminal = await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
-    pty.emit(
-      new TextEncoder().encode(
-        `\u001b]633;E;sleep 30;${pty.launches[0]?.commandNonce};1\u0007\u001b]633;C\u0007`,
-      ),
-    );
-    await Bun.sleep(10);
     const messages: TerminalActivityMessage[] = [];
+    const started = Promise.withResolvers<void>();
     let rejectDelivery = false;
     let rejected = 0;
     const stopBroken = await Effect.runPromise(
@@ -316,10 +320,19 @@ describe("TerminalService", () => {
       }),
     );
     const stop = await Effect.runPromise(
-      service.observeActivity((message) => messages.push(message)),
+      service.observeActivity((message) => {
+        messages.push(message);
+        if (message.type === "activity_updated") started.resolve();
+      }),
     );
     try {
-      expect(messages.at(-2)).toMatchObject({
+      pty.emit(
+        new TextEncoder().encode(
+          `\u001b]633;E;sleep 30;${pty.launches[0]?.commandNonce};1\u0007\u001b]633;C\u0007`,
+        ),
+      );
+      await started.promise;
+      expect(messages.at(-1)).toMatchObject({
         type: "activity_updated",
         activity: { summary: { lifecycle: "running" }, restartable: true },
       });
@@ -1087,7 +1100,6 @@ describe("TerminalService", () => {
     await emitEvictedReplay(pty);
     const tui = new TextEncoder().encode("\u001b[?1049h\u001b[HREADY");
     pty.emit(tui);
-    await Bun.sleep(0);
     const eventTypes: string[] = [];
     let restoredScreen = "";
     await Effect.runPromise(
@@ -1204,6 +1216,7 @@ describe("TerminalService", () => {
     await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     await emitEvictedReplay(pty);
     const gates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()] as const;
+    const bothDraining = Promise.withResolvers<void>();
     const originalDrained = TerminalScreenState.prototype.drained;
     let drainCalls = 0;
     const drained = spyOn(TerminalScreenState.prototype, "drained").mockImplementation(function (
@@ -1211,6 +1224,7 @@ describe("TerminalService", () => {
     ) {
       const gate = gates[drainCalls++];
       if (!gate) throw new Error("Unexpected screen drain.");
+      if (drainCalls === gates.length) bothDraining.resolve();
       return gate.promise.then(() => originalDrained.call(this));
     });
     const firstEvents: string[] = [];
@@ -1227,9 +1241,11 @@ describe("TerminalService", () => {
     const first = attach(0, firstEvents);
     const second = attach(1, secondEvents);
     try {
-      await waitForPtyOperation(pty.operations, "pause");
-      for (let attempt = 0; attempt < 200 && drainCalls < 2; attempt += 1) await Bun.sleep(10);
-      expect(drainCalls).toBe(2);
+      await Effect.promise(() => bothDraining.promise).pipe(
+        Effect.timeout("2 seconds"),
+        Effect.runPromise,
+      );
+      expect(pty.operations).toEqual(["pause"]);
       gates[0].resolve();
       await first;
       await Bun.sleep(0);

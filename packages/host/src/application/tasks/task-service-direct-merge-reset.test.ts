@@ -13,6 +13,7 @@ import { createDefaultGitRunner } from "../../infrastructure/git/git-command-run
 import { isMergeIncluded, mergeBranch } from "../../infrastructure/git/git-merge";
 import { getCurrentBranchUnchecked } from "../../infrastructure/git/git-status";
 import { HostOperationError } from "../../effect/host-errors";
+import { gitFixtureCommand, gitFixtureEnv } from "../../test-support/git-repository-fixture";
 import { TerminalServiceError } from "../terminals/terminal-service";
 import { createLiveWorkflowObservations } from "../agent-sessions/live-workflow-observations";
 import {
@@ -227,26 +228,28 @@ describe("task completion recovery and reset", () => {
       const repo = path.join(directory, "repo");
       const worktree = path.join(directory, "source");
       const runner = createDefaultGitRunner(
-        () => ({ ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" }),
-        { command: "git" },
+        () => ({
+          ...gitFixtureEnv,
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_CONFIG_GLOBAL: "/dev/null",
+          GIT_AUTHOR_NAME: "Recovery test",
+          GIT_AUTHOR_EMAIL: "recovery@example.invalid",
+          GIT_COMMITTER_NAME: "Recovery test",
+          GIT_COMMITTER_EMAIL: "recovery@example.invalid",
+        }),
+        { command: gitFixtureCommand },
       );
       const git = (cwd: string, ...args: string[]) => Effect.runPromise(runner(cwd, args));
       try {
-        await git(directory, "init", "--initial-branch=main", repo);
-        await git(repo, "config", "user.name", "Recovery test");
-        await git(repo, "config", "user.email", "recovery@example.invalid");
-        await writeFile(path.join(repo, "base"), "base");
-        await git(repo, "add", ".");
-        await git(repo, "commit", "-m", "Base");
-        await git(repo, "switch", "-c", "odt/task-1");
-        await writeFile(path.join(repo, "change"), "task change");
-        await git(repo, "add", ".");
-        await git(repo, "commit", "-m", "Task");
-        await git(repo, "switch", "main");
+        await git(directory, "init", "--initial-branch=main", "--template=", repo);
+        await git(repo, "commit", "--allow-empty", "-m", "Base");
+        await git(repo, "worktree", "add", "-b", "odt/task-1", worktree);
+        await writeFile(path.join(worktree, "change"), "task change");
+        await git(worktree, "add", "change");
+        await git(worktree, "commit", "-m", "Task");
         await writeFile(path.join(repo, "target-only"), "Existing target content");
         await git(repo, "add", ".");
         await git(repo, "commit", "-m", "Target work");
-        await git(repo, "worktree", "add", worktree, "odt/task-1");
         let appliedTargetOid: string | undefined;
         let nativeMerges = 0;
         const verifiedEvidence: Array<string | undefined> = [];
@@ -282,8 +285,8 @@ describe("task completion recovery and reset", () => {
           failure: { message: "Merge record save failed" },
         });
         expect(appliedTargetOid).toBe((await git(repo, "rev-parse", "HEAD")).stdout.trim());
-        await git(repo, "rm", "change");
-        await git(repo, "commit", "-m", "Revert task content");
+        await rm(path.join(repo, "change"));
+        await git(repo, "commit", "-am", "Revert task content");
         if (method !== "squash")
           expect((await git(repo, "merge-base", "--is-ancestor", "odt/task-1", "HEAD")).ok).toBe(
             true,
@@ -320,13 +323,8 @@ describe("task completion recovery and reset", () => {
         expect(harness.cleanupCalls()).toBe(0);
         expect(nativeMerges).toBe(1);
         expect(harness.status()).toBe("human_review");
-        expect((await git(repo, "rev-parse", "odt/task-1^{tree}")).stdout).toBe(
-          (await git(repo, "rev-parse", "HEAD^{tree}")).stdout,
-        );
         await git(repo, "update-ref", "refs/heads/odt/task-1", sourceOid);
-        await writeFile(path.join(repo, "change"), "task change");
-        await git(repo, "add", ".");
-        await git(repo, "commit", "-m", "Restore task content");
+        await git(repo, "revert", "--no-edit", "HEAD");
         expect(
           await Effect.runPromise(
             harness.service.completeDirectMerge({

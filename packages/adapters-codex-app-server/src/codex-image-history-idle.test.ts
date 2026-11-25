@@ -4,7 +4,6 @@ import {
   codexSessionRuntimeRef,
   codexThreadFixture,
   codexTurnFixture,
-  createDeferred,
   createHarness,
   createRuntimeStreamSubscription,
   flushCodexAdapterWork,
@@ -32,8 +31,8 @@ const imageTurn = (id: string) =>
 
 test("idle without a local turn settles pending nullable-timestamp history and permits a new real turn", async () => {
   const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
-  const historyRead = createDeferred<void>();
-  const releaseHistory = createDeferred<void>();
+  const historyRead = Promise.withResolvers<void>();
+  const releaseHistory = Promise.withResolvers<void>();
   const ref = codexSessionRuntimeRef("thread-existing");
   const events: AgentSessionTranscriptEvent[] = [];
   let turns = [imageTurn("old-turn")];

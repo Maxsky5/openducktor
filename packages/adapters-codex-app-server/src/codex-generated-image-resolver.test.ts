@@ -9,7 +9,6 @@ import {
 import {
   codexThreadFixture,
   codexTurnFixture,
-  createDeferred,
   createHarness,
   RecordingTransport,
 } from "./codex-app-server-adapter.test-harness";
@@ -37,8 +36,8 @@ const createImageHarness = (
   directoriesMatch?: CodexAppServerAdapterOptions["directoriesMatch"],
 ) => {
   const calls: Array<{ method: string; params: unknown }> = [];
-  const gate = createDeferred<void>();
-  const historyStarted = createDeferred<void>();
+  const gate = Promise.withResolvers<void>();
+  const historyStarted = Promise.withResolvers<void>();
   let deferred = false;
   const options: Parameters<typeof createHarness>[0] = {
     transportFactory: (runtimeId) => {
@@ -183,8 +182,8 @@ test("concurrent reads share history and a released runtime cannot publish their
 });
 
 test("canceled directory matching cannot cache saved image history", async () => {
-  const started = createDeferred<void>();
-  const finish = createDeferred<boolean>();
+  const started = Promise.withResolvers<void>();
+  const finish = Promise.withResolvers<boolean>();
   let comparisons = 0;
   const native = { ...completed(), savedPath: "/generated/image.png" };
   const harness = createImageHarness(
@@ -285,8 +284,8 @@ test("runtime replacement during client resolution rejects the read before histo
 
 test("source verification awaits image preparation and rejects a replaced runtime", async () => {
   const native = completed();
-  const started = createDeferred<void>();
-  const result = createDeferred<ReturnType<typeof codexImageGenerationPart>[]>();
+  const started = Promise.withResolvers<void>();
+  const result = Promise.withResolvers<ReturnType<typeof codexImageGenerationPart>[]>();
   const prepare = mock(async () => {
     started.resolve();
     return result.promise;
@@ -375,7 +374,7 @@ for (const failure of ["wrong item", "missing", "worker failure"] as const) {
 
 for (const cancel of ["caller", "runtime"] as const) {
   test(`${cancel} cancellation reaches image preparation`, async () => {
-    const started = createDeferred<AbortSignal>();
+    const started = Promise.withResolvers<AbortSignal>();
     const harness = createImageHarness(
       [completed()],
       "/repo",
@@ -597,8 +596,8 @@ test("two near-limit batches retain bounded sources and release reservations aft
     id: `large-${index}`,
     result: large,
   }));
-  const started = createDeferred<void>();
-  const finish = createDeferred<void>();
+  const started = Promise.withResolvers<void>();
+  const finish = Promise.withResolvers<void>();
   const prepare: CodexImageGenerationPreparer = async (images) => {
     started.resolve();
     await finish.promise;

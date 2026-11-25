@@ -5,7 +5,6 @@ import {
   expectToolError,
   readToolInputProperties,
   startMockBridge,
-  TEST_ACTIVE_STATUSES,
   taskReadPayload,
   taskSummaryPayload,
   useMcpServerTestLifecycle,
@@ -14,7 +13,7 @@ import {
 useMcpServerTestLifecycle();
 
 describe("MCP server tool results", () => {
-  test("workspaceId-forbidden mode rejects workspaceId for advertised workspace-scoped tools", async () => {
+  test("managed MCP hides workspaceId and rejects it before calling the host", async () => {
     const bridge = await startMockBridge();
     const transport = await createTransport(bridge.url, {
       workspaceId: "repo",
@@ -24,33 +23,20 @@ describe("MCP server tool results", () => {
 
     try {
       await client.connect(transport);
-      const tools = await client.listTools();
-
-      expect(readToolInputProperties(tools, "odt_read_task")).toMatchObject({
-        taskId: expect.any(Object),
-      });
-      expect(readToolInputProperties(tools, "odt_read_task")).not.toHaveProperty("workspaceId");
-      expect(readToolInputProperties(tools, "odt_set_task_artifact")).not.toHaveProperty(
+      const listing = await client.listTools();
+      const read = listing.tools.find(({ name }) => name === "odt_read_task");
+      expect(read?.inputSchema.required).toEqual(["taskId"]);
+      expect(readToolInputProperties(listing, "odt_read_task")).not.toHaveProperty("workspaceId");
+      expect(readToolInputProperties(listing, "odt_set_task_artifact")).not.toHaveProperty(
         "workspaceId",
       );
-      expect(readToolInputProperties(tools, "odt_get_workspaces")).not.toHaveProperty(
+      expect(readToolInputProperties(listing, "odt_get_workspaces")).not.toHaveProperty(
         "workspaceId",
       );
-    } finally {
-      await client.close();
-    }
-  });
+      expect(readToolInputProperties(listing, "odt_read_task_assets")).not.toHaveProperty(
+        "workspaceId",
+      );
 
-  test("workspaceId-forbidden mode rejects explicit workspaceId instead of dropping it", async () => {
-    const bridge = await startMockBridge();
-    const transport = await createTransport(bridge.url, {
-      workspaceId: "repo",
-      forbidWorkspaceIdInput: true,
-    });
-    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
-
-    try {
-      await client.connect(transport);
       const result = await client.callTool({
         name: "odt_read_task",
         arguments: {
@@ -299,78 +285,42 @@ describe("MCP server tool results", () => {
     }
   });
 
-  test("workspaceId stays advertised for public MCP clients with a startup workspace", async () => {
-    const bridge = await startMockBridge();
-    const transport = await createTransport(bridge.url, { workspaceId: "repo" });
-    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
-
-    try {
-      await client.connect(transport);
-      const tools = await client.listTools();
-
-      expect(readToolInputProperties(tools, "odt_read_task")).toHaveProperty("workspaceId");
-    } finally {
-      await client.close();
-    }
-  });
-
-  test("workspaceId stays advertised when no startup workspace is configured", async () => {
-    const bridge = await startMockBridge();
+  test("lists the active workflow states and compact tool schemas for external clients", async () => {
+    const activeStatuses = ["todo", "doing"];
+    const bridge = await startMockBridge({ activeStatuses });
     const transport = await createTransport(bridge.url);
     const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
 
     try {
       await client.connect(transport);
-      const tools = await client.listTools();
+      const listing = await client.listTools();
+      const create = readToolInputProperties(listing, "odt_create_task");
+      const search = readToolInputProperties(listing, "odt_search_tasks");
+      const assets = listing.tools.find(({ name }) => name === "odt_read_task_assets");
+      const read = listing.tools.find(({ name }) => name === "odt_read_task");
 
-      expect(readToolInputProperties(tools, "odt_read_task")).toHaveProperty("workspaceId");
-    } finally {
-      await client.close();
-    }
-  });
-
-  test("ODT_ALLOWED_TOOLS limits the advertised tool surface", async () => {
-    const bridge = await startMockBridge();
-    const transport = await createTransport(bridge.url, {
-      workspaceId: "repo",
-      allowedTools: "odt_read_task,odt_read_task_artifacts,odt_apply_workflow_event",
-    });
-    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
-
-    try {
-      await client.connect(transport);
-      const tools = await client.listTools();
-      const toolNames = tools.tools.map((tool) => tool.name);
-
-      expect(toolNames).toEqual([
-        "odt_read_task",
-        "odt_read_task_artifacts",
-        "odt_apply_workflow_event",
-      ]);
-    } finally {
-      await client.close();
-    }
-  });
-
-  test("lists the active states from the host ready reply as status values", async () => {
-    const bridge = await startMockBridge();
-    const transport = await createTransport(bridge.url, { workspaceId: "repo" });
-    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
-
-    try {
-      await client.connect(transport);
-      const tools = await client.listTools();
-      const search = tools.tools.find(({ name }) => name === "odt_search_tasks");
-
-      expect(search?.inputSchema.properties?.status).toMatchObject({
-        enum: TEST_ACTIVE_STATUSES,
+      expect(create.issueType).toMatchObject({ enum: ["task", "feature", "bug"] });
+      expect(create).not.toHaveProperty("status");
+      expect(search.status).toMatchObject({ type: "string", enum: activeStatuses });
+      expect(readToolInputProperties(listing, "odt_read_task")).toHaveProperty("workspaceId");
+      expect(read?.outputSchema).toBeDefined();
+      expect(read?.outputSchema).not.toHaveProperty("$schema");
+      expect(assets?.inputSchema.required).toEqual(expect.arrayContaining(["taskId", "assetIds"]));
+      expect(readToolInputProperties(listing, "odt_read_task_assets").assetIds).toEqual({
+        minItems: 1,
+        type: "array",
+        items: { type: "string", format: "uuid" },
+      });
+      expect(readToolInputProperties(listing, "odt_set_pull_request").number).toEqual({
+        type: "integer",
+        exclusiveMinimum: 0,
       });
     } finally {
       await client.close();
     }
   });
 
-  test("advertises canonical tool names as stable approval titles", async () => {
+  test("advertises only allowed tools and uses their canonical names as approval titles", async () => {
     const bridge = await startMockBridge();
     const transport = await createTransport(bridge.url, {
       workspaceId: "repo",
@@ -524,13 +474,16 @@ describe("MCP server tool results", () => {
     }
   });
 
-  test("startup workspace still lets explicit tool input workspaceId override execution", async () => {
+  test("advertises and honors a tool workspace override when a startup workspace exists", async () => {
     const bridge = await startMockBridge();
     const transport = await createTransport(bridge.url, { workspaceId: "repo" });
     const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
 
     try {
       await client.connect(transport);
+      const listing = await client.listTools();
+      expect(readToolInputProperties(listing, "odt_read_task")).toHaveProperty("workspaceId");
+
       const result = await client.callTool({
         name: "odt_read_task",
         arguments: {

@@ -5,10 +5,12 @@ import {
   type RuntimeKind,
 } from "@openducktor/contracts";
 import { Cause, Data, Deferred, type Duration, Effect, Exit, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import type { RuntimeDrivers, RuntimeHandle, RuntimeStartContext } from "../ports/runtime-driver";
 import { createRuntimeAdmissionGate } from "./runtime-admission-gate";
 import { createRuntimeRegistry } from "./runtime-registry";
 import type { RuntimeLifecycleRequest } from "./runtime-slot-lifecycle";
+import { forkAtYieldOffset, yieldOffsets } from "./runtime-race.test-support";
 
 class HostOperationError extends Data.TaggedError("HostOperationError")<{
   readonly operation: string;
@@ -322,24 +324,14 @@ describe("runtime registry lifecycle", () => {
   });
 
   test("shutdown never misses a start that registers while shutdown begins", async () => {
-    // A fiber yields after a fixed number of operations. Each run starts the action after one more
-    // step, so the sweep crosses every yield between the shutdown check and the start
-    // registration. A driver that never returns must still be interrupted by shutdown.
-    const steps = (count: number) => {
-      let effect: Effect.Effect<void> = Effect.void;
-      for (let step = 0; step < count; step += 1) effect = effect.pipe(Effect.andThen(Effect.void));
-      return effect;
-    };
     let entered = 0;
-    for (let count = 0; count < 2100; count += 1) {
+    for (const offset of yieldOffsets) {
       const { registry } = createHarness(() =>
         Effect.sync(() => {
           entered += 1;
         }).pipe(Effect.andThen(Effect.never)),
       );
-      const caller = Effect.runFork(
-        steps(count).pipe(Effect.andThen(apply(registry, "codex", request("start")))),
-      );
+      const caller = forkAtYieldOffset(offset, apply(registry, "codex", request("start")));
       await Effect.runPromise(Effect.yieldNow);
       const shutdown = await Effect.runPromise(
         registry.stopAll().pipe(Effect.timeoutOption("1 second")),
@@ -537,18 +529,33 @@ describe("runtime registry lifecycle", () => {
 
   test("shutdown cancels an admitted control that outlasts the grace period", async () => {
     const { registry, admission, events } = createHarness(undefined, undefined, "20 millis");
-    await Effect.runPromise(apply(registry, "claude", request("start")));
-    const control = Effect.runFork(admission.admit("claude", Effect.never));
-    await Effect.runPromise(Effect.yieldNow);
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* apply(registry, "claude", request("start"));
+        const started = yield* Deferred.make<void>();
+        const control = yield* Effect.forkChild(
+          admission.admit(
+            "claude",
+            Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
+          ),
+        );
+        yield* Deferred.await(started);
 
-    await Effect.runPromise(registry.stopAll());
+        const shutdown = yield* Effect.forkChild(registry.stopAll());
+        yield* TestClock.adjust("19 millis");
+        expect(events).toEqual(["start:claude-1"]);
+        expect(control.pollUnsafe()).toBeUndefined();
+        yield* TestClock.adjust("1 millis");
+        yield* Fiber.join(shutdown);
 
-    expect(events).toEqual(["start:claude-1", "stop:claude-1"]);
-    const result = await Effect.runPromise(Fiber.await(control));
-    if (!Exit.isFailure(result)) throw new Error("The cancelled control must fail.");
-    expect(Exit.hasInterrupts(result)).toBe(false);
-    expect(Cause.pretty(result.cause)).toContain(
-      "OpenDucktor stopped the Claude runtime before this action finished.",
+        expect(events).toEqual(["start:claude-1", "stop:claude-1"]);
+        const result = yield* Fiber.await(control);
+        if (!Exit.isFailure(result)) throw new Error("The cancelled control must fail.");
+        expect(Exit.hasInterrupts(result)).toBe(false);
+        expect(Cause.pretty(result.cause)).toContain(
+          "OpenDucktor stopped the Claude runtime before this action finished.",
+        );
+      }).pipe(Effect.provide(TestClock.layer())),
     );
   });
 
@@ -577,21 +584,34 @@ describe("runtime registry lifecycle", () => {
 
   test("a reservation cancels an admitted control that outlasts the grace period", async () => {
     const { registry, admission } = createHarness(undefined, undefined, "20 millis");
-    await Effect.runPromise(apply(registry, "opencode", request("start")));
-    const control = Effect.runFork(admission.admit("opencode", Effect.never));
-    await Effect.runPromise(Effect.yieldNow);
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* apply(registry, "opencode", request("start"));
+        const started = yield* Deferred.make<void>();
+        const control = yield* Effect.forkChild(
+          admission.admit(
+            "opencode",
+            Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
+          ),
+        );
+        yield* Deferred.await(started);
 
-    const reservation = await Effect.runPromise(registry.reserve(["opencode"]));
+        const reserving = yield* Effect.forkChild(registry.reserve(["opencode"]));
+        yield* TestClock.adjust("19 millis");
+        expect(reserving.pollUnsafe()).toBeUndefined();
+        expect(control.pollUnsafe()).toBeUndefined();
+        yield* TestClock.adjust("1 millis");
+        const reservation = yield* Fiber.join(reserving);
 
-    const result = await Effect.runPromise(Fiber.await(control));
-    if (!Exit.isFailure(result)) throw new Error("The cancelled control must fail.");
-    expect(Exit.hasInterrupts(result)).toBe(false);
-    expect(Cause.pretty(result.cause)).toContain(
-      "OpenDucktor stopped this action to apply a lifecycle action on the OpenCode runtime.",
+        const result = yield* Fiber.await(control);
+        if (!Exit.isFailure(result)) throw new Error("The cancelled control must fail.");
+        expect(Exit.hasInterrupts(result)).toBe(false);
+        expect(Cause.pretty(result.cause)).toContain(
+          "OpenDucktor stopped this action to apply a lifecycle action on the OpenCode runtime.",
+        );
+        yield* reservation.release();
+        expect(yield* admission.admit("opencode", Effect.succeed("ok"))).toBe("ok");
+      }).pipe(Effect.provide(TestClock.layer())),
     );
-    await Effect.runPromise(reservation.release());
-    await expect(
-      Effect.runPromise(admission.admit("opencode", Effect.succeed("ok"))),
-    ).resolves.toBe("ok");
   });
 });

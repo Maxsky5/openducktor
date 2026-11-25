@@ -23,10 +23,10 @@ afterEach(async () => {
   await Effect.runPromise(workers.shutdown);
 });
 
-const png = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC1sAAAAASUVORK5CYII=",
-  "base64",
-);
+const pngBase64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC1sAAAAASUVORK5CYII=";
+const png = Buffer.from(pngBase64, "base64");
+const pngRevision = createHash("sha256").update("saved_file\0").update(png).digest("hex");
 const directories: string[] = [];
 afterEach(async () => {
   await Promise.all(
@@ -45,37 +45,6 @@ beforeEach(() => {
   reader = createGeneratedImageFileAdapter(workers);
 });
 
-test("saved and inline PNG output return the same bounded bytes", async () => {
-  const path = await imageFile();
-  const saved = await Effect.runPromise(
-    reader.read(
-      {
-        representation: "saved_file",
-        revision: createHash("sha256")
-          .update("saved_file\0")
-          .update(
-            Buffer.from(
-              "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC1sAAAAASUVORK5CYII=",
-              "base64",
-            ),
-          )
-          .digest("hex"),
-        path,
-      },
-      "image",
-    ),
-  );
-  const inline = await Effect.runPromise(
-    reader.read({ representation: "inline", base64: png.toString("base64") }, "image"),
-  );
-  expect(saved).toEqual(inline);
-  expect(saved).toEqual({
-    mime: "image/png",
-    byteLength: png.byteLength,
-    base64: png.toString("base64"),
-  });
-});
-
 test("missing, directory, relative, and URL paths fail without file bytes", async () => {
   const path = await imageFile();
   for (const candidate of [
@@ -90,15 +59,7 @@ test("missing, directory, relative, and URL paths fail without file bytes", asyn
         reader.read(
           {
             representation: "saved_file",
-            revision: createHash("sha256")
-              .update("saved_file\0")
-              .update(
-                Buffer.from(
-                  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC1sAAAAASUVORK5CYII=",
-                  "base64",
-                ),
-              )
-              .digest("hex"),
+            revision: pngRevision,
             path: candidate,
           },
           "image",
@@ -108,28 +69,26 @@ test("missing, directory, relative, and URL paths fail without file bytes", asyn
   }
 });
 
-for (const [name, base64] of [
-  ["invalid characters", "private-invalid-payload"],
-  ["leading padding", "=AAA"],
-  ["excess padding", "A==="],
-  ["nonzero bits before double padding", "AB=="],
-  ["nonzero bits before single padding", "AAB="],
-  ["a trailing newline", "AAAA\n"],
-  ["empty output", ""],
-  ["plain text bytes", Buffer.from("not a PNG").toString("base64")],
-  ["GIF bytes", "R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="],
-] as const) {
-  test(`${name} fails without including image payloads`, async () => {
-    const result = await Effect.runPromise(
-      Effect.result(reader.read({ representation: "inline", base64 }, "image")),
-    );
-    expect(result._tag).toBe("Failure");
-    if (result._tag === "Failure") {
-      expect(result.failure.message).toContain("Image 'image'");
-      expect(result.failure.message).not.toContain("private-invalid-payload");
-    }
+test.each([
+  [
+    "malformed base64",
+    "private-invalid-payload!",
+    "the runtime returned malformed base64 image data",
+  ],
+  ["a GIF", "R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==", "only PNG"],
+])("rejects %s without exposing its payload", async (_input, base64, reason) => {
+  const result = await Effect.runPromise(
+    Effect.result(reader.read({ representation: "inline", base64 }, "image")),
+  );
+  if (result._tag !== "Failure") throw new Error("Expected an image validation failure");
+  expect(result.failure).toMatchObject({
+    _tag: "HostValidationError",
+    field: "image",
+    details: { itemId: "image", operation: "generated-image.read" },
   });
-}
+  expect(result.failure.message).toContain(`Image 'image' cannot be previewed: ${reason}`);
+  expect(result.failure.message).not.toContain(base64);
+});
 
 test("32 MiB is accepted and one extra decoded byte is rejected, including equal encoded lengths", async () => {
   // Small images cover worker routing above; check the large limit at the decoder and file reader.
@@ -169,15 +128,7 @@ for (const readFails of [false, true]) {
         reader.read(
           {
             representation: "saved_file",
-            revision: createHash("sha256")
-              .update("saved_file\0")
-              .update(
-                Buffer.from(
-                  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC1sAAAAASUVORK5CYII=",
-                  "base64",
-                ),
-              )
-              .digest("hex"),
+            revision: pngRevision,
             path,
           },
           "image",
@@ -236,15 +187,7 @@ test("interruption waits for file cleanup and preserves its interruption cause",
     reader.read(
       {
         representation: "saved_file",
-        revision: createHash("sha256")
-          .update("saved_file\0")
-          .update(
-            Buffer.from(
-              "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC1sAAAAASUVORK5CYII=",
-              "base64",
-            ),
-          )
-          .digest("hex"),
+        revision: pngRevision,
         path,
       },
       "image",
@@ -257,15 +200,7 @@ test("interruption waits for file cleanup and preserves its interruption cause",
       reader.read(
         {
           representation: "saved_file",
-          revision: createHash("sha256")
-            .update("saved_file\0")
-            .update(
-              Buffer.from(
-                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC1sAAAAASUVORK5CYII=",
-                "base64",
-              ),
-            )
-            .digest("hex"),
+          revision: pngRevision,
           path: otherPath,
         },
         "other",
@@ -295,7 +230,7 @@ test("interruption waits for file cleanup and preserves its interruption cause",
   }
 });
 
-test("saved file revisions follow bytes and reject replacement between metadata and preview", async () => {
+test("previews the described PNG and refuses a saved file that changes before preview", async () => {
   const path = await imageFile();
   const preparation = [
     {
@@ -313,20 +248,23 @@ test("saved file revisions follow bytes and reject replacement between metadata 
   ];
   const [first] = await workers.prepareHistory(preparation, undefined, "preview");
   expect(first?.status).toBe("completed");
-  expect(first?.output?.revision).toBe(
-    createHash("sha256").update("saved_file\0").update(png).digest("hex"),
+  expect(first?.output?.revision).toBe(pngRevision);
+  const savedSource = {
+    representation: "saved_file",
+    path,
+    revision: first!.output!.revision,
+  } as const;
+  const saved = await Effect.runPromise(reader.read(savedSource, "saved"));
+  const inline = await Effect.runPromise(
+    reader.read({ representation: "inline", base64: pngBase64 }, "inline"),
   );
+  expect(saved).toEqual({ mime: "image/png", byteLength: png.byteLength, base64: pngBase64 });
+  expect(inline).toEqual(saved);
+
   const changed = Buffer.from(png);
   changed[changed.length - 1] = changed[changed.length - 1]! ^ 1;
   await writeFile(path, changed);
-  await expect(
-    Effect.runPromise(
-      reader.read(
-        { representation: "saved_file", path, revision: first!.output!.revision },
-        "saved",
-      ),
-    ),
-  ).rejects.toThrow("changed");
+  await expect(Effect.runPromise(reader.read(savedSource, "saved"))).rejects.toThrow("changed");
   const [second] = await workers.prepareHistory(preparation, undefined, "preview");
   expect(second?.output?.revision).not.toBe(first?.output?.revision);
   const payload = await Effect.runPromise(

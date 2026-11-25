@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
+import { EventEmitter, once } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -34,14 +35,25 @@ for (const [name, config] of [
       const root = await mkdtemp(join(tmpdir(), "odt-shell-hooks-test-"));
       const nonce = "test-command-source";
       const commands: Array<string | null> = [];
+      const commandChanges = new EventEmitter();
       const screen = new TerminalScreenState({ columns: 80, rows: 24 });
       screen.onOsc(
         633,
-        createTerminalCommandTracker(nonce, (command) => commands.push(command)),
+        createTerminalCommandTracker(nonce, (command) => {
+          commands.push(command);
+          commandChanges.emit("change");
+        }),
       );
       let output = "";
       let failure: Error | null = null;
-      const detail = () => JSON.stringify({ commands, output, failure });
+      const waitForCommand = async (check: () => boolean): Promise<void> => {
+        const signal = AbortSignal.timeout(2000);
+        try {
+          while (!check()) await once(commandChanges, "change", { signal });
+        } catch (cause) {
+          throw new Error(JSON.stringify({ commands, output }), { cause: failure ?? cause });
+        }
+      };
       let child: ChildProcess | undefined;
       let prepared: TerminalShell | undefined;
       let exited: Promise<void> | undefined;
@@ -136,31 +148,31 @@ for (const [name, config] of [
         });
         exited = new Promise((resolve) => child!.once("close", () => resolve()));
         if (name === "zsh") child.stdin!.write(":\n");
-        await waitUntil(() => commands.includes(null), detail);
+        await waitForCommand(() => commands.includes(null));
         expect(commands.filter((command) => command !== null)).toEqual(name === "zsh" ? [":"] : []);
 
         if (name === "zsh") {
           commands.length = 0;
           child.stdin!.write('print -r -- "history-file:$HISTFILE"\nfc -ln 1\n');
-          await waitUntil(() => commands.includes("fc -ln 1") && commands.at(-1) === null, detail);
+          await waitForCommand(() => commands.includes("fc -ln 1") && commands.at(-1) === null);
           expect(output).toContain(`history-file:${historyPath}`);
           expect(output).toContain(historyCommand);
         }
 
-        child.stdin!.write("sleep 0.1\n");
-        await waitUntil(() => commands.includes("sleep 0.1") && commands.at(-1) === null, detail);
+        child.stdin!.write("sleep 0\n");
+        await waitForCommand(() => commands.includes("sleep 0") && commands.at(-1) === null);
 
         commands.length = 0;
         child.stdin!.write("read -r reply\n");
-        await waitUntil(() => commands.includes("read -r reply"), detail);
+        await waitForCommand(() => commands.includes("read -r reply"));
         expect(commands.at(-1)).toBe("read -r reply");
         child.stdin!.write("answer\n");
-        await waitUntil(() => commands.at(-1) === null, detail);
+        await waitForCommand(() => commands.at(-1) === null);
 
         commands.length = 0;
         const text = "printf 'héllo; 世界\\n'";
         child.stdin!.write(`${text}\n`);
-        await waitUntil(() => commands.includes(text) && commands.at(-1) === null, detail);
+        await waitForCommand(() => commands.includes(text) && commands.at(-1) === null);
 
         if (name === "zsh") {
           expect(output).toContain("user-preexec");
@@ -328,10 +340,4 @@ function runShell(
     killSignal: "SIGKILL",
   });
   return { status: result.exitCode, stdout: result.stdout.toString() };
-}
-
-async function waitUntil(check: () => boolean, detail?: () => string): Promise<void> {
-  const deadline = Date.now() + 2000;
-  while (!check() && Date.now() < deadline) await Bun.sleep(5);
-  if (!check()) throw new Error(detail?.() ?? "Shell command state did not change");
 }

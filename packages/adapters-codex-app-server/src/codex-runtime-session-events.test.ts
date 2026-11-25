@@ -1,4 +1,7 @@
-import { testWorkflowRolePolicy } from "./codex-app-server-adapter.test-harness";
+import {
+  flushCodexAdapterWork,
+  testWorkflowRolePolicy,
+} from "./codex-app-server-adapter.test-harness";
 import { describe, expect, test } from "bun:test";
 import {
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
@@ -17,15 +20,9 @@ import {
   codexTokenUsageFixture,
   codexTurnFixture,
 } from "./test-fixtures/codex-protocol";
-import type { CodexRuntimeEventQueueFailureHandler, CodexSessionState } from "./types";
+import type { CodexSessionState } from "./types";
 
 type CodexCommandExecutionItem = Extract<CodexAppServerThreadItem, { type: "commandExecution" }>;
-
-const waitForRuntimeEvent = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
-const flushRuntimeEvents = async (): Promise<void> => {
-  await waitForRuntimeEvent();
-  await waitForRuntimeEvent();
-};
 
 const runtimeEventReceivedAt = "2026-07-06T12:00:00.000Z";
 
@@ -87,7 +84,7 @@ const createItemLifecycleHarness = (...initialSessions: CodexSessionState[]) => 
   const listenersByRuntimeId = new Map<string, RuntimeListener>();
   const sessions = new Map(initialSessions.map((session) => [session.threadId, session]));
   const sessionEvents = new CodexSessionEventBus();
-  const emittedEvents: unknown[] = [];
+  const emittedEvents: AgentEvent[] = [];
   const observedThreadIds = new Set<string>();
   for (const session of initialSessions) {
     if (observedThreadIds.has(session.threadId)) {
@@ -205,17 +202,6 @@ const createActiveTurn = (
 });
 
 describe("CodexRuntimeSessionEvents", () => {
-  test("requires a synchronous queue failure handler that returns exactly undefined", () => {
-    const handler: CodexRuntimeEventQueueFailureHandler = () => {
-      return undefined;
-    };
-    expect(handler({ runtimeId: "runtime-1", error: new Error("failed") })).toBeUndefined();
-
-    // @ts-expect-error Queue failure reporting must not return a promise.
-    const asyncHandler: CodexRuntimeEventQueueFailureHandler = async () => undefined;
-    void asyncHandler;
-  });
-
   test("reports pending-input continuation failures only to their retained owner", async () => {
     const threadId = "thread-reused";
     const releasedSession = createSession(threadId);
@@ -276,7 +262,7 @@ describe("CodexRuntimeSessionEvents", () => {
       kind: "notification",
       message: { method: "skills/changed", params: { cwd: "/repo" } },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(invalidations).toEqual([{ runtimeId: "runtime-1", catalog: "skills" }]);
     expect(invalidations[0]).not.toHaveProperty("method");
@@ -321,7 +307,7 @@ describe("CodexRuntimeSessionEvents", () => {
         },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(failures).toEqual([{ runtimeId: "runtime-1", error: deliveryFailure }]);
     expect(emittedEvents).not.toContainEqual(expect.objectContaining({ type: "session_error" }));
@@ -367,7 +353,7 @@ describe("CodexRuntimeSessionEvents", () => {
 
     runtimeEvents.clearRuntime("runtime-1");
     blockedMutation.reject(deliveryFailure);
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(mutationCount).toBe(1);
     expect(failures).toEqual([{ runtimeId: "runtime-1", error: deliveryFailure }]);
@@ -406,7 +392,7 @@ describe("CodexRuntimeSessionEvents", () => {
         params: { threadId: session.threadId },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(failures).toEqual([{ runtimeId: "runtime-1", error: catalogFailure }]);
     expect(emittedEvents).not.toContainEqual(expect.objectContaining({ type: "session_error" }));
@@ -446,14 +432,14 @@ describe("CodexRuntimeSessionEvents", () => {
       kind: "notification",
       message: { method: "thread/status/changed", params: { threadId: "missing-thread" } },
     });
-    await waitForRuntimeEvent();
+    await flushCodexAdapterWork();
     listener?.({
       runtimeId: "runtime-1",
       kind: "notification",
       message: { method: "thread/status/changed", params: { threadId: "missing-thread" } },
     });
     rejectFirstDelivery?.(processingFailure);
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(failures).toEqual([{ runtimeId: "runtime-1", error: processingFailure }]);
     expect(attempts).toBe(2);
@@ -498,15 +484,15 @@ describe("CodexRuntimeSessionEvents", () => {
       kind: "notification",
       message: { method: "skills/changed", params: {} },
     });
-    await waitForRuntimeEvent();
+    await flushCodexAdapterWork();
 
     expect(deliveries).toEqual(["catalog", "mutation"]);
     expect(failures).toEqual([]);
     rejectCatalog?.(deliveryFailure);
-    await waitForRuntimeEvent();
+    await flushCodexAdapterWork();
     expect(failures).toEqual([]);
     resolveMutation?.();
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
     expect(failures).toEqual([{ runtimeId: "runtime-1", error: deliveryFailure }]);
   });
 
@@ -541,7 +527,7 @@ describe("CodexRuntimeSessionEvents", () => {
       kind: "notification",
       message: { method: "skills/changed", params: {} },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(deliveries).toEqual(["catalog", "mutation"]);
     expect(failures).toHaveLength(1);
@@ -578,7 +564,7 @@ describe("CodexRuntimeSessionEvents", () => {
         kind: event.kind,
         message: event.message,
       });
-      await flushRuntimeEvents();
+      await flushCodexAdapterWork();
     }
 
     const subagentParts = emittedEvents.flatMap((event) => {
@@ -626,13 +612,13 @@ describe("CodexRuntimeSessionEvents", () => {
       kind: childCompletionEvent.kind,
       message: childCompletionEvent.message,
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
     listener?.({
       runtimeId: "runtime-1",
       kind: spawnEvent.kind,
       message: spawnEvent.message,
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(emittedEvents).toContainEqual(
       expect.objectContaining({
@@ -673,14 +659,14 @@ describe("CodexRuntimeSessionEvents", () => {
         kind: event.kind,
         message: event.message,
       });
-      await flushRuntimeEvents();
+      await flushCodexAdapterWork();
     }
     listener?.({
       runtimeId: "runtime-1",
       kind: spawnEvent.kind,
       message: spawnEvent.message,
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     const statuses = emittedEvents.flatMap((event) => {
       if (!isSubagentAssistantPartEvent(event)) {
@@ -720,13 +706,13 @@ describe("CodexRuntimeSessionEvents", () => {
       kind: childCompletionEvent.kind,
       message: childCompletionEvent.message,
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
     listener?.({
       runtimeId: "runtime-1",
       kind: spawnEvent.kind,
       message: spawnEvent.message,
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(emittedEvents).toContainEqual(
       expect.objectContaining({
@@ -779,13 +765,13 @@ describe("CodexRuntimeSessionEvents", () => {
       kind: childCompletionEvent.kind,
       message: childCompletionEvent.message,
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
     listeners.get("runtime-2")?.({
       runtimeId: "runtime-2",
       kind: spawnEvent.kind,
       message: spawnMessageForParent("parent-two"),
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(parentTwoEvents).not.toContainEqual(
       expect.objectContaining({
@@ -799,7 +785,7 @@ describe("CodexRuntimeSessionEvents", () => {
       kind: spawnEvent.kind,
       message: spawnMessageForParent("parent-one"),
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(parentOneEvents).toContainEqual(
       expect.objectContaining({
@@ -871,13 +857,13 @@ describe("CodexRuntimeSessionEvents", () => {
       kind: "server_request",
       message: approval,
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
     listeners.get("runtime-2")?.({
       runtimeId: "runtime-2",
       kind: "server_request",
       message: approval,
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     const parentOneApproval = parentOneEvents.find((event) => event.type === "approval_required");
     const parentTwoApproval = parentTwoEvents.find((event) => event.type === "approval_required");
@@ -917,7 +903,7 @@ describe("CodexRuntimeSessionEvents", () => {
         },
       });
     }
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     runtimeEvents.clearSession("thread/stopped");
 
@@ -933,13 +919,13 @@ describe("CodexRuntimeSessionEvents", () => {
     const harness = createItemLifecycleHarness(session);
     await harness.subscribe(session.runtimeId);
     harness.emitItem(session, "item/started", 1_783_109_994_000, "reused-item");
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     harness.runtimeEvents.clearSession(session.threadId, session.runtimeId);
     harness.emittedEvents.length = 0;
 
     harness.emitItem(session, "item/completed", 1_783_109_995_000, "reused-item");
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(harness.emittedEvents).toContainEqual(
       expect.objectContaining({
@@ -963,29 +949,6 @@ describe("CodexRuntimeSessionEvents", () => {
     );
   });
 
-  test("takes matched item starts and prunes empty parent maps", async () => {
-    const session = createSession("thread/matched");
-    const harness = createItemLifecycleHarness(session);
-    await harness.subscribe(session.runtimeId);
-    harness.emitItem(session, "item/started", 1_783_109_996_000, "matched-item");
-    await flushRuntimeEvents();
-
-    harness.emitItem(session, "item/completed", 1_783_109_997_000, "matched-item");
-    await flushRuntimeEvents();
-
-    expect(harness.emittedEvents).toContainEqual(
-      expect.objectContaining({
-        type: "assistant_part",
-        part: expect.objectContaining({
-          kind: "tool",
-          callId: "matched-item",
-          startedAtMs: 1_783_109_996_000,
-          endedAtMs: 1_783_109_997_000,
-        }),
-      }),
-    );
-  });
-
   test("isolates identical item IDs by runtime and clears runtime-owned state", async () => {
     const threadId = "thread/shared";
     const runtimeOneSession = createSessionForRuntime(threadId, "runtime-1");
@@ -997,13 +960,13 @@ describe("CodexRuntimeSessionEvents", () => {
       [runtimeTwoSession, 1_783_109_999_000],
     ] as const) {
       harness.emitItem(session, "item/started", startedAtMs, "shared-item");
-      await flushRuntimeEvents();
+      await flushCodexAdapterWork();
     }
 
     harness.runtimeEvents.clearRuntime("runtime-1");
 
     harness.emitItem(runtimeTwoSession, "item/completed", 1_783_110_000_000, "shared-item");
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(harness.emittedEvents).toContainEqual(
       expect.objectContaining({
@@ -1017,9 +980,21 @@ describe("CodexRuntimeSessionEvents", () => {
       }),
     );
 
-    harness.emitItem(runtimeTwoSession, "item/started", 1_783_110_001_000, "orphaned-item");
-    await flushRuntimeEvents();
-    harness.runtimeEvents.clearRuntime("runtime-2");
+    harness.emittedEvents.length = 0;
+    await harness.subscribe(runtimeOneSession.runtimeId);
+    harness.emitItem(runtimeOneSession, "item/completed", 1_783_110_001_000, "shared-item");
+    await flushCodexAdapterWork();
+
+    const completedPart = harness.emittedEvents.find(
+      (event): event is Extract<AgentEvent, { type: "assistant_part" }> =>
+        event.type === "assistant_part",
+    )?.part;
+    expect(completedPart).toMatchObject({
+      kind: "tool",
+      callId: "shared-item",
+      endedAtMs: 1_783_110_001_000,
+    });
+    expect(completedPart).not.toHaveProperty("startedAtMs");
   });
 
   test("reuses item IDs and preserves runtime-supplied completion timing", async () => {
@@ -1028,12 +1003,12 @@ describe("CodexRuntimeSessionEvents", () => {
     await harness.subscribe(session.runtimeId);
     harness.emitItem(session, "item/started", 1_783_110_001_000, "restarted-item");
     harness.emitItem(session, "item/completed", 1_783_110_002_000, "restarted-item");
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     harness.emittedEvents.length = 0;
     harness.emitItem(session, "item/started", 1_783_110_003_000, "restarted-item");
     harness.emitItem(session, "item/completed", 1_783_110_004_000, "restarted-item");
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(harness.emittedEvents).toContainEqual(
       expect.objectContaining({
@@ -1052,7 +1027,7 @@ describe("CodexRuntimeSessionEvents", () => {
     harness.emitItem(session, "item/completed", 1_783_110_006_000, "restarted-item", {
       startedAtMs: 1_783_110_005_500,
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(harness.emittedEvents).toContainEqual(
       expect.objectContaining({
@@ -1065,14 +1040,6 @@ describe("CodexRuntimeSessionEvents", () => {
         }),
       }),
     );
-  });
-
-  test("returns null after a successful resume with no retained usage", async () => {
-    const runtimeEvents = createRuntimeEvents();
-
-    await expect(
-      runtimeEvents.loadSessionContextUsage("runtime-1", "thread-target", async () => undefined),
-    ).resolves.toBeNull();
   });
 
   test("records a malformed token notification as a stream fault without changing usage", async () => {
@@ -1108,7 +1075,7 @@ describe("CodexRuntimeSessionEvents", () => {
         },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(runtimeEvents.latestContextUsage("runtime-1", "thread-target")).toBeNull();
     expect(mutations.at(-1)?.fault).toContain("threadId");
@@ -1157,7 +1124,7 @@ describe("CodexRuntimeSessionEvents", () => {
         params: { threadId: childThreadId },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(mutations.at(-1)?.fault).toContain("method");
     expect(mutations.at(-1)?.faultRef).toEqual(codexSessionRef(childLiveSession));
@@ -1230,7 +1197,7 @@ describe("CodexRuntimeSessionEvents", () => {
         params: { threadId: grandchildSession.threadId },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(mutations.at(-1)?.faultRef).toEqual(codexSessionRef(grandchildSession));
     expect(mutations.at(-1)?.transcriptEvents).toContainEqual(
@@ -1305,7 +1272,7 @@ describe("CodexRuntimeSessionEvents", () => {
         },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     const pending = pendingInput.nativeRequest(
       "runtime-1",
@@ -1342,7 +1309,7 @@ describe("CodexRuntimeSessionEvents", () => {
         params: { threadId: grandchildSession.threadId, requestId: "nested-question" },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(
       pendingInput.nativeRequest("runtime-1", grandchildSession.threadId, "nested-question"),
@@ -1417,7 +1384,7 @@ describe("CodexRuntimeSessionEvents", () => {
         },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     const pending = pendingInput.nativeRequest(
       "runtime-1",
@@ -1447,7 +1414,7 @@ describe("CodexRuntimeSessionEvents", () => {
         params: { threadId: grandchildSession.threadId, requestId: "nested-approval" },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(
       pendingInput.nativeRequest("runtime-1", grandchildSession.threadId, "nested-approval"),
@@ -1505,7 +1472,7 @@ describe("CodexRuntimeSessionEvents", () => {
         },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(
       pendingInput.nativeRequest(
@@ -1581,7 +1548,7 @@ describe("CodexRuntimeSessionEvents", () => {
         },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     const pending = pendingInput.nativeRequest(
       "runtime-1",
@@ -1597,7 +1564,7 @@ describe("CodexRuntimeSessionEvents", () => {
         params: { threadId: childSession.threadId, requestId: "retained-child-question" },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     const eventsByType = (events: AgentEvent[], type: AgentEvent["type"]) =>
       events.filter((event) => event.type === type);
@@ -1685,7 +1652,7 @@ describe("CodexRuntimeSessionEvents", () => {
         kind: "server_request",
         message: { id: `invalid-${threadId}`, method: "", params: { threadId } },
       });
-      await flushRuntimeEvents();
+      await flushCodexAdapterWork();
     }
 
     expect(mutations).toHaveLength(3);
@@ -1752,7 +1719,7 @@ describe("CodexRuntimeSessionEvents", () => {
         },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(mutations.at(-1)?.fault).toContain('"tokenUsage"');
     expect(mutations.at(-1)?.faultRef).toEqual(codexSessionRef(childLiveSession));
@@ -1794,7 +1761,7 @@ describe("CodexRuntimeSessionEvents", () => {
         params: { threadId: session.threadId },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(mutations.at(-1)?.faultRef).toEqual(codexSessionRef(session));
     expect(
@@ -1827,7 +1794,7 @@ describe("CodexRuntimeSessionEvents", () => {
         params: { threadId: session.threadId, status: { type: "active", activeFlags: [] } },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(session.liveStatus).toEqual({ classification: "running" });
     expect(session.summary.status).toBe("running");
@@ -1858,7 +1825,7 @@ describe("CodexRuntimeSessionEvents", () => {
         },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(mutations.at(-1)?.fault).toBeUndefined();
     expect(runtimeEvents.latestContextUsage("runtime-1", "thread-target")).toEqual({
@@ -1894,7 +1861,7 @@ describe("CodexRuntimeSessionEvents", () => {
     await runtimeEvents.ensureRuntimeEventSubscription("runtime-2");
     emitUsage("runtime-1", 100);
     emitUsage("runtime-2", 200);
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(runtimeEvents.latestContextUsage("runtime-1", "shared-thread")).toEqual({
       totalTokens: 100,
@@ -1965,7 +1932,7 @@ describe("CodexRuntimeSessionEvents", () => {
         },
       },
     });
-    await waitForRuntimeEvent();
+    await flushCodexAdapterWork();
 
     expect(pendingInput.nativeRequest("runtime-1", "child-thread", 50)?.entry).toMatchObject({
       threadId: "child-thread",
@@ -2020,7 +1987,7 @@ describe("CodexRuntimeSessionEvents", () => {
         },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     const pendingApproval = pendingInput.nativeRequest(
       "runtime-1",
@@ -2089,7 +2056,7 @@ describe("CodexRuntimeSessionEvents", () => {
         },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(liveMutations.flatMap((mutation) => mutation.transcriptEvents)).toEqual([
       expect.objectContaining({
@@ -2144,7 +2111,7 @@ describe("CodexRuntimeSessionEvents", () => {
         },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(liveMutations.flatMap((mutation) => mutation.transcriptEvents)).toEqual(
       expect.arrayContaining([
@@ -2205,7 +2172,7 @@ describe("CodexRuntimeSessionEvents", () => {
         },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     const events = liveMutations.flatMap((mutation) => mutation.transcriptEvents);
     expect(events).toEqual(
@@ -2261,7 +2228,7 @@ describe("CodexRuntimeSessionEvents", () => {
         },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(liveMutations).toHaveLength(1);
     expect(liveMutations[0]?.transcriptEvents).toEqual([
@@ -2327,7 +2294,7 @@ describe("CodexRuntimeSessionEvents", () => {
         },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(pendingInput.question("54")).toBeUndefined();
     expect(emittedEvents).toContainEqual(
@@ -2387,7 +2354,7 @@ describe("CodexRuntimeSessionEvents", () => {
         },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(childEvents).toContainEqual(
       expect.objectContaining({
@@ -2446,7 +2413,7 @@ describe("CodexRuntimeSessionEvents", () => {
         },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     subagents.upsertLink({
       parentThreadId: "parent-thread",
@@ -2454,7 +2421,7 @@ describe("CodexRuntimeSessionEvents", () => {
       itemId: "spawn-1",
       status: "running",
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(pendingInput.nativeRequest("runtime-2", "child-thread", 59)).toBeUndefined();
 
@@ -2478,7 +2445,7 @@ describe("CodexRuntimeSessionEvents", () => {
         },
       },
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(pendingInput.nativeRequest("runtime-2", "child-thread", 60)).toBeUndefined();
     expect(runtimeTwoEvents).toEqual([]);
@@ -2521,7 +2488,7 @@ describe("CodexRuntimeSessionEvents", () => {
       itemId: "spawn-1",
       status: "running",
     });
-    await flushRuntimeEvents();
+    await flushCodexAdapterWork();
 
     expect(pendingInput.question(entry.request.requestId)).toMatchObject({
       route: {

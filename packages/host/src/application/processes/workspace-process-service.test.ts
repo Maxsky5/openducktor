@@ -19,6 +19,7 @@ import type {
 import type { WorktreeOwnershipChat } from "../../ports/workspace-session-store-port";
 import {
   addGitWorktree,
+  gitFixtureCommand,
   gitFixtureEnv,
   initGitRepository,
 } from "../../test-support/git-repository-fixture";
@@ -46,7 +47,7 @@ const stopOne = (service: WorkspaceProcessService, { processRef, ...request }: S
 
 const git = createGitCliAdapter({
   readEnv: () => gitFixtureEnv,
-  resolveCommand: () => Effect.succeed("git"),
+  resolveCommand: () => Effect.succeed(gitFixtureCommand),
 });
 
 let root = "";
