@@ -12,7 +12,6 @@ import { requireTaskBranches } from "../support/task-branches";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskPullRequestDetectionUseCase = ({
-  taskWorkflows,
   gitPort,
   gitProviderResolver,
   taskStore,
@@ -31,7 +30,6 @@ export const createTaskPullRequestDetectionUseCase = ({
         }),
       );
       const current = yield* taskStore.getTask(input);
-      const workflow = taskWorkflows.forTask(current);
       yield* requirePullRequestManagement(current);
       const metadata = yield* taskStore.getTaskDelivery(input);
       if (metadata.pullRequest !== undefined) {
@@ -56,7 +54,6 @@ export const createTaskPullRequestDetectionUseCase = ({
         workspaceId: input.workspaceId,
         repoPath: effectiveRepoPath,
         task: current,
-        workflow,
         operationLabel: "Pull request detection",
       });
       const provider = yield* dependencies.gitProviderResolver.resolve(repoConfig);

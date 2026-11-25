@@ -249,6 +249,23 @@ export function SessionGroupHeaderContent({
   );
 }
 
+/** One row and its presence. A list render skips each row whose entry did not change. */
+const SessionListItem = memo(function SessionListItem({
+  entry,
+  onOpen,
+}: {
+  entry: SessionNavigationEntry;
+  onOpen: (entry: SessionNavigationEntry, target?: SessionNavigationTarget) => void;
+}): ReactElement {
+  return (
+    <SessionPresence as="li">
+      <div className="py-0.5">
+        <SessionListRow entry={entry} onOpen={onOpen} />
+      </div>
+    </SessionPresence>
+  );
+});
+
 function SessionListRow({
   entry,
   onOpen,
@@ -342,11 +359,7 @@ function SessionGroupSection({
           <ul id={listId}>
             <CssPresenceList isLoading={isLoading}>
               {group.entries.map((entry) => (
-                <SessionPresence as="li" key={entry.key}>
-                  <div className="py-0.5">
-                    <SessionListRow entry={entry} onOpen={onOpen} />
-                  </div>
-                </SessionPresence>
+                <SessionListItem key={entry.key} entry={entry} onOpen={onOpen} />
               ))}
             </CssPresenceList>
           </ul>

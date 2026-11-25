@@ -11,13 +11,16 @@ import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 import type { CloseTaskOptions } from "../../types/task-close";
 import type { WorkflowDialogOwnership } from "./use-workflow-dialog-owner";
 
+/** How New task opens: a first title, and a workflow that the task starts with. */
+export type CreateTaskOptions = { initialTitle?: string; workflowId?: string };
+
 export type TaskWorkflowActions = {
   /** Runs a declared workflow action of any surface. A failure shows its message. */
   runAction: RunTaskAction;
   onLaunch: LaunchTaskWorkflow;
   kanbanPendingState?: WorkflowPendingState;
   /** Open New task for the active workspace. The title starts with `initialTitle`. */
-  onCreateTask: (options?: { initialTitle?: string }) => void;
+  onCreateTask: (options?: CreateTaskOptions) => void;
   onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   onEdit: (taskId: string, section?: EditTaskSection) => void;
   /** Open the details sheet of a task of the active workspace, on any page. */

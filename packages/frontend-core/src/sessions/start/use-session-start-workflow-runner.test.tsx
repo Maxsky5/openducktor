@@ -2,8 +2,8 @@ import {
   specPlanBuildWorkflow,
   createTaskWorkflow,
   taskWorkflowDescriptor,
-  workflowRoleCatalog,
 } from "@openducktor/workflows";
+import { workflowRoleCatalog } from "@openducktor/workflows/test-support";
 import { promptOverrideKey } from "@openducktor/contracts";
 import {
   createSettingsSnapshotFixture,

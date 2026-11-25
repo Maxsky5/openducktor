@@ -2,7 +2,6 @@ import {
   isOdtBrowserToolName,
   promptOverrideKey,
   ROLE_INSTRUCTIONS_PROMPT_ID,
-  WORKFLOW_MESSAGE_PROMPT_PREFIX,
   WORKFLOW_PROMPT_IDS,
   type AgentPromptPlaceholder,
   type AgentToolName,
@@ -17,7 +16,6 @@ import {
   fillablePlaceholdersHint,
   isPromptOverrideOutdated,
   joinPromptLayers,
-  placeholderProblem,
   promptBase,
   promptScopeLayerProblems,
   type PromptPlaceholderRules,
@@ -173,14 +171,6 @@ const promptName = (template: OwnedPromptTemplate, roleIds: readonly string[]): 
     ? `prompt "${roleIds[0]}.${template.id}"`
     : `prompt "${template.id}"`;
 
-/** The workflow prompts of the system prompt, after the role instructions. */
-const SYSTEM_PROMPT_IDS = [
-  WORKFLOW_PROMPT_IDS.rules,
-  WORKFLOW_PROMPT_IDS.toolRules,
-  WORKFLOW_PROMPT_IDS.taskContext,
-];
-const BASE_PROMPT_IDS = new Set<string>(Object.values(WORKFLOW_PROMPT_IDS));
-
 const PLACEHOLDER_PATTERN = /{{\s*([a-zA-Z0-9_.-]+)\s*}}/g;
 
 /** Fills each `{{placeholder}}` of a template. A placeholder without a value becomes empty. */
@@ -242,41 +232,51 @@ export const requirePullRequestTarget = (
   return branch;
 };
 
+/** The placeholder values that a launch action supplies to its prompt. */
+const launchPlaceholders = (
+  launch: Pick<WorkflowLaunchActionDefinition, "id" | "context" | "surface">,
+): AgentPromptPlaceholder[] => [
+  ...BASE_PROMPT_PLACEHOLDERS,
+  ...(launch.context === "human_feedback" ? HUMAN_FEEDBACK_PLACEHOLDERS : []),
+  ...(isPullRequestLaunch(launch.id) || launch.surface === "git_conflict" ? GIT_PLACEHOLDERS : []),
+];
+
+/** The launch actions of a workflow, with the core pull request launch. */
+export const workflowLaunchActions = (
+  definition: Pick<CompiledWorkflowDefinition, "steps">,
+): readonly Pick<WorkflowLaunchActionDefinition, "id" | "context" | "surface" | "template">[] => [
+  ...definition.steps.flatMap((step) => (step.kind === "agent" ? step.launchActions : [])),
+  PULL_REQUEST_LAUNCH,
+];
+
 /**
- * Checks that the workflow provides each base prompt and the prompt of each launch action, with
- * the core pull request launch. Every other prompt ID is in the messages group.
+ * The placeholders that a workflow prompt can fill. A prompt that no launch action sends fills the
+ * base set. A prompt that more than one launch action sends can fill only what each of them
+ * supplies.
  */
-const checkTemplates = (
-  definition: CompiledWorkflowDefinition,
-  workflowTemplatesById: ReadonlyMap<string, OwnedPromptTemplate>,
-  launchTemplates: ReadonlyMap<string, LaunchTemplate>,
-): void => {
-  const requireTemplate = (id: string, purpose: PromptPurpose, user: string) => {
-    const template = workflowTemplatesById.get(id);
-    if (!template) {
-      throw new Error(
-        `Task workflow "${definition.id}" has no prompt template "${id}" for ${user}.`,
-      );
-    }
-    if (template.purpose !== purpose) {
-      throw new Error(
-        `Prompt template "${id}" of task workflow "${definition.id}" is a ${template.purpose} template. ${user} needs a ${purpose} template.`,
-      );
-    }
-  };
-  for (const id of SYSTEM_PROMPT_IDS) requireTemplate(id, "system", "the system prompt");
-  requireTemplate(WORKFLOW_PROMPT_IDS.readOnlyRejection, "permission", "read-only rejections");
-  for (const id of workflowTemplatesById.keys())
-    if (!BASE_PROMPT_IDS.has(id) && !id.startsWith(WORKFLOW_MESSAGE_PROMPT_PREFIX))
-      throw new Error(
-        `Prompt "${id}" of task workflow "${definition.id}" is neither a base workflow prompt nor in the "${WORKFLOW_MESSAGE_PROMPT_PREFIX}" group. Rename it.`,
-      );
-  for (const [launchActionId, launch] of launchTemplates) {
-    requireTemplate(launch.templateId, launch.kind, `launch action "${launchActionId}"`);
-  }
-  if (workflowTemplatesById.has(WORKFLOW_PROMPT_IDS.goal))
-    requireTemplate(WORKFLOW_PROMPT_IDS.goal, "goal", "Goal mode");
+export const workflowPromptPlaceholders = (
+  definition: Pick<CompiledWorkflowDefinition, "steps">,
+  promptId: string,
+): readonly AgentPromptPlaceholder[] => {
+  const sets = workflowLaunchActions(definition)
+    .filter((launch) => launch.template.id === promptId)
+    .map(launchPlaceholders);
+  const [first = BASE_PROMPT_PLACEHOLDERS, ...rest] = sets;
+  return first.filter((placeholder) => rest.every((set) => set.includes(placeholder)));
 };
+
+/** The workflow prompts of the system prompt, after the role instructions. */
+const SYSTEM_PROMPT_IDS: readonly string[] = [
+  WORKFLOW_PROMPT_IDS.rules,
+  WORKFLOW_PROMPT_IDS.toolRules,
+  WORKFLOW_PROMPT_IDS.taskContext,
+];
+/** The base prompts that every workflow provides, by prompt ID, with their purpose. */
+export const REQUIRED_BASE_PROMPTS: ReadonlyMap<string, PromptPurpose> = new Map([
+  ...SYSTEM_PROMPT_IDS.map((id) => [id, "system"] as const),
+  [WORKFLOW_PROMPT_IDS.readOnlyRejection, "permission"],
+]);
+export const BASE_PROMPT_IDS: ReadonlySet<string> = new Set(Object.values(WORKFLOW_PROMPT_IDS));
 
 export const createTaskPrompts = (
   definition: CompiledWorkflowDefinition,
@@ -293,11 +293,6 @@ export const createTaskPrompts = (
     });
   const workflowTemplatesById = new Map<string, OwnedPromptTemplate>();
   for (const template of workflowTemplates) {
-    if (workflowTemplatesById.has(template.id)) {
-      throw new Error(
-        `Task workflow "${definition.id}" has two prompt templates "${template.id}". Keep one.`,
-      );
-    }
     workflowTemplatesById.set(template.id, {
       ...template,
       key: workflowKey(template.id),
@@ -318,10 +313,7 @@ export const createTaskPrompts = (
   const templates = [...workflowTemplatesById.values(), ...roleTemplates];
   const templatesByKey = new Map(templates.map((template) => [template.key, template]));
   const rolesById = new Map(roles.map((role) => [role.id, role]));
-  const launchActions = [
-    ...definition.steps.flatMap((step) => (step.kind === "agent" ? step.launchActions : [])),
-    PULL_REQUEST_LAUNCH,
-  ];
+  const launchActions = workflowLaunchActions(definition);
   const launchTemplates = new Map<string, LaunchTemplate>(
     launchActions.map((launch) => [
       launch.id,
@@ -331,7 +323,6 @@ export const createTaskPrompts = (
   const createsPullRequest = (roleId: string) =>
     rolesById.has(roleId) &&
     (definition.pullRequestRoles.length === 0 || definition.pullRequestRoles.includes(roleId));
-  checkTemplates(definition, workflowTemplatesById, launchTemplates);
   const templateRolesByKey = new Map(
     templates.map((entry) => {
       const templateRoles =
@@ -348,42 +339,18 @@ export const createTaskPrompts = (
                 ),
           )
           .map(({ id }) => id);
-      for (const role of templateRoles)
-        if (!rolesById.has(role))
-          throw new Error(
-            `Prompt template "${entry.id}" names unknown role "${role}" in task workflow "${definition.id}". Fix its roleIds.`,
-          );
       return [entry.key, templateRoles] as const;
     }),
   );
   const nameOf = (entry: OwnedPromptTemplate) =>
     promptName(entry, templateRolesByKey.get(entry.key)!);
-  /** The placeholder values that a launch action supplies to its prompt. */
-  const launchPlaceholders = (
-    launch: Pick<WorkflowLaunchActionDefinition, "id" | "context" | "surface">,
-  ): AgentPromptPlaceholder[] => [
-    ...BASE_PROMPT_PLACEHOLDERS,
-    ...(launch.context === "human_feedback" ? HUMAN_FEEDBACK_PLACEHOLDERS : []),
-    ...(isPullRequestLaunch(launch.id) || launch.surface === "git_conflict"
-      ? GIT_PLACEHOLDERS
-      : []),
-  ];
-  // A prompt that no launch action sends, such as the role instructions, fills the base set. A
-  // prompt that more than one launch action sends can fill only what each of them supplies.
   const fillableByKey = new Map<string, readonly AgentPromptPlaceholder[]>(
-    templates.map((entry) => {
-      const sets =
-        entry.ownerKind === "role"
-          ? []
-          : launchActions
-              .filter((launch) => launch.template.id === entry.id)
-              .map(launchPlaceholders);
-      const [first = BASE_PROMPT_PLACEHOLDERS, ...rest] = sets;
-      return [
-        entry.key,
-        first.filter((placeholder) => rest.every((set) => set.includes(placeholder))),
-      ];
-    }),
+    templates.map((entry) => [
+      entry.key,
+      entry.ownerKind === "role"
+        ? BASE_PROMPT_PLACEHOLDERS
+        : workflowPromptPlaceholders(definition, entry.id),
+    ]),
   );
   const placeholdersOf = (key: string): readonly AgentPromptPlaceholder[] => {
     const fillable = fillableByKey.get(key);
@@ -394,14 +361,6 @@ export const createTaskPrompts = (
     requiredPlaceholders: entry.requiredPlaceholders ?? [],
     fillablePlaceholders: placeholdersOf(entry.key),
   });
-  for (const entry of templates) {
-    const { requiredPlaceholders, fillablePlaceholders } = rulesOf(entry);
-    const problem = placeholderProblem(entry.template, requiredPlaceholders, fillablePlaceholders);
-    if (problem !== undefined)
-      throw new Error(
-        `The built-in text of ${nameOf(entry)} has a placeholder problem. ${problem} ${fillablePlaceholdersHint(fillablePlaceholders)}`,
-      );
-  }
   /**
    * The first placeholder problem of a saved layer of one prompt that goes into its final text,
    * with its fix. An override that a repository override hides does not go into the text, so it is
@@ -459,9 +418,10 @@ export const createTaskPrompts = (
     const lines = role.tools
       .filter((tool) => !isOdtBrowserToolName(tool))
       .map((tool) => `- ${formatOdtToolArgs(definition, tool)}`);
-    lines.push(
-      `- Allowed workflow codes for odt_set_task_artifact: ${role.writes.join(", ")}. Free-artifact writes are also allowed.`,
-    );
+    if (role.tools.includes("odt_set_task_artifact"))
+      lines.push(
+        `- Allowed workflow codes for odt_set_task_artifact: ${role.writes.length > 0 ? role.writes.join(", ") : "none"}. Free-artifact writes are also allowed.`,
+      );
     if (role.agentEvents.length > 0) {
       lines.push("- Workflow events for odt_apply_workflow_event:");
       for (const { id, description, note } of role.agentEvents)

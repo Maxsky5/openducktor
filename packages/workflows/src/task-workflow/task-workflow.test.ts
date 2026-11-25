@@ -100,7 +100,7 @@ describe("createTaskWorkflow", () => {
         goal: reviewGoal("Finish {{task.description}}"),
       };
     });
-    expect(create).toThrow('uses placeholder "task.description"');
+    expect(create).toThrow('cannot use the placeholder "task.description"');
   });
 
   test("offers Goal mode only with a goal prompt of the workflow", () => {
@@ -166,7 +166,7 @@ describe("createTaskWorkflow", () => {
           goal: reviewGoal("Apply {{humanFeedback}}"),
         };
       });
-    expect(withFeedbackGoal(undefined)).toThrow('uses placeholder "humanFeedback"');
+    expect(withFeedbackGoal(undefined)).toThrow('cannot use the placeholder "humanFeedback"');
     expect(withFeedbackGoal("human_feedback")).not.toThrow();
   });
 
@@ -174,7 +174,6 @@ describe("createTaskWorkflow", () => {
     expect(review.issueTypes).toEqual(["feature", "bug"]);
     expect(review.detectsMerge("approval")).toBe(true);
     expect(review.detectsMerge("reviewing")).toBe(false);
-    expect(review.worktreeRoles).toEqual(["writer"]);
     expect(review.reviewArtifactCodes).toEqual(["review"]);
     expect(review.artifactSubmitEvent("review", "revise")).toBe("revise-review");
     expect(review.artifactSubmitEvent("draft", undefined)).toBe("submit-draft");
@@ -183,10 +182,14 @@ describe("createTaskWorkflow", () => {
   });
 
   test("reads the host effects of each event from the definition", () => {
-    expect(review.eventEffects("drop-review")).toEqual(["worktree.reset"]);
+    expect(review.eventEffects("drop-review")).toEqual([
+      { id: "worktree.reset", clearsSessionsOf: ["writer"] },
+    ]);
     expect(review.eventEffects("request-rewrite")).toEqual([]);
     expect(review.eventEffects("finish-writing")).toEqual([]);
-    expect(specPlanBuildWorkflow.eventEffects("reset-implementation")).toEqual(["worktree.reset"]);
+    expect(specPlanBuildWorkflow.eventEffects("reset-implementation")).toEqual([
+      { id: "worktree.reset", clearsSessionsOf: ["build", "qa"] },
+    ]);
     expect(specPlanBuildWorkflow.eventEffects("human-request-changes")).toEqual([]);
   });
 
@@ -209,9 +212,7 @@ describe("createTaskWorkflow", () => {
           availableWhen: true,
         });
       }),
-    ).toThrow(
-      "The approval actions at actions[2] and actions[6] open the same approval. Keep one approval action.",
-    );
+    ).toThrow("is a second approval button. Keep one approval button. (at actions[6])");
   });
 
   test("decides events with their signal, source role, and guard recovery", () => {
@@ -382,7 +383,9 @@ describe("createTaskWorkflow", () => {
         reviewTaskPromptTemplates.filter(({ id }) => id !== "messages.pull_request"),
         reviewTaskRoles,
       ),
-    ).toThrow('has no prompt template "messages.pull_request" for launch action "pull_request"');
+    ).toThrow(
+      'Way to start "Generate Pull Request" needs the kickoff prompt "messages.pull_request"',
+    );
   });
 
   test("reads state notifications and their default settings", () => {
@@ -407,6 +410,27 @@ describe("createTaskWorkflow", () => {
       "workflow.reviewing": { enabled: true, target: "both", sound: "inherit" },
       "workflow.published": { enabled: true, target: "in_app", sound: "none" },
     });
+  });
+
+  test("tells a role that saves no workflow artifact that no workflow code is allowed", () => {
+    const definition = reviewTaskDefinition();
+    const workflow = createTaskWorkflow(
+      {
+        ...definition,
+        roles: definition.roles.map((role) =>
+          role.id === "writer" ? { ...role, writes: [] } : role,
+        ),
+      },
+      reviewTaskPromptTemplates,
+      reviewTaskRoles,
+    );
+    const system = workflow.prompts.systemPrompt({
+      role: "writer",
+      task: { taskId: "task-1" },
+      settings: EMPTY_PROMPT_SETTINGS,
+    }).prompt;
+
+    expect(system).toContain("Allowed workflow codes for odt_set_task_artifact: none.");
   });
 
   test("builds prompts from the templates and role tools of the workflow", () => {
@@ -501,18 +525,27 @@ describe("createTaskWorkflow", () => {
       withChange((definition) => {
         const event = definition.events.find(({ id }) => id === eventId);
         if (!event) throw new Error(`Missing event ${eventId}.`);
-        event.effects = ["worktree.reset"];
+        event.effects = [{ id: "worktree.reset", clearsSessionsOf: [] }];
       });
     expect(withEffects("submit-draft")).toThrow(
-      'Workflow "review" is invalid. Event "submit-draft" is sent by the draft artifact save, so it cannot declare host effects. Move the effect to a task action event.',
+      'Workflow "review" is invalid. Saving document "Draft" cannot trigger "submit-draft", because it resets the work. Turn off "Reset the work", or let only buttons trigger it.',
     );
     expect(withEffects("revise-review")).toThrow(
-      'Event "revise-review" is sent by the review artifact save with verdict "revise", so it cannot declare host effects. Move the effect to a task action event.',
+      'Verdict "Revise" of review "Editorial review" cannot trigger "revise-review", because it resets the work.',
     );
     expect(withEffects("start-writing")).toThrow(
-      'Event "start-writing" is sent by the start of the writer step, so it cannot declare host effects. Move the effect to a task action event.',
+      'Starting step "Writer" cannot trigger "start-writing", because it resets the work.',
     );
     expect(withEffects("request-rewrite")).not.toThrow();
+  });
+
+  test("rejects a worktree reset that clears the sessions of a role the workflow does not have", () => {
+    const reset = withChange((definition) => {
+      const event = definition.events.find(({ id }) => id === "drop-review");
+      if (!event) throw new Error("Missing event drop-review.");
+      event.effects = [{ id: "worktree.reset", clearsSessionsOf: ["writer", "missing"] }];
+    });
+    expect(reset).toThrow('Transition "drop-review" uses the missing role "missing"');
   });
 
   test("compiles the built-in Spec, Plan, Build workflow with its host effects", () => {
@@ -523,7 +556,9 @@ describe("createTaskWorkflow", () => {
         BUILTIN_ROLES,
       ),
     ).not.toThrow();
-    expect(specPlanBuildWorkflow.eventEffects("reset-implementation")).toEqual(["worktree.reset"]);
+    expect(specPlanBuildWorkflow.eventEffects("reset-implementation")).toEqual([
+      { id: "worktree.reset", clearsSessionsOf: ["build", "qa"] },
+    ]);
   });
 
   test("rejects an agent event that an agent cannot send", () => {
@@ -534,27 +569,29 @@ describe("createTaskWorkflow", () => {
         if (event) event.agent = agent;
       }),
     ).toThrow(
-      "The agent event at events[9] has host effects, and agents cannot send an event with host effects. Remove events[9].effects or events[9].agent.",
+      'Agents cannot trigger "drop-review", because it resets the work. Turn off "Agents" or "Reset the work". (at events[9].effects)',
     );
     expect(
       withChange((definition) => {
         const event = definition.events.find(({ id }) => id === "pause-writing");
-        if (event) event.effects = ["worktree.reset"];
+        if (event) event.effects = [{ id: "worktree.reset", clearsSessionsOf: [] }];
       }),
-    ).toThrow("The agent event at events[6] has host effects");
+    ).toThrow(
+      'because it resets the work. Turn off "Agents" or "Reset the work". (at events[6].effects)',
+    );
     expect(
       withChange((definition) => {
         const event = definition.events.find(({ id }) => id === "accept-review");
         if (event) event.agent = { ...agent, roles: ["author"] };
       }),
-    ).toThrow('Unknown roles ID "author" at events[');
+    ).toThrow('uses the missing role "author". Add it or pick another role. (at events[');
     expect(
       withChange((definition) => {
         const event = definition.events.find(({ id }) => id === "accept-review");
         if (event) event.agent = { ...agent, roles: ["editor"] };
       }),
     ).toThrow(
-      'Task workflow "review" lets role "editor" send events accept-review, but the role has no odt_apply_workflow_event tool. Add the tool to the role, or remove the role from these events.',
+      'Role "editor" can trigger "accept-review", but it lacks the "Move the task" tool. Give it that tool, or remove the role from the agents of these transitions.',
     );
   });
 
@@ -572,21 +609,19 @@ describe("createTaskWorkflow", () => {
         definition.issueTypes = [];
       }),
     ).toThrow(
-      'Task workflow "review" must support at least one issue type (task, feature, bug) and declare no facts.',
+      'Task workflow "review" is invalid. The workflow has no issue types. Add at least one of: task, feature, bug.',
     );
     expect(
       withChange((definition) => {
         definition.facts.push({ id: "priority", type: "enum", values: ["high", "low"] });
       }),
-    ).toThrow(
-      'Task workflow "review" must support at least one issue type (task, feature, bug) and declare no facts.',
-    );
+    ).toThrow('Task workflow "review" is invalid. A task workflow cannot have facts.');
     expect(
       withChange((definition) => {
         const edit = definition.steps.find(({ id }) => id === "edit");
         if (edit?.kind === "agent") edit.roleId = "writer";
       }),
-    ).toThrow("gives a role two agent steps");
+    ).toThrow('Role "writer" already does step "Writer". Give step "Editor" another role.');
     expect(() =>
       createTaskWorkflow(
         reviewTaskDefinition(),
@@ -594,7 +629,7 @@ describe("createTaskWorkflow", () => {
         reviewTaskRoles,
       ),
     ).toThrow(
-      'Task workflow "review" has no prompt template "messages.write_revise" for launch action "write_revise".',
+      'Way to start "Revise draft" needs the kickoff prompt "messages.write_revise". Add it.',
     );
     expect(() =>
       createTaskWorkflow(
@@ -602,18 +637,14 @@ describe("createTaskWorkflow", () => {
         reviewTaskPromptTemplates.filter(({ id }) => id !== "workflow.tool_rules"),
         reviewTaskRoles,
       ),
-    ).toThrow(
-      'Task workflow "review" has no prompt template "workflow.tool_rules" for the system prompt.',
-    );
+    ).toThrow('Every workflow needs the system prompt "workflow.tool_rules". Add it.');
     expect(() =>
       createTaskWorkflow(
         reviewTaskDefinition(),
         reviewTaskPromptTemplates.filter(({ id }) => id !== "workflow.read_only_rejection"),
         reviewTaskRoles,
       ),
-    ).toThrow(
-      'Task workflow "review" has no prompt template "workflow.read_only_rejection" for read-only rejections.',
-    );
+    ).toThrow('Every workflow needs the permission prompt "workflow.read_only_rejection".');
     expect(() =>
       createTaskWorkflow(
         reviewTaskDefinition(),
@@ -624,7 +655,7 @@ describe("createTaskWorkflow", () => {
         reviewTaskRoles,
       ),
     ).toThrow(
-      'Prompt "kickoff.extra" of task workflow "review" is neither a base workflow prompt nor in the "messages." group. Rename it.',
+      'Prompt "kickoff.extra" is not a built-in prompt, so its ID must start with "messages.".',
     );
   });
 });

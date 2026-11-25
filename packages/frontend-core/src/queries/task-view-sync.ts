@@ -4,7 +4,7 @@ import {
   queryWorkspaceScope,
   queryMatchesWorkspace,
 } from "./workspace-scope";
-import { type WorkspaceRef } from "@openducktor/contracts";
+import type { WorkspaceRef } from "@openducktor/contracts";
 import {
   type ExternalTaskSyncEvent,
   type TaskArtifactChange,
@@ -36,7 +36,12 @@ import {
   type TaskQueryChanges,
 } from "./task-query-changes";
 import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
-import { resolveTaskCards, refreshWorkflowMetadata, workflowQueryKeys } from "./workflows";
+import {
+  staleBoardForHiddenVersions,
+  resolveTaskCards,
+  refreshWorkflowMetadata,
+  workflowQueryKeys,
+} from "./workflows";
 
 const queryKeyStringSchema = z.string();
 
@@ -500,15 +505,25 @@ export const createTaskViewSync = ({
       const scope = workspaceScopeValue(event);
       await runForRepo(scope, async () => {
         const { doneVisibleDays } = event.boardChanges!;
+        const previousCards =
+          queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData(scope))?.tasks ?? [];
+        const { taskIds, removedTaskIds } = toEventChanges(event);
+        const removed = new Set(removedTaskIds);
+        // A removed task that no list holds was closed, so it changes no column.
+        const removedCards = [
+          ...previousCards,
+          ...(queryClient.getQueryData<RepoTaskData>(taskQueryKeys.unfilteredRepoData(scope))
+            ?.tasks ?? []),
+        ].filter((card) => removed.has(card.id));
+        await staleBoardForHiddenVersions(queryClient, scope, [
+          ...event.boardChanges!.cards,
+          ...removedCards,
+        ]);
         const cards = await resolveTaskCards(
           queryClient,
           { workspaceId: event.workspaceId, repoPath: event.repoPath },
           event.boardChanges!.cards,
         );
-        const previousCards =
-          queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData(scope))?.tasks ?? [];
-        const { taskIds, removedTaskIds } = toEventChanges(event);
-        const removed = new Set(removedTaskIds);
         const change: TaskQueryChange = {
           cards,
           taskIds,

@@ -1977,7 +1977,9 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const impact = await client.taskStopImpactGet(workspace, ["task-1", "task-2"], "delete");
+    const impact = await client.taskStopImpactGet(workspace, ["task-1", "task-2"], {
+      operation: "delete",
+    });
 
     expect(impact).toEqual({ stoppableSessionCount: 3 });
     expect(calls).toEqual([

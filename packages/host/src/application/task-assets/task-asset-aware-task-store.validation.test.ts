@@ -1,3 +1,4 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "../tasks/task-workflows";
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import { taskAssetErrorToFailure } from "../../effect/task-asset-error";
@@ -10,6 +11,7 @@ describe("asset-aware task store", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Malformed asset",
           issueType: "task",
@@ -37,6 +39,7 @@ describe("asset-aware task store", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Update target",
           issueType: "task",
@@ -77,6 +80,7 @@ describe("asset-aware task store", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Too many assets",
           issueType: "task",
@@ -104,6 +108,7 @@ describe("asset-aware task store", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Update target",
           issueType: "task",
@@ -146,6 +151,7 @@ describe("asset-aware task store", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Missing staged asset",
           issueType: "task",
@@ -159,6 +165,7 @@ describe("asset-aware task store", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Update target",
           issueType: "task",

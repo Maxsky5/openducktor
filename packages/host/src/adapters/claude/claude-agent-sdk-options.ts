@@ -125,7 +125,12 @@ export const buildClaudeAgentSdkOptions = async ({
 }: BuildClaudeAgentSdkOptionsInput): Promise<Options> => {
   const workflowScope = claudeWorkflowScope(input);
   const rolePolicy =
-    workflowScope === null ? null : serviceInput.resolveWorkflowRolePolicy(workflowScope);
+    workflowScope === null
+      ? null
+      : serviceInput.resolveWorkflowRolePolicy({
+          ...workflowScope,
+          externalSessionId: session.externalSessionId,
+        });
   session.disabledTools = getDisabledTools(claudePolicy?.toolAvailability);
   const [mcpServers, resolvedSettings] = await Promise.all([
     buildClaudeMcpServers({

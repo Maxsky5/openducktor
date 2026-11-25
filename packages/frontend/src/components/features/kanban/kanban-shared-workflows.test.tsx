@@ -34,6 +34,7 @@ describe("mixed workflow Kanban", () => {
           hostInstanceId: fixture.catalog.hostInstanceId,
           board: fixture.board,
           workflows: fixture.workflows.map(({ reference }) => reference),
+          newTaskWorkflows: [fixture.workflows[0]!.reference],
           newTaskWorkflow: fixture.workflows[0]!.reference,
         }),
         tasksList: async () => cards.map(toWireTaskCard),
@@ -54,6 +55,9 @@ describe("mixed workflow Kanban", () => {
                 <KanbanColumn
                   key={column.id}
                   column={column}
+                  mixedBoard={{
+                    columnWorkflows: new Map(),
+                  }}
                   taskSessionsByTaskId={new Map()}
                   historicalSessionsByTaskId={new Map()}
                   mergedTargetByTaskId={new Map()}

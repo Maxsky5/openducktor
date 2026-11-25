@@ -1,3 +1,4 @@
+import { testWorkflowSettings } from "../../test-support/task-workflows";
 import type { SettingsConfigView } from "../../ports/settings-config-port";
 import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
@@ -57,7 +58,7 @@ test("preference-only edits use scoped reads and do not notify shared-config obs
         committed.push(config);
       }),
     );
-    const service = createWorkspaceSettingsService(observed, builtinTaskWorkflows);
+    const service = createWorkspaceSettingsService(observed, testWorkflowSettings());
     await Effect.runPromise(service.setTheme("dark"));
     expect(reads).toEqual([]);
     await Promise.all([

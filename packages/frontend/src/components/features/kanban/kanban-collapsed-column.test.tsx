@@ -26,4 +26,26 @@ describe("KanbanCollapsedColumn", () => {
     expect(html).not.toContain('title="Backlog column is empty and collapsed"');
     expect(html).toContain("bg-muted-foreground/45");
   });
+
+  test("shows the column title as a vertical label", () => {
+    const html = renderToStaticMarkup(
+      <TooltipProvider delayDuration={120}>
+        <KanbanCollapsedColumn
+          column={{
+            id: "triage",
+            label: "Triage",
+            title: "Needs triage",
+            shortLabel: "Triage",
+            tone: "neutral",
+            taskOrder: "priority_then_created",
+            tasks: [],
+          }}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(html).toMatch(
+      /<span class="[^"]*\[writing-mode:vertical-rl\][^"]*">Needs triage<\/span>/,
+    );
+  });
 });

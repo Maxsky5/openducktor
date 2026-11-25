@@ -122,7 +122,7 @@ export const useTaskWorktreeImpact = ({
   const { impact } = useTaskWorktreeReads(taskId, enabled);
   const worktreeOwners = useTaskWorktreeOwners({
     taskIds: [taskId],
-    operation: "remove_worktree",
+    preview: { operation: "remove_worktree" },
     enabled: enabled && readsOwners,
   });
   return withOwnerRead(impact, worktreeOwners, enabled && readsOwners);
@@ -155,12 +155,16 @@ export function useTaskApprovalImpact({
   // mode shows them at once. Only a choice that removes the worktree uses them.
   const worktreeOwners = useTaskWorktreeOwners({
     taskIds: [task.id],
-    operation: "close",
+    preview: { operation: "close" },
     enabled,
   });
   const impact = withOwnerRead(reads, worktreeOwners, enabled);
   const mergeStatusQuery = useQuery(workspaceTaskMergeStatusQueryOptions(scope));
-  const stop = useTaskStopImpact({ taskIds: [task.id], operation: "close", enabled });
+  const stop = useTaskStopImpact({
+    taskIds: [task.id],
+    preview: { operation: "close" },
+    enabled,
+  });
   const stopError = stop.error === null ? null : stopImpactReadErrorMessage(stop.error);
   const mergeStatusView = mergeStatusViewOf(
     findTaskMergeStatus(mergeStatusQuery.data, task.id),

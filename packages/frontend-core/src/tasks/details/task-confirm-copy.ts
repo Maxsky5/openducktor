@@ -107,15 +107,27 @@ const listLabels = (labels: readonly string[]): string =>
     ? labels.join(" and ")
     : `${labels.slice(0, -1).join(", ")}, and ${labels.at(-1)}`;
 
+/** What a reset loses for good: the uncommitted work and the session history of the reset roles. */
+const resetWarning = (
+  input: TaskResetImplementationCopyInput,
+  roles: string,
+  clearsHistory: boolean,
+): string => {
+  const parts: string[] = [];
+  if (input.hasCanonicalWorktree || input.legacyWorktreeCount > 0)
+    parts.push("Uncommitted and untracked work will be lost.");
+  if (clearsHistory) parts.push(`The ${roles} session history cannot be recovered.`);
+  return parts.join(" ");
+};
+
 /** The `worktree.reset` effect keeps the other artifacts and the current worktree. */
 export function buildTaskResetImplementationConfirmCopy(
   input: TaskResetImplementationCopyInput,
 ): TaskConfirmCopy {
   const roles = listLabels(input.worktreeRoleLabels);
-  const changes = [
-    `Remove the ${roles} session history`,
-    "Delete review reports and remove the pull request link",
-  ];
+  const clearsHistory = input.worktreeRoleLabels.length > 0;
+  const changes = clearsHistory ? [`Remove the ${roles} session history`] : [];
+  changes.push("Delete review reports and remove the pull request link");
   if (input.dropsLocalMerge) {
     changes.push(
       "Drop the record of the unpublished local merge. The merge commit stays on the local target branch",
@@ -145,12 +157,7 @@ export function buildTaskResetImplementationConfirmCopy(
       "Other task artifacts",
       ...(input.hasCanonicalWorktree ? ["Current worktree, its branch and ignored files"] : []),
     ],
-    warning: withOwnerWarnings(
-      input.hasCanonicalWorktree || input.legacyWorktreeCount > 0
-        ? `Uncommitted and untracked work will be lost. The ${roles} session history cannot be recovered.`
-        : `The ${roles} session history cannot be recovered.`,
-      input.worktreeOwners,
-    ),
+    warning: withOwnerWarnings(resetWarning(input, roles, clearsHistory), input.worktreeOwners),
     errors: [
       ...readErrors(input.activeSessionCountError, input.impactError),
       ...ownerErrors(input.worktreeOwners),
@@ -229,5 +236,7 @@ function withOwnerWarnings(warning: string, owners: TaskWorktreeOwnersRead): str
     ...worktreeOwnerLines(owners)
       .filter((line) => !line.blocking)
       .map((line) => line.text),
-  ].join(" ");
+  ]
+    .filter((text) => text.length > 0)
+    .join(" ");
 }

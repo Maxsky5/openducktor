@@ -27,6 +27,7 @@ import type {
 } from "../effect/host-errors";
 import type { TaskAssetError } from "../effect/task-asset-error";
 import type { RuntimeOwnershipScope } from "./workspace-session-store-port";
+import type { TaskWorkflowAssignment } from "./task-workflow-port";
 import type { TransitionCause } from "@openducktor/workflows";
 
 export type TaskStoreError =
@@ -57,8 +58,11 @@ export type TaskMergeCandidate = Pick<
   "id" | "status" | "targetBranch" | "targetBranchError"
 >;
 export type TaskReference = Pick<TaskCard, "id" | "title">;
-/** A stored task. The response adds the workflow reference, steps, actions, and role states. */
-export type TaskRecord = TaskRecordData;
+/**
+ * A stored task with its workflow assignment. The response drops the assignment and adds the
+ * workflow reference, steps, actions, and role states.
+ */
+export type TaskRecord = TaskRecordData & TaskWorkflowAssignment;
 export type TaskSearchInput = {
   workspaceId: string;
   repoPath: string;
@@ -129,6 +133,8 @@ type TaskWriter = {
     workspaceId: string;
     repoPath: string;
     task: TaskCreateInput;
+    /** The workflow that the new task follows. */
+    workflow: TaskWorkflowAssignment;
     /** The initial state of the task workflow. */
     status: string;
     descriptionAssets?: TaskAssetDescriptionMutation;

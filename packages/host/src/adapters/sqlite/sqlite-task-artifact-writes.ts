@@ -1,5 +1,6 @@
+import { resolveTaskWorkflow } from "./sqlite-task-workflow-versions";
 import type { TaskWorkflow } from "@openducktor/workflows";
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import type { TaskWorkflowVersionCache } from "../../ports/task-workflow-port";
 import { randomUUID } from "node:crypto";
 import {
   freeArtifactCodeSchema,
@@ -29,7 +30,7 @@ export const createArtifactInDatabase = (
   workspaceId: string,
   input: ArtifactStoreScope & ArtifactStoreContent & { name: string; code?: string | undefined },
   updatedAt: Date,
-  taskWorkflows: TaskWorkflowResolver,
+  taskWorkflows: TaskWorkflowVersionCache,
 ): Effect.Effect<TaskArtifact, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
     const workflow = yield* requireMutableTask(session, workspaceId, input, taskWorkflows);
@@ -63,7 +64,7 @@ export const renameArtifactInDatabase = (
   workspaceId: string,
   input: ArtifactStoreReference & { name: string },
   updatedAt: Date,
-  taskWorkflows: TaskWorkflowResolver,
+  taskWorkflows: TaskWorkflowVersionCache,
 ): Effect.Effect<TaskArtifact, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
     const previous = yield* requireFreeArtifact(session, workspaceId, input, taskWorkflows);
@@ -91,7 +92,7 @@ export const replaceArtifactInDatabase = (
   workspaceId: string,
   input: ArtifactStoreReference & ArtifactStoreContent & { name?: string | undefined },
   updatedAt: Date,
-  taskWorkflows: TaskWorkflowResolver,
+  taskWorkflows: TaskWorkflowVersionCache,
 ): Effect.Effect<TaskArtifact, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
     const previous = yield* requireFreeArtifact(session, workspaceId, input, taskWorkflows);
@@ -126,7 +127,7 @@ export const deleteArtifactInDatabase = (
   session: HostDatabaseSession,
   workspaceId: string,
   input: ArtifactStoreReference,
-  taskWorkflows: TaskWorkflowResolver,
+  taskWorkflows: TaskWorkflowVersionCache,
 ): Effect.Effect<boolean, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
     yield* requireFreeArtifact(session, workspaceId, input, taskWorkflows);
@@ -216,11 +217,11 @@ const requireMutableTask = (
   session: HostDatabaseSession,
   workspaceId: string,
   input: ArtifactStoreScope,
-  taskWorkflows: TaskWorkflowResolver,
+  taskWorkflows: TaskWorkflowVersionCache,
 ): Effect.Effect<TaskWorkflow, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
     const task = yield* requireTaskRow(session, workspaceId, input.taskId, input.repoPath);
-    const workflow = taskWorkflows.forTask(task);
+    const workflow = yield* resolveTaskWorkflow(session, taskWorkflows, task);
     if (task.status === TASK_CLOSED_STATE) {
       return yield* new HostValidationError({
         message: "Closed tasks are read-only. Reopen the task before changing a free artifact.",
@@ -244,7 +245,7 @@ const requireFreeArtifact = (
   session: HostDatabaseSession,
   workspaceId: string,
   input: ArtifactStoreReference,
-  taskWorkflows: TaskWorkflowResolver,
+  taskWorkflows: TaskWorkflowVersionCache,
 ): Effect.Effect<
   Pick<TaskArtifactRow, keyof typeof artifactMetadataSelection>,
   SqliteTaskStoreWriteError

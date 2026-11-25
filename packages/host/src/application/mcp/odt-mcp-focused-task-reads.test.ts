@@ -1,3 +1,4 @@
+import { testWorkspaceWorkflows } from "../../test-support/task-workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Effect } from "effect";
@@ -354,6 +355,7 @@ describe("focused MCP task reads", () => {
     });
     return createOdtMcpToolContext({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       browserAgentTools: {
         runAgentTool: () => Effect.die(new Error("Task reads never run browser tools.")),
       },

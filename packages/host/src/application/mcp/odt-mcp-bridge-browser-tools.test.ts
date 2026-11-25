@@ -1,3 +1,4 @@
+import { testWorkspaceWorkflows } from "../../test-support/task-workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import { type BrowserTabOwner, type OdtBrowserToolResult } from "@openducktor/contracts";
@@ -44,6 +45,7 @@ const createBridge = ({
   };
   const bridge = createOdtMcpBridgeService({
     taskWorkflows: builtinTaskWorkflows,
+    workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
     browserAgentTools,
     managedCallers: {
       resolve: () => Effect.die(new Error("This tool does not resolve managed callers.")),

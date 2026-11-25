@@ -11,7 +11,18 @@ import {
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import { KanbanTaskCard } from "./kanban-task-card";
-import { type WorkflowRoleId } from "@openducktor/workflows";
+import {
+  BUILTIN_ROLES,
+  createTaskWorkflow,
+  resolveWorkspaceBoard,
+  type WorkflowRoleId,
+} from "@openducktor/workflows";
+import {
+  createWorkflowTaskCardFixture,
+  reviewTaskDefinition,
+  reviewTaskPromptTemplates,
+  reviewTaskRoles,
+} from "@openducktor/workflows/test-support";
 
 enableReactActEnvironment();
 
@@ -168,6 +179,28 @@ describe("Kanban card session shortcuts", () => {
       }
     });
   }
+
+  test("links the role sessions of a workflow without Open buttons", () => {
+    const workflow = createTaskWorkflow(reviewTaskDefinition(), reviewTaskPromptTemplates, [
+      ...reviewTaskRoles,
+      ...BUILTIN_ROLES,
+    ]);
+    const task = createWorkflowTaskCardFixture(
+      workflow,
+      resolveWorkspaceBoard([{ workflow, latest: true }]),
+      { id: "TASK-9" },
+    );
+    const props = { ...cardProps(), task, historicalSessions: [session("writer")] };
+    const view = render(<Card {...props} />);
+    try {
+      fireEvent.click(view.getByRole("button", { name: "Open Writer session" }));
+      expect(props.onOpenSession).toHaveBeenCalledWith("TASK-9", "writer", {
+        session: session("writer"),
+      });
+    } finally {
+      view.unmount();
+    }
+  });
 
   test("opens compact details from type, priority, and title controls", () => {
     const props = cardProps();

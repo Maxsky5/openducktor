@@ -18,9 +18,17 @@ import {
   WorkspacePreviewTransitionGuardProvider,
 } from "@/components/layout/workspace-preview-transition-guard";
 import { AppToaster } from "@/components/layout/app-toaster";
-import { loadNotFoundPage, loadUsagePage, USAGE_PATH } from "@/pages";
+import { EditorSkeleton } from "@/features/workflows/editor/editor-skeleton";
+import {
+  loadedPage,
+  loadNotFoundPage,
+  loadUsagePage,
+  loadWorkflowEditorPage,
+  USAGE_PATH,
+} from "@/pages";
 import { KanbanPage } from "@/pages/kanban/kanban-page";
 import { SessionsPage } from "@/pages/sessions/sessions-page";
+import { WorkflowsPage } from "@/pages/workflows/workflows-page";
 import { AppStateProvider } from "@/state";
 import { KanbanBoardLoadingShell } from "./pages/kanban/kanban-board-loading-shell";
 import { UsagePageFrame } from "./pages/usage/usage-layout";
@@ -28,6 +36,14 @@ import { UsageHeaderSkeleton, UsagePageSkeleton } from "./pages/usage/usage-page
 
 const NotFoundPage = lazy(loadNotFoundPage);
 const UsagePage = lazy(loadUsagePage);
+
+const LazyWorkflowEditorPage = lazy(loadWorkflowEditorPage);
+
+/** The editor page. A preloaded editor renders at once, without the lazy fallback. */
+function WorkflowEditorPage(): ReactElement {
+  const Page = loadedPage(loadWorkflowEditorPage) ?? LazyWorkflowEditorPage;
+  return <Page />;
+}
 
 type AppRouterMode = "browser" | "hash";
 
@@ -101,6 +117,15 @@ const routes = createRoutesFromElements(
       <Route path="/kanban" element={withRouteFallback(<KanbanPage />, <KanbanRouteFallback />)} />
       <Route path="/sessions" element={<SessionsPage />} />
       <Route path={USAGE_PATH} element={withRouteFallback(<UsagePage />, <UsageRouteFallback />)} />
+      <Route path="/workflows" element={<WorkflowsPage />} />
+      <Route
+        path="/workflows/:workflowId"
+        element={withRouteFallback(<WorkflowEditorPage />, <EditorSkeleton />)}
+      />
+      <Route
+        path="/workflows/:workflowId/versions/:version"
+        element={withRouteFallback(<WorkflowEditorPage />, <EditorSkeleton />)}
+      />
       <Route
         path="/planner"
         element={<Navigate to="/sessions?kind=task&agent=planner" replace />}

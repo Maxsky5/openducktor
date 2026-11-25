@@ -25,8 +25,7 @@ const roleLabel = (
   readOnly: boolean,
   task: ResolvedTaskCard | null,
 ): string | null => {
-  if (owner.kind === "task")
-    return task?.taskWorkflow.roles.find(({ id }) => id === owner.role)?.label ?? null;
+  if (owner.kind === "task") return task?.taskWorkflow.catalogRole(owner.role)?.label ?? null;
   if (owner.kind === "chat") return owner.record.roleSnapshot?.name ?? "Session";
   return readOnly ? "Read only" : null;
 };

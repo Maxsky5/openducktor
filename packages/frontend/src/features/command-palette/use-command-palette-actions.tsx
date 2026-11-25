@@ -9,6 +9,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import {
   Archive,
+  ChartSpline,
   Columns3,
   Compass,
   Cpu,
@@ -27,8 +28,10 @@ import {
   Settings,
   ShieldCheck,
   Sun,
+  Workflow,
 } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
+import { useNavigate } from "react-router";
 import { useDiagnosticsPanel } from "@/components/features/diagnostics";
 import { useProcessesActions } from "@/components/features/processes/processes-context";
 import { useFeatureTour } from "@/features/feature-tour/feature-tour-context";
@@ -38,6 +41,7 @@ import { SETTINGS_SECTIONS } from "@/components/features/settings/settings-modal
 import { useSettingsModal } from "@/components/features/settings/settings-modal";
 import { useTheme } from "@/components/layout/theme-provider";
 import { useWorkspaceDialogs } from "@/components/layout/workspace-dialogs-context";
+import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { WorkspaceTile } from "@/components/layout/workspace-tile";
 import {
   issueImportActionLabel,
@@ -46,6 +50,8 @@ import {
   toIssueImportState,
 } from "@openducktor/frontend-core/tasks/issue-import/issue-import-provider";
 import { taskCreationBlockedReason } from "@openducktor/frontend-core/tasks/board/task-creation-availability";
+import { WORKFLOWS_ROUTE } from "@/features/workflows/workflow-routes";
+import { USAGE_PATH } from "@/pages";
 import { KANBAN_PATH } from "@/pages/kanban/kanban-task-link";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { useKanbanTaskCardView } from "@/state/mutations/use-kanban-task-card-view";
@@ -146,6 +152,8 @@ export function useCommandPaletteActions({
   const processes = useProcessesActions();
   const { openFeatureTour } = useFeatureTour();
   const { openWorkspaceDialog } = useWorkspaceDialogs();
+  const navigate = useNavigate();
+  const { run: guardTransition } = useWorkspacePreviewTransitionGuard();
   const repoPath = target?.repoPath ?? null;
   const taskStoreCheck = useQuery({
     ...taskStoreCheckQueryOptionsOrSkip(target),
@@ -366,6 +374,18 @@ export function useCommandPaletteActions({
         suggested: true,
       }),
       ...settingsActions,
+      appAction(
+        "usage",
+        icon(ChartSpline),
+        ["tokens", "cost", "spend", "price", "statistics", "charts"],
+        () => guardTransition(() => void navigate(USAGE_PATH)),
+      ),
+      appAction(
+        "workflows",
+        icon(Workflow),
+        ["workflow library", "workflow editor", "custom workflow", "states", "roles"],
+        () => guardTransition(() => void navigate(WORKFLOWS_ROUTE)),
+      ),
       appAction("diagnostics", icon(ShieldCheck), ["health", "checks"], openDiagnostics),
       ...(processes
         ? [
@@ -436,6 +456,8 @@ export function useCommandPaletteActions({
     processes,
     openFeatureTour,
     openWorkspaceDialog,
+    navigate,
+    guardTransition,
     repoPath,
     taskStoreCheck.data,
     taskStoreCheck.error,

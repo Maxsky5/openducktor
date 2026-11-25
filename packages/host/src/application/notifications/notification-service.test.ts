@@ -1,3 +1,4 @@
+import { testWorkflowSettings } from "../../test-support/task-workflows";
 import { withSettingsConfigMutationTestMethods } from "../../test-support/settings-config-mutations";
 import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { builtinTaskWorkflows, reviewTaskWorkflows } from "../../test-support/task-workflows";
@@ -168,7 +169,7 @@ const harness = (
     taskWorkflows: options.taskWorkflows ?? builtinTaskWorkflows,
     // Some tests replace port methods after this call, so only a custom workflow wraps the port.
     settingsConfig: options.taskWorkflows
-      ? withTaskWorkflowSettings(port, options.taskWorkflows)
+      ? withTaskWorkflowSettings(port, testWorkflowSettings(options.taskWorkflows))
       : port,
     tasks: { listTasks, agentSessionsListForTasks: listAssociations },
     live: options.live ?? { attach: attachLive },
@@ -277,7 +278,7 @@ test("a task change with an unavailable workflow reports health and keeps notify
         (frame) =>
           frame.type === "health" &&
           frame.health.scope === "/alpha" &&
-          frame.health.message?.includes("openducktor-spec-plan-build@999"),
+          frame.health.message?.includes(`"openducktor-spec-plan-build" version 999`),
       ),
     ).toBe(true);
     h.service.acceptTask(transition("known-workflow"));

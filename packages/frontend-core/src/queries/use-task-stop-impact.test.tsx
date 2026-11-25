@@ -21,7 +21,7 @@ const createHarness = (
       const queryClient = useQueryClient();
       const stopImpact = useTaskStopImpact({
         taskIds: props.taskIds,
-        operation: "delete",
+        preview: { operation: "delete" },
         enabled: props.enabled,
       });
       return { stopImpact, queryClient };

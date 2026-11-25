@@ -1,6 +1,6 @@
 import { TASK_CLOSED_STATE } from "@openducktor/contracts";
 import type { WorkflowIcon } from "@openducktor/contracts";
-import { taskIssueType, workflowRoleIcon } from "@openducktor/workflows";
+import { taskIssueType, workflowRoleIcon, workflowRoleLabel } from "@openducktor/workflows";
 import { taskReviewRejection } from "@openducktor/workflows";
 import { taskActionSendsCommand } from "@openducktor/frontend-core/tasks/workflow/task-action-destination";
 import type { AgentSessionRecord } from "@openducktor/contracts";
@@ -191,7 +191,7 @@ export const buildTaskCardModel = ({
   const sessionState = footer.primarySessionState;
   const session = activeSession
     ? {
-        roleLabel: task.taskWorkflow.role(activeSession.role).label,
+        roleLabel: workflowRoleLabel(task.taskWorkflow, activeSession.role),
         statusLabel: taskSessionStatusLabel({
           session: activeSession,
           isWaitingInput: sessionState === "waiting_input",

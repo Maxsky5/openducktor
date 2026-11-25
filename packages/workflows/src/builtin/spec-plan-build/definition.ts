@@ -7,7 +7,7 @@ import {
   type WorkflowAutomationDefinition,
   type WorkflowCondition,
   type WorkflowDefinition,
-  type HostEffectId,
+  type WorkflowHostEffect,
   type WorkflowEventGuard,
   type WorkflowIssueTypeDefinition,
   type WorkflowLaunchActionDefinition,
@@ -67,10 +67,11 @@ type SpecPlanBuildOutcome = {
   sourceRole?: BuiltinRoleId;
 };
 type SpecPlanBuildEvent = {
+  label: string;
   from: SpecPlanBuildStateId[];
   guards: WorkflowEventGuard[];
   outcomes: SpecPlanBuildOutcome[];
-  effects?: HostEffectId[];
+  effects?: WorkflowHostEffect[];
   agent?: WorkflowAgentEvent & { roles: BuiltinRoleId[] };
 };
 
@@ -115,6 +116,7 @@ const moveTo = (to: SpecPlanBuildStateId, signal?: Omit<SpecPlanBuildOutcome, "w
 
 const specPlanBuildEvents = {
   "set-spec": {
+    label: "Spec saved",
     from: nonClosedStates,
     guards: [],
     outcomes: [
@@ -123,6 +125,7 @@ const specPlanBuildEvents = {
     ],
   },
   "set-plan": {
+    label: "Plan saved",
     from: nonClosedStates,
     guards: [specComplete],
     outcomes: [
@@ -135,6 +138,7 @@ const specPlanBuildEvents = {
     ],
   },
   "start-builder": {
+    label: "Start building",
     from: nonClosedStates,
     guards: [planningComplete],
     outcomes: [
@@ -143,6 +147,7 @@ const specPlanBuildEvents = {
     ],
   },
   "build-blocked": {
+    label: "Build blocked",
     from: activeOrReview.stateIn,
     guards: [],
     outcomes: moveTo("blocked"),
@@ -153,6 +158,7 @@ const specPlanBuildEvents = {
     },
   },
   "build-resumed": {
+    label: "Build resumed",
     from: nonClosedStates,
     guards: [planningComplete],
     outcomes: moveTo("in_progress"),
@@ -163,6 +169,7 @@ const specPlanBuildEvents = {
     },
   },
   "build-completed": {
+    label: "Build done",
     from: activeOrReview.stateIn,
     guards: [],
     outcomes: [
@@ -183,6 +190,7 @@ const specPlanBuildEvents = {
     },
   },
   "qa-approved": {
+    label: "QA approved",
     from: qaAvailable.stateIn,
     guards: [],
     outcomes: moveTo("human_review", {
@@ -191,16 +199,19 @@ const specPlanBuildEvents = {
     }),
   },
   "qa-rejected": {
+    label: "QA rejected",
     from: qaAvailable.stateIn,
     guards: [],
     outcomes: moveTo("in_progress", { signal: "taskRejectedByQa" }),
   },
   "human-request-changes": {
+    label: "Changes requested",
     from: ["in_progress", ...humanReview.stateIn],
     guards: [],
     outcomes: moveTo("in_progress"),
   },
   "reset-implementation": {
+    label: "Reset implementation",
     from: activeOrReview.stateIn,
     guards: [],
     outcomes: [
@@ -208,7 +219,7 @@ const specPlanBuildEvents = {
       { when: specPresent, to: "spec_ready" },
       { when: true, to: "open" },
     ],
-    effects: ["worktree.reset"],
+    effects: [{ id: "worktree.reset", clearsSessionsOf: ["build", "qa"] }],
   },
 } satisfies Record<string, SpecPlanBuildEvent>;
 

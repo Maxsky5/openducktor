@@ -1,3 +1,4 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "../../application/tasks/task-workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { createAgentSessionRecord } from "../../ports/task-store-port-contract.test-support";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -264,6 +265,7 @@ describe("SQLite Workspace Session store", () => {
       harness.store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Owner", issueType: "task", priority: 2 },
       }),
     );

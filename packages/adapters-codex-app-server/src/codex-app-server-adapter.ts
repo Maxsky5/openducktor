@@ -525,6 +525,7 @@ export class CodexAppServerAdapter
     assertCodexRuntimePolicyBinding(input, "start Codex session");
     const sessionPolicy = resolveCodexSessionScopePolicy(
       input,
+      null,
       "start Codex session",
       this.options.resolveWorkflowRolePolicy,
     );
@@ -581,6 +582,7 @@ export class CodexAppServerAdapter
     assertCodexRuntimePolicyBinding(input, "resume Codex session");
     const sessionPolicy = resolveCodexSessionScopePolicy(
       input,
+      input.externalSessionId,
       "resume Codex session",
       this.options.resolveWorkflowRolePolicy,
     );
@@ -742,6 +744,7 @@ export class CodexAppServerAdapter
     assertCodexRuntimePolicyBinding(input, "continue Codex turn");
     const sessionPolicy = resolveCodexSessionScopePolicy(
       input,
+      input.externalSessionId,
       "continue Codex turn",
       this.options.resolveWorkflowRolePolicy,
     );
@@ -912,6 +915,7 @@ export class CodexAppServerAdapter
     assertCodexRuntimePolicyBinding(input, "fork Codex session");
     const sessionPolicy = resolveCodexSessionScopePolicy(
       input,
+      null,
       "fork Codex session",
       this.options.resolveWorkflowRolePolicy,
     );
@@ -1018,6 +1022,7 @@ export class CodexAppServerAdapter
     assertCodexRuntimePolicyBinding(input, "send Codex user message");
     const scopePolicy = resolveCodexSessionScopePolicy(
       input,
+      input.externalSessionId,
       "send Codex user message",
       this.options.resolveWorkflowRolePolicy,
     );
@@ -1590,6 +1595,7 @@ export class CodexAppServerAdapter
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     const sessionPolicy = resolveCodexSessionScopePolicy(
       input,
+      input.externalSessionId,
       "open existing Codex session",
       this.options.resolveWorkflowRolePolicy,
     );
@@ -1705,6 +1711,7 @@ export class CodexAppServerAdapter
 
     const sessionPolicy = resolveCodexSessionScopePolicy(
       input,
+      input.externalSessionId,
       "ensure Codex session state",
       this.options.resolveWorkflowRolePolicy,
     );

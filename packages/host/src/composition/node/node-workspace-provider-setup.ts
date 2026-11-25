@@ -21,7 +21,7 @@ import type { HostEventBusPort } from "../../events/host-event-bus";
 import type { GitProviderFetch } from "../../adapters/git-providers/git-provider-fetch";
 import type { GlobalConfig } from "@openducktor/contracts";
 import type { NodeGitlabComposition } from "./git-provider-composition";
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import type { ReadWorkflowSettingsSource } from "../../application/workspaces/task-workflow-settings";
 
 export const createNodeWorkspaceProviderSetup = (
   ports: NodeHostDefaultPorts,
@@ -31,9 +31,9 @@ export const createNodeWorkspaceProviderSetup = (
     gitlab: NodeGitlabComposition;
   },
   onWorkspaceAdded: (repoPath: string) => void,
-  taskWorkflows: TaskWorkflowResolver,
+  readWorkflowSettings: ReadWorkflowSettingsSource,
 ) => {
-  const savedSettings = createWorkspaceSettingsService(ports.settingsConfig, taskWorkflows);
+  const savedSettings = createWorkspaceSettingsService(ports.settingsConfig, readWorkflowSettings);
   const { gitlab } = input;
   const settings: WorkspaceSettingsService = {
     ...savedSettings,

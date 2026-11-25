@@ -163,7 +163,13 @@ function renderColumn(column: Column, model: KanbanPageContentModel): ReactEleme
   }
 
   if (column.tasks.length === 0 && model.emptyColumnDisplay === "collapsed") {
-    return <KanbanCollapsedColumn key={column.id} column={column} />;
+    return (
+      <KanbanCollapsedColumn
+        key={column.id}
+        column={column}
+        workflows={model.mixedBoard?.columnWorkflows.get(column.id) ?? null}
+      />
+    );
   }
 
   return (
@@ -171,6 +177,7 @@ function renderColumn(column: Column, model: KanbanPageContentModel): ReactEleme
       key={column.id}
       column={column}
       taskCardView={model.taskCardView}
+      mixedBoard={model.mixedBoard}
       pendingState={model.pendingState}
       taskSessionsByTaskId={model.taskSessionsByTaskId}
       historicalSessionsByTaskId={model.historicalSessionsByTaskId}

@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { createTaskCardFixture, toWireTaskCard } from "../../test-support/shared-test-fixtures";
 import { editBuiltinTaskWorkflow } from "../../test-support/workflow-fixtures";
 import { createTaskActionRunner, type TaskActionRunnerHandlers } from "./task-action-runner";
-import { resolveWorkflowBoard } from "@openducktor/workflows";
+import { resolveWorkspaceBoard } from "@openducktor/workflows";
 import {
   createReviewTaskWorkflow,
   createWorkflowTaskCardFixture,
@@ -54,10 +54,7 @@ describe("createTaskActionRunner", () => {
 
   test("routes a custom worktree reset event to its confirmation and a feedback event to its form", () => {
     const workflow = createReviewTaskWorkflow();
-    const board = resolveWorkflowBoard(
-      { states: workflow.definition.states.map(({ id }) => ({ id, taskOrder: "updated" })) },
-      [workflow],
-    );
+    const board = resolveWorkspaceBoard([{ workflow, latest: true }]);
     const task = createWorkflowTaskCardFixture(workflow, board, { id: "T-1", status: "approval" });
     const handlers = createHandlers();
     const run = createTaskActionRunner(handlers);

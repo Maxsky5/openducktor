@@ -1,3 +1,4 @@
+import type { TaskWorkflowAssignment } from "./task-workflow-port";
 import type { TaskCreateInput, TaskUpdatePatch } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type { NewTaskAssetRecord } from "./task-asset-registry-port";
@@ -8,6 +9,8 @@ export type TaskDescriptionAssetPersistencePort = {
     workspaceId: string;
     repoPath: string;
     task: TaskCreateInput;
+    /** The workflow that the new task follows. */
+    workflow: TaskWorkflowAssignment;
     /** The initial state of the task workflow. */
     status: string;
     assets: NewTaskAssetRecord[];

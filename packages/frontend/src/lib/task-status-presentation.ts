@@ -131,8 +131,11 @@ const STATUS_TONE_BADGE_CLASS_NAMES = {
   success: "border-success-border bg-success-surface text-success-muted",
 } satisfies Record<TaskStatusTone, string>;
 
+export const toneBadgeClassName = (tone: TaskStatusTone): string =>
+  STATUS_TONE_BADGE_CLASS_NAMES[tone];
+
 export const statusBadgeClassName = (status: SharedBoardState): string =>
-  STATUS_TONE_BADGE_CLASS_NAMES[statusTone(status)];
+  toneBadgeClassName(statusTone(status));
 
 export const laneTheme = (tone: WorkflowTone): KanbanLaneTheme =>
   TASK_STATUS_PRESENTATION[tone].laneTheme;

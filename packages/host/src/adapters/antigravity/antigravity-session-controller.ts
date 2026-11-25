@@ -101,10 +101,10 @@ export class AntigravitySessionController {
     );
   }
 
-  private isReadOnly(sessionScope: AgentSessionScope): boolean {
+  private isReadOnly(sessionScope: AgentSessionScope, externalSessionId: string): boolean {
     return (
       sessionScope.kind === "workflow" &&
-      this.options.resolveWorkflowRolePolicy(sessionScope).readOnly
+      this.options.resolveWorkflowRolePolicy({ ...sessionScope, externalSessionId }).readOnly
     );
   }
 
@@ -114,7 +114,7 @@ export class AntigravitySessionController {
   }: Omit<AntigravityLiveSessionInput, "readOnly" | "transcript" | "approvals"> & {
     mode: AntigravityMode;
   }): AntigravityLiveSession {
-    const readOnly = this.isReadOnly(input.sessionScope);
+    const readOnly = this.isReadOnly(input.sessionScope, input.ref.externalSessionId);
     const session = new AntigravityLiveSession(
       {
         ...input,
@@ -132,6 +132,7 @@ export class AntigravitySessionController {
   private mcpServers(
     input: Pick<AntigravityStartInput, "managedMcpServer" | "sessionScope">,
     callerBindingId: string,
+    externalSessionId: string | null,
   ) {
     return [
       antigravityManagedMcpServer(
@@ -139,6 +140,7 @@ export class AntigravitySessionController {
         input.sessionScope,
         this.options.resolveWorkflowRolePolicy,
         callerBindingId,
+        externalSessionId,
       ),
     ];
   }
@@ -178,7 +180,7 @@ export class AntigravitySessionController {
         this.connection.request(() =>
           agent.request(methods.agent.session.new, {
             cwd: input.workingDirectory,
-            mcpServers: this.mcpServers(input, callerBindingId),
+            mcpServers: this.mcpServers(input, callerBindingId, null),
             _meta: antigravitySystemPromptMeta(input.systemPrompt),
           }),
         ),
@@ -223,7 +225,7 @@ export class AntigravitySessionController {
       const loadRequest: LoadSessionRequest = {
         sessionId: input.externalSessionId,
         cwd: input.workingDirectory,
-        mcpServers: this.mcpServers(input, callerBindingId),
+        mcpServers: this.mcpServers(input, callerBindingId, input.externalSessionId),
       };
       const systemPrompt = input.systemPrompt ?? "";
       if (systemPrompt.trim()) loadRequest._meta = antigravitySystemPromptMeta(systemPrompt);

@@ -1,6 +1,6 @@
 import { agentSessionRecordSchema } from "@openducktor/contracts";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import type { TaskWorkflowVersionCache } from "../../ports/task-workflow-port";
 import { Database } from "bun:sqlite";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -118,7 +118,7 @@ export const createSqliteTaskStoreHarness = async ({
 }: {
   readonly now?: () => Date;
   readonly repoPath?: string;
-  readonly taskWorkflows?: TaskWorkflowResolver;
+  readonly taskWorkflows?: TaskWorkflowVersionCache;
   readonly workspaceId?: string;
 } = {}): Promise<SqliteTaskStoreTestHarness> => {
   const configDir = await makeTempDirectory();

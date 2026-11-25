@@ -4,22 +4,32 @@ import {
   type codexRuntimeConfigSchema,
   globalConfigSchema,
   notificationSettingsSchema,
+  promptOverrideKey,
   workflowDefinitionSchema,
   repoConfigSchema,
 } from "@openducktor/contracts";
 import {
   specPlanBuildPromptKey,
   createReviewTaskWorkflow,
+  reviewTaskRoles,
 } from "@openducktor/workflows/test-support";
-import { createTaskWorkflow, workflowRoleCatalog } from "@openducktor/workflows";
+import { createTaskWorkflow } from "@openducktor/workflows";
 import type { z } from "zod";
-import { createTaskWorkflowResolver } from "../application/tasks/task-workflows";
-import { singleTaskWorkflow } from "../test-support/task-workflows";
-import { applyTaskWorkflowSettings } from "./workflow-settings";
+import {
+  applyTaskWorkflowSettings,
+  savedWorkflowSettingKeys,
+  type WorkflowSettingsMode,
+  type WorkflowSettingsSource,
+} from "./workflow-settings";
 import { repoConfigFixture } from "../test-support/repo-config-fixture";
+import { builtinWorkflowSettingsOwners } from "../test-support/task-workflows";
 
 const review = createReviewTaskWorkflow();
-const reviewWorkflows = singleTaskWorkflow(review);
+/** The host knows the review workflow and its roles only. */
+const reviewWorkflows: WorkflowSettingsSource = { latest: [review], roles: reviewTaskRoles };
+const save: WorkflowSettingsMode = {
+  saved: { prompts: new Set(), notificationKinds: new Set(), autopilotRules: new Map() },
+};
 
 const config = (input: Partial<z.input<typeof globalConfigSchema>> = {}) =>
   globalConfigSchema.parse({ version: 4, ...input });
@@ -35,7 +45,7 @@ describe("applyTaskWorkflowSettings", () => {
     const second = createTaskWorkflow(
       workflowDefinitionSchema.parse({ ...review.definition, id: "another-review" }),
       review.workflowTemplates,
-      workflowRoleCatalog([review]),
+      reviewTaskRoles,
     );
     const applied = applyTaskWorkflowSettings(
       config({
@@ -50,16 +60,8 @@ describe("applyTaskWorkflowSettings", () => {
           ],
         },
       }),
-      createTaskWorkflowResolver({
-        forWorkspace: () => ({
-          workflows: [review, second],
-          board: singleTaskWorkflow(review).forWorkspace({ workspaceId: "repo", repoPath: "/repo" })
-            .board,
-        }),
-        forTask: () => review,
-        forNewTask: () => review,
-        workflows: [review, second],
-      }),
+      { latest: [review, second], roles: reviewTaskRoles },
+      save,
     );
     expect(applied.autopilot.rules.filter((rule) => rule.eventId === "reviewRejected")).toEqual([
       { workflowId: review.definition.id, eventId: "reviewRejected", actionIds: ["startRevision"] },
@@ -73,6 +75,7 @@ describe("applyTaskWorkflowSettings", () => {
           },
         }),
         reviewWorkflows,
+        save,
       ),
     ).toThrow('Unknown Autopilot workflow "missing"');
   });
@@ -90,6 +93,7 @@ describe("applyTaskWorkflowSettings", () => {
         },
       }),
       reviewWorkflows,
+      save,
     );
 
     expect(applied.notifications.kinds["workflow.reviewing"]).toEqual({
@@ -114,7 +118,7 @@ describe("applyTaskWorkflowSettings", () => {
     const { "task.auto_close_blocked": _removed, ...kinds } = saved.notifications.kinds;
     // A parse keeps the missing kind missing, as for a config file from before the kind.
     const notifications = notificationSettingsSchema.parse({ ...saved.notifications, kinds });
-    const applied = applyTaskWorkflowSettings({ ...saved, notifications }, reviewWorkflows);
+    const applied = applyTaskWorkflowSettings({ ...saved, notifications }, reviewWorkflows, save);
 
     expect(applied.notifications.kinds["task.auto_close_blocked"]).toEqual({
       enabled: true,
@@ -134,6 +138,7 @@ describe("applyTaskWorkflowSettings", () => {
           },
         }),
         reviewWorkflows,
+        save,
       ),
     ).toThrow('Unknown Autopilot event "taskRejectedByQa"');
     expect(() =>
@@ -144,6 +149,7 @@ describe("applyTaskWorkflowSettings", () => {
           },
         }),
         reviewWorkflows,
+        save,
       ),
     ).toThrow(`Unknown prompt "${specPlanBuildPromptKey("messages.qa_review")}"`);
     expect(() =>
@@ -158,6 +164,7 @@ describe("applyTaskWorkflowSettings", () => {
           },
         }),
         reviewWorkflows,
+        save,
       ),
     ).toThrow('Unknown role "build" at workspaces.repo.agentDefaults');
   });
@@ -172,11 +179,12 @@ describe("applyTaskWorkflowSettings", () => {
       return config({ agentRuntimes: { codex: runtime } });
     };
 
-    expect(() => applyTaskWorkflowSettings(codex("writer"), reviewWorkflows)).toThrow(
+    expect(() => applyTaskWorkflowSettings(codex("writer"), reviewWorkflows, save)).toThrow(
       "Codex writer role sandboxMode cannot be read-only",
     );
     expect(
-      applyTaskWorkflowSettings(codex("editor"), reviewWorkflows).agentRuntimes.codex.roleOverrides,
+      applyTaskWorkflowSettings(codex("editor"), reviewWorkflows, save).agentRuntimes.codex
+        .roleOverrides,
     ).toEqual({ editor: { sandboxMode: "read-only" } });
   });
 
@@ -191,8 +199,143 @@ describe("applyTaskWorkflowSettings", () => {
       applyTaskWorkflowSettings(
         config({ agentRuntimes: { antigravity: runtime } }),
         reviewWorkflows,
+        save,
       ).agentRuntimes.antigravity.roleOverrides,
     ).toEqual({ editor: { mode: "auto" } });
+  });
+
+  test("a read and a save keep an Agent Studio selection of a deleted role", () => {
+    const selected = config({
+      workspaces: {
+        repo: workspace({
+          agentStudioState: { openTaskIds: [], activeTask: { taskId: "t1", role: "gone" } },
+        }),
+      },
+    });
+    expect(applyTaskWorkflowSettings(selected, reviewWorkflows, "read")).toBeDefined();
+    expect(applyTaskWorkflowSettings(selected, reviewWorkflows, save)).toBeDefined();
+  });
+
+  test("a read accepts the keys of an older version of a custom workflow", () => {
+    const olderPrompt = promptOverrideKey({
+      ownerKind: "workflow",
+      ownerId: review.definition.id,
+      promptId: "messages.removed_step",
+    });
+    const saved = config({
+      globalPromptOverrides: { [olderPrompt]: { template: "x", baseVersion: 1 } },
+      autopilot: {
+        rules: [
+          { workflowId: review.definition.id, eventId: "removedSignal", actionIds: ["gone"] },
+        ],
+      },
+    });
+
+    const applied = applyTaskWorkflowSettings(saved, reviewWorkflows, "read");
+    expect(applied.globalPromptOverrides[olderPrompt]).toEqual({ template: "x", baseVersion: 1 });
+    // The latest version gives its rules; the rule of the older signal follows, so it still applies.
+    expect(applied.autopilot.rules.map(({ eventId }) => eventId)).toEqual([
+      "draftSubmitted",
+      "reviewAccepted",
+      "reviewRejected",
+      "removedSignal",
+    ]);
+    expect(() => applyTaskWorkflowSettings(saved, reviewWorkflows, save)).toThrow(
+      `Unknown prompt "${olderPrompt}"`,
+    );
+    const resaved = applyTaskWorkflowSettings(applied, reviewWorkflows, {
+      saved: savedWorkflowSettingKeys(saved),
+    });
+    expect(resaved.globalPromptOverrides[olderPrompt]).toEqual({ template: "x", baseVersion: 1 });
+    expect(resaved.autopilot.rules.at(-1)).toEqual({
+      workflowId: review.definition.id,
+      eventId: "removedSignal",
+      actionIds: ["gone"],
+    });
+  });
+
+  test("a save keeps saved actions of an older version on a signal that still exists", () => {
+    const saved = config({
+      autopilot: {
+        rules: [
+          {
+            workflowId: review.definition.id,
+            eventId: "reviewRejected",
+            actionIds: ["removedAction"],
+          },
+        ],
+      },
+    });
+    const applied = applyTaskWorkflowSettings(saved, reviewWorkflows, "read");
+    const resaved = applyTaskWorkflowSettings(applied, reviewWorkflows, {
+      saved: savedWorkflowSettingKeys(saved),
+    });
+    expect(
+      resaved.autopilot.rules.find(({ eventId }) => eventId === "reviewRejected")?.actionIds,
+    ).toEqual(["removedAction"]);
+    const added = structuredClone(applied);
+    added.autopilot.rules.find(({ eventId }) => eventId === "reviewAccepted")!.actionIds = [
+      "removedAction",
+    ];
+    expect(() =>
+      applyTaskWorkflowSettings(added, reviewWorkflows, { saved: savedWorkflowSettingKeys(saved) }),
+    ).toThrow('Unknown Autopilot action "removedAction"');
+  });
+
+  test("a save keeps a saved notification kind that no latest version declares", () => {
+    const kind = "workflow.design_ready";
+    const saved = config();
+    saved.notifications.kinds[kind] = { enabled: true, target: "both", sound: "inherit" };
+    const applied = applyTaskWorkflowSettings(saved, reviewWorkflows, "read");
+    expect(() =>
+      applyTaskWorkflowSettings(applied, reviewWorkflows, {
+        saved: savedWorkflowSettingKeys(saved),
+      }),
+    ).not.toThrow();
+    expect(() => applyTaskWorkflowSettings(applied, reviewWorkflows, save)).toThrow(
+      `Unknown notification "${kind}"`,
+    );
+  });
+
+  test("a read checks the keys of the built-in workflow against its own IDs", () => {
+    expect(() =>
+      applyTaskWorkflowSettings(
+        config({
+          globalPromptOverrides: {
+            [specPlanBuildPromptKey("messages.unknown")]: { template: "x", baseVersion: 1 },
+          },
+        }),
+        builtinWorkflowSettingsOwners,
+        "read",
+      ),
+    ).toThrow(`Unknown prompt "${specPlanBuildPromptKey("messages.unknown")}"`);
+  });
+
+  test("checks role keys against the role catalog", () => {
+    const instructions = promptOverrideKey({
+      ownerKind: "role",
+      ownerId: "writer",
+      promptId: "instructions",
+    });
+    expect(
+      applyTaskWorkflowSettings(
+        config({ globalPromptAppends: { [instructions]: { text: "More", enabled: true } } }),
+        reviewWorkflows,
+        save,
+      ).globalPromptAppends[instructions],
+    ).toEqual({ text: "More", enabled: true });
+    const unknown = promptOverrideKey({
+      ownerKind: "role",
+      ownerId: "ghost",
+      promptId: "instructions",
+    });
+    expect(() =>
+      applyTaskWorkflowSettings(
+        config({ globalPromptAppends: { [unknown]: { text: "More", enabled: true } } }),
+        reviewWorkflows,
+        "read",
+      ),
+    ).toThrow(`Unknown prompt "${unknown}"`);
   });
 });
 
@@ -213,6 +356,7 @@ describe("naming prompt settings", () => {
           },
         }),
         reviewWorkflows,
+        save,
       ),
     ).not.toThrow();
   });
@@ -226,6 +370,7 @@ describe("naming prompt settings", () => {
       applyTaskWorkflowSettings(
         config({ globalPromptOverrides: { [branchKey]: { template, baseVersion: 1 } } }),
         reviewWorkflows,
+        save,
       ),
     ).toThrow(problem);
   });
@@ -241,6 +386,7 @@ describe("naming prompt settings", () => {
           },
         }),
         reviewWorkflows,
+        save,
       ),
     ).toThrow('The repository append of prompt "Branch name" has a placeholder problem.');
   });

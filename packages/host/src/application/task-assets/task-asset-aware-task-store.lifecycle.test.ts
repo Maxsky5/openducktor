@@ -1,3 +1,4 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "../tasks/task-workflows";
 import { describe, expect, test } from "bun:test";
 import { Deferred, Effect, Exit, Fiber, Scheduler, Result } from "effect";
 import { createTaskAssetAwareTaskStore } from "./task-asset-aware-task-store";
@@ -24,6 +25,7 @@ describe("asset-aware task store lifecycle", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "With image",
           issueType: "task",
@@ -81,6 +83,7 @@ describe("asset-aware task store lifecycle", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Referenced image",
           issueType: "task",
@@ -131,6 +134,7 @@ describe("asset-aware task store lifecycle", () => {
         store.createTask({
           ...scope,
           status: "open",
+          workflow: BUILTIN_TASK_ASSIGNMENT,
           task: {
             title: "Forged",
             issueType: "task",
@@ -154,6 +158,7 @@ describe("asset-aware task store lifecycle", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Owner",
           issueType: "task",
@@ -167,6 +172,7 @@ describe("asset-aware task store lifecycle", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Other",
           issueType: "task",
@@ -205,6 +211,7 @@ describe("asset-aware task store lifecycle", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Lifecycle",
           issueType: "task",
@@ -248,6 +255,7 @@ describe("asset-aware task store lifecycle", () => {
       harness.store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
@@ -351,6 +359,7 @@ describe("asset-aware task store lifecycle", () => {
       store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Next", issueType: "task", priority: 2 },
       }),
     );
@@ -369,6 +378,7 @@ describe("asset-aware task store lifecycle", () => {
       harness.store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );

@@ -1,12 +1,13 @@
 import { expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
+import type { TaskWorkflowAssignment } from "./task-workflow-port";
 import { Deferred, Effect, Fiber } from "effect";
 import { collectTaskStatusChanges, recordCommittedTaskStatusChange } from "./task-status-changes";
 
 const record = (id: string, status: string, previousStatus: string) =>
   // SAFETY: The recorder reads only id, title, and status.
   recordCommittedTaskStatusChange({
-    task: { id, title: id, status } as TaskCard,
+    task: { id, title: id, status } as TaskCard & TaskWorkflowAssignment,
     previousStatus,
     workflowId: "openducktor-spec-plan-build",
     workflow: { id: "openducktor-spec-plan-build", revision: 1 },

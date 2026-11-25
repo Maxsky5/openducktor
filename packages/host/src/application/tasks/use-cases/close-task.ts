@@ -12,12 +12,7 @@ import {
   recordStoppedAgentSessionCount,
 } from "../support/task-cleanup-progress";
 import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
-import {
-  runTaskLocalCleanup,
-  selectWorkflowCleanupSessionRecords,
-  taskHasSessionsForRoles,
-  workflowRoleIds,
-} from "../support/task-cleanup-support";
+import { runTaskLocalCleanup } from "../support/task-cleanup-support";
 import { collectTaskCleanupTargets } from "../support/task-close-cleanup";
 import { noRemovedWorktrees } from "../support/task-worktree-owner-guard";
 import { completeTaskClosure } from "../support/task-closure";
@@ -62,10 +57,7 @@ export const createTaskCloseUseCase = ({
       const cleanup = Effect.gen(function* () {
         const currentMetadata = yield* taskStore.getTaskMetadata(input);
         const currentSessions = currentMetadata.agentSessions;
-        const hasWorkflowSessions = taskHasSessionsForRoles(
-          currentSessions,
-          workflowRoleIds(workflow),
-        );
+        const hasWorkflowSessions = currentSessions.length > 0;
         if (hasWorkflowSessions && !taskActivityGuard) {
           return yield* Effect.fail(
             new HostDependencyError({
@@ -99,7 +91,6 @@ export const createTaskCloseUseCase = ({
             worktreeOwners,
             repoPath: effectiveRepoPath,
             repoConfig,
-            workflow,
             task: current,
             sessions: currentSessions,
             operationLabel: "close",
@@ -115,7 +106,7 @@ export const createTaskCloseUseCase = ({
             taskSessions: [
               {
                 taskId,
-                sessions: selectWorkflowCleanupSessionRecords(workflow, currentSessions),
+                sessions: currentSessions,
               },
             ],
           });

@@ -771,6 +771,7 @@ export const createPrepareOpencodeSessionRuntime =
               client,
               detail,
               scope: parent.scope,
+              policySessionId: controller.policySessionId(parent.detail),
               repoPath: ref.repoPath,
               resolveWorkflowRolePolicy: options.resolveWorkflowRolePolicy,
             }),

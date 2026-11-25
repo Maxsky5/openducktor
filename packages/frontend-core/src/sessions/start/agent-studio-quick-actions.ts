@@ -206,13 +206,37 @@ export const buildAgentStudioQuickActions = (
     else trailing.push(option);
   }
   const launchOrder = taskWorkflow.launchOrder(task);
+  // Among the starts that the launch order of the workflow does not rank, the current work comes
+  // first: a start that the board offers now, then a start of a step that is not complete, then the
+  // starts of complete steps. So the primary action matches the board without a launch order.
+  const offeredActions = [
+    ...task.availableActions.filter((id) => launchActionIds.has(id)),
+    ...following.flatMap(({ taskAction }) =>
+      taskAction.kind === "workflow" ? [taskAction.action] : [],
+    ),
+  ];
+  const offeredLaunches = new Set(
+    offeredActions.map((id) => taskWorkflow.actionLaunchAction(task, id)),
+  );
+  const completedSteps = new Set(
+    task.workflowSteps.filter(({ completed }) => completed).map(({ id }) => id),
+  );
+  const completedLaunches = new Set(
+    taskWorkflow.definition.steps.flatMap((step) =>
+      step.kind === "agent" && completedSteps.has(step.id)
+        ? step.launchActions.map(({ id }) => id)
+        : [],
+    ),
+  );
   const rank = (option: AgentStudioQuickActionOption) => {
     let id = "";
     if (option.kind === "session_start") id = option.launchActionId;
     else if (option.taskAction.kind === "workflow")
       id = taskWorkflow.actionLaunchAction(task, option.taskAction.action);
     const index = launchOrder.indexOf(id);
-    return index < 0 ? launchOrder.length : index;
+    if (index >= 0) return index;
+    const tier = (offeredLaunches.has(id) ? 0 : 1) + (completedLaunches.has(id) ? 2 : 0);
+    return launchOrder.length + tier;
   };
   const ordered = [...options, ...following].sort((left, right) => rank(left) - rank(right));
   return [...leading, ...ordered, ...trailing];

@@ -121,7 +121,13 @@ test("implementation reset uses the workflow's action and role names and names a
   expect(copy.warning).toContain("The Coder and Reviewer session history cannot be recovered.");
 });
 
-test("implementation reset lists one or three worktree roles in plain English", () => {
+test("implementation reset that clears no role keeps the session history out of the copy", () => {
+  const copy = buildTaskResetImplementationConfirmCopy(implementation({ worktreeRoleLabels: [] }));
+  expect(copy.changes.some((change) => change.includes("session history"))).toBe(false);
+  expect(copy.warning).not.toContain("session history");
+});
+
+test("implementation reset lists one or three reset roles in plain English", () => {
   const one = buildTaskResetImplementationConfirmCopy(
     implementation({ worktreeRoleLabels: ["Builder"] }),
   );

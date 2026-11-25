@@ -176,6 +176,7 @@ describe("getTaskStopImpact", () => {
         repoPath: "/repo",
         taskIds: ["task-1"],
         operation: "reset_implementation",
+        eventId: "reset-implementation",
       }),
     );
 
@@ -215,6 +216,7 @@ describe("getTaskStopImpact", () => {
         repoPath: "/repo",
         taskIds: ["task-1"],
         operation: "reset_implementation",
+        eventId: "reset-implementation",
       }),
     );
 
@@ -368,6 +370,7 @@ describe("getTaskStopImpact", () => {
         repoPath: "/repo",
         taskIds: ["task-1"],
         operation: "reset_implementation",
+        eventId: "reset-implementation",
       }),
     );
 

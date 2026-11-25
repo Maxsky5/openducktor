@@ -195,7 +195,7 @@ function IssueResultRow({
   const isLinked = Boolean(linkedTaskId);
   let rowStateClass = "border-l-transparent hover:bg-muted/30 focus-within:bg-muted/30";
   if (isLinked) rowStateClass = "border-l-transparent bg-muted/30";
-  else if (selected) rowStateClass = "border-l-primary bg-primary/5";
+  else if (selected) rowStateClass = "border-l-primary bg-selected-surface";
 
   return (
     <li

@@ -1,3 +1,5 @@
+import { prepareNoRolePolicy } from "../../../test-support/workflow-role-policy";
+import { BUILTIN_TASK_ASSIGNMENT } from "../../tasks/task-workflows";
 import { allowAllGoalCommands } from "../../../test-support/service-test-doubles";
 import { disabledNamingService } from "../../../test-support/naming-test-doubles";
 import { builtinTaskWorkflows } from "../../../test-support/task-workflows";
@@ -90,7 +92,7 @@ export const createLaunchHarness = async (
   } = {},
 ) => {
   const taskWorkflows = gates.taskWorkflows ?? builtinTaskWorkflows;
-  const workflow = taskWorkflows.forNewTask("/repo");
+  const workflow = taskWorkflows.forTask(BUILTIN_TASK_ASSIGNMENT);
   let task = taskCardFixture(
     {
       artifactSummary: workflow.emptyArtifactSummary(),
@@ -379,7 +381,7 @@ export const createLaunchHarness = async (
         }),
       updateTask: (input) =>
         Effect.sync(() => {
-          task = taskCardSchema.parse({ ...task, ...input.patch });
+          task = { ...task, ...taskCardSchema.parse({ ...task, ...input.patch }) };
           return task;
         }),
     }),
@@ -509,6 +511,7 @@ export const createLaunchHarness = async (
   // The first instruction uses the same workflow send policy as a composer message.
   const commands = createAgentSessionCommandService({
     taskWorkflows,
+    prepareRolePolicy: prepareNoRolePolicy,
     goalRules: allowAllGoalCommands,
     turnPreparation: {
       ...commandPreparationFixture,
@@ -633,6 +636,7 @@ export const createLaunchHarness = async (
     },
     sessions: createTaskSessionOperations({
       taskWorkflows,
+      prepareRolePolicy: prepareNoRolePolicy,
       canonicalizeRepoPath: git.canonicalizePath,
       runtime,
       tasks: {
@@ -660,6 +664,7 @@ export const createLaunchHarness = async (
   });
   return {
     service,
+    taskReader,
     /** Starts an automatic launch whose start check always passes. */
     launchAutomatic: (request: AutomaticLaunchInput) =>
       service.launch({

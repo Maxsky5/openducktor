@@ -90,12 +90,15 @@ export const launchPromptContext = (
   launch: Pick<TaskWorkflowLaunchAction, "id" | "context">,
 ): KickoffPromptContextKind =>
   isPullRequestLaunch(launch.id) ? "pull_request" : (launch.context ?? "none");
-/** The icon of a role. A session of a role that the workflow no longer declares has none. */
+/**
+ * The icon of a session role. It comes from the catalog role, because a moved task can keep
+ * sessions of a role that its version does not bind.
+ */
 export const workflowRoleIcon = (workflow: TaskWorkflow, role: string) =>
-  workflow.hasRole(role) ? workflow.role(role).icon : undefined;
-/** The label of a role. A session of a role that the workflow no longer declares shows its ID. */
+  workflow.catalogRole(role)?.icon;
+/** The label of a session role, from the catalog role. A role outside the catalog shows its ID. */
 export const workflowRoleLabel = (workflow: TaskWorkflow, role: string): string =>
-  workflow.hasRole(role) ? workflow.role(role).label : role;
+  workflow.catalogRole(role)?.label ?? role;
 /** The label of the one pull request role of a workflow, or null when it names zero or several. */
 export const pullRequestRoleLabel = (workflow: TaskWorkflow): string | null => {
   const [role, ...others] = workflow.pullRequestRoles;

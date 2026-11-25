@@ -40,7 +40,7 @@ export function HumanReviewFeedbackModal({
     >
       <DialogContent className="max-w-xl overflow-hidden p-0">
         <DialogHeader className="px-6 py-5 pr-14">
-          <DialogTitle>{HUMAN_REVIEW_FEEDBACK_COPY.title}</DialogTitle>
+          <DialogTitle>{model.confirmLabel}</DialogTitle>
           <DialogDescription>
             {HUMAN_REVIEW_FEEDBACK_COPY.description(model.roleLabel)}
           </DialogDescription>

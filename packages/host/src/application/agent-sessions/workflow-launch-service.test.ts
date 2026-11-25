@@ -53,6 +53,7 @@ const launchTracked = (
     hostInstanceId: "host",
     eventBus: undefined,
     taskWorkflows: overrides.taskWorkflows ?? builtinTaskWorkflows,
+    taskReader: h.taskReader,
     settings: {
       getRepoConfig: () => Effect.succeed(h.config),
       getRepoConfigByRepoPath: () => Effect.succeed(h.config),
@@ -237,10 +238,7 @@ test.each(["write_start", "unknown_action"])(
       startup: { startupAttemptId: "attempt", operationId: "operation" },
     };
     const launch = launchTracked(h, request, {
-      taskWorkflows: {
-        ...reviewTaskWorkflows,
-        forNewTask: builtinTaskWorkflows.forNewTask,
-      },
+      taskWorkflows: reviewTaskWorkflows,
     });
     if (actionId === "unknown_action") {
       const result = await Effect.runPromise(Effect.result(launch));

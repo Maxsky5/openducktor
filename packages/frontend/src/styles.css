@@ -30,6 +30,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-emphasis: var(--primary-emphasis);
   --color-status-running: var(--status-running);
   --color-status-running-foreground: var(--status-running-foreground);
   --color-status-read: var(--status-read);
@@ -37,6 +38,7 @@
   --color-status-input-read: var(--status-input-read);
   --color-status-input-unread: var(--status-input-unread);
   --color-selected-surface: var(--selected-surface);
+  --color-text-highlight: var(--text-highlight);
   --color-selected-accent: var(--selected-accent);
   --color-selected-control: var(--selected-control);
   --color-selected-control-foreground: var(--selected-control-foreground);
@@ -154,10 +156,13 @@ body {
 }
 
 /* Tailwind v4 gives buttons the default cursor. Every enabled button of the app shows the pointer,
-   also the buttons of Radix primitives and plain button elements. A utility class still wins. */
+   also the buttons of Radix primitives, plain button elements, menu items, and the labels of
+   checkboxes, radios, and switches. A utility class still wins. */
 @layer base {
   button:not(:disabled),
-  [role="button"]:not([aria-disabled="true"]) {
+  [role="button"]:not([aria-disabled="true"]),
+  [role="menuitem"]:not([data-disabled]),
+  label:has(:is([role="checkbox"], [role="radio"], [role="switch"]):not(:disabled)) {
     cursor: pointer;
   }
 }
@@ -293,7 +298,7 @@ pre {
 }
 
 ::selection {
-  background: var(--selected-surface);
+  background: var(--text-highlight);
 }
 
 ::-webkit-scrollbar {

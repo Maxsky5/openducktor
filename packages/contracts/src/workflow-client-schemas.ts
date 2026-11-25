@@ -44,7 +44,10 @@ export const workflowDescriptorSchema = z.strictObject({
   templates: z.array(workflowPromptTemplateSchema),
 });
 export type WorkflowDescriptor = z.infer<typeof workflowDescriptorSchema>;
-/** The host role catalog and the workflows that bind its roles. */
+/**
+ * The full host role catalog, the built-in workflow, the latest version of each published custom
+ * workflow, and each version that a task uses.
+ */
 export const workflowCatalogSchema = z.strictObject({
   hostInstanceId: z.string().min(1),
   roles: z.array(agentRoleDefinitionSchema),
@@ -54,7 +57,11 @@ export type WorkflowCatalog = z.infer<typeof workflowCatalogSchema>;
 export const workspaceWorkflowContextSchema = z.strictObject({
   hostInstanceId: z.string().min(1),
   board: workflowBoardDefinitionSchema,
+  /** Every version that the board or a task of the workspace uses. */
   workflows: z.array(workflowReferenceSchema),
+  /** The latest version of each enabled workflow. The default comes first. */
+  newTaskWorkflows: z.array(workflowReferenceSchema).min(1),
+  /** The default workflow of the workspace. */
   newTaskWorkflow: workflowReferenceSchema,
 });
 export type WorkspaceWorkflowContext = z.infer<typeof workspaceWorkflowContextSchema>;

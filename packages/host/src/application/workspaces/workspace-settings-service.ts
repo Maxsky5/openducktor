@@ -8,8 +8,11 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { parseConfig } from "../../config/parse-config";
-import { applyTaskWorkflowSettings } from "../../config/workflow-settings";
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import {
+  applyTaskWorkflowSettings,
+  savedWorkflowSettingKeys,
+} from "../../config/workflow-settings";
+import type { ReadWorkflowSettingsSource } from "./task-workflow-settings";
 import { HostValidationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import { applyAgentStudioStateAction } from "./workspace-agent-studio-state";
@@ -36,13 +39,13 @@ export type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspa
 
 export const createWorkspaceSettingsService = (
   settingsConfig: SettingsConfigPort,
-  taskWorkflows: TaskWorkflowResolver,
+  readWorkflowSettings: ReadWorkflowSettingsSource,
 ): WorkspaceSettingsService =>
-  withSerializedConfigWrites(createSettingsService(settingsConfig, taskWorkflows));
+  withSerializedConfigWrites(createSettingsService(settingsConfig, readWorkflowSettings));
 
 const createSettingsService = (
   settingsConfig: SettingsConfigPort,
-  taskWorkflows: TaskWorkflowResolver,
+  readWorkflowSettings: ReadWorkflowSettingsSource,
 ): WorkspaceSettingsService => ({
   ...createCustomAgentRoleOperations(settingsConfig),
   ...createWorkspaceLifecycleSettingsMethods(settingsConfig),
@@ -220,10 +223,10 @@ const createSettingsService = (
     });
   },
   saveSettingsSnapshotWith(prepared, commit) {
-    return saveSettingsSnapshotWith(settingsConfig, taskWorkflows, prepared, commit);
+    return saveSettingsSnapshotWith(settingsConfig, readWorkflowSettings, prepared, commit);
   },
   prepareSettingsSnapshot(rawSnapshot) {
-    return prepareSettingsSnapshot(settingsConfig, taskWorkflows, rawSnapshot);
+    return prepareSettingsSnapshot(settingsConfig, readWorkflowSettings, rawSnapshot);
   },
   updateAgentModelFavorites(rawFavorites) {
     return Effect.gen(function* () {
@@ -261,7 +264,7 @@ const createSettingsService = (
 
 const prepareSettingsSnapshot = (
   settingsConfig: SettingsConfigPort,
-  taskWorkflows: TaskWorkflowResolver,
+  readWorkflowSettings: ReadWorkflowSettingsSource,
   rawSnapshot: SettingsSnapshotSaveInput,
 ): Effect.Effect<PreparedSettingsSnapshot, WorkspaceSettingsError> =>
   Effect.gen(function* () {
@@ -278,9 +281,12 @@ const prepareSettingsSnapshot = (
         edits.workspaces![id] = { ...patch, repoPath };
       }
     }
+    const source = yield* readWorkflowSettings();
     const next = yield* Effect.try({
       try: () =>
-        applyTaskWorkflowSettings(applySettingsEdits(current, edits, catalog), taskWorkflows),
+        applyTaskWorkflowSettings(applySettingsEdits(current, edits, catalog), source, {
+          saved: savedWorkflowSettingKeys(current),
+        }),
       catch: (cause) =>
         new HostValidationError({
           message: cause instanceof Error ? cause.message : String(cause),
@@ -292,7 +298,7 @@ const prepareSettingsSnapshot = (
 
 const saveSettingsSnapshotWith = <A, E>(
   settingsConfig: SettingsConfigPort,
-  taskWorkflows: TaskWorkflowResolver,
+  readWorkflowSettings: ReadWorkflowSettingsSource,
   prepared: PreparedSettingsSnapshot,
   commit: (
     write: Effect.Effect<SettingsWriteResult, WorkspaceSettingsError>,
@@ -301,6 +307,7 @@ const saveSettingsSnapshotWith = <A, E>(
   const { edits } = prepared;
   return commit(
     Effect.gen(function* () {
+      const source = yield* readWorkflowSettings();
       // Rebase the prepared edits on the current rows inside the write transaction.
       const persistence = yield* settingsConfig.applyConfigChange(
         (current, catalog) => {
@@ -311,10 +318,9 @@ const saveSettingsSnapshotWith = <A, E>(
                 message: `Runtime ${kind} settings changed during review. Preview and save settings again.`,
               });
           }
-          return applyTaskWorkflowSettings(
-            applySettingsEdits(current, edits, catalog),
-            taskWorkflows,
-          );
+          return applyTaskWorkflowSettings(applySettingsEdits(current, edits, catalog), source, {
+            saved: savedWorkflowSettingKeys(current),
+          });
         },
         Object.keys(edits.workspaces ?? {}),
       );

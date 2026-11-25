@@ -1,13 +1,15 @@
-import { ChartSpline, Columns3, type LucideIcon } from "lucide-react";
+import { ChartSpline, Columns3, type LucideIcon, Workflow } from "lucide-react";
 import { type MouseEvent, type ReactElement, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import { cn } from "@/lib/utils";
 import { useShortcutTitle } from "@/features/shortcuts/shortcut-controls";
+import { WORKFLOWS_ROUTE } from "@/features/workflows/workflow-routes";
 import { USAGE_PATH } from "@/pages";
 
 const KANBAN_ROUTE = "/kanban";
 
 type SidebarNavigationState = {
+  /** The page link that shows as selected before its route commits. */
   activatedRoute: string | null;
   committedLocationKey: string;
 };
@@ -139,21 +141,21 @@ export function SidebarNavigation({
   );
 }
 
-const FOOTER_LINKS: readonly SidebarPageLink[] = [
-  { route: USAGE_PATH, label: "Usage", title: "Usage", icon: ChartSpline },
-];
-
-/** The icon links of the sidebar footer, beside Settings. */
+/** The icon links of the expanded sidebar footer, beside Settings. The collapsed sidebar has none. */
 export function SidebarFooterLinks({
-  compact = false,
   onBeforeNavigate,
-}: SidebarNavigationProps): ReactElement {
+}: Pick<SidebarNavigationProps, "onBeforeNavigate">): ReactElement {
+  const usageTitle = useShortcutTitle("usage", "Usage");
+  const workflowsTitle = useShortcutTitle("workflows", "Workflows");
   return (
     <SidebarPageLinks
       label="More pages"
-      links={FOOTER_LINKS}
+      links={[
+        { route: USAGE_PATH, label: "Usage", title: usageTitle, icon: ChartSpline },
+        { route: WORKFLOWS_ROUTE, label: "Workflows", title: workflowsTitle, icon: Workflow },
+      ]}
       iconOnly
-      className={cn("flex gap-1", compact ? "flex-col" : "items-center")}
+      className="flex items-center gap-1"
       linkClassName="size-9 justify-center"
       // A quiet tile beside the icon buttons of the footer.
       activeClassName="bg-accent text-accent-foreground ring-1 ring-border"

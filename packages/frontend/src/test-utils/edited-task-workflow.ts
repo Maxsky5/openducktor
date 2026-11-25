@@ -4,8 +4,8 @@ import {
   type ResolvedTaskCard,
   type TaskPromptTemplate,
   type TaskWorkflow,
-  workflowRoleCatalog,
 } from "@openducktor/workflows";
+import { workflowRoleCatalog } from "@openducktor/workflows/test-support";
 
 /** A new task workflow from edited copies of the definition and prompt templates of a workflow. */
 export const editTaskWorkflow = (

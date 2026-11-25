@@ -1,4 +1,8 @@
-import type { TaskWorktreeOwnersOperation, WorktreeOwners } from "@openducktor/contracts";
+import type {
+  TaskRemovalPreview,
+  TaskWorktreeOwnersOperation,
+  WorktreeOwners,
+} from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useActiveWorkspaceContext } from "../app-state/app-state-contexts";
 import { errorMessage } from "../lib/errors";
@@ -21,22 +25,23 @@ export type TaskWorktreeOwnersRead = {
  */
 export function useTaskWorktreeOwners({
   taskIds,
-  operation,
+  preview,
   enabled,
 }: {
   taskIds: string[];
-  operation: TaskWorktreeOwnersOperation;
+  /** The operation to preview. Null reads nothing. */
+  preview: TaskRemovalPreview<TaskWorktreeOwnersOperation> | null;
   enabled: boolean;
 }): TaskWorktreeOwnersRead {
   const { activeWorkspace } = useActiveWorkspaceContext();
   const repoPath = activeWorkspace?.repoPath ?? null;
-  const shouldRead = enabled && repoPath !== null && taskIds.length > 0;
+  const shouldRead = enabled && preview !== null && repoPath !== null && taskIds.length > 0;
   const query = useQuery({
     ...taskWorktreeOwnersQueryOptions({
       workspaceId: activeWorkspace?.workspaceId ?? "disabled",
       repoPath: repoPath ?? "",
       taskIds,
-      operation,
+      preview,
     }),
     enabled: shouldRead,
   });

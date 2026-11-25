@@ -1,10 +1,11 @@
+import type { TaskWorkflowAssignment } from "../../../ports/task-workflow-port";
+import { BUILTIN_TASK_ASSIGNMENT } from "../task-workflows";
 import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import {
   createReviewTaskWorkflow,
   specPlanBuildReference,
 } from "@openducktor/workflows/test-support";
 import { describe, expect, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
 import { Effect, Result } from "effect";
 import { TaskPolicyError } from "../../../domain/task";
 import { singleTaskWorkflow } from "../../../test-support/task-workflows";
@@ -17,10 +18,13 @@ import {
   requirePullRequestManagement,
   requireTaskEvent,
   decideTaskEventInput,
-  startWorktreeSessionHint,
+  START_WORKTREE_SESSION_HINT,
 } from "./task-workflow-events";
 
-const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
+type StoredTaskCard = import("@openducktor/contracts").TaskCard & TaskWorkflowAssignment;
+
+const task = (overrides: Partial<StoredTaskCard> = {}): StoredTaskCard => ({
+  ...BUILTIN_TASK_ASSIGNMENT,
   id: "task-1",
   title: "Task",
   description: "",
@@ -166,13 +170,8 @@ describe("task workflow events", () => {
     expect(formatStatusList(["open", "blocked", "closed"])).toBe("open, blocked, or closed");
   });
 
-  test("names the worktree roles of the task workflow", () => {
-    expect(startWorktreeSessionHint(specPlanBuildWorkflow)).toBe(
-      "Start a Builder or QA session first.",
-    );
-    expect(startWorktreeSessionHint(createReviewTaskWorkflow())).toBe(
-      "Start a Writer session first.",
-    );
+  test("tells to start any agent session of the task to create its worktree", () => {
+    expect(START_WORKTREE_SESSION_HINT).toBe("Start an agent session of the task first.");
   });
 });
 

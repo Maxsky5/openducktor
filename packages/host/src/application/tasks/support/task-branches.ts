@@ -1,5 +1,4 @@
 import type { WorkspaceRef } from "@openducktor/contracts";
-import type { TaskWorkflow } from "@openducktor/workflows";
 import { Effect } from "effect";
 import { canonicalTargetBranch, checkoutBranch } from "../../../domain/task";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
@@ -8,7 +7,7 @@ import type { TaskRecord } from "../../../ports/task-repository-ports";
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
-import { startWorktreeSessionHint } from "./task-workflow-events";
+import { START_WORKTREE_SESSION_HINT } from "./task-workflow-events";
 
 type TaskTargetBranchInput = WorkspaceRef & {
   task: Pick<TaskRecord, "id" | "targetBranch" | "targetBranchError">;
@@ -80,12 +79,11 @@ export const inspectTaskBranches = (
   },
   input: WorkspaceRef & {
     task: TaskRecord;
-    workflow: TaskWorkflow;
     operationLabel: string;
   },
 ) =>
   Effect.gen(function* () {
-    const { workspaceId, repoPath, task, workflow, operationLabel } = input;
+    const { workspaceId, repoPath, task, operationLabel } = input;
     const taskId = task.id;
     const taskWorktree = yield* dependencies.taskWorktreeService.getTaskWorktree({
       workspaceId,
@@ -96,7 +94,7 @@ export const inspectTaskBranches = (
       return unavailableTaskBranch(
         new HostValidationError({
           field: "taskId",
-          message: `${operationLabel} requires a task worktree for task ${taskId}. ${startWorktreeSessionHint(workflow)}`,
+          message: `${operationLabel} requires a task worktree for task ${taskId}. ${START_WORKTREE_SESSION_HINT}`,
           details: { repoPath, taskId },
         }),
       );

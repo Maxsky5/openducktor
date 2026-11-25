@@ -1,6 +1,7 @@
 import type { SourceIssueReference, TaskCreateInput } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type { TaskStoreError, TaskRecord } from "./task-repository-ports";
+import type { TaskWorkflowAssignment } from "./task-workflow-port";
 
 export type IssueImportStorePort = {
   getSourceIssue(input: {
@@ -38,6 +39,8 @@ export type IssueImportStorePort = {
     repoPath: string;
     sourceIssue: SourceIssueReference;
     task: TaskCreateInput;
+    /** The workflow that the new task follows. */
+    workflow: TaskWorkflowAssignment;
     /** The initial state of the task workflow. */
     status: string;
   }): Effect.Effect<

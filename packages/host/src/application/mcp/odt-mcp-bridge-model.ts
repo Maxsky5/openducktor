@@ -5,6 +5,7 @@ import {
   type PublicTask,
   type PublicWorkflowArtifactStates,
   type TaskCard,
+  type TaskRecordData,
   type TaskArtifact,
   type TaskSummary,
   type TaskUpdatePatch,
@@ -14,7 +15,7 @@ import { Effect } from "effect";
 import type { JSONType, z } from "zod";
 import { normalizeLabels } from "../../domain/task/task-labels";
 import { HostValidationError } from "../../effect/host-errors";
-import type { TaskReference, TaskRecord } from "../../ports/task-repository-ports";
+import type { TaskReference } from "../../ports/task-repository-ports";
 
 type ResponseParser<A> = Pick<z.ZodType<A>, "parse">;
 
@@ -23,7 +24,7 @@ const MAX_TASK_CANDIDATES = 5;
 const normalizeKey = (value: string): string => value.trim().toLowerCase();
 
 export const buildTaskUpdatePatch = (
-  current: TaskRecord,
+  current: TaskRecordData,
   input: UpdateTaskInput,
 ): TaskUpdatePatch => {
   const patch: TaskUpdatePatch = {};

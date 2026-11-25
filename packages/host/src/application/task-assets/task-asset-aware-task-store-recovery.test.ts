@@ -1,3 +1,4 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "../tasks/task-workflows";
 import { afterEach, describe, expect, test } from "bun:test";
 import { Cause, Deferred, Effect, Exit } from "effect";
 import { createNodeTaskAssetFilePort } from "../../adapters/node/filesystem-task-asset-file-port";
@@ -54,6 +55,7 @@ const createTaskWithAsset = async (harness: Awaited<ReturnType<typeof createHarn
     harness.store.createTask({
       ...harness.scope,
       status: "open",
+      workflow: BUILTIN_TASK_ASSIGNMENT,
       task: {
         title: "Asset owner",
         issueType: "task",
@@ -98,6 +100,7 @@ describe("asset-aware task store", () => {
       store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Asset-free task",
           issueType: "task",
@@ -133,6 +136,7 @@ describe("asset-aware task store", () => {
         store.createTask({
           ...harness.scope,
           status: "open",
+          workflow: BUILTIN_TASK_ASSIGNMENT,
           task: {
             title: "Asset-free failure",
             issueType: "task",
@@ -176,6 +180,7 @@ describe("asset-aware task store", () => {
       store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Asset failure",
           issueType: "task",
@@ -213,6 +218,7 @@ describe("asset-aware task store", () => {
       store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Unsupported asset persistence",
           issueType: "task",
@@ -248,6 +254,7 @@ describe("asset-aware task store", () => {
       harness.store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Rollback",
           issueType: "task",

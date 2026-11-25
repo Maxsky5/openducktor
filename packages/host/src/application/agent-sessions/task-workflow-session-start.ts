@@ -19,6 +19,7 @@ import type {
   TaskSessionProgress,
   PreparedTaskSession,
   CanonicalizeRepoPath,
+  PrepareRolePolicy,
   RuntimeControl,
   TaskLifecycle,
 } from "./task-session-operations";
@@ -31,8 +32,10 @@ export const createStartTaskWorkflowSession =
     writes,
     taskLifecycle,
     taskSessionStart,
+    prepareRolePolicy,
   }: {
     canonicalizeRepoPath: CanonicalizeRepoPath;
+    prepareRolePolicy: PrepareRolePolicy;
     runtime: Pick<RuntimeControl, "startSession" | "releaseSession">;
     writes: TaskSessionWrites;
     taskLifecycle: TaskLifecycle;
@@ -47,6 +50,11 @@ export const createStartTaskWorkflowSession =
         const scope = input.sessionScope;
         const repoPath = yield* canonicalizeRepoPath(input.repoPath);
         yield* taskLifecycle.acquireLifecycle(repoPath, [scope.taskId], "start session");
+        const rolePolicy = yield* prepareRolePolicy({
+          ...scope,
+          repoPath,
+          externalSessionId: null,
+        });
         let prepared: PreparedTaskSessionStart | null = null;
         let summary: AgentSessionControlSummary | null = null;
         let stored = false;
@@ -117,6 +125,7 @@ export const createStartTaskWorkflowSession =
             );
           }
           summary = launched.success;
+          yield* rolePolicy.keep(summary.externalSessionId);
 
           const persisted = yield* Effect.gen(function* () {
             yield* progress.created(launched.success);

@@ -1,4 +1,5 @@
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import { resolveTaskWorkflow } from "./sqlite-task-workflow-versions";
+import type { TaskWorkflowVersionCache } from "../../ports/task-workflow-port";
 import {
   directMergeRecordSchema,
   gitTargetBranchSchema,
@@ -198,13 +199,15 @@ export const applyTaskPatch = (
   workspaceId: string,
   input: Parameters<TaskStorePort["updateTask"]>[0],
   updatedAt: Date,
-  taskWorkflows: TaskWorkflowResolver,
+  taskWorkflows: TaskWorkflowVersionCache,
 ) =>
   Effect.gen(function* () {
     const current = yield* requireTaskRow(session, workspaceId, input.taskId, input.repoPath);
     if (
       input.patch.issueType !== undefined &&
-      !taskWorkflows.forTask(current).issueTypes.includes(input.patch.issueType)
+      !(yield* resolveTaskWorkflow(session, taskWorkflows, current)).issueTypes.includes(
+        input.patch.issueType,
+      )
     )
       return yield* new HostValidationError({
         field: "issueType",

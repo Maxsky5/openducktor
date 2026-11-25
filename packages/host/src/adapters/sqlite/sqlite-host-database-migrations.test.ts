@@ -311,3 +311,57 @@ test("rejects a database whose applied migration differs from the migration file
 
   expect(failure.message).toContain("does not match this OpenDucktor version");
 });
+
+test("0006 adds the workflow library, the built-in default workflow, and keeps tasks on it", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "odt-host-migration-"));
+  cleanups.add(() => rm(directory, { recursive: true, force: true }));
+  const databasePath = path.join(directory, "database.sqlite");
+  const initialFolder = await copyMigrationsUpTo(directory, 3);
+
+  const result = await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { session } = yield* openSqliteDrizzleConnection({
+          databasePath,
+          configureWal: false,
+          configureHostDatabase: true,
+          config: { schema: hostDatabaseSchema },
+        });
+        const run = (query: string) => session.execute((db) => db.run(sql.raw(query)), "test.run");
+        const read = (query: string) =>
+          session.execute((db) => db.values(sql.raw(query)), "test.read");
+        yield* applyMigrations(session, initialFolder, databasePath, "exact");
+        for (const id of ["one", "two"])
+          yield* run(
+            `INSERT INTO workspaces (workspace_id, workspace_name, repo_path, branch_prefix, default_target_branch, closed)
+             VALUES ('${id}', '${id}', '/${id}', 'odt', 'main', 0)`,
+          );
+        yield* run(
+          `INSERT INTO tasks (workspace_id, id, title, status, issue_type, priority, created_at_ms, updated_at_ms)
+           VALUES ('one', 'one-1', 'Task', 'open', 'task', 2, 1, 1)`,
+        );
+        yield* ensureSchema(session, databasePath);
+        const tasks = yield* read("SELECT id, workflow_id, workflow_version FROM tasks");
+        const tables = yield* read(
+          "SELECT name FROM sqlite_schema WHERE type = 'table' AND name LIKE 'workflow%' ORDER BY name",
+        );
+        const badMode = yield* Effect.result(
+          run("INSERT INTO workflow_availability (workflow_id, mode) VALUES ('flow', 'some')"),
+        );
+        return { tasks, tables, badMode: badMode._tag };
+      }),
+    ),
+  );
+
+  expect(result.tasks).toEqual([["one-1", "openducktor-spec-plan-build", null]]);
+  expect(result.tables).toEqual([
+    ["workflow_availability"],
+    ["workflow_availability_workspaces"],
+    ["workflow_drafts"],
+    ["workflow_roles"],
+    ["workflow_versions"],
+    ["workflows"],
+  ]);
+  // The rule mode is only or except. No rule means every workspace.
+  expect(result.badMode).toBe("Failure");
+});

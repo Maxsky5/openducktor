@@ -1,3 +1,5 @@
+import type { TaskWorkflowAssignment } from "../../ports/task-workflow-port";
+import { BUILTIN_TASK_ASSIGNMENT } from "../tasks/task-workflows";
 import { specPlanBuildReference } from "@openducktor/workflows/test-support";
 import { describe, expect, mock, test } from "bun:test";
 import {
@@ -6,7 +8,6 @@ import {
   type PullRequest,
   type PullRequestReviewContext,
   type RepoConfig,
-  type TaskCard,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { GitProviderCapabilityError } from "../../ports/git-provider-errors";
@@ -17,6 +18,8 @@ import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-
 import { createGitProviderResolver } from "../git/git-provider-resolver";
 import { createPullRequestReviewService } from "./pull-request-review-service";
 import { repoConfigFixture } from "../../test-support/repo-config-fixture";
+
+type StoredTaskCard = import("@openducktor/contracts").TaskCard & TaskWorkflowAssignment;
 
 const makeRepoConfig = (providerId: GitProviderId): RepoConfig =>
   repoConfigFixture({
@@ -34,8 +37,9 @@ const makePullRequest = (providerId: GitProviderId): PullRequest => ({
   updatedAt: "2026-07-10T08:00:00.000Z",
 });
 
-const makeTask = (pullRequest: PullRequest | undefined): TaskCard => {
-  const task: TaskCard = {
+const makeTask = (pullRequest: PullRequest | undefined): StoredTaskCard => {
+  const task: StoredTaskCard = {
+    ...BUILTIN_TASK_ASSIGNMENT,
     id: "task-1",
     title: "Task",
     description: "",

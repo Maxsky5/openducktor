@@ -1,3 +1,4 @@
+import { builtinWorkflowSettingsOwners } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -13,7 +14,6 @@ import { eq, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { applyTaskWorkflowSettings } from "../../config/workflow-settings";
-import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { openHostDatabaseConnection } from "./sqlite-host-database-connection";
 import {
   agentRuntimeSettings,
@@ -134,14 +134,14 @@ describe("shared host settings", () => {
         session.transaction("test.import", (transaction) =>
           importHostSharedConfig(
             transaction,
-            applyTaskWorkflowSettings(config, builtinTaskWorkflows),
+            applyTaskWorkflowSettings(config, builtinWorkflowSettingsOwners, "read"),
           ),
         ),
       );
       const edit = (change: (next: GlobalConfig) => void) =>
         measureSettingsEdits(session, (current) => {
           change(current);
-          applyTaskWorkflowSettings(current, builtinTaskWorkflows);
+          applyTaskWorkflowSettings(current, builtinWorkflowSettingsOwners, "read");
           return current;
         });
       const promptId = rolePromptKey("build");
@@ -203,7 +203,7 @@ describe("shared host settings", () => {
         session.transaction("test.import", (transaction) =>
           importHostSharedConfig(
             transaction,
-            applyTaskWorkflowSettings(config, builtinTaskWorkflows),
+            applyTaskWorkflowSettings(config, builtinWorkflowSettingsOwners, "read"),
           ),
         ),
       );
@@ -258,7 +258,7 @@ describe("shared host settings", () => {
         session.transaction("test.import", (transaction) =>
           importHostSharedConfig(
             transaction,
-            applyTaskWorkflowSettings(config, builtinTaskWorkflows),
+            applyTaskWorkflowSettings(config, builtinWorkflowSettingsOwners, "read"),
           ),
         ),
       );
@@ -310,7 +310,7 @@ describe("shared host settings", () => {
         session.transaction("test.import", (transaction) =>
           importHostSharedConfig(
             transaction,
-            applyTaskWorkflowSettings(config, builtinTaskWorkflows),
+            applyTaskWorkflowSettings(config, builtinWorkflowSettingsOwners, "read"),
           ),
         ),
       );

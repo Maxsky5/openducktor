@@ -99,6 +99,7 @@ export const createTaskAssetAwareCreate =
         workspaceId: resolvedWorkspaceId,
         repoPath: input.repoPath,
         task: input.task,
+        workflow: input.workflow,
         status: input.status,
         assets: toNewTaskAssetRecords(stagedAssets),
         prepareFiles: (taskId) =>

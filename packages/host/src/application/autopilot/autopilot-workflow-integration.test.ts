@@ -1,3 +1,4 @@
+import { testWorkspaceWorkflows } from "../../test-support/task-workflows";
 import { createTaskSyncService } from "../tasks/sync/task-sync-service";
 import { builtinTaskWorkflows, reviewTaskWorkflows } from "../../test-support/task-workflows";
 import { Database } from "bun:sqlite";
@@ -26,7 +27,8 @@ import {
 import type { WorkflowArtifactSaveInput } from "../tasks/task-inputs";
 import type { CommittedTaskStatusChange } from "../tasks/task-mutation-operation";
 import { createTaskServiceWithMutationProgress } from "../tasks/task-service";
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import type { TaskWorkflowVersionCache } from "../../ports/task-workflow-port";
+import { BUILTIN_TASK_ASSIGNMENT } from "../tasks/task-workflows";
 import { createAutopilotService, type AutopilotService } from "./autopilot-service";
 import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
@@ -401,7 +403,7 @@ const createWorkflowHarness = async ({
   taskWorkflows = builtinTaskWorkflows,
   rules = builtinRules,
 }: {
-  readonly taskWorkflows?: TaskWorkflowResolver;
+  readonly taskWorkflows?: TaskWorkflowVersionCache;
   readonly rules?: ReadonlyArray<{ eventId: string; actionIds: string[] }>;
 } = {}) => {
   const fixture = await createSqliteTaskStoreHarness({
@@ -421,7 +423,7 @@ const createWorkflowHarness = async ({
     workspaces: { workflow: repo },
     autopilot: {
       rules: rules.map((rule) => ({
-        workflowId: taskWorkflows.workflows[0]!.definition.id,
+        workflowId: taskWorkflows.forTask(BUILTIN_TASK_ASSIGNMENT).definition.id,
         ...rule,
       })),
     },
@@ -457,6 +459,7 @@ const createWorkflowHarness = async ({
   });
   const taskService = createTaskServiceWithMutationProgress({
     taskWorkflows,
+    workspaceWorkflows: testWorkspaceWorkflows(taskWorkflows),
     taskStore: store,
     settingsConfig,
     workspaceSettingsService,
@@ -512,7 +515,7 @@ const createWorkflowHarness = async ({
             workspaceId: request.workspaceId,
             repoPath: request.repoPath,
             taskId: request.taskId,
-            role: taskWorkflows.forTask({ id: request.taskId }).automation(policy.actionId)
+            role: taskWorkflows.forTask(BUILTIN_TASK_ASSIGNMENT).automation(policy.actionId)
               .roles[0]!,
           };
           const check = yield* policy.startCheck;

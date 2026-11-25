@@ -1,3 +1,4 @@
+import { prepareNoRolePolicy } from "../../test-support/workflow-role-policy";
 import { allowAllGoalCommands } from "../../test-support/service-test-doubles";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
@@ -111,6 +112,7 @@ const setup = (
   };
   const unexpected = () => Effect.die(new Error("Unexpected native work"));
   const commands = createAgentSessionCommandService({
+    prepareRolePolicy: prepareNoRolePolicy,
     taskWorkflows: builtinTaskWorkflows,
     canonicalizeRepoPath: Effect.succeed,
     taskReader,

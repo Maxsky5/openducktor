@@ -52,7 +52,7 @@ const createService = (status: "in_progress" | "closed", reads: unknown[]) => {
 
 const readOwners = (
   service: ReturnType<typeof createService>,
-  operation: TaskWorktreeOwnersOperation,
+  operation: Exclude<TaskWorktreeOwnersOperation, "reset_implementation">,
 ) =>
   Effect.runPromise(
     service.getTaskWorktreeOwners({

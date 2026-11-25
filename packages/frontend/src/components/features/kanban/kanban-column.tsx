@@ -1,6 +1,7 @@
 import type { KanbanColumn as KanbanColumnData } from "@openducktor/workflows";
 import type { KanbanTaskCardView } from "@openducktor/contracts";
 import { getRequiredTaskActivityState } from "@openducktor/frontend-core/tasks/board/kanban-board-sessions";
+import type { MixedBoard } from "@openducktor/frontend-core/tasks/board/use-kanban-board-data";
 import { Inbox } from "lucide-react";
 import { type ComponentProps, memo, type ReactElement, useEffect, useMemo, useRef } from "react";
 import {
@@ -20,7 +21,9 @@ import {
 } from "@openducktor/frontend-core/tasks/board/kanban-task-footer";
 import { useKanbanVirtualization } from "@/components/features/kanban/use-kanban-virtualization";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { columnWorkflowsText } from "./kanban-column-workflows";
 
 type CardProps = ComponentProps<typeof KanbanTaskCard>;
 type TaskSessions = NonNullable<CardProps["taskSessions"]>;
@@ -31,6 +34,8 @@ const EMPTY_HISTORICAL_SESSIONS: HistoricalSessions = [];
 type KanbanColumnProps = {
   column: KanbanColumnData;
   taskCardView?: KanbanTaskCardView;
+  /** A board of several workflows: cards of other workflows and the header name them. */
+  mixedBoard?: MixedBoard | null;
   pendingState?: WorkflowPendingState | undefined;
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   historicalSessionsByTaskId: Map<string, HistoricalSessions>;
@@ -44,6 +49,7 @@ type KanbanColumnProps = {
 export function KanbanColumn({
   column,
   taskCardView = "normal",
+  mixedBoard = null,
   pendingState,
   taskSessionsByTaskId,
   historicalSessionsByTaskId,
@@ -150,7 +156,12 @@ export function KanbanColumn({
         theme.boardSurfaceClass,
       )}
     >
-      <LaneHeader theme={theme} title={column.title} count={column.tasks.length} />
+      <LaneHeader
+        theme={theme}
+        title={column.title}
+        count={column.tasks.length}
+        workflows={mixedBoard?.columnWorkflows.get(column.id) ?? null}
+      />
       <div ref={cardsViewportRef} className="flex-1 p-3">
         {column.tasks.length === 0 ? <LaneEmptyState theme={theme} /> : null}
 
@@ -218,11 +229,20 @@ function LaneHeader({
   theme,
   title,
   count,
+  workflows,
 }: {
   theme: KanbanLaneTheme;
   title: string;
   count: number;
+  /** The workflows that use the column, on a board of several workflows. */
+  workflows: readonly string[] | null;
 }): ReactElement {
+  const heading = (
+    <h3 className="min-w-0 truncate text-sm font-semibold uppercase tracking-wide text-foreground">
+      {title}
+      {workflows ? <span className="sr-only">. {columnWorkflowsText(workflows)}</span> : null}
+    </h3>
+  );
   return (
     <header
       className={cn(
@@ -233,9 +253,16 @@ function LaneHeader({
     >
       <span className={cn("block h-1.5 w-14 rounded-full", theme.headerAccentClass)} />
       <div className="flex items-center justify-between gap-2">
-        <h3 className="min-w-0 truncate text-sm font-semibold uppercase tracking-wide text-foreground">
-          {title}
-        </h3>
+        {workflows ? (
+          <Tooltip>
+            <TooltipTrigger asChild>{heading}</TooltipTrigger>
+            <TooltipContent side="top" sideOffset={6}>
+              {columnWorkflowsText(workflows)}
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          heading
+        )}
         <Badge
           variant="outline"
           className={cn(

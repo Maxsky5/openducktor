@@ -11,7 +11,10 @@ import {
 import { createWorkflowLaunchService } from "../../application/agent-sessions/workflow-launch-service";
 import { createGitProviderService } from "../../application/git/git-provider-service";
 import type { AgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
-import type { CanonicalizeRepoPath } from "../../application/agent-sessions/task-session-operations";
+import type {
+  CanonicalizeRepoPath,
+  PrepareRolePolicy,
+} from "../../application/agent-sessions/task-session-operations";
 import { createAgentSessionCommandService } from "../../application/agent-sessions/agent-session-command-service";
 import type { AgentSessionOperationPolicy } from "../../application/agent-sessions/agent-session-operation-policy";
 import { Effect } from "effect";
@@ -52,7 +55,6 @@ type TaskServiceInput = Omit<
   >;
 
 export const createNodeTaskSessionServices = ({
-  hostInstanceId,
   taskServiceInput,
   eventServiceInput,
   publishMergeStatus,
@@ -66,8 +68,13 @@ export const createNodeTaskSessionServices = ({
   pauseForStop,
   savedSessions,
   claudeSessionMetadata,
+  prepareRolePolicy,
+  resolveWorkflowRolePolicy,
+  workspaceWorkflows,
 }: {
-  hostInstanceId: string;
+  workspaceWorkflows: import("../../ports/task-workflow-port").WorkspaceWorkflowPort;
+  prepareRolePolicy: PrepareRolePolicy;
+  resolveWorkflowRolePolicy: import("@openducktor/core").WorkflowRolePolicyResolver;
   taskServiceInput: TaskServiceInput;
   eventServiceInput: Omit<
     Parameters<typeof createNodeTaskEventServices>[0],
@@ -196,6 +203,7 @@ export const createNodeTaskSessionServices = ({
     readRoots: readSessionRootRefs,
     definitions: taskServiceInput.runtimeDefinitionsService,
     preparation: turnPreparation,
+    resolveWorkflowRolePolicy,
     reportFailure: (error) =>
       eventServiceInput.onBackgroundFailure(toHostOperationError(error, "approval-policy.observe")),
   });
@@ -232,6 +240,7 @@ export const createNodeTaskSessionServices = ({
       ),
     taskLifecycle: taskServiceInput.taskSessionLifecycleCoordinator,
     taskSessionStart,
+    prepareRolePolicy,
   };
   const agentSessionCommandService = {
     ...agentSessionLiveStateService,
@@ -250,6 +259,7 @@ export const createNodeTaskSessionServices = ({
     tasks: eventServices.taskService,
     taskReader: taskServiceInput.taskStore,
     taskWorkflows: taskServiceInput.taskWorkflows,
+    prepareRolePolicy,
     taskLifecycle: taskServiceInput.taskSessionLifecycleCoordinator,
     taskSessionStart,
     writes: {
@@ -296,7 +306,7 @@ export const createNodeTaskSessionServices = ({
     shutdownCompletionOperations: completionWorkers.shutdown,
     agentSessionCommandService: { ...agentSessionCommandService, forkWorkflowSession },
     workflowLaunchService,
-    workflowReads: createWorkflowReads(taskServiceInput.taskWorkflows, hostInstanceId),
+    workflowReads: createWorkflowReads(workspaceWorkflows),
     agentRuntimeQueries,
     approvalPolicy,
   };

@@ -15,6 +15,7 @@ type DesktopTaskCreateModalControllerOptions = Omit<
   | "revokePreviewUrl"
   | "collectAssetIds"
   | "removeAssetImages"
+  | "offerWorkflowChoice"
 >;
 
 // The shared controller revokes each preview URL through `revokePreviewUrl`.
@@ -22,10 +23,14 @@ type DesktopTaskCreateModalControllerOptions = Omit<
 const createPreviewUrl = (file: File): string => URL.createObjectURL(file);
 const revokePreviewUrl = (url: string): void => URL.revokeObjectURL(url);
 
-/** The New task and Edit task controller with browser files and the remark asset reader. */
+/**
+ * The New task and Edit task controller with browser files and the remark asset reader. A new task
+ * offers the workflows that the repository can use.
+ */
 export const useTaskCreateModalController = (options: DesktopTaskCreateModalControllerOptions) =>
   useSharedTaskCreateModalController<File>({
     ...options,
+    offerWorkflowChoice: true,
     readFileBase64: readFileAsBase64,
     createPreviewUrl,
     revokePreviewUrl,

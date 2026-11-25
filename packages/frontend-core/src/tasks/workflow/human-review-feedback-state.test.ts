@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { resolveWorkflowBoard } from "@openducktor/workflows";
+import { resolveWorkspaceBoard } from "@openducktor/workflows";
 import {
   createReviewTaskWorkflow,
   createWorkflowTaskCardFixture,
@@ -7,7 +7,6 @@ import {
 import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import {
   createHumanReviewFeedbackState,
-  HUMAN_REVIEW_FEEDBACK_COPY,
   isHumanReviewFeedbackConfirmDisabled,
 } from "./human-review-feedback-state";
 
@@ -35,7 +34,8 @@ describe("createHumanReviewFeedbackState for a launch", () => {
   test("commits the event of the available event action that starts the launch", () => {
     const state = launchState(["human_request_changes", "human_approve"]);
     expect(state.eventId).toBe("human-request-changes");
-    expect(state.confirmLabel).toBe(HUMAN_REVIEW_FEEDBACK_COPY.confirmLabel);
+    // The dialog takes the name of the action that opened it.
+    expect(state.confirmLabel).toBe("Request Changes");
     expect(state.launch?.launchActionId).toBe("build_after_human_request_changes");
   });
 
@@ -49,10 +49,7 @@ describe("createHumanReviewFeedbackState for a launch", () => {
 describe("createHumanReviewFeedbackState for an event", () => {
   test("selects the following launch of a custom feedback event", () => {
     const workflow = createReviewTaskWorkflow();
-    const board = resolveWorkflowBoard(
-      { states: workflow.definition.states.map(({ id }) => ({ id, taskOrder: "updated" })) },
-      [workflow],
-    );
+    const board = resolveWorkspaceBoard([{ workflow, latest: true }]);
     const task = createWorkflowTaskCardFixture(workflow, board, { status: "approval" });
     const state = createHumanReviewFeedbackState([task], task.id, {
       kind: "event",
@@ -60,6 +57,7 @@ describe("createHumanReviewFeedbackState for an event", () => {
       continuation: { workflow: task.workflow, launchActionIds: ["write_feedback"] },
     });
     expect(state.eventId).toBe("request-rewrite");
+    expect(state.confirmLabel).toBe("Request rewrite");
     expect(state.launch).toEqual({
       role: "writer",
       roleLabel: "Writer",

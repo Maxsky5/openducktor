@@ -1,3 +1,4 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "../../application/tasks/task-workflows";
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 import { TASK_ARTIFACT_MAX_FILE_BYTES, workflowArtifactId } from "@openducktor/contracts";
@@ -39,6 +40,7 @@ const createTaskHarness = async () => {
     harness.store.createTask({
       ...harness.scope,
       status: "open",
+      workflow: BUILTIN_TASK_ASSIGNMENT,
       task: { title: "Artifact task", issueType: "task", priority: 2 },
     }),
   );
@@ -473,6 +475,7 @@ describe("task artifact repository", () => {
       store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Versioned output", issueType: "task", priority: 2 },
       }),
     );
@@ -690,6 +693,7 @@ describe("task artifact repository", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Other task", issueType: "task", priority: 2 },
       }),
     );
@@ -808,6 +812,7 @@ describe("task artifact repository", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Other", issueType: "task", priority: 2 },
       }),
     );

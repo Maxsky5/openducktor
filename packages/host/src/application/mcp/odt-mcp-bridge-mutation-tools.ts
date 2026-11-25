@@ -128,7 +128,7 @@ const executeApplyWorkflowEvent: OdtMcpMutationHandler = (context, body) =>
       task.id,
       "send workflow events",
     );
-    const workflow = context.taskWorkflows.forTask(task);
+    const workflow = context.taskWorkflows.forReference(task.workflow);
     const event = workflow.agentEvent(parsed.eventId);
     if (event === undefined) {
       return yield* TaskPolicyError.policy(

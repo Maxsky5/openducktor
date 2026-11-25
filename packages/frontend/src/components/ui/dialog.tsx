@@ -121,7 +121,7 @@ function DialogContent({
           data-motion={motion}
           ref={setContentRef}
           className={cn(
-            "t-modal pointer-events-auto relative z-[70] flex w-full min-h-0 max-h-[calc(100dvh-2rem)] max-w-2xl flex-col overflow-y-auto rounded-xl border border-border bg-popover p-6 shadow-xl",
+            "t-modal pointer-events-auto relative z-[70] flex outline-none w-full min-h-0 max-h-[calc(100dvh-2rem)] max-w-2xl flex-col overflow-y-auto rounded-xl border border-border bg-popover p-6 shadow-xl",
             motion === "animated" && "t-resize",
             className,
           )}

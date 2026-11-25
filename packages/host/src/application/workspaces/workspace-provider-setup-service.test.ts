@@ -1,3 +1,4 @@
+import { testWorkflowSettings } from "../../test-support/task-workflows";
 import { withSettingsConfigMutationTestMethods } from "../../test-support/settings-config-mutations";
 import { describe, expect, mock, test } from "bun:test";
 import { Effect } from "effect";
@@ -15,7 +16,6 @@ import { HostOperationError, type HostError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { WorkspaceProviderSetupCredentialsPort } from "../../ports/workspace-provider-setup-credentials-port";
 import { createWorkspaceSettingsService } from "./workspace-settings-service";
-import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { createWorkspaceProviderSetupService } from "./workspace-provider-setup-service";
 
 const azureSelection = {
@@ -144,7 +144,7 @@ function harness() {
     newSetupId: () => crypto.randomUUID(),
     detectRepositories: () =>
       Effect.succeed({ outcome: "none", candidates: [], gitlabOrigin: null }),
-    settings: createWorkspaceSettingsService(port, builtinTaskWorkflows),
+    settings: createWorkspaceSettingsService(port, testWorkflowSettings()),
     credentials,
     github: { health: () => ({ getStatus: checkHealth }) },
     azure: { health: () => ({ getStatus: checkHealth }) },

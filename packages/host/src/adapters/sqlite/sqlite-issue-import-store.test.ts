@@ -1,3 +1,4 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "../../application/tasks/task-workflows";
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 import { Effect } from "effect";
@@ -27,6 +28,7 @@ describe("SQLite Issue imports", () => {
       ...harness.scope,
       sourceIssue,
       status: "open",
+      workflow: BUILTIN_TASK_ASSIGNMENT,
       task: {
         title: "Issue title",
         description: "Issue body",
@@ -88,6 +90,7 @@ describe("SQLite Issue imports", () => {
         ...harness.scope,
         sourceIssue,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Saved issue",
           description: "Body",
@@ -121,6 +124,7 @@ describe("SQLite Issue imports", () => {
           url: "https://github.com/example/unrelated/issues/42",
         },
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Other repository issue",
           description: "Other body",

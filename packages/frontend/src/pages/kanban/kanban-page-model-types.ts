@@ -1,3 +1,4 @@
+import type { MixedBoard } from "@openducktor/frontend-core/tasks/board/use-kanban-board-data";
 import type {
   AgentSessionRecord,
   KanbanEmptyColumnDisplay,
@@ -34,6 +35,11 @@ export type KanbanPageContentModel = {
   pendingState?: WorkflowPendingState | undefined;
   showHorizontalScrollbars: boolean | null;
   columns: KanbanColumnData[];
+  /**
+   * The default workflow of the repository when the board has tasks of several workflows. Cards
+   * of other workflows show a workflow tag. Null when the board has one workflow.
+   */
+  mixedBoard: MixedBoard | null;
   /** The board loaded at least one task, also when the search and filters hide it. */
   hasLoadedTasks: boolean;
   filter: Pick<KanbanBoardFilterModel, "isActive" | "onClear">;

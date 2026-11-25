@@ -70,6 +70,7 @@ export class CodexContextUsageLoader {
       this.assertActive(guard);
       const sessionPolicy = resolveCodexSessionScopePolicy(
         input,
+        input.externalSessionId,
         "load Codex session context usage",
         this.deps.resolveWorkflowRolePolicy,
       );
@@ -131,6 +132,7 @@ export class CodexContextUsageLoader {
     }
     const sessionPolicy = resolveCodexSessionScopePolicy(
       { sessionScope, runtimePolicy: session.runtimePolicy },
+      session.summary.externalSessionId,
       "load Codex session context usage",
       this.deps.resolveWorkflowRolePolicy,
     );

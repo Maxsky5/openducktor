@@ -1,3 +1,4 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "../../application/tasks/task-workflows";
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 import { access, mkdir } from "node:fs/promises";
@@ -113,6 +114,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
     const database = new Database(databasePath);
     try {
@@ -136,7 +138,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     );
 
     expect(results).toEqual(Array.from({ length: 8 }, () => []));
-    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(6);
+    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(7);
   });
 
   test("enforces the approved task asset registry shape and cascades task deletion", async () => {
@@ -145,6 +147,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "With asset", issueType: "task", priority: 2 },
       }),
     );
@@ -207,6 +210,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "First", issueType: "feature", priority: 3 },
       }),
     );
@@ -214,6 +218,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Second", issueType: "task", priority: 2 },
       }),
     );
@@ -229,6 +234,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Keep", issueType: "task", priority: 2, removeWorktreeOnClose: false },
       }),
     );
@@ -266,6 +272,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
@@ -285,6 +292,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
@@ -292,6 +300,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
@@ -325,6 +334,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
@@ -337,6 +347,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
@@ -380,6 +391,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
@@ -438,6 +450,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       store.createTask({
         ...scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
@@ -487,6 +500,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
         store.createTask({
           ...scope,
           status: "open",
+          workflow: BUILTIN_TASK_ASSIGNMENT,
           task: { title, issueType: "task", priority: 2 },
         }),
       );

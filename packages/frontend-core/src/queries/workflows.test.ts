@@ -1,11 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { taskCardSchema, type TaskCard } from "@openducktor/contracts";
+import { taskCardSchema, type AgentRoleDefinition, type TaskCard } from "@openducktor/contracts";
 import { createSharedBoardWorkflows } from "@openducktor/workflows/test-support";
-import { mapToKanbanColumns, type TaskWorkflow } from "@openducktor/workflows";
+import {
+  createTaskWorkflow,
+  mapToKanbanColumns,
+  taskWorkflowDescriptor,
+  type TaskWorkflow,
+} from "@openducktor/workflows";
 import { createTestClientConnection } from "../test-support/test-client-connection";
 import { repoTaskDataQueryOptions } from "./tasks";
 import { getProductionTaskViewSync } from "./task-view-sync";
 import { boardEvent, eventCursor } from "./task-view-sync.test-support";
+import { applyWorkflowLibraryChange } from "./workflow-library-changes";
 import { resolveTaskCards, workspaceWorkflowQueryOptions, workflowQueryKeys } from "./workflows";
 
 const scope = { workspaceId: "repo", repoPath: "/repo" };
@@ -36,6 +42,7 @@ const setup = () => {
     hostInstanceId: fixture.catalog.hostInstanceId,
     board: structuredClone(fixture.board),
     workflows: fixture.workflows.map(({ reference }) => reference),
+    newTaskWorkflows: [fixture.alpha.reference, fixture.beta.reference],
     newTaskWorkflow: fixture.alpha.reference,
   };
   const connection = createTestClientConnection({
@@ -57,11 +64,11 @@ describe("host workflow reads in the connection task cache", () => {
       const columns = mapToKanbanColumns(tasks, context.context.board);
       expect(columns.map(({ id }) => id)).toEqual([
         "open",
+        "alpha_work",
         "beta_work",
         "alpha_hold",
-        "shared_review",
-        "alpha_work",
         "beta_hold",
+        "shared_review",
         "alpha_approval",
         "beta_approval",
         "closed",
@@ -147,7 +154,7 @@ describe("host workflow reads in the connection task cache", () => {
     }
   });
 
-  test.each(["revision", "missing state", "conflict"] as const)(
+  test.each(["revision", "missing state", "duplicate"] as const)(
     "fails clearly for an invalid host %s",
     async (failure) => {
       const h = setup();
@@ -155,19 +162,212 @@ describe("host workflow reads in the connection task cache", () => {
         if (failure === "revision") h.cards[0]!.workflow.revision += 1;
         if (failure === "missing state")
           h.context.board.states = h.board.states.filter(({ id }) => id !== "shared_review");
-        if (failure === "conflict")
-          h.catalog.workflows[1]!.definition.states.find(({ id }) => id === "shared_review")!.tone =
-            "warning";
+        if (failure === "duplicate")
+          h.catalog.workflows.push(structuredClone(h.catalog.workflows[1]!));
         await expect(h.queryClient.fetchQuery(repoTaskDataQueryOptions(scope))).rejects.toThrow(
           failure === "revision"
             ? "outside this workspace"
             : failure === "missing state"
               ? "missing board or workflow state"
-              : "conflicts",
+              : "Duplicate workflow",
         );
       } finally {
         await h.connection.dispose();
       }
     },
   );
+});
+
+/** The next published version of a workflow, compiled with the roles of the host catalog. */
+const nextVersion = (
+  workflow: TaskWorkflow,
+  revision: number,
+  roles: readonly AgentRoleDefinition[],
+): TaskWorkflow => {
+  const descriptor = taskWorkflowDescriptor(workflow);
+  descriptor.definition.revision = revision;
+  return createTaskWorkflow(descriptor.definition, descriptor.templates, roles);
+};
+
+/** A host that counts its workflow reads and can publish a new version of alpha. */
+const countingSetup = () => {
+  const h = setup();
+  const reads = { catalog: 0, context: 0 };
+  h.connection.host.client.workflowCatalogGet = async () => {
+    reads.catalog += 1;
+    return structuredClone(h.catalog);
+  };
+  h.connection.host.client.workspaceWorkflowGet = async () => {
+    reads.context += 1;
+    return structuredClone(h.context);
+  };
+  const alpha2 = nextVersion(h.alpha, 2, h.catalog.roles);
+  /** Publishes alpha v2 and moves its tasks there, as the host does in one commit. */
+  const publishAlpha2 = () => {
+    h.catalog.workflows.push(taskWorkflowDescriptor(alpha2));
+    h.context.workflows = [alpha2.reference, h.beta.reference];
+    h.context.newTaskWorkflows = [alpha2.reference, h.beta.reference];
+    h.context.newTaskWorkflow = alpha2.reference;
+  };
+  return { ...h, reads, alpha2, publishAlpha2 };
+};
+
+describe("task cards of a version that the cached workspace lacks", () => {
+  test("a task frame before the library event reads the workspace and the catalog once more", async () => {
+    const h = countingSetup();
+    try {
+      await h.queryClient.fetchQuery(repoTaskDataQueryOptions(scope));
+      expect(h.reads).toEqual({ catalog: 1, context: 1 });
+      h.publishAlpha2();
+      const sync = getProductionTaskViewSync(h.queryClient);
+      await sync.reconcileExternalEvent(
+        boardEvent(scope, [card(h.alpha2, "alpha-1")]),
+        eventCursor(),
+      );
+      const data = await h.queryClient.ensureQueryData(repoTaskDataQueryOptions(scope));
+      expect(data.tasks.find(({ id }) => id === "alpha-1")!.taskWorkflow.reference).toEqual(
+        h.alpha2.reference,
+      );
+      expect(h.reads).toEqual({ catalog: 2, context: 2 });
+      // The library event that follows marks the reads stale. No view observes them here.
+      await applyWorkflowLibraryChange(h.queryClient);
+      expect(h.reads).toEqual({ catalog: 2, context: 2 });
+    } finally {
+      await h.connection.dispose();
+    }
+  });
+
+  test("a task frame after the library event reads the stale workspace and catalog once", async () => {
+    const h = countingSetup();
+    try {
+      await h.queryClient.fetchQuery(repoTaskDataQueryOptions(scope));
+      h.publishAlpha2();
+      await applyWorkflowLibraryChange(h.queryClient);
+      const sync = getProductionTaskViewSync(h.queryClient);
+      await sync.reconcileExternalEvent(
+        boardEvent(scope, [card(h.alpha2, "alpha-1")]),
+        eventCursor(),
+      );
+      const data = await h.queryClient.ensureQueryData(repoTaskDataQueryOptions(scope));
+      expect(data.tasks.find(({ id }) => id === "alpha-1")!.taskWorkflow.reference).toEqual(
+        h.alpha2.reference,
+      );
+      expect(h.reads).toEqual({ catalog: 2, context: 2 });
+    } finally {
+      await h.connection.dispose();
+    }
+  });
+
+  test("a second miss fails with the inventory error", async () => {
+    const h = countingSetup();
+    try {
+      await h.queryClient.fetchQuery(repoTaskDataQueryOptions(scope));
+      const unknown = nextVersion(h.alpha, 3, h.catalog.roles);
+      await expect(
+        resolveTaskCards(h.queryClient, scope, [card(unknown, "alpha-1")]),
+      ).rejects.toThrow('references workflow "alpha@3" outside this workspace');
+      expect(h.reads).toEqual({ catalog: 1, context: 2 });
+    } finally {
+      await h.connection.dispose();
+    }
+  });
+});
+
+describe("a workflow that new tasks cannot use", () => {
+  /**
+   * Alpha is enabled; beta is disabled. The host shows the beta columns only while a beta task is
+   * not closed, and counts its workspace reads.
+   */
+  const disabledBeta = async (betaStatus: string | null) => {
+    const h = setup();
+    const fullBoard = h.context.board;
+    const reads = { context: 0 };
+    const showBeta = (shown: boolean) => {
+      h.context.board = shown
+        ? fullBoard
+        : { states: fullBoard.states.filter(({ id }) => !id.startsWith("beta_")) };
+    };
+    h.connection.host.client.workspaceWorkflowGet = async () => {
+      reads.context += 1;
+      return structuredClone(h.context);
+    };
+    h.context.newTaskWorkflows = [h.alpha.reference];
+    // A null status: the closed task is outside Done retention, so no list holds it.
+    if (betaStatus === null) h.cards.splice(1, 1);
+    else h.cards[1] = card(h.beta, "beta-1", betaStatus);
+    showBeta(betaStatus !== null && betaStatus !== "closed");
+    await h.queryClient.fetchQuery(repoTaskDataQueryOptions(scope));
+    const columns = () =>
+      h.queryClient
+        .getQueryData<{ context: typeof h.context }>(workflowQueryKeys.workspace(scope))!
+        .context.board.states.map(({ id }) => id);
+    const send = (cards: TaskCard[], options?: Parameters<typeof boardEvent>[2]) =>
+      getProductionTaskViewSync(h.queryClient).reconcileExternalEvent(
+        boardEvent(scope, cards, options),
+        eventCursor(),
+      );
+    return { ...h, reads, showBeta, columns, send };
+  };
+
+  test("reads the board only for events of a version that new tasks cannot use", async () => {
+    const h = await disabledBeta("beta_work");
+    try {
+      await h.send([card(h.alpha, "alpha-1", "closed")]);
+      expect(h.reads.context).toBe(1);
+      h.showBeta(false);
+      await h.send([card(h.beta, "beta-1", "closed")]);
+      expect(h.reads.context).toBe(2);
+      expect(h.columns()).not.toContain("beta_work");
+    } finally {
+      await h.connection.dispose();
+    }
+  });
+
+  test("restores the columns when a closed task reopens in a shared state", async () => {
+    const h = await disabledBeta("closed");
+    try {
+      h.showBeta(true);
+      // Reset Task moves the task to open, a column that the board already has.
+      await h.send([card(h.beta, "beta-1", "open")]);
+      expect(h.reads.context).toBe(2);
+      expect(h.columns()).toContain("beta_work");
+    } finally {
+      await h.connection.dispose();
+    }
+  });
+
+  test("restores the columns when no list held the reopened task", async () => {
+    const h = await disabledBeta(null);
+    try {
+      h.showBeta(true);
+      await h.send([card(h.beta, "beta-1", "open")]);
+      expect(h.columns()).toContain("beta_work");
+    } finally {
+      await h.connection.dispose();
+    }
+  });
+
+  test("reads the board before it joins a reopened task in a missing column", async () => {
+    const h = await disabledBeta("closed");
+    try {
+      h.showBeta(true);
+      await h.send([card(h.beta, "beta-1", "beta_work")]);
+      const data = await h.queryClient.ensureQueryData(repoTaskDataQueryOptions(scope));
+      expect(data.tasks.find(({ id }) => id === "beta-1")!.status).toBe("beta_work");
+      expect(h.reads.context).toBe(2);
+    } finally {
+      await h.connection.dispose();
+    }
+  });
+
+  test("drops the columns when its last open task is deleted", async () => {
+    const h = await disabledBeta("beta_work");
+    try {
+      h.showBeta(false);
+      await h.send([], { removedTaskIds: ["beta-1"] });
+      expect(h.columns()).not.toContain("beta_work");
+    } finally {
+      await h.connection.dispose();
+    }
+  });
 });

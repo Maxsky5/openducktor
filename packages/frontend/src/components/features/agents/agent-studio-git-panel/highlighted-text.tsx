@@ -10,7 +10,7 @@ export function HighlightedText({ label }: { label: RowLabel }): ReactElement {
       parts.push(text.slice(cursor, start));
     }
     parts.push(
-      <mark key={start} className="rounded-sm bg-selected-surface text-foreground">
+      <mark key={start} className="rounded-sm bg-text-highlight text-foreground">
         {text.slice(start, end)}
       </mark>,
     );

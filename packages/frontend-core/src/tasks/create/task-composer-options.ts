@@ -21,6 +21,18 @@ export const issueTypeChoices = (workflow: TaskWorkflow | undefined): IssueTypeC
     icon: type.icon,
   })) ?? [];
 
+/**
+ * The issue types that a new task can pick among the workflows that it can use. Each type shows
+ * once, as the first workflow that supports it declares it, so the default workflow comes first.
+ */
+export const issueTypeChoicesOf = (workflows: readonly TaskWorkflow[]): IssueTypeChoice[] => {
+  const choices = new Map<IssueType, IssueTypeChoice>();
+  for (const workflow of workflows)
+    for (const choice of issueTypeChoices(workflow))
+      if (!choices.has(choice.value)) choices.set(choice.value, choice);
+  return [...choices.values()];
+};
+
 export const PRIORITY_OPTIONS: PriorityOption[] = PRIORITY_LEVELS.map((value) => ({
   value,
   ...PRIORITY_LABELS[value],

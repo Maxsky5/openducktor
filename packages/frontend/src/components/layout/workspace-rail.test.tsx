@@ -169,13 +169,36 @@ describe("WorkspaceRail", () => {
 
     renderRail(openRepositoryModal);
 
-    fireEvent.click(screen.getByRole("button", { name: "Beta Repo" }));
     fireEvent.click(screen.getByRole("button", { name: "Alpha Repo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Beta Repo" }));
     fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
 
     expect(selectWorkspaceMock).toHaveBeenCalledTimes(1);
     expect(selectWorkspaceMock).toHaveBeenCalledWith("beta");
     expect(openRepositoryModal).toHaveBeenCalledTimes(1);
+  });
+
+  test("shows the clicked workspace as active while the switch runs", async () => {
+    let finishSwitch = () => {};
+    selectWorkspaceMock.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSwitch = resolve;
+        }),
+    );
+    workspaceState.workspaces = [
+      workspaceRecord("alpha", { workspaceName: "Alpha Repo", isActive: true }),
+      workspaceRecord("beta", { workspaceName: "Beta Repo" }),
+    ];
+    renderRail();
+    const tile = (name: string) =>
+      screen.getByRole("button", { name }).closest("[data-active]")?.getAttribute("data-active");
+
+    fireEvent.click(screen.getByRole("button", { name: "Beta Repo" }));
+
+    await waitFor(() => expect(tile("Beta Repo")).toBe("true"));
+    expect(tile("Alpha Repo")).toBe("false");
+    await act(async () => finishSwitch());
   });
 
   test("keeps a dirty draft when workspace selection fails", async () => {

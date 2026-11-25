@@ -507,6 +507,8 @@ const createTaskStore = (): TaskStorePort =>
     getTask: () =>
       Effect.succeed({
         id: "task-1",
+        workflowId: "openducktor-spec-plan-build",
+        workflowVersion: null,
         title: "Task 1",
         description: "",
         status: "blocked",
@@ -568,6 +570,8 @@ const createTaskStore = (): TaskStorePort =>
     createTask: () =>
       Effect.succeed({
         id: "task-2",
+        workflowId: "openducktor-spec-plan-build",
+        workflowVersion: null,
         title: "Task 2",
         description: "",
         status: "open",
@@ -615,6 +619,8 @@ const createTaskStore = (): TaskStorePort =>
         [
           {
             id: "task-1",
+            workflowId: "openducktor-spec-plan-build",
+            workflowVersion: null,
             title: "Task 1",
             description: "",
             status: "open",
@@ -670,6 +676,8 @@ const createTaskStore = (): TaskStorePort =>
     updateTask: () =>
       Effect.succeed({
         id: "task-1",
+        workflowId: "openducktor-spec-plan-build",
+        workflowVersion: null,
         title: "Updated task",
         description: "",
         status: "ready_for_dev",
@@ -716,6 +724,8 @@ const createTaskStore = (): TaskStorePort =>
       Effect.succeed({
         task: {
           id: input.taskId,
+          workflowId: "openducktor-spec-plan-build",
+          workflowVersion: null,
           title: "Task 1",
           description: "",
           status: input.status ?? "open",
@@ -753,6 +763,8 @@ const createTaskStore = (): TaskStorePort =>
     transitionTask: (input) =>
       Effect.succeed({
         id: input.taskId,
+        workflowId: "openducktor-spec-plan-build",
+        workflowVersion: null,
         title: "Task 1",
         description: "",
         status: input.status,
@@ -2137,6 +2149,8 @@ describe("createElectronHostCommandRouter", () => {
         getTask: () =>
           Effect.succeed({
             id: "task-1",
+            workflowId: "openducktor-spec-plan-build",
+            workflowVersion: null,
             title: "Task 1",
             description: "",
             status: "human_review",
@@ -2183,6 +2197,8 @@ describe("createElectronHostCommandRouter", () => {
           Effect.succeed([
             {
               id: "task-1",
+              workflowId: "openducktor-spec-plan-build",
+              workflowVersion: null,
               title: "Task 1",
               description: "",
               status: "human_review",
@@ -2300,6 +2316,8 @@ describe("createElectronHostCommandRouter", () => {
           Effect.succeed([
             {
               id: "task-1",
+              workflowId: "openducktor-spec-plan-build",
+              workflowVersion: null,
               title: "Task 1",
               description: "",
               status: "ai_review",
@@ -2385,6 +2403,8 @@ describe("createElectronHostCommandRouter", () => {
           Effect.succeed([
             {
               id: "task-1",
+              workflowId: "openducktor-spec-plan-build",
+              workflowVersion: null,
               title: "Task 1",
               description: "",
               status: "human_review",
@@ -2493,6 +2513,8 @@ describe("createElectronHostCommandRouter", () => {
           Effect.succeed([
             {
               id: "task-1",
+              workflowId: "openducktor-spec-plan-build",
+              workflowVersion: null,
               title: "Task 1",
               description: "",
               status: "human_review",

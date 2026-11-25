@@ -1,3 +1,4 @@
+import type { TaskWorkflowAssignment } from "../../ports/task-workflow-port";
 import {
   createSettingsConfigTestDouble,
   createClaudeSessionMetadataTestDouble,
@@ -8,7 +9,6 @@ import { createTaskWorktreeOwnerReader } from "../workspaces/task-worktree-owner
 import type {
   AgentSessionLiveSnapshot,
   DirectMergeRecord,
-  TaskCard,
   TaskMetadataPayload,
 } from "@openducktor/contracts";
 import { createDefaultGlobalConfig } from "../../config/global-config";
@@ -29,6 +29,8 @@ import {
   extendGitPort,
   task,
 } from "./test-support/task-workflow-harness";
+
+type StoredTaskCard = import("@openducktor/contracts").TaskCard & TaskWorkflowAssignment;
 
 const repoPath = "/repo";
 const worktreePath = "/worktrees/repo/task-1";
@@ -115,7 +117,7 @@ const createHarness = (worktreeOwners: TaskWorktreeOwnerReader = noWorktreeOwner
   const existingPaths = new Set([repoPath, worktreePath]);
   const settingsConfig = createBuildSettingsConfig(existingPaths);
   const live = createLiveSessions(existingPaths);
-  let current: TaskCard = task({ status: "ai_review" });
+  let current: StoredTaskCard = task({ status: "ai_review" });
   let directMerge: DirectMergeRecord | null = null;
   let deleted = false;
   const gitPort = createDirectMergeGitPort({

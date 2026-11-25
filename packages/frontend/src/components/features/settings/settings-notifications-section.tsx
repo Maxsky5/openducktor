@@ -8,7 +8,7 @@ import {
   type NotificationTarget,
 } from "@openducktor/contracts";
 import { Bell, BellRing } from "lucide-react";
-import { memo, useCallback, type ReactElement } from "react";
+import { memo, useCallback, useMemo, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupSegmentItem } from "@/components/ui/radio-group";
@@ -299,6 +299,16 @@ export function SettingsNotificationsSection({
   onUpdateNotifications,
 }: SettingsNotificationsSectionProps): ReactElement {
   const workflows = useWorkflowSettings();
+  const workflowNotifications = workflows.data?.workflowNotifications;
+  const workflowKinds = useMemo(
+    () =>
+      workflowNotifications?.map((notification) => ({
+        ...notification,
+        id: notification.kind,
+        key: notification.kind,
+      })) ?? [],
+    [workflowNotifications],
+  );
   const notificationRuntime = useNotificationContext();
   const {
     capability,
@@ -477,21 +487,7 @@ export function SettingsNotificationsSection({
       ) : null}
       <NotificationKindGroup
         title="Workflow changes"
-        kinds={
-          workflows.data?.workflows.flatMap((taskWorkflow) =>
-            taskWorkflow.definition.states.flatMap((state) =>
-              state.notification
-                ? [
-                    {
-                      ...state.notification,
-                      id: state.notification.kind,
-                      key: `${taskWorkflow.reference.id}:${taskWorkflow.reference.revision}:${state.id}`,
-                    },
-                  ]
-                : [],
-            ),
-          ) ?? []
-        }
+        kinds={workflowKinds}
         settings={notifications}
         disabled={disabled}
         onUpdate={onUpdateNotifications}

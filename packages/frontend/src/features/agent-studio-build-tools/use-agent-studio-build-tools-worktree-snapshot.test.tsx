@@ -1138,7 +1138,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   test.each(["spec", "planner"] as const)(
     "uses a fresh %s session worktree for Git context and Open In",
     async (role) => {
-      const specSession = createAgentSessionFixture({
+      const repositorySession = createAgentSessionFixture({
         sessionAssociation: {
           kind: "workflow",
           workspaceId: "workspace-1",
@@ -1151,7 +1151,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         createBaseArgs({
           selectedView: createSelectedView({
             role,
-            loadedSession: specSession,
+            loadedSession: repositorySession,
           }),
         }),
       );
@@ -1178,8 +1178,8 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     },
   );
 
-  test("keeps a legacy root-backed Spec session in repository context", async () => {
-    const specSession = createAgentSessionFixture({
+  test("keeps a view without a task role in repository context", async () => {
+    const repositorySession = createAgentSessionFixture({
       sessionAssociation: {
         kind: "workflow",
         workspaceId: "workspace-1",
@@ -1190,7 +1190,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     });
     const harness = createHookHarness(
       createBaseArgs({
-        selectedView: createSelectedView({ role: "spec", loadedSession: specSession }),
+        selectedView: createSelectedView({ role: null, loadedSession: repositorySession }),
       }),
     );
 
@@ -1200,6 +1200,32 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       expect(taskWorktreeGetMock).not.toHaveBeenCalled();
       expect(harness.getLatest().gitPanelContextMode).toBe("repository");
       expect(harness.getLatest().openInTarget).toEqual({ path: "/repo", disabledReason: null });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("uses the task worktree for a Spec session, as for every task role", async () => {
+    const harness = createHookHarness(
+      createBaseArgs({
+        selectedView: createSelectedView({
+          role: "spec",
+          loadedSession: createAgentSessionFixture({
+            sessionAssociation: {
+              kind: "workflow",
+              workspaceId: "workspace-1",
+              taskId: "task-1",
+              role: "spec",
+            },
+            // An older Spec session started in the repository root.
+            workingDirectory: "/repo",
+          }),
+        }),
+      }),
+    );
+    try {
+      await harness.mount();
+      expect(harness.getLatest().gitPanelContextMode).toBe("worktree");
     } finally {
       await harness.unmount();
     }
@@ -1226,7 +1252,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     const args = createBaseArgs({
       activeBranch: { detached: true, revision: "head-before" },
       selectedView: createSelectedView({
-        role: "spec",
+        role: null,
         loadedSession: createAgentSessionFixture({
           sessionAssociation: {
             kind: "workflow",
@@ -1257,7 +1283,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     const harness = createHookHarness(
       createBaseArgs({
         selectedView: createSelectedView({
-          role: "spec",
+          role: null,
           loadedSession: createAgentSessionFixture({
             sessionAssociation: {
               kind: "workflow",

@@ -195,9 +195,9 @@ function taskGitContext(
     repoPath: workspaceRepoPath,
     sessionWorkingDirectory: buildToolsBootstrap.sessionWorkingDirectory,
   });
+  // Every agent session of a task works in the task worktree, whatever its role.
   const usesTaskWorktree =
-    (selectedView.role !== null &&
-      selectedView.selectedTask?.taskWorkflow.usesWorktree(selectedView.role)) ||
+    (selectedView.role !== null && selectedView.selectedTask != null) ||
     sessionWorktreePath != null;
   const gitPanelContextMode: TaskGitContextMode = usesTaskWorktree ? "worktree" : "repository";
   const repositoryBranchIdentityKey =

@@ -191,6 +191,5 @@ export const formatStatusList = (statuses: readonly string[]): string => {
   return `${statuses.slice(0, -1).join(", ")}, or ${statuses.at(-1)}`;
 };
 
-/** Tells the user to start a session of a role that creates the task worktree. */
-export const startWorktreeSessionHint = (workflow: TaskWorkflow): string =>
-  `Start a ${formatStatusList(workflow.worktreeRoles.map((role) => workflow.role(role).label))} session first.`;
+/** Tells the user to create the task worktree: every agent session of the task creates it. */
+export const START_WORKTREE_SESSION_HINT = "Start an agent session of the task first.";

@@ -1,0 +1,216 @@
+/* React Flow reads these variables. They map to the app theme tokens, so the canvas follows the
+   light and dark themes. */
+.workflow-canvas .react-flow {
+  /* The full muted foreground gives lines and arrowheads at least 3:1 on the canvas. */
+  --workflow-edge-stroke: var(--muted-foreground);
+  --xy-background-color: var(--workflow-canvas);
+  --xy-background-pattern-dots-color: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
+  --xy-edge-stroke: var(--workflow-edge-stroke);
+  --xy-edge-stroke-selected: var(--workflow-selection);
+  --xy-edge-stroke-width: 1.5;
+  --xy-connectionline-stroke: var(--workflow-selection);
+  --xy-connectionline-stroke-width: 2;
+  --xy-node-color: var(--card-foreground);
+  --xy-node-background-color: var(--card);
+  --xy-node-border: 1px solid var(--border);
+  --xy-handle-background-color: var(--card);
+  --xy-handle-border-color: var(--muted-foreground);
+  /* The minimap is translucent: the canvas shows through the part in view, a light veil covers
+     the rest, and a brand outline marks the part in view. */
+  --xy-minimap-background-color: color-mix(in oklab, var(--workflow-canvas) 55%, transparent);
+  --xy-minimap-mask-background-color: color-mix(in oklab, var(--foreground) 8%, transparent);
+  --xy-minimap-mask-stroke-color: var(--workflow-selection-soft);
+  --xy-minimap-mask-stroke-width: 2;
+  --xy-minimap-node-background-color: color-mix(in oklab, var(--muted-foreground) 55%, transparent);
+  --xy-minimap-node-stroke-color: transparent;
+  --xy-controls-button-background-color: var(--sidebar);
+  --xy-controls-button-background-color-hover: var(--accent);
+  --xy-controls-button-color: var(--foreground);
+  --xy-controls-button-color-hover: var(--accent-foreground);
+  --xy-controls-button-border-color: var(--border);
+  --xy-controls-box-shadow: none;
+  --xy-attribution-background-color: transparent;
+  --xy-selection-background-color: var(--workflow-selection-surface);
+  --xy-selection-border: 1px dotted var(--workflow-selection);
+}
+
+.workflow-canvas .react-flow__controls,
+.workflow-canvas .react-flow__minimap {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.workflow-canvas .react-flow__minimap {
+  margin: 12px;
+}
+
+/* The node draws its own box. */
+.workflow-canvas .react-flow__node-state {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* A click opens a state that cannot move, as in a read-only workflow. */
+.workflow-canvas .react-flow__node-state:not(.draggable) {
+  cursor: pointer;
+}
+
+/* Tab reaches each state, and Enter opens it. */
+.workflow-canvas .react-flow__node-state:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 0.75rem;
+}
+
+/* At least 12 screen pixels at any zoom, so a fitted overview still starts an arrow. The dots
+   show on the box under the pointer, so idle boxes stay calm. */
+.workflow-canvas .react-flow__handle.workflow-state-source {
+  width: max(10px, calc(12px / var(--workflow-zoom, 1)));
+  height: max(10px, calc(12px / var(--workflow-zoom, 1)));
+  border-width: max(2px, calc(2px / var(--workflow-zoom, 1)));
+  opacity: 0;
+  transition:
+    opacity 150ms ease,
+    scale 150ms var(--motion-ease-out),
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.workflow-canvas .workflow-canvas-empty .workflow-state-source.connectable {
+  opacity: 0.55;
+}
+
+.workflow-canvas .react-flow__node-state:hover .workflow-state-source.connectable {
+  opacity: 1;
+}
+
+/* The dot under the pointer invites the drag. */
+.workflow-canvas .react-flow__node-state .workflow-state-source.connectable:hover {
+  cursor: crosshair;
+  scale: 1.35;
+  border-color: var(--workflow-selection);
+  background-color: var(--workflow-selection);
+  box-shadow: 0 0 0 3px var(--workflow-selection-ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workflow-canvas .react-flow__handle.workflow-state-source {
+    transition: none;
+  }
+}
+
+/* The drop target of a new event. While the user drags an arrow, the whole box takes it. */
+.workflow-canvas .react-flow__handle.workflow-state-target {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.workflow-canvas .react-flow__handle.workflow-state-target.is-connecting {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform: none;
+  border-radius: 0.5rem;
+  pointer-events: all;
+}
+
+.workflow-canvas .react-flow__edge-path.workflow-edge-related {
+  stroke: var(--workflow-selection-soft);
+}
+
+.workflow-canvas .react-flow__edge-path.workflow-edge-selected {
+  stroke: var(--workflow-selection);
+  stroke-width: 2.5;
+}
+
+/* Only the lines dim, so the boxes stay readable. */
+.workflow-canvas .react-flow__edge-path.workflow-edge-dimmed {
+  opacity: 0.35;
+}
+
+/* Nothing sends the event, so the arrow never moves a task. */
+.workflow-canvas .react-flow__edge-path.workflow-edge-untriggered {
+  stroke-dasharray: 2 5;
+  stroke-linecap: round;
+}
+
+.workflow-canvas .react-flow__edge-path.workflow-edge-error {
+  stroke-dasharray: 6 4;
+}
+
+/* The "More below" control stands out from the zoom controls with the brand color. */
+.workflow-canvas .react-flow__controls-button.workflow-more-below {
+  color: var(--workflow-selection);
+}
+
+/* The round grips at the ends of the selected transition line. A drag onto another state moves
+   that end. */
+.workflow-canvas .workflow-edge-grip {
+  /* Above the boxes, so the grip wins over the connection dot of the box side under it. */
+  z-index: 2000;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  border: 2px solid var(--workflow-selection);
+  background: var(--sidebar);
+  box-shadow: 0 0 0 3px var(--workflow-selection-ring);
+  cursor: grab;
+  transition: box-shadow 150ms var(--motion-ease-out);
+}
+
+/* A wider ring, not a scale: a scale would also scale the translate that places the grip. */
+.workflow-canvas .workflow-edge-grip:hover,
+.workflow-canvas .workflow-edge-grip:active {
+  box-shadow: 0 0 0 5px var(--workflow-selection-ring);
+}
+
+.workflow-canvas .workflow-edge-grip:active {
+  cursor: grabbing;
+}
+
+.workflow-canvas .workflow-edge-grip:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.workflow-canvas .react-flow__edge-path.workflow-edge-dragging {
+  opacity: 0.25;
+}
+
+.workflow-canvas .workflow-edge-preview {
+  fill: none;
+  stroke: var(--workflow-selection);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  pointer-events: none;
+}
+
+.workflow-canvas .workflow-edge-preview.is-over-state {
+  stroke-dasharray: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workflow-canvas .workflow-edge-grip {
+    transition: none;
+  }
+}
+
+/* React Flow fills control icons and caps them at 12 px. Lucide icons draw with strokes. */
+.workflow-canvas .react-flow__controls-button svg.lucide {
+  fill: none;
+  max-width: 14px;
+  max-height: 14px;
+}
+
+/* The box under a new transition shows that a drop links to it. */
+.workflow-canvas
+  .react-flow__node-state:has(.workflow-state-target.connectingto)
+  .workflow-state-box {
+  border-color: var(--workflow-selection);
+  box-shadow: 0 0 0 4px var(--workflow-selection-ring);
+}

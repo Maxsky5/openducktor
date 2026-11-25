@@ -53,6 +53,8 @@ export const BUILTIN_SHORTCUT_ACTION_IDS = [
   "session-next",
   "workspace-previous",
   "workspace-next",
+  "usage",
+  "workflows",
   "focus-task-search",
   "focus-composer",
   "bottom-panel",

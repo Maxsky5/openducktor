@@ -8,6 +8,7 @@ export {
 export {
   createSharedBoardWorkflows,
   createWorkflowTaskCardFixture,
+  workflowRoleCatalog,
 } from "./shared-board-workflows";
 
 export {

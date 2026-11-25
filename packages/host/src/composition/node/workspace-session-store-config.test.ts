@@ -1,3 +1,4 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "../../application/tasks/task-workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { expect, spyOn, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -86,6 +87,7 @@ test("does not import Issues into SQLite when a custom Task store is active", as
           ...scope,
           sourceIssue,
           status: "open",
+          workflow: BUILTIN_TASK_ASSIGNMENT,
           task: {
             title: "Issue 42",
             description: "Body",

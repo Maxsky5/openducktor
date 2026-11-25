@@ -1,5 +1,8 @@
-import { resolveCodexEffectivePolicy, type SettingsSnapshot } from "@openducktor/contracts";
-import type { TaskWorkflowRole } from "@openducktor/workflows";
+import {
+  resolveCodexEffectivePolicy,
+  type AgentRoleDefinition,
+  type SettingsSnapshot,
+} from "@openducktor/contracts";
 
 import type {
   AgentSessionRuntimePolicy,
@@ -18,10 +21,12 @@ type RuntimeSessionContextSource = {
 };
 
 export type LoadSettingsSnapshotForRuntimePolicy = () => Promise<SettingsSnapshot>;
+/** The catalog role of a session: a moved task can keep sessions of a role that it no longer binds. */
+export type SessionPolicyRole = Pick<AgentRoleDefinition, "id" | "workspaceAccess">;
 export type LoadWorkflowRoleForRuntimePolicy = (
   taskId: string,
   roleId: string,
-) => Promise<TaskWorkflowRole>;
+) => Promise<SessionPolicyRole>;
 
 export const resolveSettingsIndependentAgentSessionRuntimePolicy = (
   runtimeKind: RuntimeKind,
@@ -76,7 +81,7 @@ export const resolveAgentSessionRuntimePolicyFromSnapshot = ({
   runtimeKind: RuntimeKind;
   sessionScope?: AgentSessionScope | null;
   snapshot: SettingsSnapshot;
-  workflowRole?: TaskWorkflowRole;
+  workflowRole?: SessionPolicyRole;
 }): AgentSessionRuntimePolicy => {
   const settingsIndependentPolicy =
     resolveSettingsIndependentAgentSessionRuntimePolicy(runtimeKind);

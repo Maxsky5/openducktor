@@ -6,7 +6,7 @@ import {
   createSqliteTaskStoreHarness,
   type SqliteTaskStoreTestHarness,
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import type { TaskWorkflowVersionCache } from "../../ports/task-workflow-port";
 import { builtinTaskWorkflows, singleTaskWorkflow } from "../../test-support/task-workflows";
 import type { WorkflowArtifactSaveInput } from "./task-inputs";
 import {
@@ -29,7 +29,7 @@ afterEach(async () => {
 });
 
 type ServiceOptions = {
-  readonly taskWorkflows?: TaskWorkflowResolver;
+  readonly taskWorkflows?: TaskWorkflowVersionCache;
   /** Runs when the reset stops the task sessions, after the host admitted the event. */
   readonly onSessionCleanup?: () => Promise<void>;
 };
@@ -172,7 +172,7 @@ describe("reset implementation with the SQLite task store", () => {
 });
 
 /** The built-in workflow, with a reset that needs the QA report that the reset itself clears. */
-const qaReportResetWorkflows = (): TaskWorkflowResolver => {
+const qaReportResetWorkflows = (): TaskWorkflowVersionCache => {
   const definition = workflowDefinitionSchema.parse(specPlanBuildWorkflow.definition);
   const reset = definition.events.find(({ id }) => id === "reset-implementation");
   if (!reset) throw new Error("The built-in workflow has no reset-implementation event.");

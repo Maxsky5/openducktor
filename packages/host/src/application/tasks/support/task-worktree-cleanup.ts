@@ -1,5 +1,5 @@
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
-import type { TaskWorkflow, TaskWorkflowRole } from "@openducktor/workflows";
+import type { TaskWorkflowRole } from "@openducktor/workflows";
 import { Effect } from "effect";
 import { canonicalPathsEqual } from "../../../domain/path-comparison";
 import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
@@ -17,11 +17,7 @@ import type { TaskSessionLifecycleCoordinator } from "../worktrees/task-session-
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
 import { loadRemoveWorktreeOnClose } from "./task-workflow-helpers";
 import { createTaskCleanupProgressState } from "./task-cleanup-progress";
-import {
-  removeTaskWorktree,
-  runTaskRuntimeCleanup,
-  selectWorkflowCleanupSessionRecords,
-} from "./task-cleanup-support";
+import { removeTaskWorktree, runTaskRuntimeCleanup } from "./task-cleanup-support";
 import type { TaskWorktreeOwnerReader } from "../../../ports/task-worktree-owner-port";
 import { acquireRemovableWorktrees } from "./task-worktree-owner-guard";
 
@@ -31,8 +27,6 @@ export const findLatestCleanupTarget = (
     gitPort: GitPort;
     settingsConfig: SettingsConfigPort;
     taskWorktreeService: TaskWorktreeService;
-    /** The workflow roles whose sessions run in the task worktree. */
-    worktreeRoles: readonly string[];
   },
   taskStore: TaskStorePort,
   repoPath: string,
@@ -47,14 +41,13 @@ export const findLatestCleanupTarget = (
       taskId,
     });
     const metadata = yield* taskStore.getTaskMetadata({ workspaceId, repoPath, taskId });
-    const sessions = metadata.agentSessions
-      .filter((session) => dependencies.worktreeRoles.includes(session.role))
-      .sort((left, right) => {
-        const startedAtComparison = Date.parse(right.startedAt) - Date.parse(left.startedAt);
-        return startedAtComparison === 0
-          ? right.workingDirectory.localeCompare(left.workingDirectory)
-          : startedAtComparison;
-      });
+    // Every agent session of the task runs in a task worktree, so each one is a candidate.
+    const sessions = [...metadata.agentSessions].sort((left, right) => {
+      const startedAtComparison = Date.parse(right.startedAt) - Date.parse(left.startedAt);
+      return startedAtComparison === 0
+        ? right.workingDirectory.localeCompare(left.workingDirectory)
+        : startedAtComparison;
+    });
     const candidates = taskWorktree ? [taskWorktree, ...sessions] : sessions;
     for (const candidate of candidates) {
       const workingDirectory = candidate.workingDirectory.trim();
@@ -90,8 +83,6 @@ type MergedTaskCleanupServices = {
   workspaceSettingsService: WorkspaceSettingsService;
   worktreeFiles?: WorktreeFilePort;
   worktreeOwners: TaskWorktreeOwnerReader | undefined;
-  /** The task workflow of the task. Its roles own the sessions and worktrees to clean. */
-  workflow: TaskWorkflow;
 };
 /**
  * A live session keeps its working directory, so a later runtime read of a removed worktree
@@ -102,8 +93,6 @@ export const releaseMergedTaskSessions = (
   dependencies: {
     gitPort: GitPort;
     taskActivityGuard?: TaskActivityGuardPort | undefined;
-    /** The task workflow of the task. Its roles own the sessions to release. */
-    workflow: TaskWorkflow;
   },
   taskStore: Pick<TaskStorePort, "getTaskMetadata">,
   repoPath: string,
@@ -112,10 +101,8 @@ export const releaseMergedTaskSessions = (
 ) =>
   Effect.gen(function* () {
     const metadata = yield* taskStore.getTaskMetadata({ workspaceId, repoPath, taskId });
-    const workflowSessions = selectWorkflowCleanupSessionRecords(
-      dependencies.workflow,
-      metadata.agentSessions,
-    );
+    // Every session of the task, also of a role that the task version no longer binds.
+    const workflowSessions = metadata.agentSessions;
     if (workflowSessions.length === 0) {
       return;
     }
@@ -182,7 +169,7 @@ export const cleanupMergedTaskState = (
       return yield* cleanupKeptTaskWorktree(dependencies, taskStore, repoPath, taskId, workspaceId);
     }
     const cleanupTarget = yield* findLatestCleanupTarget(
-      { ...dependencies, worktreeRoles: dependencies.workflow.worktreeRoles },
+      dependencies,
       taskStore,
       repoPath,
       taskId,

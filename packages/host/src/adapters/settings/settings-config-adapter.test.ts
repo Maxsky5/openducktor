@@ -1,5 +1,5 @@
+import { testWorkflowSettings } from "../../test-support/task-workflows";
 import { withConfigCommit } from "../config/config-commit";
-import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { settingsSnapshotSaveInputSchema } from "@openducktor/contracts";
 import { saveSettingsSnapshot } from "../../test-support/save-settings-snapshot";
 import { createSharedSettingsFixture } from "../../test-support/shared-settings-fixture";
@@ -38,7 +38,7 @@ describe("settings config files", () => {
       try {
         const service = createWorkspaceSettingsService(
           fixture.settingsConfig,
-          builtinTaskWorkflows,
+          testWorkflowSettings(),
         );
         const shortcuts = createKeyboardShortcutSettingsService({
           settingsConfig: fixture.settingsConfig,
@@ -136,7 +136,7 @@ describe("settings config files", () => {
       const fixture = await createSharedSettingsFixture({ configPath });
       try {
         const adapter = fixture.settingsConfig;
-        const service = createWorkspaceSettingsService(adapter, builtinTaskWorkflows);
+        const service = createWorkspaceSettingsService(adapter, testWorkflowSettings());
         const draft = await Effect.runPromise(service.getSettingsSnapshot());
         const rules = [
           { permission: "bash", pattern: "*", action: "deny" as const },
@@ -172,7 +172,7 @@ describe("settings config files", () => {
         });
         const restartedService = createWorkspaceSettingsService(
           restartedAdapter,
-          builtinTaskWorkflows,
+          testWorkflowSettings(),
         );
         const loaded = await Effect.runPromise(restartedService.getSettingsSnapshot());
         expect(loaded.agentRuntimes.opencode).toEqual(draft.agentRuntimes.opencode);

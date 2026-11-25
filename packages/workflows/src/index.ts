@@ -8,7 +8,6 @@ export {
   resolveCodexRolePolicy,
   resolvePullRequestTarget,
   SPEC_PLAN_BUILD_BOARD,
-  SPEC_PLAN_BUILD_BOARD_LAYOUT,
   specPlanBuildWorkflow,
 } from "./builtin";
 export {
@@ -25,6 +24,7 @@ export {
   type TaskProjection,
   type TaskWorkflow,
   type TaskWorkflowArtifact,
+  type TaskWorkflowHostEffect,
   type TaskWorkflowLaunchAction,
   type TaskWorkflowRole,
   type TransitionCause,
@@ -76,3 +76,20 @@ export * from "./task-presentation";
 export * from "./task-launches";
 export * from "./task-artifacts";
 export * from "./kanban-board";
+export * from "./library/builtin-shared-fields";
+export * from "./library/column-order";
+export * from "./library/checks";
+export * from "./library/documents";
+export * from "./library/references";
+export {
+  createProblemSink,
+  firstError,
+  formatProblemPath,
+  problemText,
+  type ProblemSink,
+} from "./rules/problems";
+export {
+  BASE_PROMPT_IDS,
+  REQUIRED_BASE_PROMPTS,
+  workflowPromptPlaceholders,
+} from "./task-workflow/task-prompts";

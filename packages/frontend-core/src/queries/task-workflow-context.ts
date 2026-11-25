@@ -53,10 +53,22 @@ const loadTaskWorkflowContext = async (
   if (!task) throw taskUnavailable(scope.workspaceId, taskId);
   return task;
 };
-/** The role of a task in its exact workflow. */
+/**
+ * The catalog role of a task session. A moved task can keep sessions of a role that its version
+ * does not bind, so the role comes from the catalog that compiled the task workflow.
+ */
 export const loadTaskWorkflowRole = async (
   queryClient: QueryClient,
   scope: WorkspaceRef,
   taskId: string,
   roleId: string,
-) => (await loadTaskWorkflowContext(queryClient, scope, taskId)).taskWorkflow.role(roleId);
+) => {
+  const role = (await loadTaskWorkflowContext(queryClient, scope, taskId)).taskWorkflow.catalogRole(
+    roleId,
+  );
+  if (!role)
+    throw new Error(
+      `Role "${roleId}" of a session of task "${taskId}" is not in the host role catalog. Reload the task metadata.`,
+    );
+  return role;
+};

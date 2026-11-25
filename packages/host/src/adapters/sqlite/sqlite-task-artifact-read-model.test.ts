@@ -1,3 +1,4 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "../../application/tasks/task-workflows";
 import { searchTasksInDatabase } from "./sqlite-task-search";
 import { expect, test } from "bun:test";
 
@@ -87,7 +88,7 @@ test("search keeps Unicode matches, exact counts, limits, and update-time orderi
 
 for (const input of [
   {
-    workflow: builtinTaskWorkflows.forNewTask("/repos/Fair Nest"),
+    workflow: builtinTaskWorkflows.forTask(BUILTIN_TASK_ASSIGNMENT),
     status: "open",
     issueType: "task" as const,
     code: "spec",
@@ -124,6 +125,7 @@ for (const input of [
           harness.store.createTask({
             ...harness.scope,
             status: input.status,
+            workflow: BUILTIN_TASK_ASSIGNMENT,
             task: { title, issueType: input.issueType, priority: 2 },
           }),
         );

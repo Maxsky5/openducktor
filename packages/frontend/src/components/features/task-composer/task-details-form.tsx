@@ -1,5 +1,5 @@
 import type { TaskAssetStageResult } from "@openducktor/contracts";
-import { ListTodo } from "lucide-react";
+import { ListTodo, Workflow } from "lucide-react";
 import type { ReactElement } from "react";
 import { issueTypeOptions } from "@/components/features/task-composer/constants";
 import {
@@ -24,6 +24,8 @@ import type {
 
 type TaskDetailsFormProps = {
   issueTypeChoices: Parameters<typeof issueTypeOptions>[0];
+  /** The workflow that the user picked for a new task, or undefined when there was no choice. */
+  workflowLabel?: string | undefined;
   mode: ComposerMode;
   disabled: boolean;
   state: ComposerState;
@@ -43,6 +45,7 @@ type TaskDetailsFormProps = {
 
 export function TaskDetailsForm({
   issueTypeChoices,
+  workflowLabel,
   mode,
   disabled,
   state,
@@ -66,7 +69,7 @@ export function TaskDetailsForm({
   return (
     <div className="flex flex-col gap-4">
       <div className="grid gap-2">
-        <Label>Issue type *</Label>
+        <Label>{workflowLabel ? "Type and workflow *" : "Issue type *"}</Label>
         <div className="flex items-start justify-between gap-3 rounded-xl border border-border bg-card p-3">
           <div className="flex min-w-0 items-start gap-3">
             <span
@@ -78,8 +81,14 @@ export function TaskDetailsForm({
               <SelectedIcon className="size-4" />
             </span>
             <div className="space-y-1">
-              <p className="text-sm font-semibold text-foreground">
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-foreground">
                 {selectedType?.label ?? state.issueType}
+                {workflowLabel ? (
+                  <span className="inline-flex h-5 items-center gap-1 rounded-full border border-border bg-muted/50 px-2 text-xs font-medium text-muted-foreground">
+                    <Workflow aria-hidden="true" className="size-3" />
+                    {workflowLabel}
+                  </span>
+                ) : null}
               </p>
               <p className="text-xs text-muted-foreground">
                 {selectedType?.guidance ?? selectedType?.description ?? ""}

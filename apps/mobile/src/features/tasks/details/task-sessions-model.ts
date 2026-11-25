@@ -12,6 +12,7 @@ import {
   type WorkflowRoleId as AgentRole,
   type ResolvedTaskCard,
   workflowRoleIcon,
+  workflowRoleLabel,
 } from "@openducktor/workflows";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
@@ -156,13 +157,14 @@ export const groupTaskSessions = (
   for (const [key, summary] of liveByKey) {
     if (!entries.has(key)) entries.set(key, toEntry(summary, summary));
   }
-  for (const entry of entries.values()) {
-    if (!task.taskWorkflow.roles.some(({ id }) => id === entry.role))
-      throw new Error(
-        `Task "${task.id}" has a session for unavailable workflow role "${entry.role}". Reload the task workflow.`,
-      );
-  }
-  return task.taskWorkflow.roles.flatMap(({ id: role, label }) => {
+  // A moved task can keep sessions of a role that its version does not bind. They follow the
+  // bound roles and take their label from the catalog role.
+  const roles = new Set([
+    ...task.taskWorkflow.roles.map(({ id }) => id),
+    ...[...entries.values()].map((entry) => entry.role),
+  ]);
+  return [...roles].flatMap((role) => {
+    const label = workflowRoleLabel(task.taskWorkflow, role);
     const roleEntries = [...entries.values()].filter((entry) => entry.role === role);
     const sessionNumbers = buildRoleSessionSequenceByIdentity(roleEntries);
     const rows = roleEntries.toSorted(compareAgentSessionRecency).map((entry, index) => {

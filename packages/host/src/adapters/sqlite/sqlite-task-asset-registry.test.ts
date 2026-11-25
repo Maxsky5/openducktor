@@ -1,3 +1,4 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "../../application/tasks/task-workflows";
 import { afterEach, describe, expect, test } from "bun:test";
 import { Cause, Effect, Exit } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
@@ -30,6 +31,7 @@ describe("SQLite task asset registry", () => {
       registry.createTaskWithDescriptionAssets({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Atomic asset create",
           issueType: "task",
@@ -71,6 +73,7 @@ describe("SQLite task asset registry", () => {
       harness.store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Assets", issueType: "task", priority: 2 },
       }),
     );
@@ -146,6 +149,7 @@ describe("SQLite task asset registry", () => {
       harness.store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Concurrent assets",
           issueType: "task",
@@ -207,6 +211,7 @@ describe("SQLite task asset registry", () => {
       harness.store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Original title",
           issueType: "task",

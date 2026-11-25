@@ -19,9 +19,17 @@ import {
 test("invalid workspace, repository, and task fail before native session creation", async () => {
   for (const patch of [{ workspaceId: "unknown" }, { repoPath: "/other" }, { taskId: "missing" }]) {
     const h = await createLaunchHarness();
-    const result = await Effect.runPromise(h.service.launch({ ...requestFor("codex"), ...patch }));
-    expect(result.status).toBe("failed");
-    expect(result.failure?.message).toBeTruthy();
+    const result = await Effect.runPromise(
+      Effect.result(h.service.launch({ ...requestFor("codex"), ...patch })),
+    );
+    // The launch reads the task before it accepts the request, so a missing task fails the launch.
+    // The other checks fail in the launch, which reports them in the result.
+    if (patch.taskId) expect(result._tag).toBe("Failure");
+    const message =
+      result._tag === "Failure"
+        ? result.failure.message
+        : (expect(result.success.status).toBe("failed"), result.success.failure?.message);
+    expect(message).toBeTruthy();
     expect(h.starts).toHaveLength(0);
     expect(h.sends).toHaveLength(0);
   }

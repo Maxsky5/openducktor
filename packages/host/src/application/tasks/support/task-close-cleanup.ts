@@ -1,6 +1,5 @@
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import type { AgentSessionRecord, RepoConfig } from "@openducktor/contracts";
-import type { TaskWorkflow } from "@openducktor/workflows";
 import { Effect } from "effect";
 import { collectRelatedTaskBranches } from "./task-branch-tips";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
@@ -30,15 +29,11 @@ type CloseWorktreeCandidate = {
   source: "task_worktree" | "session";
 };
 
+/** The working directories of every session of the task, also of a role that its version dropped. */
 const collectCloseManagedSessionWorktreePaths = (
-  workflow: TaskWorkflow,
   sessions: AgentSessionRecord[],
 ): CloseWorktreeCandidate[] =>
   sessions.reduce<CloseWorktreeCandidate[]>((candidates, session) => {
-    if (!workflow.hasRole(session.role.trim())) {
-      return candidates;
-    }
-
     const workingDirectory = session.workingDirectory.trim();
     if (workingDirectory.length > 0) {
       candidates.push({ path: workingDirectory, source: "session" });
@@ -52,7 +47,6 @@ export const collectCloseWorktreePaths = (
     taskWorktreeService?: TaskWorktreeService;
   },
   repoPath: string,
-  workflow: TaskWorkflow,
   task: TaskRecord,
   sessions: AgentSessionRecord[],
   workspaceId: string,
@@ -70,7 +64,7 @@ export const collectCloseWorktreePaths = (
       ...(taskWorktree
         ? [{ path: taskWorktree.workingDirectory, source: "task_worktree" as const }]
         : []),
-      ...collectCloseManagedSessionWorktreePaths(workflow, sessions),
+      ...collectCloseManagedSessionWorktreePaths(sessions),
     ];
     const seen = new Set<string>();
     const paths: string[] = [];
@@ -130,7 +124,6 @@ export const collectTaskCleanupTargets = ({
   repoPath,
   workspaceId,
   repoConfig,
-  workflow,
   task,
   sessions,
   operationLabel,
@@ -141,7 +134,6 @@ export const collectTaskCleanupTargets = ({
   repoPath: string;
   workspaceId: string;
   repoConfig: RepoConfig;
-  workflow: TaskWorkflow;
   task: TaskRecord;
   sessions: AgentSessionRecord[];
   operationLabel: string;
@@ -150,7 +142,6 @@ export const collectTaskCleanupTargets = ({
     const worktreePaths = yield* collectCloseWorktreePaths(
       dependencies,
       repoPath,
-      workflow,
       task,
       sessions,
       workspaceId,
@@ -189,7 +180,6 @@ export const cleanupConfirmedMergeClose = ({
   lifecycle,
   repoPath,
   workspaceId,
-  workflow,
   task,
   worktreeCleanup,
   onBranchDeleting,
@@ -202,16 +192,14 @@ export const cleanupConfirmedMergeClose = ({
   lifecycle: Pick<TaskSessionLifecycleCoordinator, "acquireWorktreeLifecycle">;
   repoPath: string;
   workspaceId: string;
-  workflow: TaskWorkflow;
   task: TaskRecord;
   worktreeCleanup: WorktreeCleanup;
   onBranchDeleting?: ((branch: { name: string; oid: string }) => void) | undefined;
 }) =>
   Effect.gen(function* () {
-    const releaseDependencies = { ...dependencies, workflow };
     if (!worktreeCleanup.remove) {
       return yield* cleanupKeptTaskWorktree(
-        releaseDependencies,
+        dependencies,
         taskStore,
         repoPath,
         task.id,
@@ -231,19 +219,12 @@ export const cleanupConfirmedMergeClose = ({
       worktreeOwners: dependencies.worktreeOwners,
       repoPath,
       repoConfig,
-      workflow,
       task,
       sessions: metadata.agentSessions,
       operationLabel: "close",
     });
     // The worktree lifecycle is held, so no runtime read restores a released session.
-    yield* releaseMergedTaskSessions(
-      releaseDependencies,
-      taskStore,
-      repoPath,
-      task.id,
-      workspaceId,
-    );
+    yield* releaseMergedTaskSessions(dependencies, taskStore, repoPath, task.id, workspaceId);
     yield* runTaskLocalCleanup({
       beforeWorktreeRemoval: {
         commands: repoConfig.hooks.beforeWorktreeRemoval,

@@ -237,7 +237,6 @@ describe("workflow definition schemas", () => {
       label: "Reviewer",
       tools: ["odt_read_task", "odt_set_task_artifact"],
       workspaceAccess: "read",
-      location: "repository",
       runtimeScopes: ["workspace"],
       systemPrompt: {
         builtinVersion: 1,

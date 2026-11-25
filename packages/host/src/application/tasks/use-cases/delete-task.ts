@@ -16,9 +16,6 @@ import {
   readTaskSessionRecords,
   runTaskBrowserTabCleanup,
   runTaskLocalCleanup,
-  selectWorkflowCleanupSessionRecords,
-  taskHasSessionsForRoles,
-  workflowRoleIds,
 } from "../support/task-cleanup-support";
 import { acquireRemovableWorktrees } from "../support/task-worktree-owner-guard";
 import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
@@ -63,9 +60,7 @@ export const createTaskDeleteUseCase = ({
         targetTaskIds,
         input.workspaceId,
       );
-      const hasWorkflowSessions = targetTaskSessions.some((entry) =>
-        taskHasSessionsForRoles(entry.sessions, workflowRoleIds(workflow)),
-      );
+      const hasWorkflowSessions = targetTaskSessions.some(({ sessions }) => sessions.length > 0);
       const activityGuard = taskActivityGuard;
       if (hasWorkflowSessions && !activityGuard) {
         return yield* Effect.fail(
@@ -111,10 +106,7 @@ export const createTaskDeleteUseCase = ({
       if (hasWorkflowSessions && activityGuard) {
         const { stoppedSessionCount } = yield* activityGuard.cleanupTaskSessions({
           repoPath: effectiveRepoPath,
-          taskSessions: targetTaskSessions.map(({ taskId: targetTaskId, sessions }) => ({
-            taskId: targetTaskId,
-            sessions: selectWorkflowCleanupSessionRecords(workflow, sessions),
-          })),
+          taskSessions: targetTaskSessions,
         });
         recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
       }

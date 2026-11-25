@@ -50,6 +50,7 @@
     "stream-json": "3.8.0",
     "unified": "^11.0.5",
     "unist-util-visit": "^5.2.0",
+    "yaml": "^2.9.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {

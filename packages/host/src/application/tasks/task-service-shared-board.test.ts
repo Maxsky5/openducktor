@@ -3,8 +3,11 @@ import { Effect } from "effect";
 import type { TaskWorkflow } from "@openducktor/workflows";
 import { createSharedBoardWorkflows } from "@openducktor/workflows/test-support";
 import { createSqliteTaskStoreHarness } from "../../adapters/sqlite/sqlite-task-store-test-support";
-import { createTaskWorkflowResolver } from "./task-workflows";
-import { createWorkflowReads } from "./workflow-reads";
+import type {
+  TaskWorkflowVersionCache,
+  WorkspaceWorkflowPort,
+} from "../../ports/task-workflow-port";
+import { singleTaskWorkflow, testWorkspaceWorkflows } from "../../test-support/task-workflows";
 import {
   createBuildSettingsConfig,
   createBuildStartGitPort,
@@ -14,28 +17,36 @@ import {
 } from "./test-support/task-workflow-harness";
 
 test("one workspace keeps mixed-workflow projections and mutations separate in shared states", async () => {
-  const { alpha, beta, workflows, board } = createSharedBoardWorkflows();
-  // Assignment is an injected fixture, never a task record or a stored workflow binding.
-  const assigned = new Map<string, TaskWorkflow>();
-  let creating: TaskWorkflow | null = null;
-  const resolver = createTaskWorkflowResolver({
-    workflows,
-    forWorkspace: () => ({ workflows, board }),
-    forNewTask: () => creating ?? alpha,
-    forTask: ({ id }) => {
-      const workflow = assigned.get(id);
-      if (workflow) return workflow;
-      if (!creating) throw new Error(`No injected workflow for ${id}`);
-      assigned.set(id, creating);
-      return creating;
-    },
-  });
+  const { alpha, beta } = createSharedBoardWorkflows();
+  const byId = new Map([alpha, beta].map((workflow) => [workflow.reference.id, workflow]));
+  const workflowOf = (workflowId: string) => {
+    const workflow = byId.get(workflowId);
+    if (!workflow) throw new Error(`No workflow ${workflowId}`);
+    return workflow;
+  };
+  // Each task names its stored workflow. The test cache holds both versions.
+  const resolver: TaskWorkflowVersionCache = {
+    forTask: ({ workflowId }) => workflowOf(workflowId),
+    forReference: ({ id }) => workflowOf(id),
+    missing: () => [],
+    cached: () => undefined,
+    put: () => {},
+    dropRole: () => {},
+    dropWorkflow: () => {},
+    noteTasks: () => {},
+    forTaskId: () => undefined,
+  };
+  const workspaceWorkflows: WorkspaceWorkflowPort = {
+    ...testWorkspaceWorkflows(singleTaskWorkflow(alpha)),
+    newTaskWorkflow: (_scope, workflowId) => Effect.succeed(workflowOf(workflowId ?? "alpha")),
+  };
   const harness = await createSqliteTaskStoreHarness({ taskWorkflows: resolver });
   const repoPath = harness.repoPath;
   const workspaceId = harness.workspaceId;
   const service = createTaskService({
     atomicTaskStore: harness.store,
     taskWorkflows: resolver,
+    workspaceWorkflows,
     gitPort: createBuildStartGitPort({ calls: [] }),
     settingsConfig: createBuildSettingsConfig(new Set([repoPath])),
     systemCommands: createBuildSystemCommands([]),
@@ -45,20 +56,19 @@ test("one workspace keeps mixed-workflow projections and mutations separate in s
       hooks: { beforeWorktreeRemoval: [] },
     }),
   });
-  const create = async (workflow: TaskWorkflow) => {
-    creating = workflow;
-    try {
-      return await Effect.runPromise(
-        service.createTask({
-          workspaceId,
-          repoPath,
-          task: { title: workflow.definition.label, issueType: "feature", priority: 2 },
-        }),
-      );
-    } finally {
-      creating = null;
-    }
-  };
+  const create = (workflow: TaskWorkflow) =>
+    Effect.runPromise(
+      service.createTask({
+        workspaceId,
+        repoPath,
+        task: {
+          title: workflow.definition.label,
+          issueType: "feature",
+          priority: 2,
+          workflowId: workflow.reference.id,
+        },
+      }),
+    );
   const submit = (taskId: string, code: string, verdict?: string) => {
     const input: Parameters<typeof service.workflowArtifactSave>[0] = {
       workspaceId,
@@ -89,20 +99,6 @@ test("one workspace keeps mixed-workflow projections and mutations separate in s
       workflow: { id: "beta", revision: 1 },
       availableActions: expect.not.arrayContaining(["beta_hold"]),
     });
-    const context = await Effect.runPromise(
-      createWorkflowReads(resolver, "mixed-host").workspace({ workspaceId, repoPath }),
-    );
-    expect(context.board.states.map(({ id }) => id)).toEqual([
-      "open",
-      "beta_work",
-      "alpha_hold",
-      "shared_review",
-      "alpha_work",
-      "beta_hold",
-      "alpha_approval",
-      "beta_approval",
-      "closed",
-    ]);
     await expect(
       Effect.runPromise(
         service.applyTaskEvent({ workspaceId, repoPath, taskId: second.id, eventId: "beta_hold" }),

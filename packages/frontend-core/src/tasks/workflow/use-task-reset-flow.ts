@@ -58,6 +58,12 @@ type ResetFlowWorkspaceIdentity = {
   repoPath: string;
 };
 
+/** The labels of the roles whose session history the reset event clears. */
+const resetRoleLabels = (task: TaskCard, eventId: string | undefined): string[] => {
+  const reset = eventId === undefined ? undefined : task.taskWorkflow.worktreeReset(eventId);
+  return (reset?.clearsSessionsOf ?? []).map((role) => task.taskWorkflow.role(role).label);
+};
+
 type ResetFlowRequest = ResetFlowWorkspaceIdentity & {
   taskId: string;
   /** The workflow event whose `worktree.reset` effect resets the implementation. */
@@ -121,18 +127,21 @@ export function useTaskResetFlow({
   );
   const open = task !== null;
   const openTaskId = task?.id ?? null;
+  const preview = request
+    ? { operation: "reset_implementation" as const, eventId: request.eventId }
+    : null;
   const {
     stoppableSessionCount: activeSessionCount,
     isLoading: isLoadingStopImpact,
     error: stopImpactError,
   } = useTaskStopImpact({
     taskIds: openTaskId ? [openTaskId] : [],
-    operation: "reset_implementation",
+    preview,
     enabled: open,
   });
   const worktreeOwners = useTaskWorktreeOwners({
     taskIds: openTaskId ? [openTaskId] : [],
-    operation: "reset_implementation",
+    preview,
     enabled: open,
   });
   const {
@@ -222,9 +231,7 @@ export function useTaskResetFlow({
       taskTitle: task.title,
       actionLabel: request ? resetActionLabel(task, request.eventId) : "",
       targetStatusLabel: request ? deriveRollbackLabel(task, request.eventId) : "",
-      worktreeRoleLabels: task.taskWorkflow.worktreeRoles.map(
-        (role) => task.taskWorkflow.role(role).label,
-      ),
+      worktreeRoleLabels: resetRoleLabels(task, request?.eventId),
       dropsLocalMerge: taskWaitsForMergePublication(task),
       isSubmitting,
       activeSessionCount,

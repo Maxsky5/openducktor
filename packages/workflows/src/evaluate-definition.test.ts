@@ -269,7 +269,7 @@ describe("workflow definition validation", () => {
     expect(() => createWorkflow(definition)).toThrow(
       expect.objectContaining({
         code: "invalid_definition",
-        message: expect.stringContaining(`Missing core state "${core}" in states.`),
+        message: expect.stringContaining(`Every workflow needs a state with the ID "${core}".`),
       }),
     );
   });
@@ -291,7 +291,7 @@ describe("workflow definition validation", () => {
     expect(() => createWorkflow(definition)).toThrow(
       expect.objectContaining({
         code: "invalid_definition",
-        message: expect.stringContaining("Duplicate ID"),
+        message: expect.stringMatching(/Two .* have the ID/),
       }),
     );
   });
@@ -302,7 +302,9 @@ describe("workflow definition validation", () => {
     if (reviewStep.kind === "agent") reviewStep.launchActions[0]!.id = "write-draft";
     expect(() => createWorkflow(definition)).toThrow(
       expect.objectContaining({
-        message: expect.stringContaining('Duplicate ID "write-draft" in steps[1].launchActions'),
+        message: expect.stringContaining(
+          'Two ways to start have the ID "write-draft". Change one ID. (at steps[1].launchActions[0].id)',
+        ),
       }),
     );
     const verdictDefinition = publicationDefinition();
@@ -310,7 +312,9 @@ describe("workflow definition validation", () => {
     if (artifact.kind === "review") artifact.verdicts[1]!.id = "approved";
     expect(() => createWorkflow(verdictDefinition)).toThrow(
       expect.objectContaining({
-        message: expect.stringContaining('Duplicate ID "approved" in artifacts[1].verdicts'),
+        message: expect.stringContaining(
+          'Review "First review" has two verdicts with the ID "approved". Change one ID. (at artifacts[1].verdicts[1].id)',
+        ),
       }),
     );
   });
@@ -334,7 +338,7 @@ describe("workflow definition validation", () => {
       expect.objectContaining({
         code: "invalid_definition",
         message: expect.stringContaining(
-          'Start mode "fork" at automations[0].startMode is not a start mode of launch action "review-first"',
+          'uses the start mode "fork", which way to start "First review" does not offer.',
         ),
       }),
     );
@@ -347,7 +351,7 @@ describe("workflow definition validation", () => {
       expect.objectContaining({
         code: "invalid_definition",
         message: expect.stringContaining(
-          'Unknown roles ID "missing" at pullRequestRoles[1]. Use an ID from roles.',
+          'uses the missing role "missing". Add it or pick another role. (at pullRequestRoles[1])',
         ),
       }),
     );
@@ -361,7 +365,7 @@ describe("workflow definition validation", () => {
       expect.objectContaining({
         code: "invalid_definition",
         message: expect.stringContaining(
-          'Launch action ID "pull_request" names the core pull request launch.',
+          'Way to start "Write draft" cannot use the ID "pull_request"',
         ),
       }),
     );
@@ -379,7 +383,7 @@ describe("workflow definition validation", () => {
     expect(() => createWorkflow(definition)).toThrow(
       expect.objectContaining({
         message: expect.stringContaining(
-          'Start mode "fresh" at automations[0].startMode is not a start mode of launch action "pull_request"',
+          'uses the start mode "fresh", which way to start "Generate Pull Request" does not offer.',
         ),
       }),
     );
@@ -391,7 +395,9 @@ describe("workflow definition validation", () => {
     expect(() => createWorkflow(definition)).toThrow(
       expect.objectContaining({
         code: "invalid_definition",
-        message: expect.stringContaining('Duplicate ID "approved" in events[4].guards'),
+        message: expect.stringContaining(
+          'Transition "publish" has two requirements with the ID "approved". Change one ID. (at events[4].guards[3].id)',
+        ),
       }),
     );
   });

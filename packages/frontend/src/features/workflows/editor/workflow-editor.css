@@ -1,0 +1,20 @@
+/* The selection color of the editor: the brand color at a low alpha, in the canvas, the outline,
+   and the edge labels. The dark theme lightens the stroke so it stays visible. */
+.workflow-editor {
+  /* The canvas sits a step below the panels: a light grey in light, the page dark in dark. */
+  --workflow-canvas: color-mix(in oklab, var(--muted) 70%, var(--sidebar));
+  --workflow-selection: var(--primary);
+  /* Solid, as in the dark theme: a border colour with alpha can take a wrong tint while it
+     animates. */
+  --workflow-selection-soft: color-mix(in oklab, var(--primary) 50%, white);
+  --workflow-selection-ring: color-mix(in oklab, var(--primary) 20%, transparent);
+  --workflow-selection-surface: color-mix(in oklab, var(--primary) 9%, transparent);
+}
+
+.dark .workflow-editor {
+  --workflow-canvas: var(--background);
+  --workflow-selection: color-mix(in oklab, var(--primary) 60%, white);
+  --workflow-selection-soft: color-mix(in oklab, var(--primary) 55%, var(--muted-foreground));
+  --workflow-selection-ring: color-mix(in oklab, var(--primary) 40%, transparent);
+  --workflow-selection-surface: color-mix(in oklab, var(--primary) 24%, transparent);
+}

@@ -88,9 +88,16 @@ export type WorkflowRolePolicy = {
   readonly tools: readonly AgentToolName[];
   readonly readOnly: boolean;
 };
-export type WorkflowRolePolicyResolver = (
-  scope: Pick<AgentSessionWorkflowScope, "taskId" | "role">,
-) => WorkflowRolePolicy;
+/**
+ * The live workflow session whose role policy to read. `externalSessionId` is null while a start
+ * or fork has no runtime identity yet.
+ */
+export type WorkflowRolePolicyScope = Pick<
+  AgentSessionWorkflowScope,
+  "workspaceId" | "taskId" | "role"
+> & { readonly externalSessionId: string | null };
+/** Reads the role policy that a live session keeps from its start. */
+export type WorkflowRolePolicyResolver = (scope: WorkflowRolePolicyScope) => WorkflowRolePolicy;
 
 export const workflowAgentSessionScope = (
   workspaceId: string,

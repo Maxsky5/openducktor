@@ -27,7 +27,6 @@ import {
   type KanbanPrimarySessionState,
   type WorkflowPendingState,
 } from "@openducktor/frontend-core/tasks/board/kanban-task-footer";
-import { taskActionIcon } from "@/components/features/kanban/task-action-ui";
 import { taskSessionStatusLabel } from "@openducktor/frontend-core/tasks/board/task-action-presentation";
 import { useCardFocus } from "@/components/features/kanban/use-kanban-card-focus";
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
@@ -49,6 +48,10 @@ import {
 import { toDisplayTaskLabels } from "@openducktor/frontend-core/tasks/presentation/task-labels";
 import { cn } from "@/lib/utils";
 import { getPriorityStyle, taskIssueTypeStyle } from "./kanban-task-badge-model";
+import { WORKFLOW_ICONS } from "@/lib/agent-role-presentation";
+
+/** The icon of a link to a role session, as the Open buttons of the built-in workflow show it. */
+const OpenSessionIcon = WORKFLOW_ICONS.open;
 
 type CardProps = {
   task: TaskCard;
@@ -664,8 +667,9 @@ function TaskActions({
       )}
     >
       {footer.shortcuts.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2" data-kanban-session-shortcuts>
-          {footer.shortcuts.map(({ role, action, label, options }) => (
+        // The link height already spaces wrapped rows, so only the links in a row keep a gap.
+        <div className="flex flex-wrap items-center gap-x-2" data-kanban-session-shortcuts>
+          {footer.shortcuts.map(({ role, label, options }) => (
             <Tooltip key={role}>
               <TooltipTrigger asChild>
                 <Button
@@ -686,7 +690,7 @@ function TaskActions({
                   <span className="underline decoration-muted-foreground/50 underline-offset-4">
                     {label}
                   </span>
-                  {taskActionIcon(action, task)}
+                  <OpenSessionIcon className="size-3.5" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Open {label} session</TooltipContent>

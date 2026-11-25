@@ -1,3 +1,4 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "../tasks/task-workflows";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import type {
   AgentSessionLiveEnvelope,
@@ -282,6 +283,7 @@ const setup = async () => {
       workspaceId: database.workspaceId,
       repoPath: database.repoPath,
       status: "open",
+      workflow: BUILTIN_TASK_ASSIGNMENT,
       task: { title: "Activity", issueType: "task", priority: 2 },
     }),
   );

@@ -1,3 +1,5 @@
+import { cssTimeMs } from "./css-time";
+
 /**
  * Content that animates its own height, such as a CSS presence reveal, already resizes the dialog
  * in each frame. A dialog animation over it would hold the old size and then resize a second time.
@@ -94,7 +96,7 @@ export function observeDialogResize(element: HTMLDivElement): () => void {
         },
       ],
       {
-        duration: Number.parseFloat(styles.getPropertyValue("--resize-dur")),
+        duration: cssTimeMs(styles.getPropertyValue("--resize-dur")),
         easing: styles.getPropertyValue("--resize-ease").trim(),
       },
     );

@@ -1,3 +1,5 @@
+import type { TaskWorkflowAssignment } from "../../../ports/task-workflow-port";
+import { BUILTIN_TASK_ASSIGNMENT } from "../task-workflows";
 import { specPlanBuildReference } from "@openducktor/workflows/test-support";
 import type {
   ExternalTaskSyncEvent,
@@ -120,7 +122,10 @@ export const createEventBus = () => {
   return { eventBus, events };
 };
 
-export const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
+export const task = (
+  overrides: Partial<TaskCard & TaskWorkflowAssignment> = {},
+): TaskCard & TaskWorkflowAssignment => ({
+  ...BUILTIN_TASK_ASSIGNMENT,
   id: "task-1",
   title: "Task 1",
   description: "",

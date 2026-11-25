@@ -113,7 +113,6 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         workspaceId: input.workspaceId,
         repoPath,
         task: current,
-        workflow,
         operationLabel: "Pull request linking",
       });
       // The cleanup needs the task branch. A relink can find it already removed.
@@ -138,7 +137,6 @@ export const createTaskLinkMergedPullRequestUseCase = ({
                   taskStore,
                   lifecycle: taskSessionLifecycleCoordinator,
                   repoPath,
-                  workflow,
                   task: current,
                   // The confirmation showed the uncommitted files that removal deletes.
                   worktreeCleanup: { remove: removeWorktree, force: true },

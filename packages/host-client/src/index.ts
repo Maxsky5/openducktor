@@ -37,6 +37,7 @@ import { HostSystemClient } from "./system-client";
 import { HostTaskClient } from "./task-client";
 import { HostTerminalClient } from "./terminal-client";
 import { HostBrowserClient } from "./browser-client";
+import { HostWorkflowLibraryClient } from "./workflow-library-client";
 
 export { HostInvokeError } from "./invoke-utils";
 export type { InvokeFn } from "./invoke-utils";
@@ -68,7 +69,8 @@ type HostClientApi = {
   PublicMethods<HostAgentClient> &
   PublicMethods<HostAgentSessionLiveClient> &
   PublicMethods<HostAgentRuntimeQueryClient> &
-  PublicMethods<HostGitClient>;
+  PublicMethods<HostGitClient> &
+  PublicMethods<HostWorkflowLibraryClient>;
 
 export type HostClient = HostClientApi;
 
@@ -85,6 +87,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
   const agentSessionLiveClient = new HostAgentSessionLiveClient(invokeFn);
   const agentRuntimeQueryClient = new HostAgentRuntimeQueryClient(invokeFn);
   const gitClient = new HostGitClient(invokeFn);
+  const workflowLibraryClient = new HostWorkflowLibraryClient(invokeFn);
   const hostClient = {
     workflowCatalogGet: taskClient.workflowCatalogGet.bind(taskClient),
     workspaceWorkflowGet: taskClient.workspaceWorkflowGet.bind(taskClient),
@@ -411,6 +414,26 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     gitGetDiff: gitClient.gitGetDiff.bind(gitClient),
     gitCommitsAheadBehind: gitClient.gitCommitsAheadBehind.bind(gitClient),
     gitGetWorktreeStatus: gitClient.gitGetWorktreeStatus.bind(gitClient),
+    workflowLibraryList: workflowLibraryClient.workflowLibraryList.bind(workflowLibraryClient),
+    workflowDocumentGet: workflowLibraryClient.workflowDocumentGet.bind(workflowLibraryClient),
+    workflowVersionsList: workflowLibraryClient.workflowVersionsList.bind(workflowLibraryClient),
+    workflowTaskMovesGet: workflowLibraryClient.workflowTaskMovesGet.bind(workflowLibraryClient),
+    workflowTaskUseGet: workflowLibraryClient.workflowTaskUseGet.bind(workflowLibraryClient),
+    workflowRoleImpactGet: workflowLibraryClient.workflowRoleImpactGet.bind(workflowLibraryClient),
+    workflowExport: workflowLibraryClient.workflowExport.bind(workflowLibraryClient),
+    workflowImportPreview: workflowLibraryClient.workflowImportPreview.bind(workflowLibraryClient),
+    workflowCreate: workflowLibraryClient.workflowCreate.bind(workflowLibraryClient),
+    workflowDraftSave: workflowLibraryClient.workflowDraftSave.bind(workflowLibraryClient),
+    workflowDraftDiscard: workflowLibraryClient.workflowDraftDiscard.bind(workflowLibraryClient),
+    workflowPublish: workflowLibraryClient.workflowPublish.bind(workflowLibraryClient),
+    workflowTasksMove: workflowLibraryClient.workflowTasksMove.bind(workflowLibraryClient),
+    workflowDelete: workflowLibraryClient.workflowDelete.bind(workflowLibraryClient),
+    workflowImportCommit: workflowLibraryClient.workflowImportCommit.bind(workflowLibraryClient),
+    workflowRoleSave: workflowLibraryClient.workflowRoleSave.bind(workflowLibraryClient),
+    workflowRoleDelete: workflowLibraryClient.workflowRoleDelete.bind(workflowLibraryClient),
+    workflowAvailabilitySet:
+      workflowLibraryClient.workflowAvailabilitySet.bind(workflowLibraryClient),
+    workflowDefaultSet: workflowLibraryClient.workflowDefaultSet.bind(workflowLibraryClient),
   } satisfies HostClientApi;
   for (const methodName of Object.keys(hostClient)) {
     Object.defineProperty(hostClient, methodName, { enumerable: false });

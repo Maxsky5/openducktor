@@ -1,4 +1,4 @@
-import type { TaskStopImpactOperation } from "@openducktor/contracts";
+import type { TaskRemovalPreview, TaskStopImpactOperation } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useActiveWorkspaceContext } from "../app-state/app-state-contexts";
 import { errorMessage } from "../lib/errors";
@@ -16,24 +16,25 @@ export type TaskStopImpactState = {
 
 type UseTaskStopImpactArgs = {
   taskIds: string[];
-  operation: TaskStopImpactOperation;
+  /** The operation to preview. Null reads nothing. */
+  preview: TaskRemovalPreview<TaskStopImpactOperation> | null;
   enabled: boolean;
 };
 
 export function useTaskStopImpact({
   taskIds,
-  operation,
+  preview,
   enabled,
 }: UseTaskStopImpactArgs): TaskStopImpactState {
   const { activeWorkspace } = useActiveWorkspaceContext();
   const repoPath = activeWorkspace?.repoPath ?? null;
-  const shouldRead = enabled && repoPath !== null && taskIds.length > 0;
+  const shouldRead = enabled && preview !== null && repoPath !== null && taskIds.length > 0;
   const query = useQuery({
     ...taskStopImpactQueryOptions({
       workspaceId: activeWorkspace?.workspaceId ?? "disabled",
       repoPath: repoPath ?? "",
       taskIds,
-      operation,
+      preview,
     }),
     enabled: shouldRead,
   });

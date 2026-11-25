@@ -1,3 +1,4 @@
+import { prepareNoRolePolicy } from "../../test-support/workflow-role-policy";
 import { allowAllGoalCommands } from "../../test-support/service-test-doubles";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
@@ -56,6 +57,7 @@ const setup = (
   });
   const taskReader = { getTask: () => Effect.succeed(task({ status: "in_progress" })) };
   const commands = createAgentSessionCommandService({
+    prepareRolePolicy: prepareNoRolePolicy,
     taskWorkflows: builtinTaskWorkflows,
     canonicalizeRepoPath: Effect.succeed,
     taskReader,

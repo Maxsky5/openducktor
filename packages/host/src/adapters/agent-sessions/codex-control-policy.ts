@@ -18,6 +18,7 @@ export const createCodexControlPolicyBinder =
   >(
     input: Input,
     operation: string,
+    externalSessionId: string | null,
   ) => {
     if (input.runtimeKind !== "codex") {
       return Effect.fail(
@@ -38,7 +39,7 @@ export const createCodexControlPolicyBinder =
         }),
       );
     }
-    return resolveRuntimePolicy({ repoPath: input.repoPath, sessionScope }).pipe(
+    return resolveRuntimePolicy({ repoPath: input.repoPath, sessionScope, externalSessionId }).pipe(
       Effect.map((policy) => {
         const binding: Extract<AgentRuntimePolicyBinding, { runtimeKind: "codex" }> = {
           runtimeKind: "codex",

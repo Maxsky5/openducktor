@@ -177,7 +177,9 @@ function useWorkflowSessionRuntimePolicy(
     if (runtimePolicyTarget.sessionScope?.kind === "workflow" && !taskQuery.data)
       return { runtimePolicy: null, error: null };
     try {
-      const workflowRole = taskQuery.data?.taskWorkflow.roles.find(({ id }) => id === selectedRole);
+      const workflowRole = selectedRole
+        ? taskQuery.data?.taskWorkflow.catalogRole(selectedRole)
+        : undefined;
       const policyInput: Parameters<typeof resolveAgentSessionRuntimePolicyFromSnapshot>[0] = {
         ...runtimePolicyTarget,
         snapshot: settingsSnapshot,

@@ -49,6 +49,11 @@ export type UsageProgressListener = (
   payload: HostEventPayload<"openducktor://usage-index-progress"> | ConnectionControlEvent,
 ) => void | Promise<void>;
 
+/** Workflow library commits other than draft saves. Control events report stream loss and reconnects. */
+export type WorkflowLibraryChangeListener = (
+  payload: HostEventPayload<"openducktor://workflow-library-changed"> | ConnectionControlEvent,
+) => void | Promise<void>;
+
 export type StartupProgressListener = (
   event: SessionStartupProgressEvent | ConnectionControlEvent,
 ) => void | Promise<void>;
@@ -79,6 +84,7 @@ export type HostConnection = {
   subscribeRuntimeChanges: (listener: RuntimeChangeListener) => Promise<() => void>;
   subscribeTaskMergeStatusUpdates: (listener: TaskMergeStatusUpdateListener) => Promise<() => void>;
   subscribeUsageProgress: (listener: UsageProgressListener) => Promise<() => void>;
+  subscribeWorkflowLibraryChanges: (listener: WorkflowLibraryChangeListener) => Promise<() => void>;
   subscribeBrowserTabEvents: (listener: BrowserTabEventListener) => Promise<() => void>;
   subscribeRunEvents: (listener: RunEventListener) => Promise<() => void>;
   subscribeAzureDevOpsConnectionUpdates: (

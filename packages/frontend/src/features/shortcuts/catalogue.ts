@@ -198,6 +198,8 @@ const BUILTIN_COMMANDS = {
     allowInput: true,
   },
   "workspace-next": { label: "Next workspace", group: "Navigation", scope: APP, allowInput: true },
+  usage: { label: "Go to Usage", group: "Navigation", scope: APP, allowInput: true },
+  workflows: { label: "Go to Workflows", group: "Navigation", scope: APP, allowInput: true },
   "focus-task-search": {
     label: "Focus task search",
     group: "Navigation",

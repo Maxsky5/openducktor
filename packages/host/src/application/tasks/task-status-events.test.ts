@@ -1,3 +1,5 @@
+import { testWorkspaceWorkflows } from "../../test-support/task-workflows";
+import { BUILTIN_TASK_ASSIGNMENT } from "./task-workflows";
 import { specPlanBuildReference } from "@openducktor/workflows/test-support";
 import { specPlanBuildWorkflow, type TransitionCause } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
@@ -131,6 +133,7 @@ test.each([
           repoPath,
           workspaceId,
           status: "open",
+          workflow: BUILTIN_TASK_ASSIGNMENT,
           task: { title: "Task", issueType: "task", priority: 2 },
         }),
       );
@@ -140,6 +143,7 @@ test.each([
       const { service, events } = createServices(harness, {
         workflowArtifactSave: createTaskServiceWithMutationProgress({
           taskWorkflows: builtinTaskWorkflows,
+          workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
           taskStore: store,
         }).workflowArtifactSave,
         applyAgentEvent: () =>
@@ -202,6 +206,7 @@ test.each([false, true])(
           repoPath,
           workspaceId,
           status: "open",
+          workflow: BUILTIN_TASK_ASSIGNMENT,
           task: { title: "Task", issueType: "task", priority: 2 },
         }),
       );
@@ -288,6 +293,7 @@ test("publishes committed transitions when the rest of a mutation fails", async 
         repoPath,
         workspaceId,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
@@ -341,6 +347,7 @@ test("records QA transitions only after the entire SQLite transaction commits", 
         repoPath,
         workspaceId,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
@@ -412,6 +419,7 @@ test("captures transitions made by pull request synchronization", async () => {
         repoPath,
         workspaceId,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );

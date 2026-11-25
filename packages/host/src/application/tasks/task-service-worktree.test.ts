@@ -1,6 +1,9 @@
+import { testWorkspaceWorkflows } from "../../test-support/task-workflows";
+import type { TaskWorkflowAssignment } from "../../ports/task-workflow-port";
+import { BUILTIN_TASK_ASSIGNMENT } from "./task-workflows";
 import { specPlanBuildReference } from "@openducktor/workflows/test-support";
 import { describe, expect, test } from "bun:test";
-import { type GitBranch, type TaskCard, type TaskMetadataPayload } from "@openducktor/contracts";
+import { type GitBranch, type TaskMetadataPayload } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { GitRefTip } from "../../ports/git-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
@@ -17,9 +20,12 @@ import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { createTaskService } from "./task-service";
 import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
+type StoredTaskCard = import("@openducktor/contracts").TaskCard & TaskWorkflowAssignment;
+
 const worktreePath = "/worktrees/repo/task-1";
 
-const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
+const task = (overrides: Partial<StoredTaskCard> = {}): StoredTaskCard => ({
+  ...BUILTIN_TASK_ASSIGNMENT,
   id: "task-1",
   title: "Task",
   description: "",
@@ -65,7 +71,7 @@ const createService = ({
   scriptSucceeds = true,
   transitions = [],
 }: {
-  current?: TaskCard;
+  current?: StoredTaskCard;
   metadata?: Partial<TaskMetadataPayload>;
   worktreeExists?: boolean;
   otherExistingPaths?: string[];
@@ -81,6 +87,7 @@ const createService = ({
   ];
   return createTaskService({
     taskWorkflows: builtinTaskWorkflows,
+    workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
     taskStore: createTaskStoreTestDouble({
       getTask: () => Effect.succeed(current),
       getTaskMetadata: () => Effect.succeed({ artifacts: {}, agentSessions: [], ...metadata }),

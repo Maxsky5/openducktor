@@ -1,3 +1,4 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "../../application/tasks/task-workflows";
 import { expect, test } from "bun:test";
 import { type WorkspaceSession } from "@openducktor/contracts";
 import { Effect, Result } from "effect";
@@ -25,6 +26,7 @@ test("reload roots recover workflow roles and repository scope from persisted ow
       harness.store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Permissions", issueType: "task", priority: 2 },
       }),
     );
@@ -52,6 +54,7 @@ test("reload roots recover workflow roles and repository scope from persisted ow
       harness.store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Closed history", issueType: "task", priority: 2 },
       }),
     );

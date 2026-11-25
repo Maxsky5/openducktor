@@ -137,7 +137,7 @@ describe("useTaskResetOperations", () => {
       workspaceId: "workspace-1",
       repoPath: "/repo",
       taskIds: ["A"],
-      operation: "reset_implementation",
+      preview: { operation: "reset_implementation", eventId: "reset-implementation" },
     }).queryKey;
 
     try {

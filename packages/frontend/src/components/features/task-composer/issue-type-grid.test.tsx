@@ -35,4 +35,19 @@ describe("IssueTypeGrid", () => {
     expect(onSelectIssueType).toHaveBeenCalledWith("feature");
     unmount();
   });
+
+  test("gives the feature icon tile a visible dark surface", () => {
+    const { container, unmount } = render(
+      <IssueTypeGrid
+        choices={[{ value: "feature", label: "Feature", description: "", icon: "feature" }]}
+        selectedIssueType={null}
+        onSelectIssueType={() => {}}
+      />,
+    );
+
+    const tile = container.querySelector("button > span");
+    expect(tile?.className).toContain("dark:bg-info-surface-selected");
+    expect(tile?.className).toContain("dark:text-info-surface-foreground");
+    unmount();
+  });
 });

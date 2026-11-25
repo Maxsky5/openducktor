@@ -1,7 +1,5 @@
 import {
-  PULL_REQUEST_LAUNCH_ID,
   TASK_CLOSED_STATE,
-  TASK_OPEN_STATE,
   workflowConditionSchema,
   workflowDefinitionSchema,
   type CompiledWorkflowDefinition,
@@ -9,14 +7,19 @@ import {
   type WorkflowCondition,
   type WorkflowDecision,
   type WorkflowDefinition,
-  type WorkflowFactDefinition,
   type WorkflowIds,
   type WorkflowInput,
   type WorkflowStepProjection,
-  type WorkflowValue,
 } from "@openducktor/contracts";
 import { deepFreeze } from "./deep-freeze";
-import { PULL_REQUEST_LAUNCH } from "./task-workflow/pull-request-launch";
+import {
+  createConditionCheck,
+  declaredFacts,
+  factValueDescription as valueDescription,
+  factValueTest as valueTest,
+} from "./rules/condition-rules";
+import { collectDefinitionProblems } from "./rules/definition-rules";
+import { createProblemSink, firstError, problemText } from "./rules/problems";
 
 export type WorkflowEvaluationErrorCode =
   | "invalid_definition"
@@ -284,12 +287,14 @@ export const createWorkflow = <const Definition extends WorkflowDefinition>(
           `Invalid condition for workflow "${definition.id}": ${firstIssueMessage(parsed.error.issues, "condition")}. Use a data-only workflow condition.`,
         );
       }
-      createConditionCheck(definition, (message) => {
+      const sink = createProblemSink(["condition"]);
+      createConditionCheck(definition, sink.error)(parsed.data, [], "The condition");
+      const problem = firstError(sink.problems);
+      if (problem)
         throw new WorkflowEvaluationError(
           "invalid_condition",
-          `Invalid condition for workflow "${definition.id}". ${message}`,
+          `Invalid condition for workflow "${definition.id}". ${problemText(problem)}`,
         );
-      })(parsed.data, "condition");
       const test = compile(parsed.data);
       const predicate: WorkflowPredicate = (input) => {
         checkInput(input);
@@ -530,15 +535,6 @@ const artifactStateDescription = (artifact: WorkflowArtifactDefinition): string 
     ? `{ present } and, for a present review, a verdict from ${artifact.verdicts.map((verdict) => JSON.stringify(verdict.id)).join(", ")}`
     : "{ present } without a verdict";
 
-/** Declared issue types make the `issueType` enum fact. */
-const declaredFacts = (definition: WorkflowDefinition): WorkflowDefinition["facts"] =>
-  definition.issueTypes.length === 0
-    ? definition.facts
-    : [
-        ...definition.facts,
-        { id: "issueType", type: "enum", values: definition.issueTypes.map(({ id }) => id) },
-      ];
-
 const parseDefinition = (source: WorkflowDefinition): WorkflowDefinition => {
   const parsed = workflowDefinitionSchema.safeParse(source);
   if (!parsed.success) {
@@ -558,360 +554,13 @@ const firstIssueMessage = (
   return `${issue?.path.map(String).join(".") || root}: ${issue?.message}`;
 };
 
-type ConditionCheck = (condition: WorkflowCondition, path: string) => void;
-
-const createConditionCheck = (
-  definition: WorkflowDefinition,
-  invalid: (message: string) => never,
-): ConditionCheck => {
-  const facts = new Map(declaredFacts(definition).map((fact) => [fact.id, fact]));
-  const artifacts = new Map(definition.artifacts.map((artifact) => [artifact.id, artifact]));
-  const states = new Set(definition.states.map((state) => state.id));
-  const check: ConditionCheck = (condition, path) => {
-    if (condition === true || condition === false) return;
-    if ("fact" in condition) {
-      const fact = facts.get(condition.fact);
-      if (!fact) {
-        return invalid(`Unknown fact "${condition.fact}" at ${path}.fact. Declare it in facts.`);
-      }
-      if (!valueTest(fact)(condition.equals)) {
-        invalid(
-          `Invalid comparison at ${path}.equals for fact "${condition.fact}". Use ${valueDescription(fact)}.`,
-        );
-      }
-    } else if ("artifact" in condition) {
-      const artifact = artifacts.get(condition.artifact);
-      if (!artifact) {
-        return invalid(
-          `Unknown artifact "${condition.artifact}" at ${path}.artifact. Declare it in artifacts.`,
-        );
-      }
-      if ("verdict" in condition) {
-        if (artifact.kind !== "review") {
-          return invalid(
-            `Artifact "${condition.artifact}" at ${path}.artifact has no verdicts. Compare a review artifact.`,
-          );
-        }
-        if (!artifact.verdicts.some((verdict) => verdict.id === condition.verdict)) {
-          invalid(
-            `Unknown verdict "${condition.verdict}" at ${path}.verdict. Use a verdict of artifact "${artifact.id}".`,
-          );
-        }
-      }
-    } else if ("stateIn" in condition) {
-      condition.stateIn.forEach((id, index) => {
-        if (!states.has(id)) {
-          invalid(`Unknown states ID "${id}" at ${path}.stateIn[${index}]. Use an ID from states.`);
-        }
-      });
-    } else if ("not" in condition) {
-      check(condition.not, `${path}.not`);
-    } else {
-      const key = "all" in condition ? "all" : "any";
-      const children = "all" in condition ? condition.all : condition.any;
-      children.forEach((child, index) => check(child, `${path}.${key}[${index}]`));
-    }
-  };
-  return check;
-};
-
 const checkDefinition = (definition: WorkflowDefinition): void => {
-  const invalid = (message: string): never => {
+  const sink = createProblemSink();
+  collectDefinitionProblems(definition, sink);
+  const problem = firstError(sink.problems);
+  if (problem)
     throw new WorkflowEvaluationError(
       "invalid_definition",
-      `Workflow "${definition.id}" is invalid. ${message}`,
+      `Workflow "${definition.id}" is invalid. ${problemText(problem)}`,
     );
-  };
-  const checkCondition = createConditionCheck(definition, invalid);
-  const checkIds = (
-    items: readonly { id: string }[],
-    collection: string,
-    result = new Set<string>(),
-  ): Set<string> => {
-    for (const item of items) {
-      if (result.has(item.id))
-        invalid(`Duplicate ID "${item.id}" in ${collection}. Use unique IDs.`);
-      result.add(item.id);
-    }
-    return result;
-  };
-  const checkReference = (id: string, known: Set<string>, collection: string, path: string) => {
-    if (!known.has(id))
-      invalid(`Unknown ${collection} ID "${id}" at ${path}. Use an ID from ${collection}.`);
-  };
-  const checkRule = (
-    rule: WorkflowDefinition["actionOrder"][number],
-    path: string,
-    actions: Set<string>,
-  ) => {
-    checkCondition(rule.when, `${path}.when`);
-    rule.actions.forEach((id, index) =>
-      checkReference(id, actions, "actions", `${path}.actions[${index}]`),
-    );
-  };
-
-  checkIds(declaredFacts(definition), "facts");
-  const issueTypes = checkIds(definition.issueTypes, "issueTypes");
-  if (definition.defaultIssueType !== undefined)
-    checkReference(definition.defaultIssueType, issueTypes, "issueTypes", "defaultIssueType");
-  const roles = checkIds(definition.roles, "roles");
-  const artifacts = checkIds(definition.artifacts, "artifacts");
-  const states = checkIds(definition.states, "states");
-  const steps = checkIds(definition.steps, "steps");
-  const events = checkIds(definition.events, "events");
-  const actions = checkIds(definition.actions, "actions");
-  const signals = checkIds(definition.signals, "signals");
-  const automations = checkIds(definition.automations, "automations");
-  const launchActions = new Set<string>();
-  definition.steps.forEach((step, index) => {
-    if (step.kind === "agent")
-      checkIds(step.launchActions, `steps[${index}].launchActions`, launchActions);
-  });
-  if (launchActions.has(PULL_REQUEST_LAUNCH_ID))
-    invalid(
-      `Launch action ID "${PULL_REQUEST_LAUNCH_ID}" names the core pull request launch. Use another ID.`,
-    );
-  // Automations and launch order rules can also name the core pull request launch.
-  const startableLaunches = new Set([...launchActions, PULL_REQUEST_LAUNCH_ID]);
-
-  for (const core of [TASK_OPEN_STATE, TASK_CLOSED_STATE])
-    if (!states.has(core))
-      invalid(`Missing core state "${core}" in states. Declare it with its label and tone.`);
-  definition.pullRequestRoles.forEach((id, index) =>
-    checkReference(id, roles, "roles", `pullRequestRoles[${index}]`),
-  );
-  definition.roles.forEach((role, index) =>
-    role.writes.forEach((id, writeIndex) =>
-      checkReference(id, artifacts, "artifacts", `roles[${index}].writes[${writeIndex}]`),
-    ),
-  );
-  definition.artifacts.forEach((artifact, index) => {
-    const path = `artifacts[${index}]`;
-    if (artifact.kind === "document") {
-      if (artifact.saveEventId !== undefined)
-        checkReference(artifact.saveEventId, events, "events", `${path}.saveEventId`);
-      return;
-    }
-    checkIds(artifact.verdicts, `${path}.verdicts`);
-    artifact.verdicts.forEach((verdict, verdictIndex) =>
-      checkReference(
-        verdict.eventId,
-        events,
-        "events",
-        `${path}.verdicts[${verdictIndex}].eventId`,
-      ),
-    );
-  });
-  definition.states.forEach((state, index) => {
-    const path = `states[${index}]`;
-    if (state.notification?.role !== undefined)
-      checkReference(state.notification.role, roles, "roles", `${path}.notification.role`);
-    if (state.studioRole !== undefined)
-      checkReference(state.studioRole, roles, "roles", `${path}.studioRole`);
-    state.historyRoles?.forEach((id, roleIndex) =>
-      checkReference(id, roles, "roles", `${path}.historyRoles[${roleIndex}]`),
-    );
-  });
-  definition.roles.forEach((role, index) => {
-    if (role.defaultArtifact !== undefined)
-      checkReference(
-        role.defaultArtifact,
-        artifacts,
-        "artifacts",
-        `roles[${index}].defaultArtifact`,
-      );
-  });
-  definition.steps.forEach((step, index) => {
-    const path = `steps[${index}]`;
-    step.inputs.forEach((id, artifactIndex) =>
-      checkReference(id, artifacts, "artifacts", `${path}.inputs[${artifactIndex}]`),
-    );
-    step.outputs.forEach((id, artifactIndex) =>
-      checkReference(id, artifacts, "artifacts", `${path}.outputs[${artifactIndex}]`),
-    );
-    checkCondition(step.requiredWhen, `${path}.requiredWhen`);
-    checkCondition(step.availableWhen, `${path}.availableWhen`);
-    checkCondition(step.completedWhen, `${path}.completedWhen`);
-    if (step.kind !== "agent") return;
-    checkReference(step.roleId, roles, "roles", `${path}.roleId`);
-    if (step.startEventId !== undefined)
-      checkReference(step.startEventId, events, "events", `${path}.startEventId`);
-    step.launchActions.forEach((launch, launchIndex) => {
-      const launchPath = `${path}.launchActions[${launchIndex}]`;
-      if (!launch.startModes.includes(launch.defaultStartMode))
-        invalid(
-          `Default start mode "${launch.defaultStartMode}" at ${launchPath}.defaultStartMode is not in its start modes. Add it to startModes.`,
-        );
-      if (launch.selectWhen !== undefined)
-        checkCondition(launch.selectWhen, `${launchPath}.selectWhen`);
-      if (launch.showWhen !== undefined) checkCondition(launch.showWhen, `${launchPath}.showWhen`);
-    });
-    step.displayRules?.forEach((rule, ruleIndex) =>
-      checkCondition(rule.when, `${path}.displayRules[${ruleIndex}].when`),
-    );
-  });
-  const approvalPaths: string[] = [];
-  definition.actions.forEach((action, index) => {
-    const path = `actions[${index}]`;
-    if (action.stepId !== undefined)
-      checkReference(action.stepId, steps, "steps", `${path}.stepId`);
-    checkCondition(action.availableWhen, `${path}.availableWhen`);
-    action.labels?.forEach((variant, variantIndex) =>
-      checkCondition(variant.when, `${path}.labels[${variantIndex}].when`),
-    );
-    if (action.kind === "approval") {
-      approvalPaths.push(path);
-      return;
-    }
-    if (action.kind === "view") {
-      if (action.stepId === undefined) return;
-      if (action.target !== undefined)
-        invalid(`The view action at ${path} has a step and a target. Keep one of them.`);
-      if (definition.steps.find(({ id }) => id === action.stepId)?.kind !== "agent")
-        invalid(`The view action at ${path} opens a session, so its step must be an agent step.`);
-      return;
-    }
-    if (action.eventId !== undefined)
-      checkReference(action.eventId, events, "events", `${path}.eventId`);
-    action.launchActionIds?.forEach((id, launchIndex) =>
-      checkReference(
-        id,
-        launchActions,
-        "launch actions",
-        `${path}.launchActionIds[${launchIndex}]`,
-      ),
-    );
-  });
-  if (approvalPaths.length > 1)
-    invalid(
-      `The approval actions at ${approvalPaths.join(" and ")} open the same approval. Keep one approval action.`,
-    );
-  // The host commits these events inside a running session, where worktree.reset would stop it.
-  const sessionEventSenders = new Map<string, string>();
-  definition.artifacts.forEach((artifact) => {
-    if (artifact.kind === "document") {
-      if (artifact.saveEventId !== undefined)
-        sessionEventSenders.set(artifact.saveEventId, `the ${artifact.id} artifact save`);
-      return;
-    }
-    artifact.verdicts.forEach((verdict) =>
-      sessionEventSenders.set(
-        verdict.eventId,
-        `the ${artifact.id} artifact save with verdict "${verdict.id}"`,
-      ),
-    );
-  });
-  definition.steps.forEach((step) => {
-    if (step.kind === "agent" && step.startEventId !== undefined)
-      sessionEventSenders.set(step.startEventId, `the start of the ${step.roleId} step`);
-  });
-  definition.events.forEach((event, index) => {
-    const path = `events[${index}]`;
-    const sender = sessionEventSenders.get(event.id);
-    if (sender !== undefined && event.effects !== undefined && event.effects.length > 0)
-      invalid(
-        `Event "${event.id}" is sent by ${sender}, so it cannot declare host effects. Move the effect to a task action event.`,
-      );
-    if (event.agent !== undefined) {
-      if (event.effects !== undefined && event.effects.length > 0)
-        invalid(
-          `The agent event at ${path} has host effects, and agents cannot send an event with host effects. Remove ${path}.effects or ${path}.agent.`,
-        );
-      event.agent.roles.forEach((id, roleIndex) =>
-        checkReference(id, roles, "roles", `${path}.agent.roles[${roleIndex}]`),
-      );
-    }
-    event.from.forEach((id, fromIndex) =>
-      checkReference(id, states, "states", `${path}.from[${fromIndex}]`),
-    );
-    checkIds(event.guards, `${path}.guards`);
-    event.guards.forEach((guard, guardIndex) =>
-      checkCondition(guard.when, `${path}.guards[${guardIndex}].when`),
-    );
-    event.outcomes.forEach((outcome, outcomeIndex) => {
-      const outcomePath = `${path}.outcomes[${outcomeIndex}]`;
-      if (outcome.to !== null) checkReference(outcome.to, states, "states", `${outcomePath}.to`);
-      if (outcome.signal !== undefined)
-        checkReference(outcome.signal, signals, "signals", `${outcomePath}.signal`);
-      if (outcome.sourceRole !== undefined)
-        checkReference(outcome.sourceRole, roles, "roles", `${outcomePath}.sourceRole`);
-      checkCondition(outcome.when, `${outcomePath}.when`);
-    });
-  });
-  definition.signals.forEach((signal, index) =>
-    signal.automations.forEach((id, automationIndex) =>
-      checkReference(
-        id,
-        automations,
-        "automations",
-        `signals[${index}].automations[${automationIndex}]`,
-      ),
-    ),
-  );
-  const launchStartModes = new Map<string, readonly string[]>([
-    ...definition.steps.flatMap((step) =>
-      step.kind === "agent"
-        ? step.launchActions.map((launch) => [launch.id, launch.startModes] as const)
-        : [],
-    ),
-    [PULL_REQUEST_LAUNCH_ID, PULL_REQUEST_LAUNCH.startModes],
-  ]);
-  definition.automations.forEach((automation, index) => {
-    const path = `automations[${index}]`;
-    checkReference(
-      automation.launchActionId,
-      startableLaunches,
-      "launch actions",
-      `${path}.launchActionId`,
-    );
-    const startModes = launchStartModes.get(automation.launchActionId);
-    if (
-      automation.startMode !== undefined &&
-      startModes &&
-      !startModes.includes(automation.startMode)
-    )
-      invalid(
-        `Start mode "${automation.startMode}" at ${path}.startMode is not a start mode of launch action "${automation.launchActionId}". Use ${startModes.join(", ")}.`,
-      );
-  });
-  definition.actionOrder.forEach((rule, index) =>
-    checkRule(rule, `actionOrder[${index}]`, actions),
-  );
-  definition.actionPriority.forEach((rule, index) =>
-    checkRule(rule, `actionPriority[${index}]`, actions),
-  );
-  definition.launchOrder.forEach((rule, index) => {
-    checkCondition(rule.when, `launchOrder[${index}].when`);
-    rule.order.forEach((id, orderIndex) =>
-      checkReference(
-        id,
-        startableLaunches,
-        "launch actions",
-        `launchOrder[${index}].order[${orderIndex}]`,
-      ),
-    );
-  });
 };
-
-const valueTest = (
-  fact: WorkflowFactDefinition,
-): ((value: WorkflowValue | undefined) => boolean) => {
-  switch (fact.type) {
-    case "boolean":
-      return (value) => value === true || value === false;
-    case "number":
-      return (value) => Number.isFinite(value);
-    case "string":
-      // Only a primitive string equals its own String conversion.
-      return (value) => String(value) === value;
-    case "enum": {
-      const values = new Set<WorkflowValue | undefined>(fact.values);
-      return (value) => values.has(value);
-    }
-  }
-};
-
-const valueDescription = (fact: WorkflowFactDefinition): string =>
-  fact.type === "enum"
-    ? `one of ${fact.values.map((value) => JSON.stringify(value)).join(", ")}`
-    : `a ${fact.type} value`;

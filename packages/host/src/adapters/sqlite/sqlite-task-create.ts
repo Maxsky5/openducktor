@@ -1,5 +1,6 @@
 import type { TaskCreateInput } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { TaskWorkflowAssignment } from "../../ports/task-workflow-port";
 import { normalizeLabels } from "../../domain/task/task-labels";
 import { replaceTaskLabels } from "./sqlite-task-relations";
 import {
@@ -13,6 +14,7 @@ import { insertTaskIfAbsent } from "./sqlite-task-writes";
 
 const taskInsertFromCreateInput = (
   task: TaskCreateInput,
+  workflow: TaskWorkflowAssignment,
   status: string,
   taskId: string,
   createdAt: Date,
@@ -30,6 +32,8 @@ const taskInsertFromCreateInput = (
   targetRemote: null,
   title: task.title,
   updatedAt: createdAt,
+  workflowId: workflow.workflowId,
+  workflowVersion: workflow.workflowVersion,
 });
 
 export const insertTaskFromCreateInput = ({
@@ -37,12 +41,14 @@ export const insertTaskFromCreateInput = ({
   session,
   status,
   task,
+  workflow,
   workspaceId,
 }: {
   createdAt: Date;
   session: HostDatabaseSession;
   status: string;
   task: TaskCreateInput;
+  workflow: TaskWorkflowAssignment;
   workspaceId: string;
 }) =>
   Effect.gen(function* () {
@@ -60,7 +66,7 @@ export const insertTaskFromCreateInput = ({
         yield* insertTaskIfAbsent(
           session,
           workspaceId,
-          taskInsertFromCreateInput(task, status, taskId, createdAt, workspaceId),
+          taskInsertFromCreateInput(task, workflow, status, taskId, createdAt, workspaceId),
         )
       ) {
         yield* replaceTaskLabels(session, workspaceId, taskId, normalizeLabels(task.labels ?? []));

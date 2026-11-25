@@ -1,3 +1,4 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "../../tasks/task-workflows";
 import { afterEach } from "bun:test";
 import type { TaskAssetFailure } from "@openducktor/contracts";
 import { Cause, Effect, Exit, Option } from "effect";
@@ -82,6 +83,7 @@ export const createTaskWithAsset = async (harness: Awaited<ReturnType<typeof cre
     harness.store.createTask({
       ...harness.scope,
       status: "open",
+      workflow: BUILTIN_TASK_ASSIGNMENT,
       task: {
         title: "Asset owner",
         issueType: "task",

@@ -148,7 +148,6 @@ describe("task worktree cleanup", () => {
     const cleanupTarget = await Effect.runPromise(
       findLatestCleanupTarget(
         {
-          worktreeRoles: ["build"],
           gitPort: createDirectMergeGitPort({
             calls,
             currentBranches: {
@@ -186,7 +185,6 @@ describe("task worktree cleanup", () => {
     const cleanupTarget = await Effect.runPromise(
       findLatestCleanupTarget(
         {
-          worktreeRoles: ["build"],
           gitPort: createDirectMergeGitPort({ calls }),
           settingsConfig: createBuildSettingsConfig(new Set()),
           taskWorktreeService: createDirectMergeTaskWorktreeService(null),
@@ -216,11 +214,10 @@ describe("task worktree cleanup", () => {
     expect(calls).toEqual([]);
   });
 
-  test("reads candidates only from the worktree roles of the task workflow", async () => {
+  test("reads candidates from every session of the task, latest first", async () => {
     const cleanupTarget = await Effect.runPromise(
       findLatestCleanupTarget(
         {
-          worktreeRoles: ["writer"],
           gitPort: createDirectMergeGitPort({ calls: [] }),
           settingsConfig: createBuildSettingsConfig(new Set()),
           taskWorktreeService: createDirectMergeTaskWorktreeService(null),
@@ -248,7 +245,7 @@ describe("task worktree cleanup", () => {
       ),
     );
 
-    expect(cleanupTarget).toBe("/worktrees/repo/writer");
+    expect(cleanupTarget).toBe("/worktrees/repo/editor");
   });
 
   test("skips repository-root cleanup candidates at the source", async () => {
@@ -256,7 +253,6 @@ describe("task worktree cleanup", () => {
     const cleanupTarget = await Effect.runPromise(
       findLatestCleanupTarget(
         {
-          worktreeRoles: ["build"],
           gitPort: createDirectMergeGitPort({
             calls,
             currentBranches: {
@@ -299,7 +295,6 @@ describe("task worktree cleanup", () => {
       const cleanupTarget = await Effect.runPromise(
         findLatestCleanupTarget(
           {
-            worktreeRoles: ["build"],
             gitPort: createDirectMergeGitPort({
               calls,
               currentBranches: {
@@ -335,7 +330,6 @@ describe("task worktree cleanup", () => {
     const cleanupTarget = await Effect.runPromise(
       findLatestCleanupTarget(
         {
-          worktreeRoles: ["build"],
           gitPort: createDirectMergeGitPort({
             calls,
             currentBranches: {
@@ -389,7 +383,6 @@ describe("task worktree cleanup", () => {
         cleanupMergedTaskState(
           {
             ...noRemovalScriptServices,
-            workflow: specPlanBuildWorkflow,
             gitPort: createDirectMergeGitPort({
               calls,
               currentBranches: {
@@ -451,7 +444,6 @@ describe("task worktree cleanup", () => {
               repoPath: "/repo",
               hooks: { beforeWorktreeRemoval: ["make clean"] },
             }),
-            workflow: specPlanBuildWorkflow,
             gitPort: createDirectMergeGitPort({
               calls,
               currentBranches: {
@@ -497,7 +489,6 @@ describe("task worktree cleanup", () => {
           cleanupMergedTaskState(
             {
               ...noRemovalScriptServices,
-              workflow: specPlanBuildWorkflow,
               gitPort: createDirectMergeGitPort({
                 calls,
                 currentBranches: {
@@ -592,7 +583,6 @@ describe("task worktree cleanup", () => {
         cleanupMergedTaskState(
           {
             ...noRemovalScriptServices,
-            workflow: specPlanBuildWorkflow,
             gitPort: createDirectMergeGitPort({
               calls,
               currentBranches: { [worktreePath]: { name: "odt/task-1", detached: false } },
@@ -660,7 +650,6 @@ describe("task worktree cleanup", () => {
           cleanupMergedTaskState(
             {
               ...noRemovalScriptServices,
-              workflow: specPlanBuildWorkflow,
               gitPort: createDirectMergeGitPort({
                 calls,
                 currentBranches: { [worktreePath]: { name: "odt/task-1", detached: false } },
@@ -697,7 +686,6 @@ describe("task worktree cleanup", () => {
         cleanupMergedTaskState(
           {
             ...noRemovalScriptServices,
-            workflow: specPlanBuildWorkflow,
             gitPort: createDirectMergeGitPort({
               calls,
               canonicalPaths: {
@@ -762,7 +750,6 @@ describe("task worktree cleanup", () => {
           cleanupMergedTaskState(
             {
               ...noRemovalScriptServices,
-              workflow: specPlanBuildWorkflow,
               gitPort: createDirectMergeGitPort({
                 calls,
                 canonicalPaths: {
@@ -836,7 +823,6 @@ describe("task worktree cleanup", () => {
                 repoPath,
                 hooks: emptyHooks,
               }),
-              workflow: specPlanBuildWorkflow,
               gitPort: extendGitPort(baseGitPort, {
                 removeWorktree(repoPath, targetWorktreePath, force) {
                   return baseGitPort.removeWorktree(repoPath, targetWorktreePath, force).pipe(
@@ -884,7 +870,6 @@ describe("task worktree cleanup", () => {
           cleanupMergedTaskState(
             {
               ...noRemovalScriptServices,
-              workflow: specPlanBuildWorkflow,
               gitPort: createDirectMergeGitPort({
                 calls,
                 currentBranches: {

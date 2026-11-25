@@ -6,8 +6,14 @@ export type NotificationCopy = {
   body: string;
 };
 
+/** A heading line ends as a sentence, so it does not run into the next line. */
+const headingSentence = (_line: string, heading: string): string =>
+  /[.!?:]$/.test(heading) ? heading : `${heading}.`;
+
 const toPlainNotificationText = (text: string): string =>
   text
+    .replace(/^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/gm, headingSentence)
+    .replace(/^\s*(?:[-*+]|\d+[.)]|>)\s+/gm, "")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/(\*\*|__)(.*?)\1/g, "$2")
     .replace(/`([^`]+)`/g, "$1")

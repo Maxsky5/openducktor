@@ -18,6 +18,7 @@ import { hostSettingsSchema, workspaces } from "./sqlite-host-settings-schema";
 import { booleanCheck, column } from "./sqlite-schema-sql";
 import { workspaceSessions } from "./sqlite-workspace-session-schema";
 import { agentSessionTurns } from "./sqlite-agent-session-turn-schema";
+import { workflowLibrarySchema } from "./sqlite-workflow-library-schema";
 export { workspaceSessions } from "./sqlite-workspace-session-schema";
 export { agentSessionTurns } from "./sqlite-agent-session-turn-schema";
 
@@ -47,6 +48,9 @@ export const tasks = sqliteTable(
     removeWorktreeOnClose: integer("remove_worktree_on_close", { mode: "boolean" }),
     createdAt: integer("created_at_ms", { mode: "timestamp_ms" }).notNull(),
     updatedAt: integer("updated_at_ms", { mode: "timestamp_ms" }).notNull(),
+    workflowId: text("workflow_id").notNull().default("openducktor-spec-plan-build"),
+    /** Null: the task follows the built-in workflow version that ships with the app. */
+    workflowVersion: integer("workflow_version"),
   },
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.id] }),
@@ -60,6 +64,7 @@ export const tasks = sqliteTable(
     index("idx_tasks_status_updated").on(table.workspaceId, table.status, table.updatedAt),
     // New task IDs are unique across workspaces. Imported duplicates stay, so this is no constraint.
     index("idx_tasks_id").on(table.id),
+    index("idx_tasks_workflow").on(table.workflowId, table.workflowVersion),
   ],
 );
 
@@ -283,6 +288,7 @@ export const taskAssets = sqliteTable(
 
 export const hostDatabaseSchema = {
   ...hostSettingsSchema,
+  ...workflowLibrarySchema,
   hostMetadata,
   workspaceSessions,
   agentSessionTurns,

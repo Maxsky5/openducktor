@@ -24,8 +24,10 @@ import {
   type ReactElement,
   type MouseEvent as ReactMouseEvent,
   type RefCallback,
+  startTransition,
   useEffect,
   useId,
+  useOptimistic,
   useRef,
   useState,
 } from "react";
@@ -307,17 +309,30 @@ export function WorkspaceRail({
     });
   };
 
+  // The clicked tile shows as active at once. The new workspace renders in the same action.
+  const [shownActiveWorkspaceId, showActiveWorkspace] = useOptimistic(
+    workspaces.find(({ isActive }) => isActive)?.workspaceId ?? null,
+  );
+  const shownWorkspace = (workspace: WorkspaceRecord): WorkspaceRecord => {
+    const isActive = workspace.workspaceId === shownActiveWorkspaceId;
+    return workspace.isActive === isActive ? workspace : { ...workspace, isActive };
+  };
+
   const selectGuardedWorkspace = (workspaceId: string) => {
-    if (workspaceId === activeWorkspace?.workspaceId) return;
+    if (workspaceId === shownActiveWorkspaceId) return;
     guardWorkspaceChange(
-      async () => {
-        try {
-          await selectWorkspace(workspaceId);
-          return true;
-        } catch {
-          return false;
-        }
-      },
+      () =>
+        new Promise<boolean>((resolve) => {
+          startTransition(async () => {
+            showActiveWorkspace(workspaceId);
+            try {
+              await selectWorkspace(workspaceId);
+              resolve(true);
+            } catch {
+              resolve(false);
+            }
+          });
+        }),
       undefined,
       { waitForSuccess: true },
     );
@@ -398,7 +413,7 @@ export function WorkspaceRail({
                   {workspaces.map((workspace, index) => (
                     <div key={workspace.workspaceId} className="relative">
                       <SortableWorkspaceRailButton
-                        workspace={workspace}
+                        workspace={shownWorkspace(workspace)}
                         position={index + 1}
                         isActiveDrag={activeWorkspaceId === workspace.workspaceId}
                         shouldSuppressSelection={

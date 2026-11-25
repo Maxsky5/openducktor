@@ -13,5 +13,7 @@ export const taskRowFixture = (overrides: Partial<TaskRow> = {}): TaskRow => ({
   removeWorktreeOnClose: null,
   createdAt: new Date("2026-06-10T10:00:00.000Z"),
   updatedAt: new Date("2026-06-10T10:00:00.000Z"),
+  workflowId: "openducktor-spec-plan-build",
+  workflowVersion: null,
   ...overrides,
 });

@@ -117,6 +117,25 @@ describe("useKanbanBoardData", () => {
         board.historicalSessionsByTaskId.get("TASK-1")?.map((entry) => entry.externalSessionId),
       ).toEqual(["build-1"]);
       expect(board.historicalSessionsByTaskId.get("TASK-2")).toEqual([]);
+      expect(board.mixedBoard).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("names the default workflow when the board has tasks of several workflows", async () => {
+    const tasks = [
+      createTaskCardFixture({ id: "TASK-1" }),
+      createTaskCardFixture({ id: "TASK-2", workflow: { id: "bug-triage", revision: 1 } }),
+    ];
+    const { harness } = renderBoardData(tasks, async () => createSettingsSnapshotFixture());
+    try {
+      await harness.mount();
+      await harness.waitFor((board) => !board.isLoadingTasks);
+      // Each column names the workflows that use it.
+      expect(harness.getLatest().mixedBoard?.columnWorkflows.get("open")).toContain(
+        builtinWorkspaceWorkflowsFixture.newTaskWorkflow.definition.label,
+      );
     } finally {
       await harness.unmount();
     }

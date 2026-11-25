@@ -129,6 +129,24 @@ describe("notification copy", () => {
     });
   });
 
+  test("ends a Markdown heading as a sentence and drops list marks", () => {
+    const occurrence: NotificationOccurrence = {
+      occurrenceId: "agent.session_idle:/repo:task-1:cycle-2",
+      kind: "agent.session_idle",
+      sessionLabel: "Verifier",
+      repoPath: "/repo",
+      repositoryLabel: "Repo",
+      task: { id: "task-1", title: "Fix the series" },
+      role: "bug_verifier",
+      status: "## Verdict: fixed\n\nThe test passed.\n\n## Checks\n\n- 3 runs\n1. Lint",
+      navigationTarget: { type: "agent_studio_task", repoPath: "/repo", taskId: "task-1" },
+    };
+
+    expect(buildNotificationCopy(occurrence).body).toBe(
+      "Verdict: fixed. The test passed. Checks. 3 runs Lint",
+    );
+  });
+
   for (const [kind, eventLabel, body] of EVENT_CASES) {
     test(`formats ${kind}`, () => {
       const copy = buildNotificationCopy(occurrence(kind));

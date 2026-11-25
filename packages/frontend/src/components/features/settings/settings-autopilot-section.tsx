@@ -71,6 +71,12 @@ export function SettingsAutopilotSection({
           >
             {taskWorkflow.definition.label}
           </h4>
+          {taskWorkflow.definition.signals.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              This workflow sends no Autopilot signals. Add signals to its transitions on the
+              Workflows page to automate its tasks.
+            </p>
+          ) : null}
           {taskWorkflow.definition.signals.map((eventDefinition) => {
             const rule = getAutopilotRule(autopilot, taskWorkflow.reference.id, eventDefinition.id);
             const selectedValue = getAutopilotSelectedValue(rule);

@@ -41,14 +41,18 @@ export const assertApprovalAllowed = ({
       field: "requestId",
       message: "The OpenCode approval request is no longer pending.",
     });
+  // A delegated child runs under the policy of its workflow session, the topmost registered
+  // ancestor, even when the child carries the inherited workflow scope. The adapter installs native
+  // child policies from the same root.
   let session = owner;
   const visited = new Set<string>();
-  while (!session.sessionScope && session.snapshot.parentExternalSessionId) {
+  while (session.snapshot.parentExternalSessionId) {
     const parentId = session.snapshot.parentExternalSessionId;
     if (visited.has(parentId)) break;
     visited.add(parentId);
     const parentRef = refsByExternalSessionId.find(parentId);
-    if (!parentRef)
+    if (!parentRef) {
+      if (session.sessionScope) break;
       throw new HostValidationError({
         field: "parentExternalSessionId",
         message: `Cannot approve this OpenCode request because its parent '${parentId}' is no longer registered. Reject the request or reconnect the selected runtime and retry.`,
@@ -58,11 +62,15 @@ export const assertApprovalAllowed = ({
           parentExternalSessionId: parentId,
         },
       });
+    }
     session = requireSession(parentRef);
   }
   const scope = session.sessionScope;
   if (scope?.kind !== "workflow") return;
-  const rolePolicy = resolveWorkflowRolePolicy(scope);
+  const rolePolicy = resolveWorkflowRolePolicy({
+    ...scope,
+    externalSessionId: session.snapshot.ref.externalSessionId,
+  });
   const descriptor = OPENCODE_RUNTIME_DESCRIPTOR;
   const names = [request.action?.name, request.tool?.name].filter(
     (name): name is string => name !== undefined,

@@ -3,6 +3,13 @@ import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { observeAgentSessionSummaries } from "@openducktor/frontend-core/sessions/agent-session-snapshots";
+import { BUILTIN_ROLES, createTaskWorkflow, resolveWorkspaceBoard } from "@openducktor/workflows";
+import {
+  createWorkflowTaskCardFixture,
+  reviewTaskDefinition,
+  reviewTaskPromptTemplates,
+  reviewTaskRoles,
+} from "@openducktor/workflows/test-support";
 import { groupTaskSessions } from "./task-sessions-model";
 
 const record = (
@@ -156,5 +163,31 @@ describe("groupTaskSessions", () => {
       live: false,
       activityState: null,
     });
+  });
+
+  test("lists sessions of a role that a moved task no longer binds after the bound roles", () => {
+    const workflow = createTaskWorkflow(reviewTaskDefinition(), reviewTaskPromptTemplates, [
+      ...reviewTaskRoles,
+      ...BUILTIN_ROLES,
+    ]);
+    const task = createWorkflowTaskCardFixture(
+      workflow,
+      resolveWorkspaceBoard([{ workflow, latest: true }]),
+      { id: "TASK-1" },
+    );
+    const groups = groupTaskSessions(
+      task,
+      [
+        record("b-1", "build", "2026-10-01T08:00:00.000Z"),
+        record("w-1", "writer", "2026-10-01T09:00:00.000Z"),
+      ],
+      [],
+      "ws-1",
+    );
+    expect(groups.map(({ role, roleLabel }) => [role, roleLabel])).toEqual([
+      ["writer", "Writer"],
+      ["build", "Builder"],
+    ]);
+    expect(groups[1]?.rows[0]?.label).toBe("Builder #1");
   });
 });

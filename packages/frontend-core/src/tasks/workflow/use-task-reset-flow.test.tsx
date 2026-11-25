@@ -15,7 +15,7 @@ import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
 import * as cleanupImpactModule from "../details/use-task-cleanup-impact";
 import { useTaskResetFlow } from "./use-task-reset-flow";
-import { resolveWorkflowBoard } from "@openducktor/workflows";
+import { resolveWorkspaceBoard } from "@openducktor/workflows";
 import {
   createReviewTaskWorkflow,
   createWorkflowTaskCardFixture,
@@ -100,10 +100,7 @@ describe("useTaskResetFlow", () => {
 
   test("applies the event of a custom workflow and names the state that the event gives", async () => {
     const workflow = createReviewTaskWorkflow();
-    const board = resolveWorkflowBoard(
-      { states: workflow.definition.states.map(({ id }) => ({ id, taskOrder: "updated" })) },
-      [workflow],
-    );
+    const board = resolveWorkspaceBoard([{ workflow, latest: true }]);
     const review = createWorkflowTaskCardFixture(workflow, board, {
       id: "task-1",
       status: "approval",

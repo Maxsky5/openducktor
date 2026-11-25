@@ -96,6 +96,8 @@ export const createDemoHostConnection = (client: HostClient, clock: DemoClock) =
   const connection: HostConnection = {
     client,
     subscribeWorkspaceProviderSetupUpdates: noEvents,
+    // The demo has one built-in workflow, so its workflow library never changes.
+    subscribeWorkflowLibraryChanges: noEvents,
     subscribeStartupProgress: (listener) => subscribed(startup.add(listener)),
     subscribeWorkspaceSessionUpdates: (listener) => subscribed(workspaceSessions.add(listener)),
     subscribeRuntimeChanges: noEvents,

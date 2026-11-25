@@ -1,23 +1,18 @@
 import {
-  agentRoleDefinitionSchema,
+  TASK_CLOSED_STATE,
+  TASK_OPEN_STATE,
   type AgentRoleDefinition,
-  type CompiledAgentRoleDefinition,
   workflowCatalogSchema,
   workflowDefinitionSchema,
   type BoardTaskOrder,
-  type SharedBoardState,
   type WorkflowBoardDefinition,
   type WorkflowCatalog,
   type WorkflowDescriptor,
   type WorkflowReference,
 } from "@openducktor/contracts";
 import { deepFreeze } from "./deep-freeze";
+import { columnOrder } from "./library/column-order";
 import { createTaskWorkflow, type TaskWorkflow } from "./task-workflow/task-workflow";
-
-/** Column order and task order of a board. The workflows that use a state give its metadata. */
-export type WorkflowBoardLayout = {
-  readonly states: readonly { readonly id: string; readonly taskOrder: BoardTaskOrder }[];
-};
 
 export const workflowReferenceKey = ({ id, revision }: WorkflowReference): string =>
   `${id}@${revision}`;
@@ -36,31 +31,99 @@ export const taskWorkflowDescriptor = (workflow: TaskWorkflow): WorkflowDescript
   templates: workflowPromptTemplates(workflow),
 });
 
-/** The catalog role of a bound role, without what the workflow lets it write. */
-const catalogRole = ({
-  writes: _writes,
-  defaultArtifact: _defaultArtifact,
-  ...role
-}: TaskWorkflow["roles"][number]) => role;
-
-/** The catalog form of the roles that the workflows bind, once each, in first-use order. */
-export const workflowRoleCatalog = (
-  workflows: readonly TaskWorkflow[],
-): readonly AgentRoleDefinition[] => {
-  const roles = new Map<string, AgentRoleDefinition>();
-  for (const workflow of workflows)
-    for (const role of workflow.roles.map(catalogRole))
-      if (!roles.has(role.id)) roles.set(role.id, agentRoleDefinitionSchema.parse(role));
-  return [...roles.values()];
+/**
+ * A workflow version on a board, and whether it is the latest version of its workflow. A
+ * display-only version gives the display of its states and adds no column.
+ */
+export type BoardWorkflow = {
+  readonly workflow: TaskWorkflow;
+  readonly latest: boolean;
+  readonly displayOnly?: boolean;
 };
 
-type SharedStateMetadata = Omit<SharedBoardState, "id" | "taskOrder">;
-const sharedMetadata = (state: TaskWorkflow["definition"]["states"][number]) => ({
+const boardDisplay = (state: TaskWorkflow["definition"]["states"][number]) => ({
   label: state.label,
   title: state.title ?? state.label,
   shortLabel: state.shortLabel ?? state.label,
   tone: state.tone ?? "neutral",
 });
+
+const taskOrderOf = (stateId: string): BoardTaskOrder =>
+  stateId === TASK_OPEN_STATE ? "priority_then_created" : "updated";
+
+/**
+ * The board of a workspace. The caller passes the versions in board order: the default workflow
+ * first, then the other workflows by name; each workflow gives its latest version, then its older
+ * versions, newest first.
+ *
+ * `open` is the first column and `closed` the last. The default workflow gives the first order.
+ * Each workflow reads its states in board order. A run of its states that the board does not show
+ * yet goes between the nearest earlier and the nearest later state of that run that the board
+ * shows, spread evenly across that gap, so an early state of a workflow stays early on the board
+ * and a late state stays late. States at the same place keep the order in which they came.
+ * Display-only versions add no column. A column takes its display from the first latest version
+ * that declares the state, else from the first version that declares it.
+ */
+export const resolveWorkspaceBoard = (
+  workflows: readonly BoardWorkflow[],
+): WorkflowBoardDefinition => {
+  /** The place of each column, from `open` at 0 to `closed` at 1. `closed` is always last. */
+  const places = new Map<string, number>([[TASK_OPEN_STATE, 0]]);
+  const CLOSED_PLACE = 1;
+  const display = new Map<
+    string,
+    { latest: boolean; state: TaskWorkflow["definition"]["states"][number] }
+  >();
+  /** Puts a run of new states between two places, spread evenly across the gap. */
+  const placeRun = (run: readonly string[], after: number, before: number) => {
+    // A later state that the board shows earlier gives no gap: the run then fills the gap after
+    // the earlier state.
+    const limit =
+      before > after
+        ? before
+        : Math.min(...[...places.values()].filter((place) => place > after), CLOSED_PLACE);
+    run.forEach((id, index) => {
+      places.set(id, after + ((limit - after) * (index + 1)) / (run.length + 1));
+    });
+  };
+  for (const { workflow, latest, displayOnly } of workflows) {
+    const states = columnOrder(workflow.definition.states).map(({ state }) => state);
+    for (const state of states) {
+      const known = display.get(state.id);
+      if (!known || (latest && !known.latest)) display.set(state.id, { latest, state });
+    }
+    if (displayOnly) continue;
+    let after = 0;
+    let run: string[] = [];
+    for (const { id } of states) {
+      const place = id === TASK_CLOSED_STATE ? CLOSED_PLACE : places.get(id);
+      if (place === undefined) {
+        run.push(id);
+        continue;
+      }
+      if (run.length > 0) placeRun(run, after, place);
+      run = [];
+      after = Math.max(after, places.get(id) ?? after);
+    }
+    if (run.length > 0) placeRun(run, after, CLOSED_PLACE);
+  }
+  // A sort is stable, so states at the same place keep the order in which they came. The
+  // tolerance keeps the rounding of fractions, such as 0.6 + 0.2 < 0.8, out of that tie.
+  const order = [...places]
+    .toSorted(([, left], [, right]) => (Math.abs(left - right) < 1e-9 ? 0 : left - right))
+    .map(([id]) => id);
+  order.push(TASK_CLOSED_STATE);
+  return deepFreeze({
+    states: order.map((id) => {
+      const known = display.get(id);
+      if (!known)
+        throw new Error(
+          `No workspace workflow declares state "${id}". Fix the workflow inventory.`,
+        );
+      return { id, ...boardDisplay(known.state), taskOrder: taskOrderOf(id) };
+    }),
+  });
+};
 
 /** The latest revision of each workflow, in first-use order. */
 export const latestWorkflowRevisions = (
@@ -75,96 +138,15 @@ export const latestWorkflowRevisions = (
   return [...latest.values()];
 };
 
-/** Remembers the value of each key, and fails when a second owner gives the key another value. */
-const sameValueCheck = <Value, Owner>(
-  conflict: (key: string, prior: Owner, current: Owner) => string,
-) => {
-  const values = new Map<string, { encoded: string; owner: Owner }>();
-  return (key: string, value: Value, owner: Owner): void => {
-    const encoded = JSON.stringify(value);
-    const prior = values.get(key);
-    if (prior && prior.encoded !== encoded) throw new Error(conflict(key, prior.owner, owner));
-    if (!prior) values.set(key, { encoded, owner });
-  };
-};
-
-/** The shared metadata of each state ID, from the first workflow that uses it. */
-const sharedStates = (workflows: readonly TaskWorkflow[]) => {
-  const states = new Map<string, SharedStateMetadata>();
-  for (const workflow of workflows)
-    for (const state of workflow.definition.states)
-      if (!states.has(state.id)) states.set(state.id, sharedMetadata(state));
-  return states;
-};
-
-/**
- * Checks a workflow inventory once: unique references, one catalog role for each role ID, equal
- * shared state metadata for each state ID, and equal notification defaults for each notification
- * kind. Prompt IDs are local to the workflow that owns them, so workflows cannot conflict there.
- */
+/** Checks a workflow inventory once: each workflow version appears once. */
 export const validateWorkflowInventory = (workflows: readonly TaskWorkflow[]): void => {
   const references = new Set<string>();
-  const checkRole = sameValueCheck<CompiledAgentRoleDefinition, string>(
-    (id, prior, current) =>
-      `Role "${id}" differs between workflows "${prior}" and "${current}". Bind one catalog role.`,
-  );
-  const checkState = sameValueCheck<SharedStateMetadata, string>(
-    (id, prior, current) =>
-      `Shared state "${id}" conflicts between workflows "${prior}" and "${current}". Use the same label, title, short label, and tone.`,
-  );
-  const checkNotification = sameValueCheck<
-    NonNullable<TaskWorkflow["definition"]["states"][number]["notification"]>["defaultSetting"],
-    { reference: string; state: string }
-  >(
-    (kind, prior, current) =>
-      `Notification "${kind}" has conflicting defaults in "${prior.reference}" state "${prior.state}" and "${current.reference}" state "${current.state}". Use distinct kinds for distinct policies.`,
-  );
   for (const workflow of workflows) {
     const reference = workflowReferenceKey(workflow.reference);
     if (references.has(reference))
       throw new Error(`Duplicate workflow "${reference}". Fix the host inventory.`);
     references.add(reference);
-    for (const role of workflow.roles.map(catalogRole)) checkRole(role.id, role, reference);
-    for (const state of workflow.definition.states) {
-      checkState(state.id, sharedMetadata(state), reference);
-      if (state.notification)
-        checkNotification(state.notification.kind, state.notification.defaultSetting, {
-          reference,
-          state: state.id,
-        });
-    }
   }
-};
-
-/**
- * Resolves a board layout against the workflows of its workspace. Every state has one column. The
- * workflows come from an inventory that `validateWorkflowInventory` checked.
- */
-export const resolveWorkflowBoard = (
-  layout: WorkflowBoardLayout,
-  workflows: readonly TaskWorkflow[],
-): WorkflowBoardDefinition => {
-  const metadata = sharedStates(workflows);
-  const positions = new Set<string>();
-  for (const { id } of layout.states) {
-    if (positions.has(id))
-      throw new Error(`Board repeats state "${id}". Give each shared state one position.`);
-    positions.add(id);
-  }
-  for (const workflow of workflows)
-    for (const { id } of workflow.definition.states)
-      if (!positions.has(id))
-        throw new Error(
-          `Board is missing state "${id}" used by workflow "${workflowReferenceKey(workflow.reference)}". Add it at an explicit position.`,
-        );
-  return deepFreeze({
-    states: layout.states.map(({ id, taskOrder }) => {
-      const shared = metadata.get(id);
-      if (!shared)
-        throw new Error(`Board state "${id}" belongs to no workspace workflow. Remove it.`);
-      return { id, ...shared, taskOrder };
-    }),
-  });
 };
 
 /** A host catalog with each definition compiled once. */

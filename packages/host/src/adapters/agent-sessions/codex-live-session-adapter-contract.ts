@@ -91,6 +91,8 @@ export type CreateCodexLiveSessionAdapterPreparerInput = {
   readonly resolveRuntimePolicy: (input: {
     repoPath: string;
     sessionScope: AgentSessionScope;
+    /** Null while a start or fork has no runtime identity yet. */
+    externalSessionId: string | null;
   }) => Effect.Effect<CodexEffectivePolicy, HostError>;
   /** The tools and workspace access of a workflow role in the task workflow of the session task. */
   readonly resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;

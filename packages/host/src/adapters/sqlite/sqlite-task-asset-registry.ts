@@ -196,6 +196,7 @@ export const createSqliteTaskAssetRegistry = ({
                   createdAt: now(),
                   session: transaction,
                   status: input.status,
+                  workflow: input.workflow,
                   task: input.task,
                   workspaceId,
                 });

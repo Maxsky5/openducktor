@@ -1,3 +1,5 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "../tasks/task-workflows";
+import { testWorkspaceWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { Cause, Effect, Exit } from "effect";
@@ -43,7 +45,7 @@ const setup = (
   let current = task({
     status,
     issueType: options.issueType ?? "task",
-    artifactSummary: taskWorkflows.forNewTask("/repo").emptyArtifactSummary(),
+    artifactSummary: taskWorkflows.forTask(BUILTIN_TASK_ASSIGNMENT).emptyArtifactSummary(),
   });
   const transitions: unknown[] = [];
   const commands: unknown[] = [];
@@ -71,6 +73,7 @@ const setup = (
   });
   const bridge = createOdtMcpBridgeService({
     taskWorkflows,
+    workspaceWorkflows: testWorkspaceWorkflows(taskWorkflows),
     browserAgentTools: { runAgentTool: () => Effect.die("Unexpected browser call") },
     browserCallers: { resolve: () => Effect.die("Unexpected browser caller") },
     managedCallers: {

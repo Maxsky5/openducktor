@@ -9,7 +9,7 @@ import {
 } from "../../effect/host-errors";
 import { resolveSqliteHostDatabasePath } from "../../infrastructure/sqlite/sqlite-host-database-path";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import type { TaskWorkflowVersionCache } from "../../ports/task-workflow-port";
 import type { WorkspaceSessionStoreScope } from "../../ports/workspace-session-store-port";
 import { sqliteValues } from "./sqlite-parameters";
 import {
@@ -30,7 +30,7 @@ export type SqliteTaskRepositoryContext = {
   repoPath: string;
   session: HostDatabaseSession;
   workspaceId: string;
-  taskWorkflows: TaskWorkflowResolver;
+  taskWorkflows: TaskWorkflowVersionCache;
 };
 
 export type SqliteTaskRepositoryContextProvider = <A>(
@@ -40,7 +40,7 @@ export type SqliteTaskRepositoryContextProvider = <A>(
 ) => Effect.Effect<A, TaskStoreError>;
 type SqliteWorkspacesReadContext = {
   session: HostDatabaseSession;
-  taskWorkflows: TaskWorkflowResolver;
+  taskWorkflows: TaskWorkflowVersionCache;
 };
 /** Runs one read transaction over several workspaces. It checks every workspace in that transaction. */
 export type SqliteWorkspacesReadProvider = <A>(
@@ -83,7 +83,7 @@ export type SqliteHostDatabaseManager = {
 type CreateSqliteHostDatabaseManagerInput = {
   configDir: string;
   openConnection?: OpenHostDatabaseConnection;
-  taskWorkflows: TaskWorkflowResolver;
+  taskWorkflows: TaskWorkflowVersionCache;
 };
 type AdmissionGate = {
   readonly stop: () => Effect.Effect<void>;

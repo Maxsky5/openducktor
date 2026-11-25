@@ -1,83 +1,147 @@
-import type { WorkspaceRef, WorkflowBoardDefinition } from "@openducktor/contracts";
+import type { AgentRoleDefinition } from "@openducktor/contracts";
 import {
-  resolveWorkflowBoard,
-  taskWorkflowDescriptor,
-  validateWorkflowInventory,
-  workflowReferenceKey,
-  workflowRoleCatalog,
+  BUILTIN_ROLES,
+  BUILTIN_WORKFLOW_ID,
+  createTaskWorkflow,
+  promptTemplatesOfDocument,
+  specPlanBuildWorkflow,
+  withBuiltinSharedFields,
   type TaskWorkflow,
-  type WorkflowBoardLayout,
 } from "@openducktor/workflows";
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import { HostValidationError } from "../../effect/host-errors";
+import type {
+  CachedWorkflowVersion,
+  TaskWorkflowAssignment,
+  TaskWorkflowVersionCache,
+  WorkflowVersionKey,
+} from "../../ports/task-workflow-port";
+import type { StoredWorkflowVersion } from "../../ports/workflow-library-store-port";
 
-type TaskWorkflowSource = Pick<TaskWorkflowResolver, "workflows" | "forTask" | "forNewTask"> & {
-  forWorkspace(scope: WorkspaceRef): {
-    board: WorkflowBoardLayout;
-    workflows: readonly TaskWorkflow[];
-  };
+const keyOf = ({ workflowId, version }: WorkflowVersionKey) => `${workflowId}@${version}`;
+const taskKeyOf = (workspaceId: string, taskId: string) => JSON.stringify([workspaceId, taskId]);
+
+/** The assignment of a task that follows the built-in workflow. */
+export const BUILTIN_TASK_ASSIGNMENT: TaskWorkflowAssignment = Object.freeze({
+  workflowId: BUILTIN_WORKFLOW_ID,
+  workflowVersion: null,
+});
+
+/** The stored assignment of a new task that follows the workflow. */
+export const assignmentOf = (workflow: TaskWorkflow): TaskWorkflowAssignment => ({
+  workflowId: workflow.reference.id,
+  workflowVersion:
+    workflow.reference.id === BUILTIN_WORKFLOW_ID ? null : workflow.reference.revision,
+});
+
+/** The built-in roles and the custom roles. */
+export const roleCatalogOf = (
+  customRoles: readonly AgentRoleDefinition[],
+): AgentRoleDefinition[] => [...BUILTIN_ROLES, ...customRoles];
+
+/**
+ * Compiles a published custom version. The host gives each state and notification kind that the
+ * built-in workflow uses the built-in display at each compile.
+ */
+export const compileWorkflowVersion = (
+  { workflowId, version, publishedAtMs, document }: StoredWorkflowVersion,
+  customRoles: ReadonlyMap<string, { role: AgentRoleDefinition; updatedAtMs: number }>,
+): CachedWorkflowVersion => {
+  try {
+    const workflow = createTaskWorkflow(
+      withBuiltinSharedFields(document.definition),
+      promptTemplatesOfDocument(document.prompts),
+      roleCatalogOf([...customRoles.values()].map(({ role }) => role)),
+    );
+    const roleStamps = new Map<string, number>();
+    for (const { id } of workflow.definition.roles) {
+      const custom = customRoles.get(id);
+      if (custom) roleStamps.set(id, custom.updatedAtMs);
+    }
+    return { workflow, publishedAtMs, roleStamps };
+  } catch (cause) {
+    throw new HostValidationError({
+      field: "workflow",
+      message: `Workflow "${workflowId}" version ${version} does not compile: ${cause instanceof Error ? cause.message : String(cause)} Publish a corrected version and move its tasks.`,
+      cause,
+      details: { workflowId, version },
+    });
+  }
 };
 
 /**
- * Owns inventory validation, exact lookup, and workspace membership for every host consumer. The
- * inventory is checked once, and each board layout is resolved once for its workflows.
+ * The host version cache. The built-in workflow resolves tasks without a stored version. The
+ * cache never reads the database: the SQLite adapter checks and fills it before it returns task
+ * records.
  */
-export const createTaskWorkflowResolver = (source: TaskWorkflowSource): TaskWorkflowResolver => {
-  const workflows = Object.freeze([...source.workflows]);
-  validateWorkflowInventory(workflows);
-  const descriptors = Object.freeze(workflows.map(taskWorkflowDescriptor));
-  const roles = Object.freeze(workflowRoleCatalog(workflows));
-  const registeredWorkflows = new Set(workflows);
-  const byReference = new Map(
-    workflows.map((workflow) => [workflowReferenceKey(workflow.reference), workflow]),
-  );
-  const registered = (workflow: TaskWorkflow) => {
-    if (!registeredWorkflows.has(workflow))
-      throw new Error(
-        `Workflow "${workflowReferenceKey(workflow.reference)}" is not registered. Fix the host inventory.`,
-      );
-    return workflow;
+export const createTaskWorkflowVersionCache = (
+  builtin: TaskWorkflow = specPlanBuildWorkflow,
+): TaskWorkflowVersionCache => {
+  const entries = new Map<string, CachedWorkflowVersion>();
+  // Entries of a saved role. A lookup still serves them; the next database read compiles them again.
+  const stale = new Set<string>();
+  const assignments = new Map<string, TaskWorkflowAssignment>();
+  const lookup = (key: WorkflowVersionKey): TaskWorkflow => {
+    const entry = entries.get(keyOf(key));
+    if (!entry)
+      throw new HostValidationError({
+        field: "workflow",
+        message: `Workflow "${key.workflowId}" version ${key.version} is not loaded on this host. Reload the task and retry.`,
+        details: { workflowId: key.workflowId, version: key.version },
+      });
+    return entry.workflow;
   };
-  const boards = new WeakMap<
-    WorkflowBoardLayout,
-    { workflows: readonly TaskWorkflow[]; board: WorkflowBoardDefinition }
-  >();
-  const resolvedBoard = (layout: WorkflowBoardLayout, members: readonly TaskWorkflow[]) => {
-    const cached = boards.get(layout);
-    if (cached?.workflows === members) return cached.board;
-    const board = resolveWorkflowBoard(layout, members);
-    boards.set(layout, { workflows: members, board });
-    return board;
-  };
-  return {
-    workflows,
-    catalog: (hostInstanceId) => ({
-      hostInstanceId,
-      roles: [...roles],
-      workflows: [...descriptors],
-    }),
-    forTask: (task) => registered(source.forTask(task)),
-    forNewTask: (repoPath) => registered(source.forNewTask(repoPath)),
-    forReference: (reference) => {
-      const workflow = byReference.get(workflowReferenceKey(reference));
-      if (!workflow)
-        throw new Error(
-          `Committed workflow "${workflowReferenceKey(reference)}" is unavailable. Fix the host inventory.`,
-        );
-      return workflow;
+  const cache: TaskWorkflowVersionCache = {
+    forTask: ({ workflowId, workflowVersion }) => {
+      if (workflowVersion !== null) return lookup({ workflowId, version: workflowVersion });
+      if (workflowId !== builtin.reference.id)
+        throw new HostValidationError({
+          field: "workflow",
+          message: `A task of workflow "${workflowId}" has no version. Move the task to a published version of the workflow.`,
+          details: { workflowId },
+        });
+      return builtin;
     },
-    forWorkspace: (scope) => {
-      const workspace = source.forWorkspace(scope);
-      workspace.workflows.forEach(registered);
-      const newTaskWorkflow = registered(source.forNewTask(scope.repoPath));
-      if (!workspace.workflows.includes(newTaskWorkflow))
-        throw new Error(
-          `Workspace "${scope.workspaceId}" does not include its new-task workflow. Fix the host inventory.`,
-        );
-      return {
-        workflows: workspace.workflows,
-        newTaskWorkflow,
-        board: resolvedBoard(workspace.board, workspace.workflows),
-      };
+    forReference: ({ id, revision }) =>
+      id === builtin.reference.id && revision === builtin.reference.revision
+        ? builtin
+        : lookup({ workflowId: id, version: revision }),
+    missing: (assignments) => {
+      const missing = new Map<string, WorkflowVersionKey>();
+      for (const { workflowId, workflowVersion, workflowPublishedAtMs } of assignments) {
+        if (workflowVersion === null) continue;
+        const key = { workflowId, version: workflowVersion };
+        if (
+          stale.has(keyOf(key)) ||
+          entries.get(keyOf(key))?.publishedAtMs !== workflowPublishedAtMs
+        )
+          missing.set(keyOf(key), key);
+      }
+      return [...missing.values()];
+    },
+    cached: (key) => (stale.has(keyOf(key)) ? undefined : entries.get(keyOf(key))),
+    put: (key, entry) => {
+      entries.set(keyOf(key), entry);
+      stale.delete(keyOf(key));
+    },
+    dropRole: (roleId) => {
+      for (const [key, entry] of entries)
+        if (entry.workflow.definition.roles.some(({ id }) => id === roleId)) stale.add(key);
+    },
+    dropWorkflow: (workflowId) => {
+      for (const [key, entry] of entries)
+        if (entry.workflow.reference.id === workflowId) {
+          entries.delete(key);
+          stale.delete(key);
+        }
+    },
+    noteTasks: (tasks) => {
+      for (const { workspaceId, id, workflowId, workflowVersion } of tasks)
+        assignments.set(taskKeyOf(workspaceId, id), { workflowId, workflowVersion });
+    },
+    forTaskId: (workspaceId, taskId) => {
+      const assignment = assignments.get(taskKeyOf(workspaceId, taskId));
+      return assignment && cache.forTask(assignment);
     },
   };
+  return cache;
 };

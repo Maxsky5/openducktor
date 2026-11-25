@@ -1,5 +1,5 @@
-import type { TaskWorkflow } from "@openducktor/workflows";
 import type { AgentSessionRecord, RepoConfig } from "@openducktor/contracts";
+import type { TaskWorkflow } from "@openducktor/workflows";
 import { Effect } from "effect";
 import { collectRelatedTaskBranches } from "./task-branch-tips";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
@@ -39,10 +39,28 @@ export const appendImplementationResetCleanupProgress = <E>(
     completedSteps: progress.completedSteps,
   });
 
+/**
+ * The roles whose sessions a Reset Implementation preview clears: the `worktree.reset` effect of
+ * its event. An event without that effect is not a Reset Implementation.
+ */
+export const previewResetRoles = (workflow: TaskWorkflow, taskId: string, eventId: string) => {
+  const reset = workflow.worktreeReset(eventId);
+  return reset
+    ? Effect.succeed(reset.clearsSessionsOf)
+    : Effect.fail(
+        new HostValidationError({
+          field: "eventId",
+          message: `Event ${eventId} of task ${taskId} has no worktree.reset effect, so it cannot preview a Reset Implementation. Reload the task and try again.`,
+          details: { taskId, eventId },
+        }),
+      );
+};
+
 // Reset and its preview must use the same worktree session list.
 export const collectImplementationResetSessionState = (
   dependencies: { gitPort: GitPort; settingsConfig: SettingsConfigPort },
-  workflow: TaskWorkflow,
+  /** The roles whose sessions the `worktree.reset` effect clears. */
+  resetRoles: readonly string[],
   repoConfig: RepoConfig,
   taskId: string,
   sessions: AgentSessionRecord[],
@@ -59,7 +77,7 @@ export const collectImplementationResetSessionState = (
       sessionState: yield* collectSessionsUsingCanonicalWorktree(
         dependencies.gitPort,
         dependencies.settingsConfig,
-        workflow,
+        resetRoles,
         sessions,
         canonicalWorktree,
       ),
@@ -176,7 +194,7 @@ const collectImplementationResetWorktreePaths = (
     managedWorktreeBasePath: string;
     taskId: string;
     sessions: AgentSessionRecord[];
-    workflow: TaskWorkflow;
+    resetRoles: readonly string[];
   },
 ) =>
   collectResetWorktreePaths(
@@ -185,7 +203,7 @@ const collectImplementationResetWorktreePaths = (
     input.managedWorktreeBasePath,
     input.taskId,
     input.sessions,
-    new Set(input.workflow.worktreeRoles),
+    new Set(input.resetRoles),
     "reset implementation",
   );
 
@@ -209,7 +227,7 @@ export const collectImplementationResetTargets = (
     canonicalWorktree: string | null;
     task: TaskRecord;
     sessions: AgentSessionRecord[];
-    workflow: TaskWorkflow;
+    resetRoles: readonly string[];
   },
 ) =>
   Effect.gen(function* () {
@@ -251,7 +269,7 @@ export const collectImplementationResetTargets = (
 export const collectImplementationResetRemovedPaths = (
   dependencies: { gitPort: GitPort; settingsConfig: SettingsConfigPort },
   repoPath: string,
-  target: { taskId: string; sessions: AgentSessionRecord[]; workflow: TaskWorkflow },
+  target: { taskId: string; sessions: AgentSessionRecord[]; resetRoles: readonly string[] },
   state: Effect.Success<ReturnType<typeof collectImplementationResetSessionState>>,
 ) =>
   Effect.gen(function* () {

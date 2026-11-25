@@ -1,3 +1,4 @@
+import { workflowNameAndVersion } from "@openducktor/frontend-core/tasks/presentation/workflow-version-label";
 import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { PropsWithChildren, ReactElement } from "react";
 import { View } from "react-native";
@@ -47,8 +48,8 @@ function TargetBranchFact({ label, error }: { label: string; error: string | nul
 type CardCollapse = { collapsed: boolean; onToggle: () => void };
 
 /**
- * The facts of a task: the target branch and declared review verdicts. The
- * pull request shows as a badge in the header.
+ * The facts of a task: its workflow and version, the target branch, and declared review verdicts.
+ * The pull request shows as a badge in the header.
  */
 export function TaskMetadataSection({
   task,
@@ -57,9 +58,17 @@ export function TaskMetadataSection({
 }: CardCollapse & { task: TaskCard }): ReactElement {
   const verdicts = taskReviewVerdicts(task);
   const branch = taskTargetBranchPresentation(task);
+  const workflow = workflowNameAndVersion(task.taskWorkflow);
   return (
     <DetailsCard title="Metadata" icon="layers" collapsed={collapsed} onToggle={onToggle}>
       <View style={styles.facts}>
+        <View accessible accessibilityLabel={`Workflow ${workflow}`}>
+          <Fact label="Workflow">
+            <Text variant="footnote" numberOfLines={1} style={styles.value}>
+              {workflow}
+            </Text>
+          </Fact>
+        </View>
         {branch ? <TargetBranchFact label={branch.label} error={branch.error} /> : null}
         {verdicts.map((verdict) => (
           <View

@@ -23,6 +23,7 @@ export const HOST_EVENT_CHANNELS = [
   "openducktor://browser-event",
   "openducktor://task-merge-status-updated",
   "openducktor://usage-index-progress",
+  "openducktor://workflow-library-changed",
 ] as const;
 
 export type HostEventChannel = (typeof HOST_EVENT_CHANNELS)[number];
@@ -47,6 +48,11 @@ export const hostEventEnvelopeSchema = z.discriminatedUnion("channel", [
   z.strictObject({
     channel: z.literal("openducktor://runtime-changed"),
     payload: hostRuntimeEventSchema,
+  }),
+  /** A library commit other than a draft save: a publication, a move, an availability, or a role. */
+  z.strictObject({
+    channel: z.literal("openducktor://workflow-library-changed"),
+    payload: z.strictObject({}),
   }),
   z.strictObject({
     channel: z.literal("openducktor://task-merge-status-updated"),

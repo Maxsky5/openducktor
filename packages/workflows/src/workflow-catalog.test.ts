@@ -1,56 +1,84 @@
 import { describe, expect, test } from "bun:test";
-import {
-  promptOverrideKey,
-  workflowDefinitionSchema,
-  type WorkflowDefinition,
-} from "@openducktor/contracts";
+import { workflowDefinitionSchema, type WorkflowDefinition } from "@openducktor/contracts";
 import { specPlanBuildWorkflow } from "./builtin/spec-plan-build/workflow";
-import { SPEC_PLAN_BUILD_BOARD_LAYOUT } from "./builtin/spec-plan-build/board";
 import {
   createReviewTaskWorkflow,
   reviewTaskPromptTemplates,
   reviewTaskRoles,
 } from "../test-support/review-task-workflow";
+import { workflowRoleCatalog } from "../test-support/shared-board-workflows";
 import { createTaskWorkflow } from "./task-workflow/task-workflow";
 import {
   compileWorkflowCatalog,
   requireCatalogWorkflow,
-  resolveWorkflowBoard,
-  validateWorkflowInventory,
+  resolveWorkspaceBoard,
   taskWorkflowDescriptor,
-  workflowRoleCatalog,
-  type WorkflowBoardLayout,
+  validateWorkflowInventory,
 } from "./workflow-catalog";
 
 const review = createReviewTaskWorkflow();
-const variant = (change: (definition: WorkflowDefinition) => void) => {
+const variant = (
+  change: (definition: WorkflowDefinition) => void,
+  templates = reviewTaskPromptTemplates,
+) => {
   const definition = workflowDefinitionSchema.parse(structuredClone(review.definition));
   definition.id = "second-editorial";
   definition.revision = 3;
   change(definition);
-  return createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
+  return createTaskWorkflow(definition, templates, reviewTaskRoles);
 };
-// Both workflows share the core states, so each review-only state follows one built-in state.
-const reviewOnlyStates = review.definition.states.filter(
-  ({ id }) => !SPEC_PLAN_BUILD_BOARD_LAYOUT.states.some((state) => state.id === id),
+const basePrompts = reviewTaskPromptTemplates.filter(
+  ({ id }) => !id.startsWith("messages.") || id === "messages.pull_request",
 );
-const layout: WorkflowBoardLayout = {
-  states: SPEC_PLAN_BUILD_BOARD_LAYOUT.states.flatMap((state, index) => {
-    const reviewState = reviewOnlyStates[index];
-    return reviewState ? [state, { id: reviewState.id, taskOrder: "updated" as const }] : [state];
-  }),
-};
+const ids = (board: ReturnType<typeof resolveWorkspaceBoard>) => board.states.map(({ id }) => id);
 
-describe("workflow catalog and shared board", () => {
-  test("resolves explicit interleaved columns with metadata from the definitions", () => {
-    const board = resolveWorkflowBoard(layout, [specPlanBuildWorkflow, review]);
-    expect(board.states.slice(0, 4).map(({ id }) => id)).toEqual([
-      "open",
-      "writing",
-      "spec_ready",
-      "paused",
+/** A workflow with only the given states, in that definition order, and nothing that uses them. */
+const statesOnly = (id: string, stateIds: readonly string[]) =>
+  variant((definition) => {
+    definition.id = id;
+    definition.states = stateIds.map(
+      (stateId) =>
+        review.definition.states.find((state) => state.id === stateId) ?? {
+          id: stateId,
+          label: stateId,
+        },
+    );
+    definition.events = [];
+    definition.actions = [];
+    definition.steps = [];
+    definition.artifacts = [];
+    definition.signals = [];
+    definition.automations = [];
+    definition.actionOrder = [];
+    definition.actionPriority = [];
+    definition.launchOrder = [];
+    definition.pullRequestRoles = [];
+    definition.roles = [];
+  }, basePrompts);
+
+describe("workspace board", () => {
+  test("puts open first, closed last, and the default workflow order between them", () => {
+    const board = resolveWorkspaceBoard([
+      { workflow: specPlanBuildWorkflow, latest: true },
+      { workflow: review, latest: true },
     ]);
-    expect(board.states).toHaveLength(12);
+    // The review states spread across the board: early ones early, late ones late.
+    expect(ids(board)).toEqual([
+      "open",
+      "spec_ready",
+      "writing",
+      "ready_for_dev",
+      "paused",
+      "in_progress",
+      "blocked",
+      "reviewing",
+      "ai_review",
+      "approval",
+      "human_review",
+      "closed",
+    ]);
+    expect(board.states[0]!.taskOrder).toBe("priority_then_created");
+    expect(board.states[1]!.taskOrder).toBe("updated");
     expect(board.states.find(({ id }) => id === "spec_ready")).toEqual({
       id: "spec_ready",
       label: "Spec ready",
@@ -61,6 +89,103 @@ describe("workflow catalog and shared board", () => {
     });
   });
 
+  test("puts new states between their nearest neighbors in their workflow", () => {
+    const board = resolveWorkspaceBoard([
+      { workflow: specPlanBuildWorkflow, latest: true },
+      {
+        workflow: statesOnly("design", ["open", "in_progress", "design_review", "closed"]),
+        latest: true,
+      },
+    ]);
+    const order = ids(board);
+    expect(order.indexOf("design_review")).toBeGreaterThan(order.indexOf("in_progress"));
+    expect(order.at(-1)).toBe("closed");
+  });
+
+  test("keeps early states of several workflows before the shared states that follow them", () => {
+    const board = resolveWorkspaceBoard([
+      { workflow: specPlanBuildWorkflow, latest: true },
+      // A definition can list `closed` before its other states. The board still ends with it.
+      {
+        workflow: statesOnly("triage", ["open", "closed", "triage", "fixing", "test"]),
+        latest: true,
+      },
+      {
+        workflow: statesOnly("bug", [
+          "open",
+          "diagnosing",
+          "ready_for_dev",
+          "in_progress",
+          "closed",
+        ]),
+        latest: true,
+      },
+      {
+        workflow: statesOnly("perf", [
+          "open",
+          "profiling",
+          "ready_for_dev",
+          "in_progress",
+          "closed",
+        ]),
+        latest: true,
+      },
+    ]);
+    expect(ids(board)).toEqual([
+      "open",
+      "spec_ready",
+      "diagnosing",
+      "profiling",
+      "triage",
+      "ready_for_dev",
+      "in_progress",
+      "fixing",
+      "blocked",
+      "ai_review",
+      "test",
+      "human_review",
+      "closed",
+    ]);
+  });
+
+  test("takes the display of a state from a latest version first", () => {
+    const older = variant((definition) => {
+      definition.states.find(({ id }) => id === "writing")!.label = "Old writing";
+    });
+    const latest = variant((definition) => {
+      definition.revision = 4;
+    });
+    const board = resolveWorkspaceBoard([
+      { workflow: older, latest: false },
+      { workflow: latest, latest: true },
+    ]);
+    expect(board.states.find(({ id }) => id === "writing")!.label).toBe("Writing");
+  });
+
+  test("takes display from a display-only version and adds none of its columns", () => {
+    const older = variant((definition) => {
+      definition.states.find(({ id }) => id === "writing")!.label = "Old writing";
+    });
+    const latest = variant((definition) => {
+      definition.revision = 4;
+    });
+    const builtin = { workflow: specPlanBuildWorkflow, latest: true };
+    const board = resolveWorkspaceBoard([
+      builtin,
+      { workflow: latest, latest: true, displayOnly: true },
+      { workflow: older, latest: false },
+    ]);
+    expect(ids(board)).toEqual(
+      ids(resolveWorkspaceBoard([builtin, { workflow: older, latest: false }])),
+    );
+    expect(board.states.find(({ id }) => id === "writing")!.label).toBe("Writing");
+    expect(
+      ids(resolveWorkspaceBoard([builtin, { workflow: latest, latest: true, displayOnly: true }])),
+    ).toEqual(ids(resolveWorkspaceBoard([builtin])));
+  });
+});
+
+describe("workflow catalog", () => {
   test("compiles each catalog workflow once and matches exact revisions", () => {
     const catalog = compileWorkflowCatalog({
       hostInstanceId: "host-a",
@@ -75,80 +200,15 @@ describe("workflow catalog and shared board", () => {
     );
   });
 
-  test("shares state identity across definitions and rejects conflicts or missing states", () => {
-    expect(
-      resolveWorkflowBoard(layout, [specPlanBuildWorkflow, review, variant(() => {})]).states,
-    ).toHaveLength(12);
-    const relabelled = variant((definition) => {
-      definition.states.find(({ id }) => id === "reviewing")!.label = "Different review";
+  test("rejects a duplicate workflow version and accepts several versions of one workflow", () => {
+    expect(() => validateWorkflowInventory([review, review])).toThrow(
+      'Duplicate workflow "review@1"',
+    );
+    const next = variant((definition) => {
+      definition.id = "review";
+      definition.revision = 2;
     });
-    expect(() => validateWorkflowInventory([review, relabelled])).toThrow("reviewing");
-    const retoned = variant((definition) => {
-      definition.states.find(({ id }) => id === "reviewing")!.tone = "warning";
-    });
-    expect(() => validateWorkflowInventory([review, retoned])).toThrow("reviewing");
-    const relabelledCore = variant((definition) => {
-      definition.states.find(({ id }) => id === "closed")!.label = "Published";
-    });
-    expect(() => validateWorkflowInventory([review, relabelledCore])).toThrow("closed");
-    expect(() =>
-      resolveWorkflowBoard({ states: layout.states.filter(({ id }) => id !== "reviewing") }, [
-        review,
-      ]),
-    ).toThrow('missing state "reviewing"');
-    expect(() =>
-      resolveWorkflowBoard({ states: [...layout.states, layout.states[0]!] }, [review]),
-    ).toThrow('repeats state "open"');
-    expect(() => resolveWorkflowBoard(layout, [review])).toThrow(
-      'Board state "spec_ready" belongs to no workspace workflow',
-    );
-  });
-
-  test("rejects notification defaults that share a saved key but use different policies", () => {
-    const other = variant((definition) => {
-      definition.states.find(({ id }) => id === "reviewing")!.notification!.defaultSetting.enabled =
-        false;
-    });
-    expect(() => validateWorkflowInventory([review, other])).toThrow(
-      'Notification "workflow.reviewing"',
-    );
-  });
-
-  test("rejects a role that differs between workflows", () => {
-    const relabelled = createTaskWorkflow(
-      { ...workflowDefinitionSchema.parse(structuredClone(review.definition)), id: "second" },
-      reviewTaskPromptTemplates,
-      reviewTaskRoles.map((role) => (role.id === "editor" ? { ...role, label: "Other" } : role)),
-    );
-    expect(() => validateWorkflowInventory([review, relabelled])).toThrow(
-      'Role "editor" differs between workflows',
-    );
-  });
-
-  test("lets two workflows use the same prompt ID with different text", () => {
-    const rewritten = createTaskWorkflow(
-      { ...workflowDefinitionSchema.parse(structuredClone(review.definition)), id: "third" },
-      reviewTaskPromptTemplates.map((template) =>
-        template.id === "messages.edit_review" ? { ...template, template: "Other" } : template,
-      ),
-      reviewTaskRoles,
-    );
-    expect(() => validateWorkflowInventory([review, rewritten])).not.toThrow();
-    const kickoffKeys = [review, rewritten].map(
-      ({ prompts }) => prompts.templates.find(({ id }) => id === "messages.edit_review")?.key,
-    );
-    expect(kickoffKeys).toEqual([
-      promptOverrideKey({
-        ownerKind: "workflow",
-        ownerId: "review",
-        promptId: "messages.edit_review",
-      }),
-      promptOverrideKey({
-        ownerKind: "workflow",
-        ownerId: "third",
-        promptId: "messages.edit_review",
-      }),
-    ]);
+    expect(() => validateWorkflowInventory([review, next])).not.toThrow();
   });
 
   test("rejects invalid display references in the definition", () => {
@@ -156,6 +216,6 @@ describe("workflow catalog and shared board", () => {
       variant((definition) => {
         definition.roles.find(({ id }) => id === "writer")!.defaultArtifact = "missing";
       }),
-    ).toThrow('Unknown artifacts ID "missing"');
+    ).toThrow('uses the missing artifact "missing"');
   });
 });

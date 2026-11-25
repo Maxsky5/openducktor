@@ -26,9 +26,10 @@ import type { TaskServiceUseCaseInput } from "../task-service";
 import type { HostEffectHandler } from "./host-effect-registry";
 
 /**
- * The `worktree.reset` host effect. It stops the sessions of the worktree roles, removes their other
- * worktrees and branches, and restores the task worktree to its start point. Then it clears the
- * sessions of the worktree roles, the review artifacts, the pull request link, and the merge record.
+ * The `worktree.reset` host effect. It stops the sessions of the reset roles and the sessions in the
+ * task worktree, removes the other worktrees and branches of the reset roles, and restores the task
+ * worktree to its start point. Then it clears the sessions of the roles that the effect names
+ * (`clearsSessionsOf`), the review artifacts, the pull request link, and the merge record.
  * A failure after the first store write reports the progress with the changed task.
  */
 export const createWorktreeResetEffect = ({
@@ -45,7 +46,7 @@ export const createWorktreeResetEffect = ({
   taskSessionLifecycleCoordinator: coordinator,
   completionState,
 }: TaskServiceUseCaseInput): HostEffectHandler => {
-  const reset: HostEffectHandler = ({ input, artifactChanges }, commit) =>
+  const reset: HostEffectHandler = ({ input, effect, artifactChanges }, commit) =>
     Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const dependencies = yield* requireDependencies(() =>
@@ -65,7 +66,7 @@ export const createWorktreeResetEffect = ({
         sessionState: canonicalSessionState,
       } = yield* collectImplementationResetSessionState(
         dependencies,
-        workflow,
+        effect.clearsSessionsOf,
         repoConfig,
         taskId,
         currentSessions,
@@ -86,7 +87,7 @@ export const createWorktreeResetEffect = ({
           canonicalWorktree: canonicalSessionState.canonicalExists ? canonicalWorktree : null,
           task: current,
           sessions: currentSessions,
-          workflow,
+          resetRoles: effect.clearsSessionsOf,
         });
       // The canonical worktree stays, so only the removed worktrees count.
       const removedWorktreePaths = yield* acquireRemovableWorktrees(
@@ -135,10 +136,10 @@ export const createWorktreeResetEffect = ({
         yield* storeDependencies.clearAgentSessionsByRoles({
           ...input,
           repoPath: effectiveRepoPath,
-          roles: [...workflow.worktreeRoles],
+          roles: [...effect.clearsSessionsOf],
         });
         taskStoreWriteCompleted = true;
-        cleanupProgress.completedSteps.push("Cleared the session records of the worktree roles.");
+        cleanupProgress.completedSteps.push("Cleared the session records of the reset roles.");
         yield* storeDependencies.clearWorkflowArtifacts({
           ...input,
           repoPath: effectiveRepoPath,

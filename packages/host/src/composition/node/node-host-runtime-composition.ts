@@ -124,7 +124,7 @@ export const createNodeHostRuntimeComposition = ({
       codexAppServer,
       onBackgroundFailure,
       resolveMcpServerConfig: mcpServerConfigFor("codex"),
-      resolveRuntimePolicy: ({ sessionScope }) =>
+      resolveRuntimePolicy: ({ sessionScope, externalSessionId }) =>
         settingsConfig.readGlobalConfig().pipe(
           Effect.flatMap(({ agentRuntimes: { codex } }) =>
             Effect.try({
@@ -133,7 +133,7 @@ export const createNodeHostRuntimeComposition = ({
                   ? resolveCodexEffectivePolicy(
                       codex,
                       sessionScope.role,
-                      !resolveWorkflowRolePolicy(sessionScope).readOnly,
+                      !resolveWorkflowRolePolicy({ ...sessionScope, externalSessionId }).readOnly,
                     )
                   : resolveCodexEffectivePolicy(codex, null, false),
               catch: (cause) => toHostOperationError(cause, "codex.resolve-runtime-policy"),

@@ -59,8 +59,9 @@ export const latestWorkflowArtifactRows = (
   });
 
 /**
- * The summary of a task has an entry for each artifact of its workflow. A stored code outside that
- * workflow is left out.
+ * The summary of a task has an entry for each artifact of its workflow version. A stored code
+ * outside that version is left out. A stored verdict that the version does not declare is left
+ * out, so the review counts as present without a verdict.
  */
 export const artifactSummariesByTaskId = (
   session: HostDatabaseSession,
@@ -91,12 +92,21 @@ export const artifactSummariesByTaskId = (
       );
       for (const row of rows) {
         const state: TaskArtifactState = { present: true, updatedAt: toIso(row.updatedAt) };
-        if (row.verdict !== null) state.verdict = row.verdict;
+        if (row.verdict !== null && declaresVerdict(workflowsByTaskId.get(row.taskId), row))
+          state.verdict = row.verdict;
         summaries.get(row.taskId)![row.code] = state;
       }
     }
     return summaries;
   });
+
+const declaresVerdict = (
+  workflow: TaskWorkflow | undefined,
+  { code, verdict }: { code: string; verdict: string | null },
+) => {
+  const artifact = workflow?.artifact(code);
+  return artifact?.kind === "review" && artifact.verdicts.some(({ id }) => id === verdict);
+};
 
 // Each requested task/code pair seeks one row through the workflow revision index.
 const latestRequestedArtifact = (workspaceId: string) => sql`${taskArtifacts}.rowid = (

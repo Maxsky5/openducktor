@@ -1,3 +1,4 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "../../application/tasks/task-workflows";
 import { openSqliteDrizzleConnection } from "../../infrastructure/sqlite/sqlite-drizzle-client";
 import { hostDatabaseSchema } from "./sqlite-host-database-schema";
 import { expect, test } from "bun:test";
@@ -14,6 +15,7 @@ test("reads large ID sets and writes large label sets within the Node parameter 
       harness.store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Large collections", issueType: "task", priority: 2 },
       }),
     );
@@ -41,7 +43,7 @@ test("reads large ID sets and writes large label sets within the Node parameter 
           const sessions = yield* readTaskSessionsForTasks(bounded, workspaceId, ids);
           expect(sessions.size).toBe(ids.length);
           expect(sessions.get(task.id)).toEqual([]);
-          const workflow = builtinTaskWorkflows.forNewTask(harness.repoPath);
+          const workflow = builtinTaskWorkflows.forTask(BUILTIN_TASK_ASSIGNMENT);
           const summaries = yield* artifactSummariesByTaskId(
             bounded,
             workspaceId,

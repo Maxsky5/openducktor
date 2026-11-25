@@ -1,6 +1,7 @@
 import {
   createSharedBoardWorkflows,
   createWorkflowTaskCardFixture,
+  workflowRoleCatalog,
 } from "@openducktor/workflows/test-support";
 import {
   promptOverrideKey,
@@ -11,7 +12,7 @@ import { prepareSessionStartInstruction } from "../../sessions/start/session-sta
 import { startSessionWorkflow } from "../../sessions/start/session-start-workflow";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
 import { createSettingsSnapshotFixture } from "../../test-support/shared-test-fixtures";
-import { createTaskWorkflow, workflowRoleCatalog } from "@openducktor/workflows";
+import { createTaskWorkflow } from "@openducktor/workflows";
 import { createHumanReviewFeedbackState } from "./human-review-feedback-state";
 import { describe, expect, mock, test } from "bun:test";
 import { repoConfigFixture } from "../../test-support/repo-config-fixture";

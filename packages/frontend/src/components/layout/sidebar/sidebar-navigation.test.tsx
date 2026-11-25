@@ -107,6 +107,34 @@ describe("SidebarNavigation", () => {
     expect(screen.getByRole("link", { name: "Kanban" }).textContent).toBe(text);
   });
 
+  test("shows Usage, then Workflows, as footer icon links", () => {
+    render(
+      <MemoryRouter initialEntries={["/kanban"]}>
+        <SidebarFooterLinks />
+      </MemoryRouter>,
+    );
+
+    const links = screen.getAllByRole("link");
+    expect(links.map((link) => link.getAttribute("aria-label"))).toEqual(["Usage", "Workflows"]);
+    expect(links.map((link) => link.textContent)).toEqual(["", ""]);
+  });
+
+  test("selects the Workflows footer link on the editor routes of a workflow", () => {
+    render(
+      <MemoryRouter initialEntries={["/workflows/review-flow/versions/2"]}>
+        <SidebarNavigation />
+        <SidebarFooterLinks />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("link", { name: "Workflows" }).className.split(" ")).toContain(
+      "bg-accent",
+    );
+    expect(screen.getByRole("link", { name: "Kanban" }).className).not.toContain(
+      "bg-sidebar-accent",
+    );
+  });
+
   test("opens Usage from the footer icon link and marks it as the active page", () => {
     render(
       <MemoryRouter initialEntries={["/kanban"]}>

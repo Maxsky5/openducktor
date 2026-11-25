@@ -1,6 +1,8 @@
+import type { TaskWorkflowAssignment } from "../../../ports/task-workflow-port";
+import { BUILTIN_TASK_ASSIGNMENT } from "../task-workflows";
 import { specPlanBuildReference } from "@openducktor/workflows/test-support";
 import type { TaskWorkflowResolver } from "../../../ports/task-workflow-port";
-import { builtinTaskWorkflows } from "../../../test-support/task-workflows";
+import { builtinTaskWorkflows, testWorkspaceWorkflows } from "../../../test-support/task-workflows";
 import {
   createGitPortTestDouble,
   createSettingsConfigTestDouble,
@@ -52,7 +54,10 @@ import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
 import { createDefaultGitProviderResolver } from "./git-provider-test-support";
 import { repoConfigFixture } from "../../../test-support/repo-config-fixture";
 
-const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
+const task = (
+  overrides: Partial<TaskCard & TaskWorkflowAssignment> = {},
+): TaskCard & TaskWorkflowAssignment => ({
+  ...BUILTIN_TASK_ASSIGNMENT,
   id: "task-1",
   title: "Task 1",
   description: "",
@@ -203,6 +208,8 @@ const createTaskServiceInput = (input: TaskServiceTestInput): CreateTaskServiceI
     toolDiscovery: resolvedToolDiscovery,
     taskStore: atomicTaskStore ?? createTaskStorePort(taskStore!),
     taskWorkflows: rest.taskWorkflows ?? builtinTaskWorkflows,
+    workspaceWorkflows:
+      rest.workspaceWorkflows ?? testWorkspaceWorkflows(rest.taskWorkflows ?? builtinTaskWorkflows),
   };
   if (workspaceSettingsService) {
     taskServiceInput.workspaceSettingsService = workspaceSettingsService;

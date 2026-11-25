@@ -22,7 +22,7 @@ import {
   SPEC_PLAN_BUILD_BOARD,
   specPlanBuildWorkflow,
   taskWorkflowDescriptor,
-  workflowRoleCatalog,
+  BUILTIN_ROLES,
 } from "@openducktor/workflows";
 import {
   DEMO_HOST_INSTANCE_ID,
@@ -170,7 +170,8 @@ export const createDemoTaskStore = (
           `This action is not available while the task is ${task.record.status}. Refresh the task.`,
       );
     }
-    const resetsWorktree = workflow.eventEffects(eventId).includes("worktree.reset");
+    const reset = workflow.worktreeReset(eventId);
+    const resetsWorktree = reset !== undefined;
     // A live role owns the worktree while its session starts, as on a host.
     if (resetsWorktree && world.startingTasks.has(task))
       throw new Error(
@@ -197,7 +198,7 @@ export const createDemoTaskStore = (
     } else {
       touch(task, {});
     }
-    if (resetsWorktree) resetWorktree(workspace, task);
+    if (reset) resetWorktree(workspace, task, reset.clearsSessionsOf);
     const change: Parameters<typeof publish>[1] = { taskIds: [taskId], statusChanges };
     if (extra?.artifactCodes) change.artifactCodes = new Map([[taskId, extra.artifactCodes]]);
     return publish(workspace, change);
@@ -205,9 +206,14 @@ export const createDemoTaskStore = (
 
   /**
    * An implementation reset keeps the worktree and its branch, and drops the review documents, the
-   * worktree role sessions, and the pull request link. `applyEvent` restores the branch first.
+   * sessions of the roles that the reset clears, and the pull request link. `applyEvent` restores
+   * the branch first.
    */
-  const resetWorktree = (workspace: DemoWorkspace, task: DemoTask) => {
+  const resetWorktree = (
+    workspace: DemoWorkspace,
+    task: DemoTask,
+    clearedRoles: readonly string[],
+  ) => {
     for (const code of workflow.reviewArtifactCodes) {
       if (isDocumentCode(code)) delete task.documents[code];
     }
@@ -219,7 +225,7 @@ export const createDemoTaskStore = (
         ),
       },
     });
-    world.sessions.forgetTaskSessions(workspace, task.record.id, workflow.worktreeRoles);
+    world.sessions.forgetTaskSessions(workspace, task.record.id, clearedRoles);
     unlinkPullRequest(task);
   };
 
@@ -423,13 +429,14 @@ export const createDemoTaskStore = (
   const handlers = {
     workflowCatalogGet: async () => ({
       hostInstanceId: DEMO_HOST_INSTANCE_ID,
-      roles: [...workflowRoleCatalog([workflow])],
+      roles: [...BUILTIN_ROLES],
       workflows: [taskWorkflowDescriptor(workflow)],
     }),
     workspaceWorkflowGet: async () => ({
       hostInstanceId: DEMO_HOST_INSTANCE_ID,
       board: SPEC_PLAN_BUILD_BOARD,
       workflows: [workflow.reference],
+      newTaskWorkflows: [workflow.reference],
       newTaskWorkflow: workflow.reference,
     }),
     tasksList: async (scope) => {
@@ -517,8 +524,7 @@ export const createDemoTaskStore = (
     },
     taskApplyEvent: async (scope, taskId, eventId) => {
       const workspace = workspaceOf(scope);
-      if (workflow.eventEffects(eventId).includes("worktree.reset"))
-        world.sessions.stopTaskSessions(workspace, taskId);
+      if (workflow.worktreeReset(eventId)) world.sessions.stopTaskSessions(workspace, taskId);
       applyEvent(workspace, taskId, eventId);
       return taskCard(findTask(workspace, taskId));
     },

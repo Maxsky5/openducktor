@@ -8,13 +8,13 @@ import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 export const canUnlinkTaskPullRequest = (task: TaskCard): boolean =>
   task.status !== TASK_CLOSED_STATE;
 
-/** Detection searches the task branch, which a completed worktree step created. */
+/**
+ * Detection searches the task branch. Every agent session of the task works in the task worktree,
+ * so a completed agent step created that branch.
+ */
 export const canDetectTaskPullRequest = (task: TaskCard): boolean =>
   canUnlinkTaskPullRequest(task) &&
-  task.workflowSteps.some(
-    (step) =>
-      step.kind === "agent" && step.completed && task.taskWorkflow.usesWorktree(step.roleId),
-  );
+  task.workflowSteps.some((step) => step.kind === "agent" && step.completed);
 
 export const humanDate = (value: string): string => {
   const parsed = new Date(value);
