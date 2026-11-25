@@ -3,12 +3,12 @@ import {
   GITHUB_PROVIDER_DESCRIPTOR,
   GITLAB_PROVIDER_DESCRIPTOR,
 } from "@openducktor/contracts";
-import { Check, CircleOff, Github } from "lucide-react";
+import { Check, CircleOff } from "lucide-react";
 import type { ComponentType, ReactElement } from "react";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
-import { AzureDevOpsIcon, GitlabIcon } from "./git-provider-icons";
+import { AzureDevOpsIcon, GithubIcon, GitlabIcon } from "./git-provider-icons";
 
 export type GitProviderSelection = "none" | "github" | "gitlab" | "azure_devops" | "unsupported";
 
@@ -97,7 +97,7 @@ const gitProviderOptions = [
   {
     value: "github",
     label: GITHUB_PROVIDER_DESCRIPTOR.label,
-    icon: Github,
+    icon: GithubIcon,
   },
   {
     value: "gitlab",

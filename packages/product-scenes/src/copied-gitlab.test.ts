@@ -11,7 +11,7 @@ import { AzureDevOpsIcon, GithubIcon, GitlabIcon } from "./replicas/settings/Git
 import { GIT_PROVIDER_OPTIONS, GIT_PROVIDER_TEXT } from "./replicas/settings/GitProviderSelector";
 import { REPOSITORY_SECTIONS } from "./replicas/settings/RepositorySidebar";
 import { ACCOUNT, INSTANCE_LABEL, INSTANCE_URL, PROJECT_PATH } from "./scenes/gitlab/sample";
-import { importProduct, importProductDependency, readProduct } from "./test-support/product-source";
+import { importProduct, readProduct } from "./test-support/product-source";
 
 type GitlabDraft = {
   instanceUrl: string;
@@ -54,16 +54,12 @@ const contracts = await importProduct<{
 const { REPOSITORY_SECTIONS: APP_SECTIONS } = await importProduct<{
   REPOSITORY_SECTIONS: readonly { label: string }[];
 }>(`${SETTINGS}/settings-modal-constants.ts`);
-// SAFETY: git-provider-icons.tsx exports the two marks, and a missing export fails the test.
+// SAFETY: git-provider-icons.tsx exports the three marks, and a missing export fails the test.
 const icons = await importProduct<{
+  GithubIcon: ComponentType;
   GitlabIcon: ComponentType;
   AzureDevOpsIcon: ComponentType;
 }>(`${SETTINGS}/git-provider-icons.tsx`);
-// SAFETY: the lucide-react of the app exports its GitHub icon, and a missing export fails the test.
-const { Github } = await importProductDependency<{ Github: ComponentType }>(
-  "lucide-react",
-  "packages/frontend",
-);
 // The card has its words in its markup, so the test reads the product source as text.
 const cardSource = (
   await Promise.all(
@@ -105,7 +101,7 @@ describe("the GitLab settings copied from the app", () => {
   test("the provider marks have the geometry of the app", () => {
     expect(paths(GitlabIcon)).toEqual(paths(icons.GitlabIcon));
     expect(paths(AzureDevOpsIcon)).toEqual(paths(icons.AzureDevOpsIcon));
-    expect(paths(GithubIcon)).toEqual(paths(Github));
+    expect(paths(GithubIcon)).toEqual(paths(icons.GithubIcon));
   });
 
   test("the repository menu lists the sections of the app", () => {

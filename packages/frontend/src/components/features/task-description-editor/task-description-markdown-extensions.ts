@@ -63,6 +63,11 @@ export const TaskDescriptionImage = Image.extend({
 const isEmptyParagraph = (node: JSONContent | undefined): boolean =>
   node?.type === "paragraph" && (!node.content || node.content.length === 0);
 
+// A list item must start with a paragraph. TipTap puts an empty paragraph before a leading block,
+// and the Markdown puts that block on the marker line.
+const startsWithBlock = (content: JSONContent[]): boolean =>
+  isEmptyParagraph(content[0]) && content[1] !== undefined && content[1].type !== "paragraph";
+
 const ensureLeadingMathParagraph = (node: JSONContent) => {
   if (node.type !== "listItem" || node.content?.[0]?.type !== "blockMath") {
     return node;
@@ -297,12 +302,15 @@ const parseLeadingTaskItemMath = (
   token: MarkdownToken,
   helpers: MarkdownParseHelpers,
 ): JSONContent | undefined => {
-  if (token.mainContent?.trim() !== "$$" || !Array.isArray(token.nestedTokens)) {
+  // TipTap joins the paragraph continuation lines after the marker line into `mainContent`.
+  const mainContent = token.mainContent ?? "";
+  if (mainContent.split("\n", 1)[0]?.trim() !== "$$") {
     return undefined;
   }
 
-  const nestedSource = token.nestedTokens.map(tokenSource).join("");
-  const sequence = parseLeadingBlockMathSequence(`$$\n${nestedSource}`);
+  const nestedTokens = token.nestedTokens ?? [];
+  const nestedSource = nestedTokens.map(tokenSource).join("");
+  const sequence = parseLeadingBlockMathSequence(`${mainContent}\n${nestedSource}`);
   if (!sequence) {
     return undefined;
   }
@@ -314,7 +322,7 @@ const parseLeadingTaskItemMath = (
   if (sequence.trailingSource) {
     content.push(
       ...helpers.parseChildren(
-        findTrailingTokens(token.nestedTokens, sequence.trailingSource, "task-item"),
+        findTrailingTokens(nestedTokens, sequence.trailingSource, "task-item"),
       ),
     );
   }
@@ -329,8 +337,7 @@ const renderListItem = (
   continuationWidth = prefix.length,
 ): string => {
   const content = node.content ?? [];
-  const startsWithMath = isEmptyParagraph(content[0]) && content[1]?.type === "blockMath";
-  const firstIndex = startsWithMath ? 1 : 0;
+  const firstIndex = startsWithBlock(content) ? 1 : 0;
   const first = content[firstIndex];
   const renderedFirst = first ? helpers.renderChildren([first]) : "";
   const continuation = " ".repeat(continuationWidth);
@@ -370,6 +377,14 @@ const listItemPrefix = (context: RenderContext): string => {
 
 const TaskDescriptionListItem = ListItem.extend({
   parseMarkdown(token, helpers) {
+    // TipTap turns a leading heading into a paragraph, which changes the meaning of the Markdown.
+    if (token.type === "list_item" && token.tokens?.[0]?.type === "heading") {
+      const parseBlockChildren = helpers.parseBlockChildren ?? helpers.parseChildren;
+      return {
+        type: "listItem",
+        content: [{ type: "paragraph", content: [] }, ...parseBlockChildren(token.tokens)],
+      };
+    }
     const parsed = defaultListItemParseMarkdown.call(
       this,
       withLeadingListItemMathTokens(token),
@@ -384,6 +399,7 @@ const TaskDescriptionListItem = ListItem.extend({
     const content = node.content ?? [];
     const needsDialectRenderer =
       context.parentType === "orderedList" ||
+      startsWithBlock(content) ||
       content.some((child) => child.type === "blockMath" || child.type === "codeBlock");
     return needsDialectRenderer
       ? renderListItem(node, helpers, listItemPrefix(context))

@@ -90,10 +90,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         </noscript>
       </head>
       <body>
-        {/* react-doctor-disable-next-line react-doctor/anchor-target-exists -- page.tsx and not-found.tsx render #docs-title. */}
-        <a className="docs-skip-link" href="#docs-title">
-          Skip to content
-        </a>
         <Provider>
           <RouteFocus />
           <InputModality />

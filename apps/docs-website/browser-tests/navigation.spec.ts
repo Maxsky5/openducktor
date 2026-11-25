@@ -84,7 +84,7 @@ test("a malformed section address still shows the page", async ({ page }) => {
 test("the skip link moves focus to the page title", async ({ page }) => {
   await page.goto("/install-and-update/");
   await page.keyboard.press("Tab");
-  const skip = page.getByRole("link", { name: "Skip to content" });
+  const skip = page.getByRole("link", { name: "Skip to Content" });
   await expect(skip).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.locator("#docs-title")).toBeFocused();

@@ -166,10 +166,12 @@ jobs:
   deploy:
     needs: [build, browser]
     # Only internal pull requests to main get previews. Validation covers every PR target branch.
+    # A run that Dependabot starts gets no Cloudflare token, so it gets no preview.
     # Production comes only from main, or from a release, whose build checks out main.
     if: >-
       (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main'
-      && github.event.pull_request.head.repo.full_name == github.repository)
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.actor != 'dependabot[bot]')
       || github.event_name == 'release' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10

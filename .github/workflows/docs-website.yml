@@ -127,12 +127,14 @@ jobs:
           retention-days: 7
 
   # A separate job keeps the Cloudflare token away from the build scripts. It installs the locked
-  # Wrangler without install scripts and uploads the built files.
+  # Wrangler without install scripts and uploads the built files. A run that Dependabot starts gets
+  # no Cloudflare token, so it gets no preview.
   deploy:
     needs: build
     if: >-
       github.ref == 'refs/heads/main' || (github.event_name == 'pull_request'
-      && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository)
+      && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository
+      && github.actor != 'dependabot[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:

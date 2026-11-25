@@ -120,7 +120,7 @@ try {
       const id = randomUUID();
       await writeFile(
         join(project, `${id}.jsonl`),
-        JSON.stringify({ customTitle: "Saved session", cwd }) + "\n",
+        JSON.stringify({ type: "custom-title", customTitle: "Saved session", cwd }) + "\n",
       );
       await assertFailure(id, /no absolute working directory/);
     }
