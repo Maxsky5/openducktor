@@ -18,6 +18,8 @@ const DIAGRAM_OPTIONS = {
   fontFamily: '"Space Grotesk", "Avenir Next", "Segoe UI", sans-serif',
   fontFamilyMono: '"IBM Plex Mono", "SF Mono", Menlo, Monaco, Consolas, monospace',
   fontSize: 14,
+  // Right-angle edges with rounded corners.
+  config: { flowchart: { curve: "step" } },
 };
 
 export type DiagramRenderer = LazyModuleState<PeleRender>;
@@ -49,8 +51,11 @@ const EXPAND_ICON =
 /** The attribute of a drawn diagram. A click on it opens the diagram in the preview dialog. */
 export const DIAGRAM_ATTRIBUTE = "data-diagram";
 
+const SVG_WIDTH = /^<svg\b[^>]*?\swidth="([\d.]+)"/;
+
+/** The drawing keeps its width for the CSS minimum scale in `markdown.css`. */
 const diagramHtml = (svg: string): string =>
-  `<div data-markdown="mermaid" ${DIAGRAM_ATTRIBUTE}="">${svg}` +
+  `<div data-markdown="mermaid" ${DIAGRAM_ATTRIBUTE}="" style="--diagram-width:${Number(SVG_WIDTH.exec(svg)?.[1] ?? 0)}px">${svg}` +
   `<button type="button" data-diagram-expand="" aria-label="Open diagram preview" title="Open diagram preview">${EXPAND_ICON}</button></div>`;
 
 const diagramErrorHtml = (title: string, message: string, action: string): string =>

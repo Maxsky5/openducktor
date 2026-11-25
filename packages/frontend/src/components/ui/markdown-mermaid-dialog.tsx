@@ -155,7 +155,7 @@ export function MarkdownMermaidDialog({ svg }: { svg: string }) {
         tabIndex={0}
         role="region"
         aria-label="Diagram preview viewport"
-        className="min-h-0 flex-1 overflow-auto bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        className="min-h-0 flex-1 overflow-auto bg-(--diagram-canvas) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         onPointerDown={startDrag}
         onPointerMove={moveDrag}
         onPointerUp={stopDrag}

@@ -11,6 +11,12 @@
   transition: text-decoration-color 150ms var(--motion-ease-out);
 }
 
+/* Words keeps the text of a link whose destination is unsafe, without a destination. */
+.markdown-body a:not([href]) {
+  color: inherit;
+  text-decoration: none;
+}
+
 .markdown-body a:hover {
   text-decoration-color: var(--foreground);
 }
@@ -81,26 +87,68 @@
 }
 
 /*
- * The Pele theme, in the slate tokens of the app. Pele reads these colors when the diagram paints,
- * so a theme change needs no new drawing.
+ * The Pele theme. A diagram is a canvas with card nodes, in the slate tokens of the app. Pele
+ * reads these colors when the diagram paints, so a theme change needs no new drawing.
  */
+:root {
+  --diagram-canvas: color-mix(in oklch, var(--muted) 55%, var(--card));
+  --diagram-node: var(--card);
+  --diagram-shadow: drop-shadow(0 1px 1.5px oklch(0.2 0.04 265 / 0.08))
+    drop-shadow(0 1px 1px oklch(0.2 0.04 265 / 0.04));
+}
+
+.dark {
+  --diagram-canvas: var(--card);
+  --diagram-node: var(--muted);
+  --diagram-shadow: drop-shadow(0 1px 2px oklch(0 0 0 / 0.35));
+}
+
 .pele {
-  --pele-bg: var(--card);
+  --pele-bg: var(--diagram-canvas);
   --pele-fg: var(--foreground);
   --pele-fg-on-light: oklch(0.21 0.03 265);
   --pele-fg-on-dark: oklch(0.98 0 0);
   --pele-muted: var(--muted-foreground);
   --pele-line: var(--muted-foreground);
-  --pele-surface: var(--muted);
-  --pele-surface-alt: oklch(from var(--muted) l c h / 50%);
-  --pele-border: var(--input);
+  --pele-surface: var(--diagram-node);
+  --pele-surface-alt: color-mix(in oklch, var(--diagram-node) 40%, transparent);
+  --pele-border: var(--border);
   --pele-accent: var(--primary);
   --pele-critical: var(--destructive);
   --pele-error: var(--destructive);
-  --pele-radius: 8px;
+  --pele-radius: 10px;
   --pele-heading-weight: 600;
   --pele-title-weight: 600;
   --pele-bold-weight: 600;
+  /* Chart series: Tailwind 500 shades, from indigo near the primary color. */
+  --pele-series-1: oklch(0.585 0.233 277.117);
+  --pele-series-2: oklch(0.685 0.169 237.323);
+  --pele-series-3: oklch(0.696 0.17 162.48);
+  --pele-series-4: oklch(0.769 0.188 70.08);
+  --pele-series-5: oklch(0.645 0.246 16.439);
+  --pele-series-6: oklch(0.704 0.14 182.503);
+  --pele-series-7: oklch(0.606 0.25 292.717);
+  --pele-series-8: oklch(0.554 0.046 257.417);
+}
+
+/* Tailwind 400 shades stay clear on the dark canvas. */
+.dark .pele {
+  --pele-series-1: oklch(0.673 0.182 276.935);
+  --pele-series-2: oklch(0.746 0.16 232.661);
+  --pele-series-3: oklch(0.765 0.177 163.223);
+  --pele-series-4: oklch(0.828 0.189 84.429);
+  --pele-series-5: oklch(0.712 0.194 13.428);
+  --pele-series-6: oklch(0.777 0.152 181.912);
+  --pele-series-7: oklch(0.702 0.183 293.541);
+  --pele-series-8: oklch(0.704 0.04 256.788);
+}
+
+.pele .pele-node > :is(rect, path, polygon, circle, ellipse):first-child {
+  filter: var(--diagram-shadow);
+}
+
+.pele .pele-node .pele-label {
+  font-weight: 500;
 }
 
 .pele .pele-edge path:not(.pele-marker) {
@@ -112,21 +160,38 @@
   fill: var(--muted-foreground);
 }
 
-.pele .pele-lifeline {
-  stroke-dasharray: 3 4;
+/* A halo in the canvas color keeps the lines clear of the label text. */
+.pele .pele-edge-label text {
+  paint-order: stroke;
+  stroke: var(--pele-bg);
+  stroke-width: 4px;
+  stroke-linejoin: round;
 }
 
-/* A drawn diagram is a card. A click on it opens the diagram in the preview dialog. */
+.pele .pele-lifeline {
+  stroke-dasharray: 2 4;
+}
+
+.pele .pele-note rect {
+  fill: var(--warning-surface);
+  stroke: color-mix(in oklch, var(--warning-border) 60%, transparent);
+}
+
+.pele .pele-note .pele-label {
+  fill: var(--warning-surface-foreground);
+}
+
+/* A drawn diagram sits on its canvas. A click on it opens the diagram in the preview dialog. */
 .markdown-body [data-markdown="mermaid"] {
   position: relative;
   display: flex;
   justify-content: safe center;
   margin-block: 0.75rem;
   overflow-x: auto;
-  padding: 1.25rem 1rem;
+  padding: 1.5rem 1.25rem;
   border: 1px solid var(--border);
   border-radius: 0.75rem;
-  background: var(--card);
+  background: var(--diagram-canvas);
 }
 
 .markdown-body [data-diagram] {
@@ -136,6 +201,16 @@
 .markdown-body [data-markdown="mermaid"] svg.pele {
   max-width: 100%;
   height: auto;
+}
+
+/*
+ * A drawn diagram shrinks to the view width, but not below 85% of its size, so its text stays
+ * readable. A wider diagram scrolls. Pele writes `max-width: 100%` on the drawing itself.
+ */
+.markdown-body [data-diagram] svg.pele {
+  flex-shrink: 0;
+  width: max(min(100%, var(--diagram-width)), calc(var(--diagram-width) * 0.85));
+  max-width: none !important;
 }
 
 /* The button gives the preview to the keyboard. It shows on hover and on focus. */
@@ -171,15 +246,29 @@
   align-items: flex-start;
   gap: 0.5rem;
   margin-block: 0.75rem;
-  padding: 0.75rem;
-  border: 1px solid var(--border);
+  padding: 0.875rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--destructive) 35%, var(--border));
   border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--destructive) 5%, var(--card));
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+.markdown-body [data-diagram-error] > svg,
+.markdown-body [data-diagram-error] p:first-child {
   color: var(--destructive);
-  font-size: 0.875rem;
 }
 
 .markdown-body [data-diagram-error] p {
   margin: 0;
+}
+
+.markdown-body [data-diagram-error] p + p {
+  margin-top: 0.375rem;
+}
+
+.markdown-body [data-diagram-error] .font-mono {
+  color: var(--foreground);
 }
 
 .markdown-body [data-diagram-loading] {
