@@ -92,39 +92,17 @@
 }
 
 /*
- * The desktop values of the diagram theme in `@openducktor/theme/diagrams.css`. Tailwind 500 shades
- * suit the light canvas, and 400 shades stay clear on the dark canvas.
+ * The desktop base colors of the diagram theme in `@openducktor/theme/diagrams.css`. Node tints
+ * mix into the node base, so nodes sit above the canvas. In the dark theme, warm hues mix into a
+ * neutral base, because the navy canvas would gray them.
  */
 :root {
   --diagram-canvas: color-mix(in oklab, var(--muted) 55%, var(--card));
-  /* Node tints mix into this base, so nodes sit above the canvas. In the dark theme, warm hues mix
-     into a neutral base, because the navy canvas would gray them. */
   --diagram-node-base: var(--card);
   --diagram-warm-base: var(--card);
   --diagram-surface: var(--card);
   --diagram-surface-alt: var(--muted);
   --diagram-rule: var(--border);
-  --diagram-indigo: oklch(0.585 0.233 277.117);
-  --diagram-sky: oklch(0.685 0.169 237.323);
-  --diagram-emerald: oklch(0.696 0.17 162.48);
-  --diagram-amber: oklch(0.769 0.188 70.08);
-  --diagram-rose: oklch(0.645 0.246 16.439);
-  --diagram-fuchsia: oklch(0.667 0.295 322.15);
-  --diagram-violet: oklch(0.606 0.25 292.717);
-  --diagram-lime: oklch(0.648 0.2 131.684);
-  --diagram-fill-mix: 15%;
-  --diagram-text-mix: 35%;
-  /* Pie slices mix with white, so their dark labels stay readable. */
-  --diagram-solid-mix: 85%;
-  --diagram-event-opacity: 0.1;
-  --diagram-fg-on-light: oklch(0.21 0.034 264.665);
-  --diagram-fg-on-dark: oklch(0.984 0.003 247.858);
-  /* Sequence author colors keep their lightness and chroma, and Pele picks their text color. */
-  --diagram-author-l: l;
-  --diagram-author-c: c;
-  --diagram-author-alpha: alpha;
-  --diagram-sequence-on-light: var(--diagram-fg-on-light);
-  --diagram-sequence-on-dark: var(--diagram-fg-on-dark);
 }
 
 .dark {
@@ -133,32 +111,11 @@
   --diagram-warm-base: oklch(0.24 0.01 265);
   --diagram-surface: color-mix(in oklab, var(--foreground) 5%, var(--diagram-canvas));
   --diagram-surface-alt: color-mix(in oklab, var(--foreground) 9%, var(--diagram-canvas));
-  --diagram-indigo: oklch(0.673 0.182 276.935);
-  --diagram-sky: oklch(0.746 0.16 232.661);
-  --diagram-emerald: oklch(0.765 0.177 163.223);
-  --diagram-amber: oklch(0.828 0.189 84.429);
-  --diagram-rose: oklch(0.712 0.194 13.428);
-  --diagram-fuchsia: oklch(0.74 0.238 322.16);
-  --diagram-violet: oklch(0.702 0.183 293.541);
-  --diagram-lime: oklch(0.841 0.238 128.85);
-  --diagram-fill-mix: 20%;
-  --diagram-text-mix: 25%;
-  --diagram-solid-mix: 100%;
-  --diagram-event-opacity: 0.14;
-  /* Authors pick sequence colors for a light page, so the dark theme keeps only their hue, and
-     their text takes the text color. */
-  --diagram-author-l: 0.3;
-  --diagram-author-c: min(c * 0.9 + 0.02, 0.07);
-  --diagram-author-alpha: max(alpha, 0.6);
-  --diagram-sequence-on-light: var(--foreground);
-  --diagram-sequence-on-dark: var(--foreground);
 }
 
 .pele {
   --pele-bg: var(--diagram-canvas);
   --pele-fg: var(--foreground);
-  --pele-fg-on-light: var(--diagram-fg-on-light);
-  --pele-fg-on-dark: var(--diagram-fg-on-dark);
   --pele-muted: var(--muted-foreground);
   --pele-surface: var(--diagram-surface);
   --pele-surface-alt: var(--diagram-surface-alt);
@@ -166,8 +123,11 @@
   --pele-error: var(--destructive);
 }
 
-/* A drawn diagram sits on its canvas. A click on it opens the diagram in the preview dialog. */
-.markdown-body [data-markdown="mermaid"] {
+/*
+ * A drawn diagram sits on its canvas, in a view or in the editor. In a view, a click on it opens
+ * the diagram in the preview dialog.
+ */
+[data-markdown="mermaid"] {
   position: relative;
   display: flex;
   justify-content: safe center;
@@ -210,7 +170,7 @@
   outline-offset: 0;
 }
 
-.markdown-body [data-diagram-error] {
+[data-diagram-error] {
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
@@ -224,28 +184,28 @@
 }
 
 /* The title mixes red with the text color, so it stays readable on the red tint in both themes. */
-.markdown-body [data-diagram-error] > svg,
-.markdown-body [data-diagram-error] p:first-child {
+[data-diagram-error] > svg,
+[data-diagram-error] p:first-child {
   color: color-mix(in oklab, var(--destructive) 75%, var(--foreground));
 }
 
-.markdown-body [data-diagram-error] p {
+[data-diagram-error] p {
   margin: 0;
 }
 
-.markdown-body [data-diagram-error] p + p {
+[data-diagram-error] p + p {
   margin-top: 0.5rem;
 }
 
 /* The parse message sits in a code well. */
-.markdown-body [data-diagram-error] .font-mono {
+[data-diagram-error] .font-mono {
   border-radius: 0.375rem;
   padding: 0.5rem 0.75rem;
   background: color-mix(in oklab, var(--foreground) 5%, transparent);
   color: var(--foreground);
 }
 
-.markdown-body [data-diagram-loading] {
+[data-diagram-loading] {
   display: flex;
   min-height: 10rem;
   align-items: center;

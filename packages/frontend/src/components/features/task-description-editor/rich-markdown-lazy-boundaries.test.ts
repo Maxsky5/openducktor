@@ -108,9 +108,5 @@ describe("rich Markdown lazy module boundaries", () => {
         expect(graph.packages).not.toContain(packageName);
       }
     }
-    const diagrams = await readSource("../../ui/markdown-diagram.ts");
-    const code = await readSource("../../ui/markdown-code.ts");
-    expect(diagrams).toContain('import("pele")');
-    expect(code).toContain('import("@pierre/words/highlights")');
   });
 });

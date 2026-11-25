@@ -29,9 +29,23 @@ export type HostImageOptions = {
   source: MarkdownImageSource | null;
 };
 
+/** How the host loads an image: as a task asset, as a host file, or through the caller source. */
+type HostImage =
+  | { kind: "task-asset" }
+  | { kind: "local"; path: string }
+  | { kind: "source"; source: MarkdownImageSource };
+
+const classifyHostImage = (src: string, { source }: HostImageOptions): HostImage | null => {
+  if (src.startsWith(TASK_ASSET_URI_PREFIX)) return { kind: "task-asset" };
+  const path = localImagePathOf(src);
+  if (path !== null) return { kind: "local", path };
+  if (source?.handles(src)) return { kind: "source", source };
+  return null;
+};
+
 /** True when the view loads `src` through the host instead of the browser. */
-export const isHostImage = (src: string, { source }: HostImageOptions): boolean =>
-  src.startsWith(TASK_ASSET_URI_PREFIX) || localImagePathOf(src) !== null || !!source?.handles(src);
+export const isHostImage = (src: string, options: HostImageOptions): boolean =>
+  classifyHostImage(src, options) !== null;
 
 function ImageAlert({ children }: { children: ReactNode }) {
   return (
@@ -90,24 +104,26 @@ export function MarkdownHostImage({
   ...image
 }: MarkdownImageProps & { options: HostImageOptions }): ReactElement | null {
   const { src, alt, title } = image;
-  if (src.startsWith(TASK_ASSET_URI_PREFIX)) {
-    if (!parseTaskAssetUri(src)) {
-      return (
-        <ImageAlert>Image could not be loaded: the task asset reference is invalid.</ImageAlert>
-      );
+  // The view mounts this component only for an image that it classified as a host image.
+  const hostImage = classifyHostImage(src, options);
+  switch (hostImage?.kind) {
+    case "task-asset":
+      if (!parseTaskAssetUri(src)) {
+        return (
+          <ImageAlert>Image could not be loaded: the task asset reference is invalid.</ImageAlert>
+        );
+      }
+      if (!options.taskAssets) {
+        return <ImageAlert>Image could not be loaded: task context is unavailable.</ImageAlert>;
+      }
+      return <TaskAssetImage {...image} taskAssets={options.taskAssets} />;
+    case "local":
+      return <MarkdownLocalImage path={hostImage.path} alt={alt} title={title || undefined} />;
+    case "source": {
+      const { Image } = hostImage.source;
+      return <Image {...image} />;
     }
-    if (!options.taskAssets) {
-      return <ImageAlert>Image could not be loaded: task context is unavailable.</ImageAlert>;
-    }
-    return <TaskAssetImage {...image} taskAssets={options.taskAssets} />;
+    case undefined:
+      return null;
   }
-  const localPath = localImagePathOf(src);
-  if (localPath !== null) {
-    return <MarkdownLocalImage path={localPath} alt={alt} title={title || undefined} />;
-  }
-  if (options.source?.handles(src)) {
-    const { Image } = options.source;
-    return <Image {...image} />;
-  }
-  return null;
 }

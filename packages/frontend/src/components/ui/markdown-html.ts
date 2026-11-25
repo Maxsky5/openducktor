@@ -49,11 +49,13 @@ export const LOCAL_LINK_ATTRIBUTE = "data-local-link";
 
 /**
  * Marks the URLs that the view handles itself. Words then checks each URL with its default rule,
- * which drops unsafe schemes.
+ * which drops unsafe schemes. Words drops a URL that already has a mark, so only this rule writes
+ * the marks.
  */
 export const createMarkdownUrlTransform =
   (isHostImage: (src: string) => boolean, local: MarkdownLocalLinks | null) =>
-  (url: string, key: "href" | "src"): string => {
+  (url: string, key: "href" | "src"): string | null => {
+    if (url.startsWith(HOST_IMAGE_PREFIX) || url.startsWith(LOCAL_LINK_PREFIX)) return null;
     if (key === "src") {
       return isHostImage(url) ? HOST_IMAGE_PREFIX + encodeURIComponent(url) : url;
     }
@@ -96,7 +98,15 @@ const islandHtml = (name: string, data: MarkdownHostImageData): string =>
   ` data-words-island-data="${escapeHtml(JSON.stringify(data))}">` +
   "<span data-words-island-content></span><span data-words-island-fallback></span></span>";
 
+/**
+ * The hooks change only the elements of Words, not the markup of a plugin, such as a diagram. Each
+ * element of Words passes through the URL rule, which writes the only valid marks.
+ */
+const WORDS_IMAGE = '<img data-markdown="img"';
+const WORDS_LINK = '<a data-markdown="a"';
+
 const hostImageHtml = (html: string): string => {
+  if (!html.startsWith(WORDS_IMAGE)) return html;
   const attributes = readTagAttributes(html);
   const marked = attributes.get("src") ?? "";
   if (!marked.startsWith(HOST_IMAGE_PREFIX)) return html;
@@ -142,28 +152,41 @@ const taskCheckboxHtml = (html: string): string => {
 
 /** Keeps the destination of a local link off its navigation URL. */
 const localLinkHtml = (html: string): string => {
+  if (!html.startsWith(WORDS_LINK)) return html;
   const href = readTagAttributes(html).get("href") ?? "";
   if (!href.startsWith(LOCAL_LINK_PREFIX)) return html;
   const destination = escapeHtml(decodeURIComponent(href.slice(LOCAL_LINK_PREFIX.length)));
   return html.replace(
     /^<a data-markdown="a" href="[^"]*"/,
-    `<a data-markdown="a" href="#" ${LOCAL_LINK_ATTRIBUTE}="${destination}" title="${destination}"`,
+    `${WORDS_LINK} href="#" ${LOCAL_LINK_ATTRIBUTE}="${destination}" title="${destination}"`,
   );
 };
+
+/** The note under each code block when the highlighter did not load, with the reason. */
+const codeFailureHtml = (message: string): string =>
+  '<p class="m-0 border-t border-border px-3.5 py-2 text-[11px] text-muted-foreground">' +
+  `Syntax highlighting unavailable: ${escapeHtml(message)}</p>`;
 
 /** The element hooks of a view. A view passes only the hooks that its text can use. */
 export const createMarkdownHooks = ({
   links,
   images,
   taskItems,
+  codeFailure,
 }: {
   /** `text` shows links as text. Local links open in the app. */
   links: "text" | MarkdownLocalLinks | null;
   images: MarkdownImageMode | null;
   taskItems: boolean;
+  /** Why the code highlighter did not load, or `null`. */
+  codeFailure: string | null;
 }): Components => {
   const hooks: Components = {};
   if (taskItems) hooks.input = taskCheckboxHtml;
+  if (codeFailure !== null) {
+    const note = codeFailureHtml(codeFailure);
+    hooks.pre = (html) => html + note;
+  }
   if (links === "text") hooks.a = (html) => `<span>${innerHtml(html)}</span>`;
   else if (links) hooks.a = localLinkHtml;
   if (images === "label") hooks.img = imageLabelHtml;

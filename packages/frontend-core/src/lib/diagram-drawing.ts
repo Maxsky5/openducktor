@@ -5,18 +5,22 @@
  */
 
 /**
- * Right-angle edges with rounded corners, flat commit labels, and no empty member boxes in a class
- * without members.
+ * The Pele options that the desktop and mobile views share. Each view adds its fonts.
+ * - Right-angle edges with rounded corners, and flat commit labels.
+ * - No empty member boxes in a class without members.
+ * - Class members in the code font, as the signatures that they are.
+ * - No links, as Mermaid strict mode did: a diagram link would leave the app.
  */
-export const DIAGRAM_CONFIG = {
-  flowchart: { curve: "step" },
-  state: { curve: "step" },
-  gitGraph: { rotateCommitLabel: false },
-  class: { hideEmptyMembersBox: true },
+export const DIAGRAM_RENDER_OPTIONS = {
+  monospace: ["members"] satisfies "members"[],
+  links: false,
+  config: {
+    flowchart: { curve: "step" },
+    state: { curve: "step" },
+    gitGraph: { rotateCommitLabel: false },
+    class: { hideEmptyMembersBox: true },
+  },
 };
-
-/** Class members show in the code font, as the signatures that they are. */
-export const DIAGRAM_MONOSPACE: readonly "members"[] = ["members"];
 
 /**
  * The corner radius of diagram boxes. `--pele-radius` in `@openducktor/theme/diagrams.css` has the

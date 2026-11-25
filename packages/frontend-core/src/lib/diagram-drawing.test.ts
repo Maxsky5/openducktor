@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { render } from "pele";
-import { DIAGRAM_CONFIG, DIAGRAM_MONOSPACE, prepareDiagram } from "./diagram-drawing";
+import { DIAGRAM_RENDER_OPTIONS, prepareDiagram } from "./diagram-drawing";
 
-const draw = (source: string): string =>
-  prepareDiagram(render(source, { monospace: DIAGRAM_MONOSPACE, config: DIAGRAM_CONFIG }).svg);
+const draw = (source: string): string => prepareDiagram(render(source, DIAGRAM_RENDER_OPTIONS).svg);
 
 /** The markup of one node, from its start to the start of the next node. */
 const nodeOf = (svg: string, id: string): string => {
@@ -74,8 +73,15 @@ describe("prepareDiagram", () => {
     expect(svg).not.toMatch(/style="(?:[^"]*;)?fill:/);
   });
 
+  test("draws no link for a Mermaid click line, so a diagram cannot leave the app", () => {
+    const svg = draw('flowchart LR\n  A --> B\n  click A href "https://example.com"');
+
+    expect(svg).toContain('data-id="A"');
+    expect(svg).not.toContain("<a ");
+  });
+
   test("leaves a flowchart unchanged", () => {
-    const svg = render("flowchart LR\n  A[Start] --> B{Valid?}", { config: DIAGRAM_CONFIG }).svg;
+    const svg = render("flowchart LR\n  A[Start] --> B{Valid?}", DIAGRAM_RENDER_OPTIONS).svg;
 
     expect(prepareDiagram(svg)).toBe(svg);
   });

@@ -6,16 +6,11 @@
  * work. Groups and frames are violet outlines. Charts use the same hues as series colors. A
  * diagram that sets its own colors, such as with `classDef`, keeps them.
  *
- * The rules read only Pele variables and `--diagram-*` variables. Each app sets them for its theme:
- * - `--pele-bg` (the canvas), `--pele-fg`, `--pele-muted`, `--pele-fg-on-light`, `--pele-fg-on-dark`,
- *   `--pele-surface`, `--pele-surface-alt`, `--pele-border`, and `--pele-error`.
- * - `--diagram-indigo`, `--diagram-sky`, `--diagram-emerald`, `--diagram-amber`, `--diagram-rose`,
- *   `--diagram-fuchsia`, `--diagram-violet`, and `--diagram-lime`.
- * - `--diagram-fill-mix`, `--diagram-text-mix`, `--diagram-solid-mix`, and
- *   `--diagram-event-opacity`.
+ * This file sets the palette for the light and dark themes. The dark values apply in a `.dark`
+ * page, or to a drawing with the `dark` class. Each app sets its base colors for its theme:
+ * - `--pele-bg` (the canvas), `--pele-fg`, `--pele-muted`, `--pele-surface`, `--pele-surface-alt`,
+ *   `--pele-border`, and `--pele-error`.
  * - `--diagram-node-base`, `--diagram-warm-base`, `--diagram-surface`, and `--diagram-rule`.
- * - `--diagram-author-l`, `--diagram-author-c`, `--diagram-author-alpha`,
- *   `--diagram-sequence-on-light`, and `--diagram-sequence-on-dark`.
  */
 
 /*
@@ -43,6 +38,41 @@
   --pele-series-8: var(--pele-muted);
   /* Borders move from the hue toward the text color, so they keep contrast. */
   --diagram-border-mix: 66%;
+}
+
+/* The light palette is the Tailwind 500 shades. */
+.pele {
+  --pele-fg-on-light: oklch(0.21 0.034 264.665);
+  --pele-fg-on-dark: oklch(0.984 0.003 247.858);
+  --diagram-indigo: oklch(0.585 0.233 277.117);
+  --diagram-sky: oklch(0.685 0.169 237.323);
+  --diagram-emerald: oklch(0.696 0.17 162.48);
+  --diagram-amber: oklch(0.769 0.188 70.08);
+  --diagram-rose: oklch(0.645 0.246 16.439);
+  --diagram-fuchsia: oklch(0.667 0.295 322.15);
+  --diagram-violet: oklch(0.606 0.25 292.717);
+  --diagram-lime: oklch(0.648 0.2 131.684);
+  --diagram-fill-mix: 15%;
+  --diagram-text-mix: 35%;
+  /* Pie slices mix with white, so their dark labels stay readable. */
+  --diagram-solid-mix: 85%;
+  --diagram-event-opacity: 0.1;
+}
+
+/* The dark palette is the Tailwind 400 shades, which stay clear on a dark canvas. */
+:is(.dark .pele, .pele.dark) {
+  --diagram-indigo: oklch(0.673 0.182 276.935);
+  --diagram-sky: oklch(0.746 0.16 232.661);
+  --diagram-emerald: oklch(0.765 0.177 163.223);
+  --diagram-amber: oklch(0.828 0.189 84.429);
+  --diagram-rose: oklch(0.712 0.194 13.428);
+  --diagram-fuchsia: oklch(0.74 0.238 322.16);
+  --diagram-violet: oklch(0.702 0.183 293.541);
+  --diagram-lime: oklch(0.841 0.238 128.85);
+  --diagram-fill-mix: 20%;
+  --diagram-text-mix: 25%;
+  --diagram-solid-mix: 100%;
+  --diagram-event-opacity: 0.14;
 }
 
 /* Each part takes its fill, line, and text from its hue, through the variables that Pele reads. */
@@ -240,21 +270,25 @@
 }
 
 /*
- * Sequence highlights and boxes paint their author color from `--author-fill`, through the
- * lightness and chroma of the theme. Pele picks the text and line colors on them from
- * `--pele-fg-on-light` and `--pele-fg-on-dark`, so each theme sets those for sequences. Pele sets
- * the app colors on the root of each drawing, so these colors go on its children.
+ * Sequence highlights and boxes paint their author color from `--author-fill`. Pele picks the
+ * text and line colors on them from `--pele-fg-on-light` and `--pele-fg-on-dark`.
  */
 .pele-sequence [style*="--author-fill"] {
-  fill: oklch(
-    from var(--author-fill) var(--diagram-author-l) var(--diagram-author-c) h /
-      var(--diagram-author-alpha)
-  );
+  fill: var(--author-fill);
 }
 
-.pele-sequence > * {
-  --pele-fg-on-light: var(--diagram-sequence-on-light);
-  --pele-fg-on-dark: var(--diagram-sequence-on-dark);
+/*
+ * Authors pick sequence colors for a light page, so the dark theme keeps only their hue, and their
+ * text takes the text color. Pele sets the app colors on the root of each drawing, so the text
+ * colors go on its children.
+ */
+:is(.dark .pele-sequence, .pele-sequence.dark) [style*="--author-fill"] {
+  fill: oklch(from var(--author-fill) 0.3 min(c * 0.9 + 0.02, 0.07) h / max(alpha, 0.6));
+}
+
+:is(.dark .pele-sequence, .pele-sequence.dark) > * {
+  --pele-fg-on-light: var(--pele-fg);
+  --pele-fg-on-dark: var(--pele-fg);
 }
 
 /* Actor icons draw with the weight of the message lines. */

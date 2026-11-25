@@ -5,8 +5,7 @@
 import { escapeHtml, type PluginConfig } from "@pierre/words/html";
 import { createMermaidPlugin } from "@pierre/words/mermaid";
 import {
-  DIAGRAM_CONFIG,
-  DIAGRAM_MONOSPACE,
+  DIAGRAM_RENDER_OPTIONS,
   prepareDiagram,
 } from "@openducktor/frontend-core/lib/diagram-drawing";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
@@ -20,8 +19,7 @@ const DIAGRAM_OPTIONS = {
   fontFamily: '"Space Grotesk", "Avenir Next", "Segoe UI", sans-serif',
   fontFamilyMono: '"IBM Plex Mono", "SF Mono", Menlo, Monaco, Consolas, monospace',
   fontSize: 14,
-  monospace: DIAGRAM_MONOSPACE,
-  config: DIAGRAM_CONFIG,
+  ...DIAGRAM_RENDER_OPTIONS,
 };
 
 export type DiagramRenderer = LazyModuleState<PeleRender>;
@@ -50,12 +48,16 @@ const pele = createLazyModule(() =>
 /** The diagram renderer. It starts to load when `needed` is true. */
 export const useDiagramRenderer = (needed: boolean): DiagramRenderer => pele.useModule(needed);
 
-const MERMAID_FENCE = /^ {0,3}(?:`{3,}|~{3,})\s*mermaid\b/m;
+/** A fence opener with the `mermaid` language, also in a list item or a quote. */
+const MERMAID_FENCE = /(?:`{3,}|~{3,})\s*mermaid\b/;
 
-/** A fence that a view draws as a diagram. The check is cheap, and it can be wrong only one way. */
+/**
+ * A fence that a view draws as a diagram. The check is cheap. It can find a fence that is not
+ * there, such as one in an inline code span, but it never misses one.
+ */
 export const mayHaveDiagram = (markdown: string): boolean => MERMAID_FENCE.test(markdown);
 
-export type DrawnDiagram = { status: "ready"; svg: string } | { status: "error"; message: string };
+type DrawnDiagram = { status: "ready"; svg: string } | { status: "error"; message: string };
 
 /**
  * The last drawings, by source. A view draws its diagrams when it mounts, and chat rows and
@@ -73,7 +75,7 @@ const draw = (render: PeleRender, source: string): DrawnDiagram => {
 };
 
 /** Draws a diagram, or returns the last drawing of the same source. */
-export const drawDiagram = (render: PeleRender, source: string): DrawnDiagram => {
+const drawDiagram = (render: PeleRender, source: string): DrawnDiagram => {
   const cached = drawings.get(source);
   if (cached) {
     // The map keeps insertion order, so a reused drawing moves to the end.
@@ -91,15 +93,15 @@ export const drawDiagram = (render: PeleRender, source: string): DrawnDiagram =>
 };
 
 /** A diagram that cannot show, with what the user can do. */
-export type DiagramFailure = { title: string; message: string; action: string };
+type DiagramFailure = { title: string; message: string; action: string };
 
-export const rendererFailure = (message: string): DiagramFailure => ({
+const rendererFailure = (message: string): DiagramFailure => ({
   title: "Diagram renderer failed to load",
   message,
   action: "Reload the app to show diagrams.",
 });
 
-export const sourceFailure = (message: string): DiagramFailure => ({
+const sourceFailure = (message: string): DiagramFailure => ({
   title: "Diagram preview failed",
   message,
   action: "Edit the Mermaid source to fix the diagram.",
@@ -114,9 +116,12 @@ const EXPAND_ICON =
 /** The attribute of a drawn diagram. A click on it opens the diagram in the preview dialog. */
 export const DIAGRAM_ATTRIBUTE = "data-diagram";
 
-const diagramHtml = (svg: string): string =>
-  `<div data-markdown="mermaid" ${DIAGRAM_ATTRIBUTE}="">${svg}` +
-  `<button type="button" data-diagram-expand="" aria-label="Open diagram preview" title="Open diagram preview">${EXPAND_ICON}</button></div>`;
+const EXPAND_BUTTON = `<button type="button" data-diagram-expand="" aria-label="Open diagram preview" title="Open diagram preview">${EXPAND_ICON}</button>`;
+
+const drawingHtml = (svg: string, preview: boolean): string =>
+  preview
+    ? `<div data-markdown="mermaid" ${DIAGRAM_ATTRIBUTE}="">${svg}${EXPAND_BUTTON}</div>`
+    : `<div data-markdown="mermaid">${svg}</div>`;
 
 const diagramErrorHtml = ({ title, message, action }: DiagramFailure): string =>
   `<div data-diagram-error="" role="alert">${ALERT_ICON}<div><p class="font-medium">${escapeHtml(title)}</p>` +
@@ -126,28 +131,32 @@ const diagramErrorHtml = ({ title, message, action }: DiagramFailure): string =>
 const LOADING_HTML = '<div data-diagram-loading="" role="status">Loading diagram…</div>';
 
 /**
+ * The HTML of a diagram source: the diagram, or what failed and what to do. With `preview`, a click
+ * on the diagram opens it in the preview dialog.
+ */
+export const diagramHtml = (state: DiagramRenderer, source: string, preview: boolean): string => {
+  if (state.status === "loading") return LOADING_HTML;
+  if (state.status === "failed") return diagramErrorHtml(rendererFailure(state.message));
+  const drawn = drawDiagram(state.value, source);
+  return drawn.status === "ready"
+    ? drawingHtml(drawn.svg, preview)
+    : diagramErrorHtml(sourceFailure(drawn.message));
+};
+
+/**
  * The Words renderer of `mermaid` fences, without the code frame. An open fence shows the last
  * complete diagram, as Words does. A closed fence shows its diagram, or the parse error and what
  * to do.
  */
 export const createDiagramRenderer = (state: DiagramRenderer): DiagramRendererEntry => {
-  const entry = (render: DiagramRendererEntry["render"]): DiagramRendererEntry => ({
+  const streaming =
+    state.status === "ready" ? createMermaidPlugin({ render: state.value }, DIAGRAM_OPTIONS) : null;
+  return {
     language: "mermaid",
     frame: false,
-    render,
-  });
-  if (state.status === "loading") return entry(() => LOADING_HTML);
-  if (state.status === "failed") {
-    const html = diagramErrorHtml(rendererFailure(state.message));
-    return entry(() => html);
-  }
-  const render = state.value;
-  const streaming = createMermaidPlugin({ render }, DIAGRAM_OPTIONS);
-  return entry((options) => {
-    if (options.isIncomplete) return streaming.render(options);
-    const drawn = drawDiagram(render, options.code);
-    return drawn.status === "ready"
-      ? diagramHtml(drawn.svg)
-      : diagramErrorHtml(sourceFailure(drawn.message));
-  });
+    render: (options) =>
+      streaming && options.isIncomplete
+        ? streaming.render(options)
+        : diagramHtml(state, options.code, true),
+  };
 };

@@ -41,6 +41,18 @@ describe("links", () => {
     expect(openExternalUrl).toHaveBeenCalledWith("https://example.com/docs");
   });
 
+  test("opens the link of a linked host image through the external URL bridge", async () => {
+    const openExternalUrl = mock(async (_url: string) => {});
+    const view = renderLink(
+      `[![Shot](odt-asset:${ASSET_ID})](https://example.com/shot)`,
+      openExternalUrl,
+    );
+    const image = await view.findByRole("alert");
+
+    expect(fireEvent.click(image)).toBe(false);
+    expect(openExternalUrl).toHaveBeenCalledWith("https://example.com/shot");
+  });
+
   test("opens a web link on middle click, and blocks other buttons and the context menu", () => {
     const openExternalUrl = mock(async (_url: string) => {});
     const view = renderLink("[Open link](https://example.com/middle)", openExternalUrl);
@@ -115,6 +127,78 @@ describe("links", () => {
     expect(fireEvent.keyDown(link, { key: "Enter" })).toBe(false);
     fireEvent.keyDown(link, { key: "Enter", repeat: true });
     expect(open).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("forged marks", () => {
+  test.each([
+    ["an image", "Hello ![x](#odt-image:%E0%A4%A) end"],
+    ["a link", "See [x](#odt-link:%) end"],
+  ])("ignores %s with a forged mark of the view", (_name, markdown) => {
+    const local = { handles: () => true, open: mock(() => {}) };
+    const view = render(
+      <MarkdownStreamRenderer markdown={markdown} streaming={false} links={{ local }} />,
+    );
+
+    expect(view.container.textContent).toContain("end");
+    expect(view.container.querySelector("img, [data-words-island], [data-local-link]")).toBeNull();
+  });
+});
+
+test("shows an image island directive in the text as text", () => {
+  const markdown = `Hello :odt-image[x]{src="odt-asset:${ASSET_ID}"} end`;
+  const view = render(
+    withShellPlatform(<MarkdownRenderer markdown={markdown} />, createUnavailableShellBridge()),
+  );
+
+  expect(view.container.textContent).toContain(":odt-image[x]");
+  expect(view.container.querySelector("[data-words-island]")).toBeNull();
+});
+
+describe("every Markdown form of a hooked element", () => {
+  test.each([
+    ["an alt text with brackets", `![shot \\[v2\\]](odt-asset:${ASSET_ID})`],
+    ["an alt text on two lines", `![one\ntwo](odt-asset:${ASSET_ID})`],
+    ["a reference image", `![ref]\n\n[ref]: odt-asset:${ASSET_ID}`],
+  ])("loads a task asset from %s", async (_name, markdown) => {
+    const view = render(
+      withShellPlatform(<MarkdownRenderer markdown={markdown} />, createUnavailableShellBridge()),
+    );
+
+    expect((await view.findByRole("alert")).textContent).toBe(
+      "Image could not be loaded: task context is unavailable.",
+    );
+  });
+
+  test("shows a task item in a quote as an app checkbox", () => {
+    const view = render(<MarkdownRenderer markdown="> - [x] done" />);
+
+    expect(view.getByRole("checkbox").getAttribute("aria-checked")).toBe("true");
+    expect(view.container.querySelector("input")).toBeNull();
+  });
+
+  test("opens a local file autolink with the caller action", () => {
+    const open = mock((_destination: string, _anchor: HTMLAnchorElement) => {});
+    const local = { handles: (href: string) => href.startsWith("file:"), open };
+    const view = render(
+      <MarkdownStreamRenderer
+        markdown="See <file:///repo/a.ts>."
+        streaming={false}
+        links={{ local }}
+      />,
+    );
+
+    fireEvent.click(view.getByRole("link"));
+    expect(open).toHaveBeenCalledWith("file:///repo/a.ts", expect.anything());
+  });
+
+  test.each([
+    ["a list item", "- Step\n\n  ```mermaid\n  flowchart LR\n    A --> B\n  ```"],
+    ["a quote", "> ```mermaid\n> flowchart LR\n>   A --> B\n> ```"],
+  ])("draws a Mermaid fence in %s", async (_name, markdown) => {
+    const view = render(<MarkdownRenderer markdown={markdown} />);
+
+    await waitFor(() => expect(view.container.querySelector("svg.pele")).not.toBeNull());
   });
 });
 

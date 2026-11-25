@@ -1,7 +1,6 @@
 /** Mermaid diagrams for the diagram page, drawn with Pele. Pele escapes diagram text and filters links. */
 import {
-  DIAGRAM_CONFIG,
-  DIAGRAM_MONOSPACE,
+  DIAGRAM_RENDER_OPTIONS,
   prepareDiagram,
 } from "@openducktor/frontend-core/lib/diagram-drawing";
 import diagramStyles from "@openducktor/theme/diagrams.css" with { type: "text" };
@@ -15,76 +14,35 @@ import { drawElementPng, pageDocument } from "./page-runtime";
 const FONT_FAMILY = "-apple-system, system-ui, sans-serif";
 const FONT_FAMILY_MONO = "ui-monospace, Menlo, monospace";
 
-const FG_ON_LIGHT = "oklch(0.21 0.034 264.665)";
-const FG_ON_DARK = "oklch(0.984 0.003 247.858)";
-
 /**
- * The mobile values of the diagram theme in `@openducktor/theme/diagrams.css`, as on desktop:
- * Tailwind 500 shades on light and 400 shades on dark. Node tints mix into white on light, so nodes
- * sit above the screen background. On dark, warm hues mix into a neutral base, because the navy
- * background would gray them.
+ * The mobile base colors of the diagram theme in `@openducktor/theme/diagrams.css`. Node tints mix
+ * into white on light, so nodes sit above the screen background. On dark, warm hues mix into a
+ * neutral base, because the navy background would gray them.
  */
-const THEME_VALUES = {
+const BASE_COLORS = {
   light: {
-    "--diagram-indigo": "oklch(0.585 0.233 277.117)",
-    "--diagram-sky": "oklch(0.685 0.169 237.323)",
-    "--diagram-emerald": "oklch(0.696 0.17 162.48)",
-    "--diagram-amber": "oklch(0.769 0.188 70.08)",
-    "--diagram-rose": "oklch(0.645 0.246 16.439)",
-    "--diagram-fuchsia": "oklch(0.667 0.295 322.15)",
-    "--diagram-violet": "oklch(0.606 0.25 292.717)",
-    "--diagram-lime": "oklch(0.648 0.2 131.684)",
-    "--diagram-fill-mix": "15%",
-    "--diagram-text-mix": "35%",
-    "--diagram-solid-mix": "85%",
-    "--diagram-event-opacity": "0.1",
     "--diagram-node-base": "white",
     "--diagram-surface": "white",
     "--diagram-warm-base": "white",
-    "--diagram-author-l": "l",
-    "--diagram-author-c": "c",
-    "--diagram-author-alpha": "alpha",
-    "--diagram-sequence-on-light": FG_ON_LIGHT,
-    "--diagram-sequence-on-dark": FG_ON_DARK,
   },
   dark: {
-    "--diagram-indigo": "oklch(0.673 0.182 276.935)",
-    "--diagram-sky": "oklch(0.746 0.16 232.661)",
-    "--diagram-emerald": "oklch(0.765 0.177 163.223)",
-    "--diagram-amber": "oklch(0.828 0.189 84.429)",
-    "--diagram-rose": "oklch(0.712 0.194 13.428)",
-    "--diagram-fuchsia": "oklch(0.74 0.238 322.16)",
-    "--diagram-violet": "oklch(0.702 0.183 293.541)",
-    "--diagram-lime": "oklch(0.841 0.238 128.85)",
-    "--diagram-fill-mix": "20%",
-    "--diagram-text-mix": "25%",
-    "--diagram-solid-mix": "100%",
-    "--diagram-event-opacity": "0.14",
     "--diagram-node-base": "var(--pele-bg)",
     "--diagram-surface": "color-mix(in oklab, var(--pele-fg) 5%, var(--pele-bg))",
     // The screen background of the app is darker than the desktop diagram canvas.
     "--diagram-warm-base": "oklch(0.17 0.008 265)",
-    "--diagram-author-l": "0.28",
-    "--diagram-author-c": "min(c * 0.9 + 0.02, 0.07)",
-    "--diagram-author-alpha": "max(alpha, 0.6)",
-    "--diagram-sequence-on-light": "var(--pele-fg)",
-    "--diagram-sequence-on-dark": "var(--pele-fg)",
   },
 } as const;
 
 /** The diagram colors in the app colors, with the screen background as the canvas. */
 const diagramColors = ({ colors, theme }: BlockRenderMessage) => ({
-  ...THEME_VALUES[theme],
+  ...BASE_COLORS[theme],
   "--pele-bg": colors.background,
   "--pele-fg": colors.label,
-  "--pele-fg-on-light": FG_ON_LIGHT,
-  "--pele-fg-on-dark": FG_ON_DARK,
   "--pele-muted": colors.secondaryLabel,
   "--pele-surface": colors.codeBackground,
   "--pele-surface-alt": colors.fill,
   "--pele-border": colors.separator,
   "--pele-error": colors.error,
-  "--pele-font": FONT_FAMILY,
   "--diagram-rule": colors.separator,
 });
 
@@ -100,16 +58,12 @@ const SVG_OPEN_TAG = /^<svg\b[^>]*>/;
 const RENDER_OPTIONS = {
   fontFamily: FONT_FAMILY,
   fontFamilyMono: FONT_FAMILY_MONO,
-  monospace: DIAGRAM_MONOSPACE,
-  config: DIAGRAM_CONFIG,
+  ...DIAGRAM_RENDER_OPTIONS,
 };
-
-let colors: Record<string, string> | null = null;
 
 /** Replaces each `mermaid` code block with its diagram. Pele draws synchronously. */
 export const renderDiagrams: DiagramRenderer = (root, message) => {
-  colors = diagramColors(message);
-  for (const [name, value] of Object.entries(colors)) root.style.setProperty(name, value);
+  const colors = diagramColors(message);
   const blocks = Array.from(
     root.querySelectorAll('[data-markdown="code-block"][data-language="mermaid"]'),
   );
@@ -124,6 +78,13 @@ export const renderDiagrams: DiagramRenderer = (root, message) => {
       SVG_OPEN_TAG,
       (tag) => tag + THEME_STYLE,
     );
+    // An SVG image cannot read the page, so each drawing carries its theme and colors to its PNG
+    // picture.
+    const svg = figure.querySelector("svg");
+    if (svg) {
+      if (message.theme === "dark") svg.setAttribute("class", `${svg.getAttribute("class")} dark`);
+      for (const [name, value] of Object.entries(colors)) svg.style.setProperty(name, value);
+    }
     block.replaceWith(figure);
   }
 };
@@ -147,8 +108,6 @@ export const snapshotDiagram: BlockSnapshotter = async (root) => {
   sized.setAttribute("width", String(place.width));
   sized.setAttribute("height", String(place.height));
   sized.style.removeProperty("max-width");
-  // An SVG image cannot read the variables of the page, so the picture carries its colors.
-  for (const [name, value] of Object.entries(colors ?? {})) sized.style.setProperty(name, value);
   let image: string;
   try {
     image = await drawElementPng(sized, place);
