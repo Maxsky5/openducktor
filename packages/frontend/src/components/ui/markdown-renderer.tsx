@@ -1,157 +1,48 @@
-import { markdownLinkComponents, type MarkdownLinkPolicy } from "./markdown-link-policy";
-import { TASK_ASSET_URI_PREFIX, type TaskAssetRenderContext } from "@openducktor/contracts";
-import {
-  type ComponentProps,
-  createElement,
-  lazy,
-  memo,
-  type ReactElement,
-  type ReactNode,
-  Suspense,
-  useMemo,
-} from "react";
-import type { Components } from "react-markdown";
-import { useShellPlatform } from "@/lib/shell-platform";
-import { cn } from "@/lib/utils";
-import { renderMarkdownElement } from "./markdown-render-element";
-import {
-  MARKDOWN_CLASSES,
-  MARKDOWN_COMPONENTS,
-  type MarkdownRendererVariant,
-} from "./markdown-renderer-components";
+import type { TaskAssetRenderContext } from "@openducktor/contracts";
+import { memo, type ReactElement } from "react";
 import { prepareMarkdownRenderContent } from "./markdown-render-content";
+import type { MarkdownLinks } from "./markdown-html";
+import type { MarkdownRendererVariant } from "./markdown-variants";
+import { type MarkdownImages, MarkdownView } from "./markdown-view";
 
-const PremiumMarkdownRenderer = lazy(() => import("./markdown-renderer-premium"));
-const MarkdownRendererRich = lazy(() => import("./markdown-renderer-rich"));
-const MarkdownRendererMathCandidate = lazy(() => import("./markdown-renderer-math-candidate"));
-const MarkdownRendererMermaidCandidate = lazy(
-  () => import("./markdown-renderer-mermaid-candidate"),
-);
-
-export type { MarkdownRendererVariant } from "./markdown-renderer-components";
-
-export type MarkdownPremiumRendererProps = {
-  markdown: string;
-  components: Components;
-  linkPolicy?: MarkdownLinkPolicy | undefined;
-  fallback?: ReactNode;
-};
+export type { MarkdownRendererVariant } from "./markdown-variants";
+export type { MarkdownImages } from "./markdown-view";
 
 type MarkdownRendererProps = {
   markdown: string;
   variant?: MarkdownRendererVariant;
   className?: string;
-  components?: Components;
-  linkPolicy?: MarkdownLinkPolicy | undefined;
-  premiumCodeBlocks?: boolean;
-  fallback?: ReactNode;
+  links?: MarkdownLinks;
+  images?: MarkdownImages;
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
   stripTaskDescriptionFrontMatter?: boolean;
+  /** Shows math and diagram fences as text, for short previews. */
   lightweight?: boolean;
 };
 
-type MarkdownRendererCandidate = "mermaid" | "math";
-
-type MarkdownTaskAssetProps = Pick<
-  ComponentProps<typeof MarkdownRendererRich>,
-  "taskAssetContext" | "resolveTaskAssetSource"
->;
-
-const selectMarkdownCandidate = (
-  content: string,
-  lightweight: boolean,
-): MarkdownRendererCandidate | null => {
-  if (lightweight) {
-    return null;
-  }
-  if (content.includes("mermaid")) {
-    return "mermaid";
-  }
-  if (content.includes("$")) {
-    return "math";
-  }
-  return null;
-};
-
+/** Renders a complete Markdown text, such as a task description or a workflow document. */
 export const MarkdownRenderer = memo(function MarkdownRenderer({
   markdown,
   variant = "document",
   className,
-  components: componentOverrides,
-  linkPolicy,
-  premiumCodeBlocks = false,
-  fallback,
+  links,
+  images,
   taskAssetContext,
   stripTaskDescriptionFrontMatter = false,
   lightweight = false,
 }: MarkdownRendererProps): ReactElement | null {
-  const { resolveTaskAssetSource } = useShellPlatform();
-  const components = useMemo(
-    () => markdownLinkComponents(MARKDOWN_COMPONENTS[variant], componentOverrides, linkPolicy),
-    [variant, componentOverrides, linkPolicy],
-  );
   const content = prepareMarkdownRenderContent(markdown, stripTaskDescriptionFrontMatter);
-  if (!content) {
-    return null;
-  }
-
-  const candidate = selectMarkdownCandidate(content, lightweight);
-  const needsRichRenderer =
-    taskAssetContext !== undefined || (!lightweight && content.includes(TASK_ASSET_URI_PREFIX));
-  const taskAssetProps: MarkdownTaskAssetProps = taskAssetContext
-    ? { taskAssetContext, resolveTaskAssetSource }
-    : {};
-  const loadingFallback =
-    fallback === undefined
-      ? createElement(renderMarkdownElement, { markdown: content, components, linkPolicy })
-      : fallback;
-
-  let renderedContent: ReactElement;
-  if (needsRichRenderer) {
-    renderedContent = (
-      <Suspense fallback={loadingFallback}>
-        <MarkdownRendererRich
-          markdown={content}
-          components={components}
-          linkPolicy={linkPolicy}
-          premiumCodeBlocks={premiumCodeBlocks}
-          fallback={fallback}
-          {...taskAssetProps}
-        />
-      </Suspense>
-    );
-  } else if (premiumCodeBlocks) {
-    renderedContent = (
-      <Suspense fallback={loadingFallback}>
-        <PremiumMarkdownRenderer
-          markdown={content}
-          components={components}
-          linkPolicy={linkPolicy}
-          fallback={fallback}
-        />
-      </Suspense>
-    );
-  } else {
-    renderedContent = renderMarkdownElement({ markdown: content, components, linkPolicy });
-  }
-
-  if (candidate !== null) {
-    const CandidateRenderer =
-      candidate === "mermaid" ? MarkdownRendererMermaidCandidate : MarkdownRendererMathCandidate;
-    renderedContent = (
-      <Suspense fallback={renderedContent}>
-        <CandidateRenderer
-          markdown={content}
-          components={components}
-          linkPolicy={linkPolicy}
-          fallbackContent={renderedContent}
-          premiumCodeBlocks={premiumCodeBlocks}
-          fallback={fallback}
-          {...taskAssetProps}
-        />
-      </Suspense>
-    );
-  }
-
-  return <div className={cn(MARKDOWN_CLASSES[variant], className)}>{renderedContent}</div>;
+  if (!content) return null;
+  return (
+    <MarkdownView
+      markdown={content}
+      streaming={false}
+      variant={variant}
+      className={className}
+      lightweight={lightweight}
+      links={links}
+      images={images}
+      taskAssetContext={taskAssetContext}
+    />
+  );
 });

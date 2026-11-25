@@ -5,7 +5,6 @@ import {
   decodeArtifactText,
 } from "@openducktor/frontend-core/tasks/artifacts/artifact-presentation";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
-import { hasLabeledCodeFence } from "@/lib/markdown-utils";
 import { cn } from "@/lib/utils";
 import { TaskArtifactHtmlPreview } from "./task-artifact-html-preview";
 
@@ -70,7 +69,6 @@ function PreviewContent({
         <MarkdownRenderer
           markdown={text.value}
           variant="document"
-          premiumCodeBlocks={hasLabeledCodeFence(text.value)}
           {...(markdownAssetContext ? { taskAssetContext: markdownAssetContext } : {})}
         />
       );

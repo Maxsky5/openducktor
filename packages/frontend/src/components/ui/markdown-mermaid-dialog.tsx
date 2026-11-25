@@ -1,52 +1,34 @@
 import { Minimize2, Minus, Plus, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { type PointerEvent, type ReactElement, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "./button";
 import { DialogClose, DialogContent, DialogDescription, DialogTitle } from "./dialog";
 
 type DiagramSize = { width: number; height: number };
 const controlClassName = "size-8 text-muted-foreground hover:text-foreground";
 
+const VIEW_BOX = /^<svg\b[^>]*?\sviewBox="[\d.-]+[\s,]+[\d.-]+[\s,]+([\d.]+)[\s,]+([\d.]+)"/;
+
+/** The size of a Pele drawing, from the `viewBox` that Pele writes on its root tag. */
 function readDiagramSize(svg: string): DiagramSize | null {
-  const document = new DOMParser().parseFromString(svg, "image/svg+xml");
-  if (document.querySelector("parsererror")) return null;
-  const root = document.documentElement;
-  const viewBox = root
-    .getAttribute("viewBox")
-    ?.trim()
-    .split(/[\s,]+/)
-    .map(Number);
-  const [, , viewBoxWidth, viewBoxHeight] = viewBox ?? [];
-  if (
-    viewBoxWidth &&
-    viewBoxHeight &&
-    Number.isFinite(viewBoxWidth) &&
-    Number.isFinite(viewBoxHeight) &&
-    viewBoxWidth > 0 &&
-    viewBoxHeight > 0
-  ) {
-    return { width: viewBoxWidth, height: viewBoxHeight };
-  }
-  const width = Number.parseFloat(root.getAttribute("width") ?? "");
-  const height = Number.parseFloat(root.getAttribute("height") ?? "");
-  return Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0
-    ? { width, height }
-    : null;
+  const viewBox = VIEW_BOX.exec(svg.trimStart());
+  const width = Number(viewBox?.[1]);
+  const height = Number(viewBox?.[2]);
+  return width > 0 && height > 0 ? { width, height } : null;
 }
 
-export function MarkdownMermaidDialog({ svg }: { svg: string }) {
+export function MarkdownMermaidDialog({
+  svg,
+  onCloseAutoFocus,
+}: {
+  svg: string;
+  onCloseAutoFocus?: (event: Event) => void;
+}): ReactElement {
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
   const dragRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
   const [viewportSize, setViewportSize] = useState<DiagramSize | null>(null);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [imageError, setImageError] = useState(false);
   const [zoom, setZoom] = useState(1);
   const diagramSize = useMemo(() => readDiagramSize(svg), [svg]);
-
-  useEffect(() => {
-    const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
-    setImageUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [svg]);
+  const markup = useMemo(() => ({ __html: svg }), [svg]);
 
   useEffect(() => {
     if (!viewport) return;
@@ -63,8 +45,8 @@ export function MarkdownMermaidDialog({ svg }: { svg: string }) {
       : 0;
   const width = diagramSize ? diagramSize.width * fitScale * zoom : 0;
   const height = diagramSize ? diagramSize.height * fitScale * zoom : 0;
-  const hasPreviewError = imageError || !diagramSize;
-  const canShowImage = !hasPreviewError && imageUrl !== null && fitScale > 0;
+  const hasPreviewError = !diagramSize;
+  const canShowDiagram = !hasPreviewError && fitScale > 0;
 
   const fit = () => {
     setZoom(1);
@@ -97,6 +79,7 @@ export function MarkdownMermaidDialog({ svg }: { svg: string }) {
   return (
     <DialogContent
       closeButton={null}
+      onCloseAutoFocus={onCloseAutoFocus}
       className="my-0 h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] gap-0 bg-background p-0 outline-none"
     >
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2.5">
@@ -166,7 +149,7 @@ export function MarkdownMermaidDialog({ svg }: { svg: string }) {
         tabIndex={0}
         role="region"
         aria-label="Diagram preview viewport"
-        className="min-h-0 flex-1 overflow-auto bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        className="min-h-0 flex-1 overflow-auto bg-(--diagram-canvas) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         onPointerDown={startDrag}
         onPointerMove={moveDrag}
         onPointerUp={stopDrag}
@@ -177,7 +160,7 @@ export function MarkdownMermaidDialog({ svg }: { svg: string }) {
             The diagram preview could not load. Close it and try the diagram again.
           </p>
         )}
-        {canShowImage && (
+        {canShowDiagram && (
           <div
             className="flex items-center justify-center"
             style={{
@@ -185,12 +168,13 @@ export function MarkdownMermaidDialog({ svg }: { svg: string }) {
               minHeight: Math.max(viewportSize?.height ?? 0, height),
             }}
           >
-            <img
-              src={imageUrl}
-              alt="Expanded Mermaid diagram"
-              draggable={false}
-              style={{ width, height, maxWidth: "none" }}
-              onError={() => setImageError(true)}
+            <div
+              role="img"
+              aria-label="Expanded Mermaid diagram"
+              className="shrink-0 select-none [&>svg]:h-full! [&>svg]:w-full! [&>svg]:max-w-none!"
+              style={{ width, height }}
+              // oxlint-disable-next-line react/no-danger -- Pele escapes diagram text and filters links and styles
+              dangerouslySetInnerHTML={markup}
             />
           </div>
         )}

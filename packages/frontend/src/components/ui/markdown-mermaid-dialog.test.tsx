@@ -1,14 +1,12 @@
-import { expect, mock, spyOn, test } from "bun:test";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { expect, mock, test } from "bun:test";
+import { fireEvent, render } from "@testing-library/react";
 import { Dialog } from "./dialog";
 import { MarkdownMermaidDialog } from "./markdown-mermaid-dialog";
 
 const svg =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200"><text>Selected</text></svg>';
 
-test("fits an isolated diagram, zooms and pans it, and reports image load errors", async () => {
-  const createUrl = spyOn(URL, "createObjectURL").mockReturnValue("blob:diagram");
-  const revokeUrl = spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+test("fits a diagram to the viewport, then zooms and pans it", () => {
   const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
   const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientHeight");
   Object.defineProperty(HTMLElement.prototype, "clientWidth", {
@@ -35,11 +33,9 @@ test("fits an isolated diagram, zooms and pans it, and reports image load errors
         <MarkdownMermaidDialog svg={svg} />
       </Dialog>,
     );
-    const image = await view.findByRole("img", { name: "Expanded Mermaid diagram" });
-    if (!(image instanceof HTMLImageElement)) throw new Error("The diagram image is missing.");
-    expect(image.getAttribute("src")).toBe("blob:diagram");
+    const image = view.getByRole("img", { name: "Expanded Mermaid diagram" });
+    expect(image.querySelector("text")?.textContent).toBe("Selected");
     expect(image.style.width).toBe("800px");
-    expect(createUrl).toHaveBeenCalledTimes(1);
 
     fireEvent.click(view.getByRole("button", { name: "Zoom in" }));
     expect(image.style.width).toBe("1200px");
@@ -73,18 +69,12 @@ test("fits an isolated diagram, zooms and pans it, and reports image load errors
     fireEvent.pointerMove(viewport, { pointerId: 7, clientX: 200, clientY: 100 });
     expect(viewport.scrollLeft).toBe(160);
     expect(viewport.scrollTop).toBe(130);
-
-    fireEvent.error(image);
-    expect(view.getByRole("alert").textContent).toContain("could not load");
     view.unmount();
-    await waitFor(() => expect(revokeUrl).toHaveBeenCalledWith("blob:diagram"));
   } finally {
     globalThis.ResizeObserver = originalObserver;
     if (width) Object.defineProperty(HTMLElement.prototype, "clientWidth", width);
     else Reflect.deleteProperty(HTMLElement.prototype, "clientWidth");
     if (height) Object.defineProperty(HTMLElement.prototype, "clientHeight", height);
     else Reflect.deleteProperty(HTMLElement.prototype, "clientHeight");
-    createUrl.mockRestore();
-    revokeUrl.mockRestore();
   }
 });

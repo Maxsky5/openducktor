@@ -6,6 +6,7 @@ import {
   buildIsolatedPage,
   buildIsolatedPages,
   PAGE_SOURCE_DIRECTORY,
+  pageContentSecurityPolicy,
 } from "../../../scripts/build-isolated-page";
 import { pageCspMeta } from "../../test-support/page-csp";
 
@@ -43,7 +44,7 @@ const NEWER_BUILT_INS = [
   "Uint8Array.fromHex",
 ];
 // `page-src/shared/page-globals.ts` supplies these when the WebView lacks them.
-const SUPPLIED_BUILT_INS = new Set(["Promise.withResolvers", "Object.groupBy"]);
+const SUPPLIED_BUILT_INS = new Set(["Promise.withResolvers"]);
 
 const unsuppliedBuiltIns = (html: string): string[] =>
   NEWER_BUILT_INS.filter((name) => !SUPPLIED_BUILT_INS.has(name) && html.includes(name));
@@ -99,15 +100,19 @@ describe("buildIsolatedPages", () => {
     expect(String(failure)).toContain("Pages load no file or remote resource");
   });
 
-  // This test runs the real bundler on Mermaid, KaTeX, xterm.js, and their fonts.
+  test("lets the page compile the WebAssembly of Words, and allows no script eval", () => {
+    const scriptSource = /script-src ([^;]*)/.exec(pageContentSecurityPolicy("hash"))?.[1] ?? "";
+    expect(scriptSource.split(" ")).toEqual(["'sha256-hash'", "'wasm-unsafe-eval'"]);
+  });
+
+  // This test runs the real bundler on Words, Pele, xterm.js, and their fonts.
   test("builds the pages without external loads or built-ins that old WebViews lack", async () => {
     for (const name of ["rich-block", "rich-diagram", "terminal"]) {
       const html = await buildIsolatedPage(path.join(PAGE_SOURCE_DIRECTORY, `${name}.ts`));
       expectSelfContained(html);
       expect(unsuppliedBuiltIns(html)).toEqual([]);
-      // The terminal page inlines IBM Plex Mono as TrueType. The other pages inline woff2 fonts.
-      const font = name === "terminal" ? "ttf" : "woff2";
-      expect(styleText(html)).toContain(`src:url(data:font/${font};base64,`);
+      // Each page inlines its fonts as TrueType.
+      expect(styleText(html)).toContain("src:url(data:font/ttf;base64,");
       expect(html).toContain('<div id="root"></div>');
     }
   }, 10_000);

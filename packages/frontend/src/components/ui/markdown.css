@@ -1,0 +1,242 @@
+@import "@openducktor/theme/diagrams.css";
+
+/*
+ * Markdown that `@pierre/words` renders. The prose classes of each view variant style the text.
+ * These rules style the parts that Words adds: code frames, diagrams, task items, and links.
+ */
+
+.markdown-body a {
+  color: var(--foreground);
+  text-decoration-line: underline;
+  text-decoration-color: var(--muted-foreground);
+  text-underline-offset: 2px;
+  transition: text-decoration-color 150ms var(--motion-ease-out);
+}
+
+/* Words keeps the text of a link whose destination is unsafe, without a destination. */
+.markdown-body a:not([href]) {
+  color: inherit;
+  text-decoration: none;
+}
+
+.markdown-body a:hover {
+  text-decoration-color: var(--foreground);
+}
+
+.markdown-body a:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* A GFM task item shows its checkbox in place of the list bullet. A top-level task list starts at
+   the left edge. A nested list keeps the list indent of the prose, so it shows its level. */
+.markdown-body li:has(> [data-markdown-task]) {
+  list-style: none;
+  padding-inline-start: 0;
+}
+
+.markdown-body ul:has(> li > [data-markdown-task]) {
+  list-style: none;
+}
+
+.markdown-body > ul:has(> li > [data-markdown-task]) {
+  padding-inline-start: 0;
+}
+
+/* Table rules take the border tokens, also in the dark theme. */
+.markdown-body tbody tr {
+  border-bottom-color: var(--border);
+}
+
+.markdown-body thead {
+  border-bottom-color: var(--input);
+}
+
+/* A code block is one frame without a header, as the other code views of the app. */
+.markdown-body [data-markdown="code-block"] {
+  margin-block: 0.75rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: oklch(from var(--muted) l c h / 30%);
+}
+
+.markdown-body [data-markdown="code-header"] {
+  display: none;
+}
+
+.markdown-body [data-markdown="code-block"] pre {
+  margin: 0;
+  padding: 0.875rem;
+  overflow: auto;
+  border-radius: 0;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.markdown-body pre code {
+  display: block;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+}
+
+.markdown-body [data-markdown="code-lines"] {
+  display: block;
+}
+
+/*
+ * The desktop base colors of the diagram theme in `@openducktor/theme/diagrams.css`. Node tints
+ * mix into the node base, so nodes sit above the canvas. In the dark theme, warm hues mix into a
+ * neutral base, because the navy canvas would gray them.
+ */
+:root {
+  --diagram-canvas: color-mix(in oklab, var(--muted) 55%, var(--card));
+  --diagram-node-base: var(--card);
+  --diagram-warm-base: var(--card);
+  --diagram-surface: var(--card);
+  --diagram-surface-alt: var(--muted);
+  --diagram-rule: var(--border);
+}
+
+.dark {
+  --diagram-canvas: color-mix(in oklab, var(--muted) 38%, var(--card));
+  --diagram-node-base: var(--diagram-canvas);
+  --diagram-warm-base: oklch(0.24 0.01 265);
+  --diagram-surface: color-mix(in oklab, var(--foreground) 5%, var(--diagram-canvas));
+  --diagram-surface-alt: color-mix(in oklab, var(--foreground) 9%, var(--diagram-canvas));
+}
+
+.pele {
+  --pele-bg: var(--diagram-canvas);
+  --pele-fg: var(--foreground);
+  --pele-muted: var(--muted-foreground);
+  --pele-surface: var(--diagram-surface);
+  --pele-surface-alt: var(--diagram-surface-alt);
+  --pele-border: var(--input);
+  --pele-error: var(--destructive);
+}
+
+/*
+ * A drawn diagram sits on its canvas, in a view or in the editor. In a view, a click on it opens
+ * the diagram in the preview dialog.
+ */
+[data-markdown="mermaid"] {
+  position: relative;
+  display: flex;
+  justify-content: safe center;
+  margin-block: 0.75rem;
+  padding: 1.5rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--diagram-canvas);
+}
+
+.markdown-body [data-diagram] {
+  cursor: zoom-in;
+}
+
+/* The button gives the preview to the keyboard. It shows on hover and on focus. */
+.markdown-body [data-diagram-expand] {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  border-radius: 0.375rem;
+  padding: 0.375rem;
+  color: var(--muted-foreground);
+  opacity: 0;
+  transition: opacity 150ms var(--motion-ease-out);
+}
+
+.markdown-body [data-diagram]:hover [data-diagram-expand],
+.markdown-body [data-diagram-expand]:focus-visible {
+  opacity: 1;
+}
+
+.markdown-body [data-diagram-expand]:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.markdown-body [data-diagram-expand]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 0;
+}
+
+[data-diagram-error] {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-block: 0.75rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid color-mix(in oklab, var(--destructive) 35%, var(--border));
+  border-radius: 0.75rem;
+  background: color-mix(in oklab, var(--destructive) 5%, var(--card));
+  color: color-mix(in oklab, var(--muted-foreground) 70%, var(--foreground));
+  font-size: 0.8125rem;
+}
+
+/* The title mixes red with the text color, so it stays readable on the red tint in both themes. */
+[data-diagram-error] > svg,
+[data-diagram-error] p:first-child {
+  color: color-mix(in oklab, var(--destructive) 75%, var(--foreground));
+}
+
+[data-diagram-error] p {
+  margin: 0;
+}
+
+[data-diagram-error] p + p {
+  margin-top: 0.5rem;
+}
+
+/* The parse message sits in a code well. */
+[data-diagram-error] .font-mono {
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  background: color-mix(in oklab, var(--foreground) 5%, transparent);
+  color: var(--foreground);
+}
+
+[data-diagram-loading] {
+  display: flex;
+  min-height: 10rem;
+  align-items: center;
+  justify-content: center;
+  margin-block: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+/* Words draws math as SVG in the font of the text. */
+.markdown-body :is([data-markdown="math"], [data-markdown="math-display"]) {
+  font-size: 1.2em;
+}
+
+.markdown-body [data-markdown="math-display"] {
+  box-sizing: content-box;
+  padding-block: 0.5em;
+  overflow-x: auto;
+}
+
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Footnotes end the text below a rule, in a smaller size. */
+.markdown-body section[data-footnotes] {
+  margin-top: 1rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.5rem;
+  font-size: 0.875em;
+}

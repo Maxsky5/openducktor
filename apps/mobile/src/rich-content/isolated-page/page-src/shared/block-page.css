@@ -107,6 +107,7 @@ ol,
 blockquote,
 table,
 pre,
+[data-markdown="code-block"],
 hr,
 h1,
 h2,
@@ -114,8 +115,7 @@ h3,
 h4,
 h5,
 h6,
-.diagram,
-.math-display {
+.diagram {
   margin: 0;
 }
 
@@ -265,7 +265,7 @@ th {
 }
 
 /* A header cell of a column without an alignment keeps the start alignment. */
-th:not([align]) {
+th:not([style*="text-align"]) {
   text-align: left;
 }
 
@@ -288,17 +288,22 @@ hr {
   border-top: 1px solid var(--separator);
 }
 
-.math-display {
-  overflow-x: auto;
-  overflow-y: hidden;
+/* Words writes the language and the buttons of a code block in a header. Native code has none. */
+[data-markdown="code-header"] {
+  display: none;
 }
 
-.katex-display {
-  margin: 0;
+/* Words draws math as SVG in the system math font. A wide formula shrinks to the block width. */
+[data-markdown="math"],
+[data-markdown="math-display"] {
+  font-size: 1.2em;
+  max-width: 100%;
 }
 
-.katex {
-  font-size: 1.05em;
+/* Words writes a 1em margin on the drawing itself. The block rules give the page gaps. */
+[data-markdown="math-display"] {
+  height: auto;
+  margin: 0 auto !important;
 }
 
 .diagram {

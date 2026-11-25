@@ -7,6 +7,7 @@
 @import "./components/ui/tooltip.css";
 @import "./components/ui/icon-swap.css";
 @import "./components/ui/css-presence.css";
+@import "./components/ui/markdown.css";
 @import "./components/layout/sidebar/session-navigation.css";
 @import "./features/session-panels/session-panel-split.css";
 @import "./components/features/agents/agent-chat/agent-chat-message-queue.css";
@@ -376,28 +377,6 @@ body:has([data-separator="active"]) [data-browser-surface] {
 
 .electron-platform-darwin .onboarding-shell {
   padding-top: var(--electron-titlebar-height);
-}
-
-.markdown-body pre code {
-  border-radius: 0;
-  border: none;
-  padding: 0;
-  background: transparent;
-  color: inherit;
-  font-size: inherit;
-}
-
-.markdown-body pre > code:only-child {
-  display: block;
-  border-radius: 0.75rem;
-  border: 1px solid var(--border);
-  padding: 0.875rem;
-  background: oklch(from var(--muted) l c h / 30%);
-}
-
-.markdown-body pre code::before,
-.markdown-body pre code::after {
-  content: none;
 }
 
 @keyframes odt-task-tab-status-glow {

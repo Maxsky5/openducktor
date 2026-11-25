@@ -18,8 +18,6 @@ import type { EditorFocus } from "@/types/editor-focus";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import type { IssueImageContext } from "@/components/features/issue-source/github-issue-image";
-import { MermaidPreviewProvider } from "@/components/ui/markdown-mermaid";
-import type { MermaidPreviews } from "@/components/ui/markdown-mermaid-state";
 import { cn } from "@/lib/utils";
 import { TaskDescriptionEditorLoading } from "./task-description-editor-loading";
 import { TaskDescriptionFormattingToolbar } from "./task-description-formatting-toolbar";
@@ -64,7 +62,6 @@ type TaskDescriptionVisualEditorProps = {
   editorRef?: Ref<EditorFocus> | undefined;
   uploads: TaskDescriptionAssetUpload[];
   previews: ReadonlyMap<string, string>;
-  mermaidPreviews: MermaidPreviews;
 };
 
 export default function TaskDescriptionVisualEditor({
@@ -79,7 +76,6 @@ export default function TaskDescriptionVisualEditor({
   editorRef,
   uploads,
   previews,
-  mermaidPreviews,
 }: TaskDescriptionVisualEditorProps) {
   const uploading = uploads.some((upload) => upload.status === "uploading");
   const canEdit = !disabled && !uploading;
@@ -304,15 +300,11 @@ export default function TaskDescriptionVisualEditor({
         </div>
       </fieldset>
       <TaskDescriptionImageContext.Provider value={imageContext}>
-        <MermaidPreviewProvider previews={mermaidPreviews}>
-          <EditorContent
-            editor={editor}
-            onDrop={(event) => uploadImages(event.dataTransfer.files, () => event.preventDefault())}
-            onPaste={(event) =>
-              uploadImages(event.clipboardData.files, () => event.preventDefault())
-            }
-          />
-        </MermaidPreviewProvider>
+        <EditorContent
+          editor={editor}
+          onDrop={(event) => uploadImages(event.dataTransfer.files, () => event.preventDefault())}
+          onPaste={(event) => uploadImages(event.clipboardData.files, () => event.preventDefault())}
+        />
       </TaskDescriptionImageContext.Provider>
       {linkHref !== null ? (
         <TaskDescriptionLinkDialog

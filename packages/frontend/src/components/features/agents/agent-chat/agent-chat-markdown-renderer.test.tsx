@@ -1,133 +1,115 @@
-import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { act, render as renderView, waitFor, within } from "@testing-library/react";
-import type { Nodes } from "mdast";
-import { createElement, type ReactElement } from "react";
-import { MermaidSvgCacheProvider } from "@/components/ui/markdown-mermaid-svg-cache-context";
-import * as markdownStreamTree from "@/components/ui/markdown-stream-tree";
+import { createShellBridgeFixture, withShellPlatform } from "@/test-utils/focused-fixture";
+import { describe, expect, mock, spyOn, test } from "bun:test";
+import { fireEvent, render as renderView, waitFor } from "@testing-library/react";
+import type { ReactElement, ReactNode } from "react";
+import { toast } from "sonner";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
-import { createIntersectionObserverTestDriver } from "@/test-utils/intersection-observer-test-driver";
+import { ChatFileLinkContext } from "./agent-chat-file-link-context";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
+import { loadMarkdownModules } from "@/test-utils/markdown-modules";
 
-const DIAGRAM_SVG = '<svg xmlns="http://www.w3.org/2000/svg"><text>Rendered diagram</text></svg>';
-const DIAGRAM_FENCE = "```mermaid\ngraph TD\n  A --> B\n```";
-const DIAGRAM_MARKDOWN = `Intro\n\n${DIAGRAM_FENCE}`;
-const intersectionObserver = createIntersectionObserverTestDriver();
+await loadMarkdownModules();
 
-// A block that keeps its content object does not render again, so only changed blocks render.
-const spyOnBlockRenders = () => spyOn(markdownStreamTree, "renderMarkdownBlock");
+const render = (element: ReactElement) => renderView(element, { wrapper: QueryProvider });
 
-const renderedTexts = (blockSpy: ReturnType<typeof spyOnBlockRenders>): string[] =>
-  blockSpy.mock.calls.map(([content]) => content.nodes.map(nodeText).join(""));
+const chat = (markdown: string, streaming = false): ReactElement => (
+  <AgentChatMarkdownRenderer markdown={markdown} streaming={streaming} />
+);
 
-const nodeText = (node: Nodes): string => {
-  if ("value" in node) {
-    return node.value;
-  }
-  if ("children" in node) {
-    return node.children.map(nodeText).join("");
-  }
-  return "";
-};
+type OpenFile = (href: string, trigger: HTMLAnchorElement) => void;
 
-const spyOnDiagramRender = async (svg: Promise<string> = Promise.resolve(DIAGRAM_SVG)) => {
-  const renderModule = await import("@/components/ui/markdown-mermaid-render");
-  return spyOn(renderModule, "renderMermaidSvg").mockImplementation(() => svg);
-};
-
-const waitForDiagram = (container: HTMLElement) =>
-  waitFor(() => expect(within(container).getByText("Rendered diagram")).toBeTruthy(), {
-    timeout: 500,
-  });
-
-const render = (element: ReactElement) => renderView(element, { wrapper: MermaidSvgCacheProvider });
-
-const chatMarkdown = (markdown: string, streaming = false): ReactElement =>
-  createElement(AgentChatMarkdownRenderer, { markdown, streaming });
+const withFiles = (open: OpenFile, children: ReactNode): ReactElement => (
+  <ChatFileLinkContext value={open}>{children}</ChatFileLinkContext>
+);
 
 describe("AgentChatMarkdownRenderer", () => {
-  beforeEach(() => intersectionObserver.install());
-  afterEach(() => intersectionObserver.restore());
+  test("renders a completed reply in its first frame", () => {
+    const view = render(chat("Persisted the **canonical spec**.\n\n- First\n- Second"));
 
-  test("renders completed markdown without a plain-text first frame", () => {
-    const rendered = render(
-      chatMarkdown(
-        "Persisted the **canonical spec**.\n\n- First requirement\n- Second requirement",
-      ),
+    expect(view.container.querySelector(".markdown-body strong")?.textContent).toBe(
+      "canonical spec",
     );
-
-    try {
-      expect(rendered.container.querySelector(".markdown-body")).not.toBeNull();
-      expect(rendered.container.querySelector("strong")?.textContent).toBe("canonical spec");
-      expect(rendered.container.querySelectorAll("li")).toHaveLength(2);
-    } finally {
-      rendered.unmount();
-    }
+    expect(view.container.querySelectorAll("li")).toHaveLength(2);
   });
 
-  test.each([
-    ["tight", "- one\n- two\n- three\n- four\n\n-", 0],
-    ["loose prefix", "- one\n\n- two\n- three\n- four\n- five\n- six\n\n-", 6],
-    ["loose boundary", "- one\n- two\n- three\n\n- four\n\n-", 4],
-    ["loose item", "- one\n- two\n\n  Continuation.\n- three\n- four\n\n-", 5],
-  ])("keeps %s list spacing when an empty tail item becomes a rule", (_, source, paragraphs) => {
-    for (const lineEnding of ["\n", "\r\n", "\r"]) {
-      const before = source.replaceAll("\n", lineEnding);
-      const complete = `${before}--`;
-      const rendered = render(chatMarkdown(before.slice(0, before.indexOf("- four")), true));
-      const fresh = render(chatMarkdown(complete));
+  test("renders a streamed reply as the same reply rendered at once", () => {
+    const reply = [
+      "## Result",
+      "",
+      "- one\n- two\n\n  Continuation.\n- three",
+      "",
+      "| File | Change |\n| --- | --- |\n| `a.ts` | **added** |",
+      "",
+      "```ts\nconst value = 1;\n```",
+      "",
+      "Done[^1].\n\n[^1]: A note.",
+    ].join("\n");
+    const fresh = render(chat(reply));
+    const streamed = render(chat(reply.slice(0, 5), true));
 
-      try {
-        expect(fresh.container.querySelectorAll("li > p")).toHaveLength(paragraphs);
-        rendered.rerender(chatMarkdown(before, true));
-        for (const [markdown, streaming] of [
-          [complete, true],
-          [complete, false],
-          [`${complete}${lineEnding}${lineEnding}After`, true],
-          [`${complete}${lineEnding}${lineEnding}After`, false],
-        ] as const) {
-          rendered.rerender(chatMarkdown(markdown, streaming));
-
-          expect(rendered.container.querySelector("ul")?.outerHTML).toBe(
-            fresh.container.querySelector("ul")?.outerHTML,
-          );
-          expect(rendered.container.querySelector("hr")).not.toBeNull();
-        }
-      } finally {
-        rendered.unmount();
-        fresh.unmount();
-      }
+    for (let end = 10; end < reply.length; end += 7) {
+      streamed.rerender(chat(reply.slice(0, end), true));
     }
+    streamed.rerender(chat(reply));
+
+    // The highlighter can write the styles of a token in another form, so compare code as text.
+    const renderedReply = (view: ReturnType<typeof render>) => ({
+      elements: Array.from(view.container.querySelectorAll("*"))
+        .filter((element) => !element.closest("code"))
+        .map((element) => element.tagName),
+      text: view.container.textContent,
+    });
+    expect(renderedReply(streamed)).toEqual(renderedReply(fresh));
   });
 
-  test("renders an in-progress fenced code block as code while streaming", async () => {
-    const rendered = render(chatMarkdown("```ts\nconst value = 1;", true));
+  test("keeps one root element while the reply streams", () => {
+    const view = render(chat("Plain line", true));
+    const root = view.container.firstElementChild;
 
-    try {
-      await waitFor(() => {
-        expect(rendered.container.textContent).toContain("const value = 1;");
-      });
-    } finally {
-      rendered.unmount();
-    }
+    view.rerender(chat("Plain line with **emphasis**", true));
+
+    expect(view.container.firstElementChild).toBe(root);
+    expect(view.container.querySelector("strong")?.textContent).toBe("emphasis");
   });
 
-  test("shows images of host files through the host, and keeps web images as they are", async () => {
+  test("shows an open code fence as code while the reply streams", () => {
+    const view = render(chat("```ts\nconst value = 1;", true));
+
+    expect(view.container.querySelector("pre code")?.textContent).toContain("const value = 1;");
+  });
+
+  test("keeps raw HTML out of the reply", () => {
+    const view = render(chat("<script>alert('bad')</script>\n\n**safe**"));
+
+    expect(view.container.querySelector("script")).toBeNull();
+    expect(view.getByText("safe")).toBeTruthy();
+  });
+
+  test("keeps a drawn diagram while the reply streams and ends", async () => {
+    const diagram = "Intro\n\n```mermaid\nflowchart LR\n  A --> B\n```";
+    const view = render(chat(`${diagram}\n\nAfter`, true));
+    await waitFor(() => expect(view.container.querySelector("svg.pele")).not.toBeNull());
+    const svg = view.container.querySelector("svg.pele");
+
+    view.rerender(chat(`${diagram}\n\nAfter the diagram.`, true));
+    view.rerender(chat(`${diagram}\n\nAfter the diagram.`));
+
+    expect(view.getByText("After the diagram.")).toBeTruthy();
+    expect(view.container.querySelector("svg.pele")).toBe(svg);
+  });
+
+  test("shows images of host files through the host, and web images as they are", async () => {
     const localImageRead = mock(async ({ path }: { path: string }) => ({
       mediaType: "image/png" as const,
       bytesBase64: path === "/tmp/shot.png" ? "AAAA" : "BBBB",
     }));
-    const connection = createTestClientConnection({ client: { localImageRead } });
     const view = renderView(
-      <AgentChatMarkdownRenderer
-        markdown={
-          "![Shot](/tmp/shot.png) ![File](file:///tmp/a%20b.png) ![Web](https://example.com/logo.png)"
-        }
-      />,
+      chat("![Shot](/tmp/shot.png) ![File](file:///tmp/a%20b.png) ![Web](https://x.dev/a.png)"),
       {
         wrapper: ({ children }) => (
-          <QueryProvider connection={connection}>
-            <MermaidSvgCacheProvider>{children}</MermaidSvgCacheProvider>
+          <QueryProvider connection={createTestClientConnection({ client: { localImageRead } })}>
+            {children}
           </QueryProvider>
         ),
       },
@@ -141,407 +123,85 @@ describe("AgentChatMarkdownRenderer", () => {
     expect(view.getByRole("img", { name: "File" }).getAttribute("src")).toBe(
       "data:image/png;base64,BBBB",
     );
-    expect(view.getByRole("img", { name: "Web" }).getAttribute("src")).toBe(
-      "https://example.com/logo.png",
-    );
+    expect(view.getByRole("img", { name: "Web" }).getAttribute("src")).toBe("https://x.dev/a.png");
     expect(localImageRead.mock.calls.map(([input]) => input.path).sort()).toEqual([
       "/tmp/a b.png",
       "/tmp/shot.png",
     ]);
   });
+});
 
-  test("keeps raw html out of rendered chat markdown", async () => {
-    const rendered = render(chatMarkdown("<script>alert('bad')</script>\n\n**safe**"));
-
-    try {
-      await waitFor(() => {
-        expect(rendered.container.textContent).toContain("safe");
-      });
-      expect(rendered.container.querySelector("script")).toBeNull();
-    } finally {
-      rendered.unmount();
-    }
-  });
-
-  test("keeps code blocks locally horizontally scrollable without app-hidden scrollbars", async () => {
-    const rendered = render(chatMarkdown("```ts\nconst value = 1;\n```"));
-
-    try {
-      await waitFor(() => {
-        expect(rendered.container.querySelector("pre")).not.toBeNull();
-      });
-      const codeBlock = rendered.container.querySelector("pre");
-      expect(codeBlock).not.toBeNull();
-      expect(codeBlock?.className).toContain("overflow-x-auto");
-      expect(codeBlock?.className).not.toContain("hide-scrollbar");
-      expect(rendered.container.innerHTML).not.toContain("hide-scrollbar");
-    } finally {
-      rendered.unmount();
-    }
-  });
-
-  test("keeps one rendered markdown tree while streaming syntax arrives", () => {
-    const rendered = render(chatMarkdown("Plain transcript line", true));
-
-    try {
-      const initialRoot = rendered.container.firstElementChild;
-      expect(initialRoot?.classList.contains("markdown-body")).toBe(true);
-
-      rendered.rerender(chatMarkdown("Plain transcript line with **emphasis**", true));
-
-      expect(rendered.container.firstElementChild).toBe(initialRoot);
-      expect(rendered.container.querySelector("strong")?.textContent).toBe("emphasis");
-    } finally {
-      rendered.unmount();
-    }
-  });
-
-  test("renders only the changed block while a response streams", () => {
-    const blockSpy = spyOnBlockRenders();
-    const rendered = render(chatMarkdown("First paragraph.\n\nSecond paragraph.\n\nThird", true));
-
-    try {
-      blockSpy.mockClear();
-      rendered.rerender(
-        chatMarkdown("First paragraph.\n\nSecond paragraph.\n\nThird paragraph.", true),
-      );
-
-      expect(renderedTexts(blockSpy)).toEqual(["Third paragraph."]);
-      expect(rendered.container.querySelectorAll("p")).toHaveLength(3);
-    } finally {
-      rendered.unmount();
-      blockSpy.mockRestore();
-    }
-  });
-
-  test("keeps a finished diagram mounted while the response streams and ends", async () => {
-    const diagramSpy = await spyOnDiagramRender();
-    const rendered = render(chatMarkdown(`${DIAGRAM_MARKDOWN}\n\nAfter`, true));
-
-    try {
-      await waitForDiagram(rendered.container);
-      const diagram = rendered.getByRole("group", { name: "Mermaid diagram" });
-
-      rendered.rerender(chatMarkdown(`${DIAGRAM_MARKDOWN}\n\nAfter the diagram.`, true));
-      rendered.rerender(chatMarkdown(`${DIAGRAM_MARKDOWN}\n\nAfter the diagram.`));
-
-      expect(rendered.getByText("After the diagram.")).toBeTruthy();
-      expect(rendered.getByRole("group", { name: "Mermaid diagram" })).toBe(diagram);
-      expect(diagramSpy).toHaveBeenCalledTimes(1);
-    } finally {
-      rendered.unmount();
-      diagramSpy.mockRestore();
-    }
-  });
-
+describe("chat file links", () => {
   test.each([
-    ["at the top level", "Intro\n\n```mermaid\ngraph TD\n  A -->", "  A --> B\n```", "  "],
-    [
-      "in a list item",
-      "1. Draw it:\n\n   ```mermaid\n   graph TD\n   A -->",
-      "   A --> B\n   ```",
-      "",
-    ],
-  ])(
-    "draws a streaming diagram %s once its fence closes",
-    async (_, partialMarkdown, closingLines, sourceIndent) => {
-      const diagramSpy = await spyOnDiagramRender();
-      const completeMarkdown = `${partialMarkdown.slice(0, partialMarkdown.lastIndexOf("\n"))}\n${closingLines}`;
-      const rendered = render(chatMarkdown(partialMarkdown, true));
+    "[file](src/a.ts:42)",
+    "[`file`](file:///repo/a.ts#L42)",
+    "[file][source]\n\n[source]: <src/a b.ts>",
+    "[file](src/%E6%96%87.ts)\n\n$x^2$",
+    "[file](src/a.ts)\n\n```mermaid\ngraph TD; A-->B;\n```",
+  ])("opens %s once per activation", (markdown) => {
+    const open = mock<OpenFile>(() => {});
+    const view = render(withFiles(open, chat(markdown)));
+    const link = view.getByRole("link", { name: "file" });
 
-      try {
-        const diagram = await rendered.findByRole(
-          "group",
-          { name: "Mermaid diagram" },
-          { timeout: 500 },
-        );
-        expect(diagram.getAttribute("aria-busy")).toBe("true");
-        expect(diagramSpy).not.toHaveBeenCalled();
-
-        rendered.rerender(chatMarkdown(completeMarkdown, true));
-
-        await waitForDiagram(rendered.container);
-        expect(rendered.getByRole("group", { name: "Mermaid diagram" })).toBe(diagram);
-        expect(diagramSpy).toHaveBeenCalledTimes(1);
-        expect(diagramSpy.mock.calls[0]?.[1]).toBe(`graph TD\n${sourceIndent}A --> B`);
-      } finally {
-        rendered.unmount();
-        diagramSpy.mockRestore();
-      }
-    },
-  );
-
-  // A runtime can keep a reply streaming while it runs tools, so no more text comes for a while.
-  test("draws a closed diagram at the end of a reply that still streams", async () => {
-    const diagramSpy = await spyOnDiagramRender();
-    const rendered = render(chatMarkdown(DIAGRAM_MARKDOWN, true));
-
-    try {
-      await waitForDiagram(rendered.container);
-      expect(diagramSpy).toHaveBeenCalledTimes(1);
-    } finally {
-      rendered.unmount();
-      diagramSpy.mockRestore();
+    expect(link.getAttribute("href")).toBe("#");
+    for (const modifier of ["ctrlKey", "metaKey", "shiftKey", "altKey"]) {
+      fireEvent.click(link, { [modifier]: true });
     }
+    const middle = new MouseEvent("auxclick", { button: 1, bubbles: true, cancelable: true });
+    expect(fireEvent(link, middle)).toBe(false);
+    expect(open).not.toHaveBeenCalled();
+
+    expect(fireEvent.click(link)).toBe(false);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(fireEvent.keyDown(link, { key: "Enter" })).toBe(false);
+    fireEvent.keyDown(link, { key: "Enter", repeat: true });
+    expect(open).toHaveBeenCalledTimes(2);
   });
 
-  // A math block can load the KaTeX module first, which can take more than 1 s in a full test run.
-  test("draws a closed diagram while a later fence in its list streams", async () => {
-    const diagramSpy = await spyOnDiagramRender();
-    const rendered = render(
-      chatMarkdown(
-        "1. Draw it:\n\n   ```mermaid\n   graph TD\n   A --> B\n   ```\n2. Code:\n\n   ```ts\n   const value",
-        true,
+  test("opens a streamed link only once it is complete", () => {
+    const open = mock<OpenFile>(() => {});
+    const view = render(withFiles(open, chat("[file](src/a", true)));
+
+    expect(view.queryByRole("link")).toBeNull();
+    view.rerender(withFiles(open, chat("[file](src/a.ts)", true)));
+    fireEvent.click(view.getByRole("link", { name: "file" }));
+
+    expect(open.mock.calls.at(-1)?.[0]).toBe("src/a.ts");
+  });
+
+  test("keeps web links on the shell, drops unsafe schemes, and opens file links", () => {
+    const openExternal = mock(async (_url: string) => {});
+    const openFile = mock<OpenFile>(() => {});
+    const view = render(
+      withShellPlatform(
+        withFiles(
+          openFile,
+          chat("[web](https://example.com) [unsafe](javascript:42) [file](a.ts:42) [empty]()"),
+        ),
+        createShellBridgeFixture({ bridge: { openExternalUrl: openExternal } }),
       ),
     );
 
-    try {
-      await waitForDiagram(rendered.container);
-      expect(diagramSpy).toHaveBeenCalledTimes(1);
-    } finally {
-      rendered.unmount();
-      diagramSpy.mockRestore();
-    }
+    fireEvent.click(view.getByText("web"));
+    fireEvent.click(view.getByText("unsafe"));
+    fireEvent.click(view.getByText("file"));
+    fireEvent.click(view.getByText("empty"));
+
+    expect(openExternal.mock.calls).toEqual([["https://example.com"]]);
+    expect(openFile.mock.calls.map(([href]) => href)).toEqual(["a.ts:42", ""]);
   });
 
-  test("keeps a diagram after a display equation drawn while text streams", async () => {
-    const diagramSpy = await spyOnDiagramRender();
-    const equationAndDiagram = `$$\nx = 1\n\ny = 2\n$$\n\n${DIAGRAM_FENCE}`;
-    const rendered = await act(async () =>
-      render(chatMarkdown(`${equationAndDiagram}\n\nAfter`, true)),
-    );
-    const blockSpy = spyOnBlockRenders();
-
+  test("says why a file link cannot open without a worktree", () => {
+    const toastError = spyOn(toast, "error").mockImplementation(() => "toast-id");
     try {
-      await waitForDiagram(rendered.container);
-      // The equation renders again once the KaTeX module loads.
-      await waitFor(
-        () => expect(rendered.container.querySelector(".katex-display")).not.toBeNull(),
-        {
-          timeout: 3000,
-        },
-      );
-      const diagram = rendered.getByRole("group", { name: "Mermaid diagram" });
-      blockSpy.mockClear();
+      const view = render(chat("[file](src/a.ts)"));
+      fireEvent.click(view.getByRole("link", { name: "file" }));
 
-      rendered.rerender(chatMarkdown(`${equationAndDiagram}\n\nAfter the diagram.`, true));
-
-      expect(renderedTexts(blockSpy)).toEqual(["After the diagram."]);
-      expect(rendered.getByRole("group", { name: "Mermaid diagram" })).toBe(diagram);
-      expect(diagramSpy).toHaveBeenCalledTimes(1);
-    } finally {
-      rendered.unmount();
-      blockSpy.mockRestore();
-      diagramSpy.mockRestore();
-    }
-  }, 4000);
-
-  // A math block can load the KaTeX module first, which can take more than 1 s in a full test run.
-  test("renders a changed math block once after KaTeX loads", async () => {
-    const rendered = render(chatMarkdown("Intro\n\nValue $x$ and", true));
-    const blockSpy = spyOnBlockRenders();
-
-    try {
-      await waitFor(() => expect(rendered.container.querySelector(".katex")).not.toBeNull(), {
-        timeout: 3000,
+      expect(toastError).toHaveBeenCalledWith("Cannot open file: src/a.ts", {
+        description: "The Task's Build Worktree is unavailable.",
       });
-      blockSpy.mockClear();
-
-      rendered.rerender(chatMarkdown("Intro\n\nValue $x$ and more", true));
-
-      expect(renderedTexts(blockSpy)).toEqual(["Value x and more"]);
     } finally {
-      rendered.unmount();
-      blockSpy.mockRestore();
-    }
-  }, 4000);
-
-  // A math block can load the KaTeX module first, which can take more than 1 s in a full test run.
-  test("keeps a diagram mounted when math first appears in its block", async () => {
-    const diagramSpy = await spyOnDiagramRender();
-    const list =
-      "1. Draw it:\n\n   ```mermaid\n   graph TD\n   A --> B\n   ```\n2. Two\n3. Three\n4. Four\n5. Value";
-    const rendered = render(chatMarkdown(list, true));
-
-    try {
-      await waitForDiagram(rendered.container);
-      const diagram = rendered.getByRole("group", { name: "Mermaid diagram" });
-
-      rendered.rerender(chatMarkdown(`${list} $x$`, true));
-
-      await waitFor(() => expect(rendered.container.querySelector(".katex")).not.toBeNull(), {
-        timeout: 3000,
-      });
-      expect(rendered.getByRole("group", { name: "Mermaid diagram" })).toBe(diagram);
-      expect(diagramSpy).toHaveBeenCalledTimes(1);
-    } finally {
-      rendered.unmount();
-      diagramSpy.mockRestore();
-    }
-  }, 4000);
-
-  test("keeps a drawn diagram and resolves references when a link definition arrives", async () => {
-    const diagramSpy = await spyOnDiagramRender();
-    const reply = `${DIAGRAM_MARKDOWN}\n\nSee [the docs][docs].`;
-    const rendered = render(chatMarkdown(reply, true));
-
-    try {
-      await waitForDiagram(rendered.container);
-      const diagram = rendered.getByRole("group", { name: "Mermaid diagram" });
-      const replyWithDefinition = `${reply}\n\n[docs]: https://example.com`;
-
-      rendered.rerender(chatMarkdown(replyWithDefinition, true));
-      rendered.rerender(chatMarkdown(replyWithDefinition));
-
-      expect(rendered.container.querySelector("a")?.textContent).toBe("the docs");
-      expect(rendered.getByRole("group", { name: "Mermaid diagram" })).toBe(diagram);
-      expect(diagramSpy).toHaveBeenCalledTimes(1);
-    } finally {
-      rendered.unmount();
-      diagramSpy.mockRestore();
+      toastError.mockRestore();
     }
   });
-
-  test("draws a diagram after footnotes while the reply streams and renders only the tail", async () => {
-    const diagramSpy = await spyOnDiagramRender();
-    const reply = `Text with a note[^1].\n\n[^1]: A note.\n\n${DIAGRAM_FENCE}\n\nAfter`;
-    const rendered = render(chatMarkdown(reply, true));
-    const blockSpy = spyOnBlockRenders();
-
-    try {
-      await waitForDiagram(rendered.container);
-      const diagram = rendered.getByRole("group", { name: "Mermaid diagram" });
-      blockSpy.mockClear();
-
-      rendered.rerender(chatMarkdown(`${reply} the diagram.`, true));
-
-      expect(renderedTexts(blockSpy)).toEqual(["After the diagram."]);
-      expect(rendered.container.querySelector("sup a")?.textContent).toBe("1");
-      expect(rendered.container.querySelector("section[data-footnotes]")?.textContent).toContain(
-        "A note.",
-      );
-      expect(rendered.getByRole("group", { name: "Mermaid diagram" })).toBe(diagram);
-      expect(diagramSpy).toHaveBeenCalledTimes(1);
-    } finally {
-      rendered.unmount();
-      blockSpy.mockRestore();
-      diagramSpy.mockRestore();
-    }
-  });
-
-  test("renders a nested multiline link definition as in a completed reply", () => {
-    const reply = '> [x]:\n>   https://example.com\n>   "A\n>   title"\n\nSee [x].';
-    const streamed = render(chatMarkdown("> [x]:", true));
-    const history = render(chatMarkdown(reply));
-
-    try {
-      streamed.rerender(chatMarkdown(reply, true));
-      streamed.rerender(chatMarkdown(reply));
-
-      const link = streamed.container.querySelector("a");
-      expect(link?.textContent).toBe("x");
-      expect(link?.getAttribute("title")).toBe("A\ntitle");
-      const visibleText = (container: HTMLElement) =>
-        container.textContent?.replace(/\s+/g, " ").trim();
-      expect(visibleText(streamed.container)).toBe(visibleText(history.container));
-      expect(streamed.container.textContent).not.toContain("example.com");
-    } finally {
-      streamed.unmount();
-      history.unmount();
-    }
-  });
-
-  // The list block parses again when it joins the next item. Its diagram must not draw again.
-  test.each([
-    ["after its render completes", true],
-    ["while its render is pending", false],
-  ])("draws a diagram once when its list joins the next item %s", async (_, drawFirst) => {
-    const pendingSvg = Promise.withResolvers<string>();
-    const diagramSpy = await spyOnDiagramRender(pendingSvg.promise);
-    const list =
-      "1. Draw it:\n\n   ```mermaid\n   graph TD\n   A --> B\n   ```\n2. Two\n3. Three\n4. Four";
-    const rendered = render(chatMarkdown(`${list}\n5`, true));
-
-    try {
-      await waitFor(() => expect(diagramSpy).toHaveBeenCalledTimes(1), { timeout: 500 });
-      const diagram = rendered.getByRole("group", { name: "Mermaid diagram" });
-      if (drawFirst) {
-        pendingSvg.resolve(DIAGRAM_SVG);
-        await waitForDiagram(rendered.container);
-      }
-
-      for (const suffix of ["5. Next item", "5. Next item\n\nAfter"]) {
-        rendered.rerender(chatMarkdown(`${list}\n${suffix}`, true));
-      }
-      await act(async () => {
-        pendingSvg.resolve(DIAGRAM_SVG);
-        await pendingSvg.promise;
-      });
-
-      expect(rendered.getByText("Rendered diagram")).toBeTruthy();
-      expect(rendered.getByRole("group", { name: "Mermaid diagram" })).toBe(diagram);
-      expect(diagramSpy).toHaveBeenCalledTimes(1);
-    } finally {
-      pendingSvg.resolve(DIAGRAM_SVG);
-      rendered.unmount();
-      diagramSpy.mockRestore();
-    }
-  });
-
-  test("draws a diagram in a quoted footnote as in a completed reply", async () => {
-    const diagramSpy = await spyOnDiagramRender();
-    const reply =
-      "Intro[^a].\n\n> [^a]:\n>     ```mermaid\n>     graph TD\n>     A --> B\n>     ```\n\nTail";
-    const streamed = render(chatMarkdown(reply, true));
-    const history = render(chatMarkdown(reply));
-
-    try {
-      await waitFor(
-        () => expect(within(history.container).getByText("Rendered diagram")).toBeTruthy(),
-        {
-          timeout: 500,
-        },
-      );
-      expect(
-        within(streamed.container).getByRole("group", { name: "Mermaid diagram" }),
-      ).toBeTruthy();
-
-      streamed.rerender(chatMarkdown(reply));
-
-      await waitForDiagram(streamed.container);
-      expect(diagramSpy.mock.calls.map(([, source]) => source)).toEqual([
-        "graph TD\nA --> B",
-        "graph TD\nA --> B",
-      ]);
-    } finally {
-      streamed.unmount();
-      history.unmount();
-      diagramSpy.mockRestore();
-    }
-  });
-
-  // A math block can load the KaTeX module first, which can take more than 1 s in a full test run.
-  test("renders task list math in a footnote as in a completed reply", async () => {
-    const reply = "$z$\n\nIntro[^a].\n\n[^a]: - [ ] $$\n    x = 1\n    $$\n\nTail";
-    const streamed = render(chatMarkdown(reply.slice(0, 20), true));
-    const history = render(chatMarkdown(reply));
-    const footnoteMath = (container: HTMLElement) =>
-      container.querySelector("section[data-footnotes] .katex-display")?.textContent;
-
-    try {
-      await waitFor(() => expect(footnoteMath(history.container)).toContain("x=1"), {
-        timeout: 3000,
-      });
-      streamed.rerender(chatMarkdown(reply, true));
-      streamed.rerender(chatMarkdown(reply));
-
-      await waitFor(
-        () => expect(footnoteMath(streamed.container)).toBe(footnoteMath(history.container)),
-        { timeout: 3000 },
-      );
-    } finally {
-      streamed.unmount();
-      history.unmount();
-    }
-  }, 4000);
 });

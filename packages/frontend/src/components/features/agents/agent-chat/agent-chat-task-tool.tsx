@@ -1,7 +1,5 @@
 import type { PublicTaskSummaryTask } from "@openducktor/contracts";
-import { ImageIcon } from "lucide-react";
-import { lazy, Suspense, useMemo, useState, type ComponentProps, type ReactElement } from "react";
-import type { Components, ExtraProps } from "react-markdown";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { useChatToolTask } from "./agent-chat-workflow-context";
 import { IssueTypeBadge } from "@/components/features/kanban/issue-type-badge";
 import { PriorityBadge } from "@/components/features/kanban/priority-badge";
@@ -33,30 +31,6 @@ const TASK_DESCRIPTION_PREVIEW_CLASS_NAME = cn(
   "prose-em:text-muted-foreground prose-li:text-muted-foreground",
   "prose-blockquote:text-muted-foreground",
 );
-
-const TaskDescriptionPreviewImage = ({
-  alt,
-  title,
-}: ComponentProps<"img"> & ExtraProps): ReactElement => (
-  <span
-    className={cn(
-      "mx-0.5 inline-flex max-w-full items-center gap-1 rounded-md border border-border bg-muted px-1.5 py-0.5",
-      "text-[11px] font-medium text-muted-foreground",
-    )}
-  >
-    <ImageIcon aria-hidden="true" className="size-3 shrink-0" />
-    <span className="min-w-0 truncate">{alt?.trim() || title?.trim() || "Image"}</span>
-  </span>
-);
-
-const TaskDescriptionPreviewLink = ({
-  children,
-}: ComponentProps<"a"> & ExtraProps): ReactElement => <span>{children}</span>;
-
-const TASK_DESCRIPTION_PREVIEW_COMPONENTS: Components = {
-  a: TaskDescriptionPreviewLink,
-  img: TaskDescriptionPreviewImage,
-};
 
 const TaskDetailsSheetViewer = lazy(
   () => import("@/components/features/tasks/task-details-sheet-viewer"),
@@ -116,7 +90,8 @@ const TaskResultCard = ({ task }: { task: PublicTaskSummaryTask }) => {
             <MarkdownRenderer
               markdown={descriptionPreview}
               variant="compact"
-              components={TASK_DESCRIPTION_PREVIEW_COMPONENTS}
+              links="text"
+              images="label"
               className={TASK_DESCRIPTION_PREVIEW_CLASS_NAME}
               lightweight
             />

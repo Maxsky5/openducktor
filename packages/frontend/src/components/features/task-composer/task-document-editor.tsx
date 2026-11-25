@@ -42,9 +42,6 @@ const VIEW_OPTIONS: Array<{
   { id: "preview", label: "Preview", icon: Eye },
 ];
 
-const hasLabeledCodeFence = (value: string): boolean =>
-  value.includes("```") && /```[a-z0-9_-]+/i.test(value);
-
 const PANEL_MIN_HEIGHT_CLASS = "min-h-[52vh]";
 const PANEL_SCROLL_VIEWPORT_CLASS = "max-h-[52vh] overflow-y-auto";
 const PREVIEW_COPY_LENGTH = 50;
@@ -260,11 +257,7 @@ export function TaskDocumentEditor({
               >
                 {deferredMarkdown.trim().length > 0 ? (
                   <>
-                    <MarkdownRenderer
-                      markdown={deferredMarkdown}
-                      variant="document"
-                      premiumCodeBlocks={hasLabeledCodeFence(deferredMarkdown)}
-                    />
+                    <MarkdownRenderer markdown={deferredMarkdown} variant="document" />
                     <TaskDocumentPreviewCopyButton markdown={deferredMarkdown} />
                   </>
                 ) : (

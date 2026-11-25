@@ -5,10 +5,7 @@ import { fireEvent, render } from "@testing-library/react";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryProvider } from "@/test-utils/query-provider";
-import {
-  TaskExecutionCiCommentCard,
-  TaskExecutionCiMarkdownLink,
-} from "./task-execution-ci-comment-card";
+import { TaskExecutionCiCommentCard } from "./task-execution-ci-comment-card";
 
 const createComment = (): PullRequestReviewActivity => ({
   id: "comment-1",
@@ -148,10 +145,15 @@ test("skips unchanged card inputs and renders updated comments", () => {
 test("opens links in review markdown through the external URL shell bridge", () => {
   const openExternalUrlSpy = mock(async (_url: string) => {});
   const markdownUrl = "https://example.com/review-guidance";
+  const comment = { ...createComment(), body: `See [Review guidance](${markdownUrl}).` };
 
   const view = render(
     withShellPlatform(
-      <TaskExecutionCiMarkdownLink href={markdownUrl}>Review guidance</TaskExecutionCiMarkdownLink>,
+      <QueryProvider>
+        <TooltipProvider>
+          <TaskExecutionCiCommentCard comment={comment} isBot={false} />
+        </TooltipProvider>
+      </QueryProvider>,
       createShellBridgeFixture({ bridge: { openExternalUrl: openExternalUrlSpy } }),
     ),
   );

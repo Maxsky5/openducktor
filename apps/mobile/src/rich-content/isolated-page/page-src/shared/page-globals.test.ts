@@ -1,29 +1,18 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { installPageGlobals, objectGroupBy, promiseWithResolvers } from "./page-globals";
+import { installPageGlobals, promiseWithResolvers } from "./page-globals";
 
-type BuiltIn = PromiseConstructor | ObjectConstructor;
-type PageGlobalName = "withResolvers" | "groupBy";
+/** The own method on `Promise`, read without its declared type, so a removed method is undefined. */
+const ownWithResolvers = (): PropertyDescriptor["value"] =>
+  Object.getOwnPropertyDescriptor(Promise, "withResolvers")?.value;
 
-/** The own method on a built-in, read without its declared type, so a removed method is undefined. */
-const ownMethod = (target: BuiltIn, name: PageGlobalName): PropertyDescriptor["value"] =>
-  Object.getOwnPropertyDescriptor(target, name)?.value;
+// The test runtime has the method. Each test restores it after it removes it.
+const platformWithResolvers = ownWithResolvers();
 
-// The test runtime has both methods. Each test restores them after it removes them.
-const platformWithResolvers = ownMethod(Promise, "withResolvers");
-const platformGroupBy = ownMethod(Object, "groupBy");
-
-const restore = (
-  target: BuiltIn,
-  name: PageGlobalName,
-  value: PropertyDescriptor["value"],
-): void => {
-  Object.defineProperty(target, name, { value, configurable: true, writable: true });
+const restore = (value: PropertyDescriptor["value"]): void => {
+  Object.defineProperty(Promise, "withResolvers", { value, configurable: true, writable: true });
 };
 
-afterEach(() => {
-  restore(Promise, "withResolvers", platformWithResolvers);
-  restore(Object, "groupBy", platformGroupBy);
-});
+afterEach(() => restore(platformWithResolvers));
 
 describe("page globals", () => {
   test("promiseWithResolvers settles its promise from outside", async () => {
@@ -37,23 +26,14 @@ describe("page globals", () => {
     await expect(rejected.promise).rejects.toBe(failure);
   });
 
-  test("objectGroupBy groups items by key into a null-prototype object", () => {
-    const words = ["ant", "bee", "cat", "bear", "ape"];
-    const grouped = objectGroupBy(words, (word, index) => (index === 4 ? "last" : (word[0] ?? "")));
-    expect({ ...grouped }).toEqual({ a: ["ant"], b: ["bee", "bear"], c: ["cat"], last: ["ape"] });
-    expect(Object.getPrototypeOf(grouped)).toBeNull();
-  });
-
-  test("installs both methods when the WebView lacks them, and keeps platform methods", () => {
+  test("installs the method when the WebView lacks it, and keeps the platform method", () => {
     Reflect.deleteProperty(Promise, "withResolvers");
-    Reflect.deleteProperty(Object, "groupBy");
 
     installPageGlobals();
-    expect(ownMethod(Promise, "withResolvers")).toBe(promiseWithResolvers);
-    expect(ownMethod(Object, "groupBy")).toBe(objectGroupBy);
+    expect(ownWithResolvers()).toBe(promiseWithResolvers);
 
-    restore(Promise, "withResolvers", platformWithResolvers);
+    restore(platformWithResolvers);
     installPageGlobals();
-    expect(ownMethod(Promise, "withResolvers")).toBe(platformWithResolvers);
+    expect(ownWithResolvers()).toBe(platformWithResolvers);
   });
 });

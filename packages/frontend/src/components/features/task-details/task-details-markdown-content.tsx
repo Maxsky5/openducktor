@@ -1,17 +1,7 @@
 import { ShortcutScope } from "@/features/shortcuts/shortcut-controls";
 import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
 import type { TaskAssetRenderContext } from "@openducktor/contracts";
-import {
-  type MouseEvent,
-  memo,
-  type ReactElement,
-  type RefObject,
-  useRef,
-  startTransition,
-  useCallback,
-  useEffect,
-  useReducer,
-} from "react";
+import { type MouseEvent, memo, type ReactElement, useCallback, useRef } from "react";
 import { CopyIconButton } from "@/components/ui/copy-icon-button";
 import { cn } from "@/lib/utils";
 import {
@@ -30,115 +20,6 @@ type TaskDetailsMarkdownContentProps = {
   issueImageContext?: IssueImageContext;
 };
 
-const LARGE_MARKDOWN_DEFER_THRESHOLD = 2000;
-const LABELED_CODE_FENCE_PATTERN = /^[ \t]{0,3}(?:```|~~~)[ \t]*[^\s`~]/im;
-type TaskDetailsRenderedMarkdownProps = {
-  markdown: string;
-  hasLabeledCodeFence: boolean;
-  stripTaskDescriptionFrontMatter: boolean;
-  taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
-  issueImageContext?: IssueImageContext;
-};
-
-const TaskDetailsRenderedMarkdown = memo(function TaskDetailsRenderedMarkdown({
-  markdown,
-  hasLabeledCodeFence,
-  stripTaskDescriptionFrontMatter,
-  taskAssetContext,
-  issueImageContext,
-}: TaskDetailsRenderedMarkdownProps): ReactElement {
-  return (
-    <IssueMarkdownRenderer
-      markdown={markdown}
-      variant="document"
-      premiumCodeBlocks={hasLabeledCodeFence}
-      stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
-      fallback={
-        <p className="text-xs text-muted-foreground">
-          Rendering markdown with syntax highlighting…
-        </p>
-      }
-      {...(taskAssetContext ? { taskAssetContext } : {})}
-      {...(issueImageContext ? { issueImageContext } : {})}
-    />
-  );
-});
-
-type DeferredTaskDetailsMarkdownProps = TaskDetailsRenderedMarkdownProps & {
-  shortcutRoot: RefObject<HTMLDivElement | null>;
-  copyableMarkdown: string | undefined;
-  copied: boolean;
-  onCopy: (e: MouseEvent<HTMLButtonElement>) => void;
-  taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
-};
-
-function DeferredTaskDetailsMarkdown({
-  shortcutRoot,
-  markdown,
-  hasLabeledCodeFence,
-  stripTaskDescriptionFrontMatter,
-  copyableMarkdown,
-  copied,
-  onCopy,
-  taskAssetContext,
-  issueImageContext,
-}: DeferredTaskDetailsMarkdownProps): ReactElement {
-  const [isMarkdownReady, setIsMarkdownReady] = useReducer(
-    (_current: boolean, next: boolean) => next,
-    false,
-  );
-
-  useEffect(() => {
-    if (isMarkdownReady) {
-      return;
-    }
-
-    const frameId = requestAnimationFrame(() => {
-      startTransition(() => {
-        setIsMarkdownReady(true);
-      });
-    });
-
-    return () => {
-      cancelAnimationFrame(frameId);
-    };
-  }, [isMarkdownReady]);
-
-  if (!isMarkdownReady) {
-    return (
-      <div className="space-y-2 rounded-lg border border-border bg-muted p-3">
-        <div className="h-3 w-4/5 animate-pulse rounded bg-border" />
-        <div className="h-3 w-full animate-pulse rounded bg-border" />
-        <div className="h-3 w-3/4 animate-pulse rounded bg-border" />
-      </div>
-    );
-  }
-
-  return (
-    <div ref={shortcutRoot} className="relative">
-      <div className={cn("max-h-84 overflow-y-auto", copyableMarkdown && "pr-9")}>
-        <TaskDetailsRenderedMarkdown
-          markdown={markdown}
-          hasLabeledCodeFence={hasLabeledCodeFence}
-          stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
-          {...(taskAssetContext ? { taskAssetContext } : {})}
-          {...(issueImageContext ? { issueImageContext } : {})}
-        />
-      </div>
-      {copyableMarkdown ? (
-        <CopyIconButton
-          shortcutId="content-copy"
-          copied={copied}
-          ariaLabel="Copy description content"
-          dataTestId="copy-document-content"
-          className="absolute top-2 right-2 z-10"
-          onClick={onCopy}
-        />
-      ) : null}
-    </div>
-  );
-}
-
 export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownContent({
   markdown,
   copyableMarkdown,
@@ -150,8 +31,6 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
     getSuccessDescription: buildCopyPreview,
     errorLogContext: "TaskDetailsMarkdownContent",
   });
-  const hasLabeledCodeFence = LABELED_CODE_FENCE_PATTERN.test(markdown);
-  const shouldDeferMarkdown = markdown.length >= LARGE_MARKDOWN_DEFER_THRESHOLD;
 
   const shortcutRoot = useRef<HTMLDivElement>(null);
   const copyContent = useCallback(() => {
@@ -177,32 +56,13 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
     [copyContent],
   );
 
-  if (shouldDeferMarkdown) {
-    return (
-      <ShortcutScope owners={[shortcutOwner]}>
-        <DeferredTaskDetailsMarkdown
-          shortcutRoot={shortcutRoot}
-          key={markdown}
-          markdown={markdown}
-          hasLabeledCodeFence={hasLabeledCodeFence}
-          stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
-          copyableMarkdown={copyableMarkdown}
-          copied={copied}
-          onCopy={handleCopy}
-          {...(taskAssetContext ? { taskAssetContext } : {})}
-          {...(issueImageContext ? { issueImageContext } : {})}
-        />
-      </ShortcutScope>
-    );
-  }
-
   return (
     <ShortcutScope owners={[shortcutOwner]}>
       <div ref={shortcutRoot} className="relative">
         <div className={cn("max-h-84 overflow-y-auto", copyableMarkdown && "pr-9")}>
-          <TaskDetailsRenderedMarkdown
+          <IssueMarkdownRenderer
             markdown={markdown}
-            hasLabeledCodeFence={hasLabeledCodeFence}
+            variant="document"
             stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
             {...(taskAssetContext ? { taskAssetContext } : {})}
             {...(issueImageContext ? { issueImageContext } : {})}

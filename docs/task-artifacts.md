@@ -12,7 +12,7 @@ A mounted task view loads its existing Specification, Implementation Plan, and Q
 
 A return to a previously opened artifact shows its cached content at once. After the task view closes, completed reads keep the connection's normal 10-minute inactive cache lifetime. Live changes refresh affected reads. Closing the view releases its preview frames, ports, and image URLs; closing the workspace removes its cached artifact reads.
 
-Workflow previews and editors share one Markdown query per task and workflow kind. Each query uses its direct host read without waiting for the artifact collection. The task summary identifies outputs that do not exist yet. After a session change passes the navigation guard, the client also starts its selected read before changing the route. Readers share pending work; deletion and workspace release still cancel it. Markdown text appears while code, math, and diagram renderers load.
+Workflow previews and editors share one Markdown query per task and workflow kind. Each query uses its direct host read without waiting for the artifact collection. The task summary identifies outputs that do not exist yet. After a session change passes the navigation guard, the client also starts its selected read before changing the route. Readers share pending work; deletion and workspace release still cancel it. Markdown text and math show at once. Code highlighting and diagrams load the first time that a view shows them.
 
 Background workspace session refreshes wait in a client queue that matches the host's single refresh lane. Queued refreshes do not hold browser connections needed by artifact reads. Each failure reaches its caller, and later refreshes can proceed. Closing a workspace skips its queued refreshes.
 

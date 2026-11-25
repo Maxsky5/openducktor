@@ -2,7 +2,6 @@ import type { BlockContent, ListItem, Root } from "mdast";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
-import type { Plugin } from "unified";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
 
@@ -63,9 +62,3 @@ export const normalizeTaskListBlockMath = (tree: Root, markdown: string): void =
     );
   });
 };
-
-export const remarkTaskListBlockMath: Plugin<[], Root> =
-  () =>
-  (tree, file): void => {
-    normalizeTaskListBlockMath(tree, String(file));
-  };

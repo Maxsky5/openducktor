@@ -38,12 +38,8 @@ export default {
       ],
       // Knip does not read the configurations that `bun check -p` receives.
       typescript: { config: ["tsconfig.json", "tsconfig.test.json"] },
-      // `app.config.ts` embeds the font files by path, and the isolated page styles `@import` KaTeX.
-      ignoreDependencies: [
-        "@expo-google-fonts/ibm-plex-mono",
-        "@expo-google-fonts/space-grotesk",
-        "katex",
-      ],
+      // `app.config.ts` embeds the font files by path.
+      ignoreDependencies: ["@expo-google-fonts/ibm-plex-mono", "@expo-google-fonts/space-grotesk"],
     },
     "packages/frontend-core": {
       entry: ["src/**/*.test.{ts,tsx}", "expo-compat/consumer.ts"],

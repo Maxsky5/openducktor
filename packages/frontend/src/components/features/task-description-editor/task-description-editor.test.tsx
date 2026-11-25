@@ -1,16 +1,6 @@
 import { IsolatedMarkdownWrapper } from "@/test-utils/isolated-markdown-wrapper";
 import type { ReactNode } from "react";
-import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  jest,
-  mock,
-  spyOn,
-  test,
-} from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   act,
   fireEvent,
@@ -18,7 +8,7 @@ import {
   waitFor as testingLibraryWaitFor,
 } from "@testing-library/react";
 import { useState } from "react";
-import { hasMarkdownMath } from "@/components/ui/markdown-math-detection";
+import { hasMarkdownMath } from "@/test-utils/markdown-math";
 import { createIntersectionObserverTestDriver } from "@/test-utils/intersection-observer-test-driver";
 import TaskDescriptionEditor from "./task-description-editor";
 
@@ -93,6 +83,7 @@ describe("TaskDescriptionEditor", () => {
     await Promise.all([
       import("./task-description-markdown"),
       import("./task-description-visual-editor"),
+      import("pele"),
     ]);
   }, 10_000);
 
@@ -245,47 +236,23 @@ describe("TaskDescriptionEditor", () => {
     }
   });
 
-  test("mounts the Visual editor and a stable Mermaid viewport before the preview is ready", async () => {
-    const renderModule = await import("@/components/ui/markdown-mermaid-render");
-    const diagram = Promise.withResolvers<string>();
-    const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockReturnValue(diagram.promise);
-    jest.useFakeTimers();
+  test("draws a Mermaid diagram inside a list item of the Visual editor", async () => {
+    const view = await act(async () =>
+      render(
+        <TaskDescriptionEditor
+          {...createProps()}
+          markdown={"1. ```mermaid\n   graph TD\n     A --> B\n   ```"}
+          onChange={() => {}}
+        />,
+      ),
+    );
 
     try {
-      const view = await act(async () =>
-        render(
-          <TaskDescriptionEditor
-            {...createProps()}
-            markdown={"1. ```mermaid\n   graph TD\n     A --> B\n   ```"}
-            onChange={() => {}}
-          />,
-        ),
-      );
-
-      try {
-        expect(view.container.querySelector(".tiptap")).not.toBeNull();
-        const viewport = view.getByRole("group", { name: "Mermaid diagram" });
-        expect(viewport.getAttribute("aria-busy")).toBe("true");
-        expect(renderSpy).not.toHaveBeenCalled();
-
-        await act(async () => jest.advanceTimersByTime(250));
-        expect(renderSpy).toHaveBeenCalledTimes(1);
-        expect(viewport.getAttribute("aria-busy")).toBe("true");
-
-        await act(async () => {
-          diagram.resolve(
-            '<svg xmlns="http://www.w3.org/2000/svg"><text>Rendered diagram</text></svg>',
-          );
-        });
-        expect(view.getByText("Rendered diagram")).toBeTruthy();
-        expect(view.getByRole("group", { name: "Mermaid diagram" })).toBe(viewport);
-        expect(viewport.getAttribute("aria-busy")).toBe("false");
-      } finally {
-        view.unmount();
-      }
+      const diagram = await view.findByRole("group", { name: "Mermaid diagram" });
+      expect(view.container.querySelector(".tiptap")).not.toBeNull();
+      await waitFor(() => expect(diagram.querySelector("svg.pele")).not.toBeNull());
     } finally {
-      jest.useRealTimers();
-      renderSpy.mockRestore();
+      view.unmount();
     }
   });
 

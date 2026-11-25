@@ -1,23 +1,24 @@
 /**
  * Builds each isolated page entry `src/rich-content/isolated-page/page-src/<name>.ts`, with its
- * optional `<name>.css`, into one self-contained `assets/pages/<name>.html`. The page has inline JS and CSS, inline woff2 fonts,
+ * optional `<name>.css`, into one self-contained `assets/pages/<name>.html`. The page has inline JS and CSS, inline fonts,
  * and a Content Security Policy that blocks every load except inline data and runs only the page
  * script. The build fails when the output would load another file or a remote resource.
  *
  * Run `bun run build:page` in apps/mobile after a change in `page-src`.
  */
 import { createHash } from "node:crypto";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { BunPlugin } from "bun";
 
 /**
  * The page Content Security Policy. `scriptHash` is the base64 SHA-256 hash of the page script, so
  * only that script runs. Markup that a renderer bug lets into the page, such as an `onerror`
- * attribute, cannot run script.
+ * attribute, cannot run script. `'wasm-unsafe-eval'` lets the page compile the WebAssembly of the
+ * Markdown renderer, and it does not allow `eval` of script.
  */
 export const pageContentSecurityPolicy = (scriptHash: string): string =>
-  `default-src 'none'; script-src 'sha256-${scriptHash}'; style-src 'unsafe-inline'; img-src data:; font-src data:`;
+  `default-src 'none'; script-src 'sha256-${scriptHash}' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; img-src data:; font-src data:`;
 
 const MOBILE_ROOT = path.resolve(import.meta.dir, "..");
 export const PAGE_SOURCE_DIRECTORY = path.join(
@@ -78,15 +79,24 @@ const inlineFontSources = async (css: string, directory: string): Promise<string
   return result;
 };
 
-const inlineFontsPlugin: BunPlugin = {
+/**
+ * Inlines the fonts of the style sheets in the folder of a page. Other style sheets, such as the
+ * diagram theme that a page imports as text, keep their default loader.
+ */
+const inlineFontsPlugin = (directory: string): BunPlugin => ({
   name: "inline-css-fonts",
   setup(build) {
-    build.onLoad({ filter: /\.css$/ }, async (args) => ({
+    // Windows paths use backslashes, so each separator matches both kinds.
+    const folder = directory
+      .split(/[\\/]/)
+      .map((segment) => segment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join("[\\\\/]");
+    build.onLoad({ filter: new RegExp(`^${folder}[\\\\/].+\\.css$`) }, async (args) => ({
       contents: await inlineFontSources(await readFile(args.path, "utf8"), path.dirname(args.path)),
       loader: "css",
     }));
   },
-};
+});
 
 /** Stops text inside an inline element from closing that element early. */
 const escapeInline = (text: string, element: "script" | "style"): string =>
@@ -115,7 +125,7 @@ export const pageHtml = (script: string, style: string): string => {
 
 /**
  * Builds one page entry into its HTML text. A `<name>.css` file beside the entry is the page
- * style sheet; it can `@import` package styles, such as `katex/dist/katex.min.css`.
+ * style sheet. It can `@import` the style sheets of its folder, whose fonts the page inlines.
  */
 export const buildIsolatedPage = async (entry: string): Promise<string> => {
   const styleEntry = entry.replace(/\.ts$/, ".css");
@@ -127,7 +137,8 @@ export const buildIsolatedPage = async (entry: string): Promise<string> => {
     splitting: false,
     sourcemap: "none",
     define: { "process.env.NODE_ENV": JSON.stringify("production") },
-    plugins: [inlineFontsPlugin],
+    // Bun reports the real paths of the files that it loads.
+    plugins: [inlineFontsPlugin(path.dirname(await realpath(entry)))],
   });
   if (!result.success) {
     throw new Error(`The page ${entry} did not build:\n${result.logs.map(String).join("\n")}`);

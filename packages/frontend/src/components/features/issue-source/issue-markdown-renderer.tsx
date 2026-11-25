@@ -1,6 +1,6 @@
 import { type ComponentProps, type ReactElement, useMemo } from "react";
-import type { Components } from "react-markdown";
-import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
+import type { MarkdownImageProps } from "@/components/ui/markdown-host-image-kind";
+import { type MarkdownImages, MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { GithubIssueImage, type IssueImageContext } from "./github-issue-image";
 import { isHostLoadedIssueImageUrl } from "@openducktor/frontend-core/tasks/issue-import/issue-image-url";
 
@@ -12,28 +12,25 @@ export function IssueMarkdownRenderer({
 }: ComponentProps<typeof MarkdownRenderer> & {
   issueImageContext?: IssueImageContext;
 }): ReactElement | null {
-  const components = useIssueImageComponents(issueImageContext);
-  return <MarkdownRenderer {...props} {...(components ? { components } : {})} />;
+  const images = useIssueImages(issueImageContext);
+  return <MarkdownRenderer {...props} {...(images ? { images } : {})} />;
 }
 
-export function useIssueImageComponents(
-  issueImageContext?: IssueImageContext,
-): Components | undefined {
+/** The images of an issue that the host loads, such as private GitHub attachments. */
+export function useIssueImages(issueImageContext?: IssueImageContext): MarkdownImages | undefined {
   const workspaceId = issueImageContext?.workspaceId;
   const providerId = issueImageContext?.providerId;
   const repoPath = issueImageContext?.repoPath;
   const sourceId = issueImageContext?.sourceId;
   const taskId = issueImageContext?.taskId;
-  return useMemo<Components | undefined>(() => {
+  return useMemo<MarkdownImages | undefined>(() => {
     if (!workspaceId || !providerId || !repoPath || !sourceId) return undefined;
     const context = { workspaceId, providerId, repoPath, sourceId, taskId };
     return {
-      img: ({ node: _node, src, alt, title }) => {
-        if (isHostLoadedIssueImageUrl(providerId, src ?? "")) {
-          return <GithubIssueImage context={context} src={src ?? ""} alt={alt} title={title} />;
-        }
-        return <img src={src} alt={alt ?? ""} title={title} />;
-      },
+      handles: (src) => isHostLoadedIssueImageUrl(providerId, src),
+      Image: ({ src, alt, title }: MarkdownImageProps) => (
+        <GithubIssueImage context={context} src={src} alt={alt} title={title || undefined} />
+      ),
     };
   }, [workspaceId, providerId, repoPath, sourceId, taskId]);
 }
