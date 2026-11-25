@@ -184,24 +184,20 @@ test("replacing a discarded draft resets custom mode to the saved target", () =>
   expect(screen.getAllByRole("textbox", { name: "Command pattern" })).toHaveLength(2);
 });
 
-test("disables every permission control during saving in both themes", () => {
-  for (const theme of ["light", "dark"]) {
-    document.documentElement.className = theme;
-    const config = initialConfig();
-    config.roleOverrides.qa = { rules: [{ permission: "webfetch", pattern: "*", action: "deny" }] };
-    const view = render(<Editor initial={config} disabled />);
-    expect(
-      screen
-        .getByRole("switch", { name: "Enable OpenCode permissions role overrides" })
-        .getAttribute("aria-checked"),
-    ).toBe("true");
-    expect(screen.getByRole("button", { name: "QA permission rules" }).textContent).toContain(
-      "Use role rules",
-    );
-    for (const control of view.container.querySelectorAll<HTMLInputElement | HTMLButtonElement>(
-      "input, button",
-    ))
-      expect(control.disabled).toBe(true);
-    view.unmount();
-  }
+test("disables every permission control during saving", () => {
+  const config = initialConfig();
+  config.roleOverrides.qa = { rules: [{ permission: "webfetch", pattern: "*", action: "deny" }] };
+  const view = render(<Editor initial={config} disabled />);
+  expect(
+    screen
+      .getByRole("switch", { name: "Enable OpenCode permissions role overrides" })
+      .getAttribute("aria-checked"),
+  ).toBe("true");
+  expect(screen.getByRole("button", { name: "QA permission rules" }).textContent).toContain(
+    "Use role rules",
+  );
+  for (const control of view.container.querySelectorAll<HTMLInputElement | HTMLButtonElement>(
+    "input, button",
+  ))
+    expect(control.disabled).toBe(true);
 });

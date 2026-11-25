@@ -30,7 +30,8 @@ export type SessionPanelLayoutStore = {
   takeReadError: (owner: SessionPanelOwner) => string | null;
   /**
    * Applies `change` to the layout of an owner and saves the tool tabs when they change. A save
-   * failure shows one toast for each owner. The layout stays in memory.
+   * failure reports its cause once until it changes or the next save succeeds. The layout stays
+   * in memory.
    */
   update: (
     owner: SessionPanelOwner,
@@ -63,7 +64,7 @@ export const createSessionPanelLayoutStore = (storage: ClientStorage): SessionPa
   const listeners = new Set<() => void>();
   const pruneListeners = new Set<(owners: readonly SessionPanelOwner[]) => void>();
   let snapshot: ReadonlyMap<string, SessionPanelLayout> = new Map();
-  let pruneErrorShown = false;
+  let pruneFailure: string | null = null;
 
   const notify = (): void => {
     snapshot = new Map([...entries].map(([ownerKey, entry]) => [ownerKey, entry.layout]));
@@ -94,13 +95,15 @@ export const createSessionPanelLayoutStore = (storage: ClientStorage): SessionPa
         if (owner) owners.push(owner);
       }
       for (const key of staleKeys) storage.removeItem(key);
+      pruneFailure = null;
       return owners;
     } catch (error) {
-      console.error("[session-panels] Failed to remove old panel layouts.", { error });
-      if (!pruneErrorShown) {
-        pruneErrorShown = true;
+      const message = errorMessage(error);
+      if (pruneFailure !== message) {
+        pruneFailure = message;
+        console.error("[session-panels] Failed to remove old panel layouts.", { error });
         toast.error("Could not remove old panel layouts", {
-          description: `${errorMessage(error)} Saved layouts of removed tasks and sessions stay on this computer.`,
+          description: `${message} Saved layouts of removed tasks and sessions stay on this computer.`,
         });
       }
       return [];
@@ -132,12 +135,14 @@ export const createSessionPanelLayoutStore = (storage: ClientStorage): SessionPa
         try {
           storage.setItem(sessionPanelLayoutStorageKey(owner), record);
           entry.savedRecord = record;
+          entry.writeFailure = null;
         } catch (error) {
-          console.error("[session-panels] Failed to save the panel layout.", { owner, error });
-          if (!entry.writeErrorShown) {
-            entry.writeErrorShown = true;
+          const message = errorMessage(error);
+          if (entry.writeFailure !== message) {
+            entry.writeFailure = message;
+            console.error("[session-panels] Failed to save the panel layout.", { owner, error });
             toast.error("Could not save the panel layout", {
-              description: `${errorMessage(error)} The layout works until the app restarts.`,
+              description: `${message} The layout works until the app restarts.`,
             });
           }
         }
@@ -255,7 +260,7 @@ type StoreEntry = {
   /** The last saved or restored record, so a change of live entries only does not write. */
   savedRecord: string | null;
   readError: string | null;
-  writeErrorShown: boolean;
+  writeFailure: string | null;
 };
 
 /** Restores the saved layout of an owner. A failed read starts an empty layout and keeps the error. */
@@ -265,7 +270,7 @@ const readEntry = (storage: ClientStorage, owner: SessionPanelOwner): StoreEntry
     layout: emptySessionPanelLayout(),
     savedRecord: null,
     readError: null,
-    writeErrorShown: false,
+    writeFailure: null,
   };
   try {
     const key = sessionPanelLayoutStorageKey(owner);

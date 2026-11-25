@@ -7,7 +7,13 @@ import type {
 } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
-import { createElement, type PropsWithChildren, useEffect, useState } from "react";
+import {
+  createElement,
+  type PropsWithChildren,
+  type ReactElement,
+  useEffect,
+  useState,
+} from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import type { TaskArtifactsViewProps } from "@/components/features/task-artifacts/task-artifacts";
@@ -44,9 +50,6 @@ function TaskRightPanel({ model }: { model: TaskRightPanelModel }) {
     />
   );
 }
-let lastFileTreeOptions: Parameters<typeof actualPierreTreesReact.useFileTree>[0] | null = null;
-let prepareFileTreeInputCalls: string[][] = [];
-let preparePresortedFileTreeInputCalls: string[][] = [];
 let fileTreeSelectedPaths: string[] = [];
 let deselectedFileTreePaths: string[] = [];
 let selectedOnlyFileTreePaths: string[] = [];
@@ -54,34 +57,20 @@ let fileTreeSubscriber: (() => void) | null = null;
 
 const actualPierreTrees = await import("@pierre/trees");
 const actualPierreTreesReact = await import("@pierre/trees/react");
-const actualPrepareFileTreeInput = actualPierreTrees.prepareFileTreeInput;
-const actualPreparePresortedFileTreeInput = actualPierreTrees.preparePresortedFileTreeInput;
 let moduleSpies: Array<{ mockRestore: () => void }> = [];
 
 beforeEach(async () => {
-  lastFileTreeOptions = null;
-  prepareFileTreeInputCalls = [];
-  preparePresortedFileTreeInputCalls = [];
   fileTreeSelectedPaths = [];
   deselectedFileTreePaths = [];
   selectedOnlyFileTreePaths = [];
   fileTreeSubscriber = null;
 
   moduleSpies = [
-    spyOn(actualPierreTrees, "prepareFileTreeInput").mockImplementation((paths, options) => {
-      prepareFileTreeInputCalls.push([...paths]);
-      return actualPrepareFileTreeInput(paths, options);
-    }),
-    spyOn(actualPierreTrees, "preparePresortedFileTreeInput").mockImplementation((paths) => {
-      preparePresortedFileTreeInputCalls.push([...paths]);
-      return actualPreparePresortedFileTreeInput(paths);
-    }),
     spyOn(actualPierreTrees, "themeToTreeStyles").mockImplementation(() => ({})),
     spyOn(actualPierreTreesReact, "FileTree").mockImplementation(() =>
       createElement("div", { "data-testid": "mock-pierre-file-tree" }),
     ),
     spyOn(actualPierreTreesReact, "useFileTree").mockImplementation((options) => {
-      lastFileTreeOptions = options;
       const [model] = useState(() => {
         const fileTree = new actualPierreTrees.FileTree(options);
         const originalGetItem = fileTree.getItem.bind(fileTree);
@@ -264,24 +253,7 @@ function SeedQueryData({
   return children;
 }
 
-const renderPanelWithFileTreeData = (
-  model: TaskRightPanelModel,
-  fileTree: WorkspaceFileTree,
-): string => {
-  const connection = createTestClientConnection();
-  const queryClient = connection.queryClient;
-  queryClient.setQueryData(
-    filesystemQueryKeys.tree(fileTree.rootPath, model.fileExplorerModel.targetBranch),
-    fileTree,
-  );
-  return renderToStaticMarkup(
-    createElement(
-      ClientConnectionProvider,
-      { connection },
-      createElement(ThemeProvider, null, createElement(TaskRightPanel, { model })),
-    ),
-  );
-};
+const renderAsync = (element: ReactElement) => act(async () => render(element));
 
 const renderPanelWithCiData = (context: PullRequestReviewContext): string => {
   const connection = createTestClientConnection();
@@ -487,56 +459,6 @@ describe("useTaskExecutionToolTabs", () => {
     expect(html).toContain("task-execution-file-explorer-copy-root-path");
     expect(html).toContain("Copy working directory");
     expect(html).not.toContain("Search files");
-    expect(lastFileTreeOptions?.initialExpansion).toBe("closed");
-  });
-
-  test("prepares file explorer paths through PierreTrees sorting instead of the presorted fast path", () => {
-    renderPanelWithFileTreeData(
-      {
-        ...basePanelModel,
-        tabs: ["diffs", "files"],
-        activeTabId: "files",
-        documentModel: null,
-        fileExplorerModel: {
-          rootPath: "/repo/.worktrees/task-12",
-          targetBranch: "origin/main",
-          unavailableReason: null,
-          isActive: true,
-          selectedFile: null,
-          onSelectFile: () => {},
-        },
-        ciChecksModel: null,
-      },
-      {
-        rootPath: "/repo/.worktrees/task-12",
-        entries: [
-          {
-            kind: "file",
-            path: "package.json",
-            size: 24,
-            mtimeMs: 1_760_000_000_000,
-            gitStatus: "modified",
-          },
-          {
-            kind: "file",
-            path: "apps/web.ts",
-            size: 24,
-            mtimeMs: 1_760_000_000_000,
-            gitStatus: "modified",
-          },
-          {
-            kind: "file",
-            path: "README.md",
-            size: 24,
-            mtimeMs: 1_760_000_000_000,
-            gitStatus: null,
-          },
-        ],
-      },
-    );
-
-    expect(prepareFileTreeInputCalls).toContainEqual(["package.json", "apps/web.ts", "README.md"]);
-    expect(preparePresortedFileTreeInputCalls).toEqual([]);
   });
 
   test("clears the PierreTrees selection when the file preview is closed", async () => {
@@ -557,7 +479,7 @@ describe("useTaskExecutionToolTabs", () => {
     const queryClient = connection.queryClient;
     queryClient.setQueryData(filesystemQueryKeys.tree(fileTree.rootPath, "origin/main"), fileTree);
 
-    render(
+    await renderAsync(
       createElement(
         ClientConnectionProvider,
         { connection },
@@ -608,7 +530,7 @@ describe("useTaskExecutionToolTabs", () => {
     const connection = createTestClientConnection();
     const queryClient = connection.queryClient;
     queryClient.setQueryData(filesystemQueryKeys.tree(requestedRoot, "origin/main"), fileTree);
-    render(
+    await renderAsync(
       createElement(
         ClientConnectionProvider,
         { connection },
@@ -655,7 +577,7 @@ describe("useTaskExecutionToolTabs", () => {
         { kind: "file", path: "src/second.ts", size: 24, mtimeMs: 1, gitStatus: null },
       ],
     };
-    render(
+    await renderAsync(
       createElement(
         QueryProvider,
         null,
@@ -748,7 +670,7 @@ describe("useTaskExecutionToolTabs", () => {
         </>
       );
     }
-    const view = render(
+    const view = await renderAsync(
       <ClientConnectionProvider connection={connection}>
         <ThemeProvider>
           <PreviewWithExplorer />

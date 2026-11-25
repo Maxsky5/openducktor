@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  AGENT_CHAT_ROW_WINDOW_EDGE_PRELOAD_COUNT,
-  AGENT_CHAT_ROW_WINDOW_SIZE,
-  selectTurnAnchorsForWindow,
-} from "./agent-chat-row-windows";
+import { selectTurnAnchorsForWindow } from "./agent-chat-row-windows";
 
 describe("agent chat row windows", () => {
   test("clips turn anchors to the selected row window", () => {
@@ -20,10 +16,5 @@ describe("agent chat row windows", () => {
       { key: "b", startRow: 0, endRowExclusive: 4 },
       { key: "c", startRow: 4, endRowExclusive: 7 },
     ]);
-  });
-
-  test("exports mounted row budgets", () => {
-    expect(AGENT_CHAT_ROW_WINDOW_SIZE).toBe(20);
-    expect(AGENT_CHAT_ROW_WINDOW_EDGE_PRELOAD_COUNT).toBe(10);
   });
 });

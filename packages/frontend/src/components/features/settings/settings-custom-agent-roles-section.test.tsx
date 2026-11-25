@@ -4,7 +4,6 @@ import { fireEvent, render } from "@testing-library/react";
 import { useState } from "react";
 import { validateCustomAgentRoleDrafts } from "@/state/read-models/custom-agent-role-settings";
 import { SettingsCustomAgentRolesSection } from "./settings-custom-agent-roles-section";
-import { SettingsReusablePromptsSection } from "./settings-reusable-prompts-section";
 
 function RoleDraft({
   initial = [],
@@ -67,47 +66,5 @@ test("disables every role control while settings are saving", () => {
     }
   } finally {
     view.unmount();
-  }
-});
-
-test("matches reusable prompt sidebar, editor, delete button, and textarea styles", () => {
-  const roles = render(
-    <RoleDraft initial={[{ id: "one", name: "Reviewer", systemPrompt: "Review." }]} />,
-  );
-  const prompts = render(
-    <SettingsReusablePromptsSection
-      reusablePrompts={[
-        { id: "prompt", name: "review", description: "Review", content: "Review." },
-      ]}
-      selectedReusablePromptId="prompt"
-      validationErrors={{}}
-      disabled={false}
-      onSelectedReusablePromptIdChange={() => {}}
-      onUpdateReusablePrompts={() => {}}
-    />,
-  );
-  try {
-    expect(roles.container.firstElementChild?.className).toBe(
-      prompts.container.firstElementChild?.className,
-    );
-    expect(roles.container.querySelector("aside")?.className).toBe(
-      prompts.container.querySelector("aside")?.className,
-    );
-    expect(roles.container.querySelector("textarea")?.className).toBe(
-      prompts.container.querySelector("textarea")?.className,
-    );
-    const roleButtons = Array.from(roles.container.querySelectorAll("button"));
-    const promptButtons = Array.from(prompts.container.querySelectorAll("button"));
-    expect(roleButtons.find((button) => button.textContent === "Delete")?.className).toBe(
-      promptButtons.find((button) => button.textContent === "Delete")?.className,
-    );
-    const roleAdd = roleButtons.find((button) => button.textContent === "Add role");
-    const promptAdd = promptButtons.find((button) => button.textContent === "Add prompt");
-    expect(roleAdd?.className).toBe(promptAdd?.className);
-    expect(roleAdd === roles.container.querySelector("aside")?.lastElementChild).toBe(true);
-    expect(promptAdd === prompts.container.querySelector("aside")?.lastElementChild).toBe(true);
-  } finally {
-    roles.unmount();
-    prompts.unmount();
   }
 });

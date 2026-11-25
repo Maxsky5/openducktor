@@ -61,7 +61,7 @@ describe("TaskResetConfirmDialog", () => {
     );
 
     expect(screen.getByRole("status")).toBeDefined();
-    expect(screen.queryByRole("button", { name: "Checking…" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reset task" })).toBeNull();
   });
 
   test("shows the preview failure and keeps confirm disabled while it is unresolved", () => {

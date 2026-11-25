@@ -1,14 +1,11 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { act, render } from "@testing-library/react";
 import type { ComponentType } from "react";
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import {
   createMarkdownSyntaxBlock,
   type MarkdownSyntaxBlockProps,
   type MarkdownSyntaxLanguageRegistry,
 } from "./markdown-syntax-block-core";
-
-enableReactActEnvironment();
 
 type Theme = "dark" | "light";
 

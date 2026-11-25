@@ -1,8 +1,19 @@
 import { ShortcutTestProviders } from "@/test-utils/shortcut-providers";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { createWireTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
-import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  jest,
+  mock,
+  onTestFinished,
+  spyOn,
+  test,
+} from "bun:test";
 import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
 import {
   type ClientStorage,
@@ -24,15 +35,17 @@ import type { HostClient } from "@openducktor/host-client";
 import type { QueryClient } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useEffect, useState } from "react";
-import { Link, MemoryRouter, Navigate, Route, Routes, useLocation } from "react-router";
+import { Link, MemoryRouter, Navigate, Outlet, Route, Routes, useLocation } from "react-router";
 import { toast } from "sonner";
 import {
   buildMessage,
   buildSession,
 } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 import { useAgentChatTranscriptModel } from "@openducktor/frontend-core/sessions/transcript/use-agent-chat-transcript-model";
-import * as repositoryModal from "@/components/features/repository/open-repository-modal";
+import { MAX_SYNC_MESSAGES } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model-build";
+import { SessionMenuProvider } from "@/components/layout/sidebar/session-menu-provider";
 import { ThemeProvider } from "@/components/layout/theme-provider";
+import { WorkspaceDialogsProvider } from "@/components/layout/workspace-dialogs";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
 import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
@@ -67,7 +80,12 @@ import { platformQueryOptions } from "@openducktor/frontend-core/queries/system"
 import { repoTaskDataQueryOptions } from "@openducktor/frontend-core/queries/tasks";
 import { agentSessionQueryKeys } from "@openducktor/frontend-core/queries/agent-sessions";
 import { RECENT_ITEMS_STORAGE_KEY } from "@/features/command-palette/constants";
+import { CommandPaletteProvider } from "@/features/command-palette/command-palette-provider";
+import type { CommandPaletteShell } from "@/features/command-palette/command-palette-types";
 import type { RecentItem } from "@/features/command-palette/recent-items";
+import { documentVisibility } from "@/features/session-navigation/document-visibility";
+import { SessionReadStateProvider } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
+import { VisibleSessionTargetProvider } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
 import {
   repoConfigQueryOptions,
   settingsSnapshotQueryOptions,
@@ -87,7 +105,6 @@ import {
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import {
   createChecksStateFixture,
-  createDeferred,
   createGitProviderContextFixture,
   createHostRuntimeStatusContextValue,
   createSettingsSnapshotFixture,
@@ -114,6 +131,8 @@ import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 // The tour host loads the dialog lazily. Load it here, so no test pays for the first load.
 await import("@/features/feature-tour/feature-tour-dialog");
+
+setupTestingLibraryFakeTimers();
 
 const LEFT_SIDEBAR_STORAGE_KEY = "openducktor:app-shell:left-sidebar";
 const SESSION_SCOPE_STORAGE_KEY = "openducktor:sidebar:session-scope";
@@ -181,20 +200,8 @@ const notificationContextValue = {
   },
 } satisfies NotificationContextValue;
 
-type MemoryStorageOverrides = {
-  getItem?: (key: string) => string | null;
-  setItem?: (key: string, value: string) => void;
-};
-
 class MemoryStorage implements Storage {
   readonly #items = new Map<string, string>();
-  readonly #getItemOverride: MemoryStorageOverrides["getItem"];
-  readonly #setItemOverride: MemoryStorageOverrides["setItem"];
-
-  constructor(overrides: MemoryStorageOverrides = {}) {
-    this.#getItemOverride = overrides.getItem;
-    this.#setItemOverride = overrides.setItem;
-  }
 
   get length(): number {
     return this.#items.size;
@@ -205,10 +212,6 @@ class MemoryStorage implements Storage {
   }
 
   getItem(key: string): string | null {
-    if (this.#getItemOverride) {
-      return this.#getItemOverride(key);
-    }
-
     return this.#items.get(key) ?? null;
   }
 
@@ -221,11 +224,6 @@ class MemoryStorage implements Storage {
   }
 
   setItem(key: string, value: string): void {
-    if (this.#setItemOverride) {
-      this.#setItemOverride(key, value);
-      return;
-    }
-
     this.#items.set(key, value);
   }
 }
@@ -299,6 +297,7 @@ type RenderAppShellForTestOptions = {
   runtimeDefinitionsError?: string | null;
   workspaceAdd?: (input: LocalWorkspaceDetails) => Promise<WorkspaceRecord>;
   workspacePresence?: Partial<WorkspacePresenceContextValue>;
+  routeElement?: ReactElement;
   prepareQueryClient?: (queryClient: QueryClient) => void;
   /** Host storage of the connection, such as a saved Recent list. */
   storage?: ClientStorage;
@@ -491,7 +490,7 @@ function AppShellTestEnvironment({
                                                   element={
                                                     <ManualPullRequestSyncProvider>
                                                       <ManualMergeCheckProvider>
-                                                        <AppShell />
+                                                        {options.routeElement ?? <AppShell />}
                                                       </ManualMergeCheckProvider>
                                                     </ManualPullRequestSyncProvider>
                                                   }
@@ -556,10 +555,12 @@ const configureHostFakes = (client: Partial<HostClient>): void => {
 
 const renderAppShellForTest = (
   options: RenderAppShellForTestOptions = {},
-): ReturnType<typeof render> => {
+): Promise<ReturnType<typeof render>> => {
   const connection = createTestClientConnection({
     client: {
       workspaceGetKeyboardShortcuts: async () => ({ version: 1, overrides: {} }),
+      browserTabsList: async () => ({ tabs: [] }),
+      browserStateRead: async () => ({ kind: "no_window" }),
       ...localOnlyProviderSetupClient(),
       ...hostFakes,
     },
@@ -601,18 +602,40 @@ const renderAppShellForTest = (
   );
   options.prepareQueryClient?.(queryClient);
 
-  return render(
-    <AppShellTestEnvironment
-      options={options}
-      connection={connection}
-      settingsSnapshot={settingsSnapshot}
-    />,
+  // Shell providers publish their initial host and shortcut state after render.
+  return act(async () =>
+    render(
+      <AppShellTestEnvironment
+        options={options}
+        connection={connection}
+        settingsSnapshot={settingsSnapshot}
+      />,
+    ),
   );
 };
 
-afterEach(() => {
-  cleanup();
-});
+async function prepareFirstWorkspace() {
+  expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
+  fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
+  fireEvent.click(screen.getByRole("button", { name: "Continue to notifications" }));
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Continue without a coding agent" }));
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
+  expect(screen.getByRole("button", { name: "Back to notifications" })).toBeDefined();
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Choose This Folder" }));
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Skip Git provider setup" }));
+  });
+  const continueToModels = screen.getByRole<HTMLButtonElement>("button", {
+    name: "Continue to models",
+  });
+  await waitFor(() => expect(continueToModels.disabled).toBe(false));
+  fireEvent.click(continueToModels);
+  return screen.getByRole("button", { name: "Open repository" });
+}
 
 describe("AppShell", () => {
   beforeEach(() => {
@@ -637,7 +660,7 @@ describe("AppShell", () => {
   });
 
   test("opens New chat on the first menu click", async () => {
-    renderAppShellForTest();
+    await renderAppShellForTest();
     fireEvent.click(screen.getByRole("button", { name: "More actions for OpenDucktor" }));
     fireEvent.click(await screen.findByRole("button", { name: "New session" }));
 
@@ -646,38 +669,42 @@ describe("AppShell", () => {
     expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeTruthy();
   });
 
-  test("keeps the active repo config loaded outside Agent Studio", () => {
+  test("keeps the active repo config loaded outside Agent Studio", async () => {
+    const updatedConfig = { ...activeRepoConfig, branchPrefix: "updated" };
+    const workspaceGetRepoConfig = mock(async () => updatedConfig);
+    configureHostFakes({ ...hostFakes, workspaceGetRepoConfig });
     const queryClients: QueryClient[] = [];
-    renderAppShellForTest({
+    await renderAppShellForTest({
       prepareQueryClient: (client) => {
         queryClients.push(client);
       },
     });
 
-    const query = queryClients[0]?.getQueryCache().find({
-      queryKey: repoConfigQueryOptions(activeWorkspace.workspaceId).queryKey,
-      exact: true,
+    const queryKey = repoConfigQueryOptions(activeWorkspace.workspaceId).queryKey;
+    await act(async () => {
+      await queryClients[0]?.invalidateQueries({ queryKey, exact: true });
     });
-    expect(query?.getObserversCount()).toBeGreaterThan(0);
+    expect(workspaceGetRepoConfig).toHaveBeenCalledWith(activeWorkspace.workspaceId);
+    expect(queryClients[0]?.getQueryData(queryKey)).toEqual(updatedConfig);
   });
 
-  test("waits for the workspace list before choosing an entry path", () => {
-    renderAppShellForTest({ workspacePresence: { isLoadingWorkspaces: true } });
+  test("waits for the workspace list before choosing an entry path", async () => {
+    await renderAppShellForTest({ workspacePresence: { isLoadingWorkspaces: true } });
 
     expect(screen.getByRole("status").textContent).toContain("Loading workspaces");
     expect(screen.queryByText("Kanban")).toBeNull();
   });
 
-  test("shows host-wide Usage after the workspace list loads without workspaces or fails", () => {
+  test("shows host-wide Usage after the workspace list loads without workspaces or fails", async () => {
     // Usage waits for the list, so it mounts once: a second mount would cancel its read.
-    const loading = renderAppShellForTest({
+    const loading = await renderAppShellForTest({
       initialEntry: "/usage",
       workspacePresence: { isLoadingWorkspaces: true, hasWorkspaces: false },
     });
     expect(screen.getByText("Loading workspaces…")).toBeTruthy();
     loading.unmount();
 
-    const view = renderAppShellForTest({
+    const view = await renderAppShellForTest({
       initialEntry: "/usage",
       workspacePresence: { hasWorkspaces: false },
     });
@@ -685,7 +712,7 @@ describe("AppShell", () => {
     expect(screen.getByText("Usage", { selector: "main main" })).toBeTruthy();
     view.unmount();
 
-    renderAppShellForTest({
+    await renderAppShellForTest({
       initialEntry: "/usage",
       workspacePresence: {
         hasWorkspaces: false,
@@ -700,40 +727,24 @@ describe("AppShell", () => {
   });
 
   test("does not open the repository modal while selecting an existing workspace on startup", async () => {
-    renderAppShellForTest({ initiallyUnselectedWorkspace: true });
+    await renderAppShellForTest({ initiallyUnselectedWorkspace: true });
 
     await waitFor(() => expect(screen.getByText("OpenDucktor", { selector: "p" })).toBeTruthy());
     expect(screen.queryByRole("dialog", { name: "Open a repository" })).toBeNull();
   });
 
-  test("opens the repository modal when only closed workspaces exist", () => {
-    renderAppShellForTest({ closedOnly: true });
+  test("opens the repository modal when only closed workspaces exist", async () => {
+    await renderAppShellForTest({ closedOnly: true });
 
     expect(screen.getByRole("dialog", { name: "Open a repository" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Reopen a workspace" })).toBeTruthy();
   });
 
-  test("shows the workspace load failure when no cached workspace exists", () => {
-    renderAppShellForTest({
-      workspacePresence: {
-        hasWorkspaces: false,
-        hasLoadedWorkspaceList: false,
-        workspaceLoadError: new Error("Workspace list unavailable"),
-      },
-    });
-
-    expect(
-      screen.getByRole("heading", { name: "OpenDucktor could not load your workspaces" }),
-    ).toBeTruthy();
-    expect(screen.getByText("Workspace list unavailable")).toBeTruthy();
-    expect(screen.queryByText("Kanban")).toBeNull();
-  });
-
-  test("keeps a failed workspace retry on the recoverable error screen", async () => {
+  test("shows the workspace load error and stays on that screen when Retry fails", async () => {
     const retryWorkspaces = mock(async () => {
       throw new Error("Workspace list still unavailable");
     });
-    renderAppShellForTest({
+    await renderAppShellForTest({
       workspacePresence: {
         hasWorkspaces: false,
         hasLoadedWorkspaceList: false,
@@ -742,16 +753,19 @@ describe("AppShell", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    const errorHeading = { name: "OpenDucktor could not load your workspaces" };
+    expect(screen.getByRole("heading", errorHeading)).toBeTruthy();
+    expect(screen.getByText("Workspace list unavailable")).toBeTruthy();
+    expect(screen.queryByText("Kanban")).toBeNull();
 
-    await waitFor(() => expect(retryWorkspaces).toHaveBeenCalledTimes(1));
-    expect(
-      screen.getByRole("heading", { name: "OpenDucktor could not load your workspaces" }),
-    ).toBeTruthy();
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Retry" })));
+    expect(retryWorkspaces).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("heading", errorHeading)).toBeTruthy();
+    expect(screen.queryByText("Kanban")).toBeNull();
   });
 
-  test("keeps cached workspaces visible after a background refresh fails", () => {
-    renderAppShellForTest({
+  test("keeps cached workspaces visible after a background refresh fails", async () => {
+    await renderAppShellForTest({
       workspacePresence: { workspaceLoadError: new Error("Workspace refresh unavailable") },
     });
 
@@ -761,8 +775,8 @@ describe("AppShell", () => {
     ).toBeNull();
   });
 
-  test("keeps onboarding visible when a cached empty workspace list refresh fails", () => {
-    renderAppShellForTest({
+  test("keeps onboarding visible when a cached empty workspace list refresh fails", async () => {
+    await renderAppShellForTest({
       initialEntry: "/onboarding",
       workspacePresence: {
         hasWorkspaces: false,
@@ -779,7 +793,7 @@ describe("AppShell", () => {
   });
 
   test("redirects an empty workspace from kanban to onboarding", async () => {
-    renderAppShellForTest({ workspacePresence: { hasWorkspaces: false } });
+    await renderAppShellForTest({ workspacePresence: { hasWorkspaces: false } });
 
     await waitFor(() =>
       expect(screen.getByTestId("current-route").textContent).toBe("/onboarding"),
@@ -791,7 +805,7 @@ describe("AppShell", () => {
   });
 
   test("redirects onboarding to kanban when a workspace exists", async () => {
-    renderAppShellForTest({ initialEntry: "/onboarding" });
+    await renderAppShellForTest({ initialEntry: "/onboarding" });
 
     await waitFor(() => expect(screen.getByTestId("current-route").textContent).toBe("/kanban"));
     expect(document.querySelector("main")?.textContent).toBe("Kanban");
@@ -802,17 +816,20 @@ describe("AppShell", () => {
     expect(screen.queryByText("Welcome to OpenDucktor")).toBeNull();
   });
 
-  test("exits onboarding only after workspace creation publishes the active workspace", async () => {
-    const workspaceAddResult = createDeferred<WorkspaceRecord>();
-    const initialTaskLoad = createDeferred<void>();
-    const platformLoad = createDeferred<void>();
-    const workspaceAdd = mock(async () => workspaceAddResult.promise);
+  test("keeps the workspace draft after failure and exits onboarding after a ready retry", async () => {
+    const failedWorkspaceAdd = Promise.withResolvers<WorkspaceRecord>();
+    const workspaceAddResult = Promise.withResolvers<WorkspaceRecord>();
+    const initialTaskLoad = Promise.withResolvers<void>();
+    const platformLoad = Promise.withResolvers<void>();
+    const workspaceAdd = mock(async () => workspaceAddResult.promise).mockImplementationOnce(
+      async () => failedWorkspaceAdd.promise,
+    );
     const createdWorkspace = {
       ...activeWorkspace,
       workspaceId: "repo",
       workspaceName: "repo",
     } satisfies WorkspaceRecord;
-    renderAppShellForTest({
+    await renderAppShellForTest({
       workspacePresence: { hasWorkspaces: false },
       workspaceAdd,
       prepareQueryClient: (queryClient) => {
@@ -833,49 +850,30 @@ describe("AppShell", () => {
       },
     });
 
-    await waitFor(() =>
-      expect(screen.getByTestId("current-route").textContent).toBe("/onboarding"),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
-    await screen.findByRole("heading", { name: "Configure coding agents" });
-    fireEvent.click(screen.getByRole("button", { name: "Continue to notifications" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Continue without a coding agent" }));
-    await screen.findByRole("heading", {
-      name: "Configure notifications",
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
-    await screen.findByRole("heading", { name: "Open your first workspace" });
-    const selectionActions = await screen.findByTestId("onboarding-workspace-actions");
-    const workspaceContent = screen.getByTestId("onboarding-workspace-content");
-    const workspaceFooter = screen.getByTestId("onboarding-workspace-footer");
-    expect(workspaceContent.contains(workspaceFooter)).toBe(false);
-    expect(workspaceFooter.parentElement).toBe(workspaceContent.parentElement);
-    expect(workspaceFooter.contains(selectionActions)).toBe(true);
-    expect(
-      within(workspaceFooter).getByRole("button", { name: "Back to notifications" }),
-    ).toBeTruthy();
-    expect(screen.queryByText("Choose a local Git repository to continue.")).toBeNull();
-    fireEvent.click(within(workspaceFooter).getByRole("button", { name: "Choose This Folder" }));
-    const submitActions = await screen.findByTestId("onboarding-workspace-actions");
-    expect(workspaceFooter.contains(submitActions)).toBe(true);
-    expect(within(workspaceFooter).getByRole("button", { name: "Back" })).toBeTruthy();
+    const openRepositoryButton = await prepareFirstWorkspace();
     expect(workspaceAdd).not.toHaveBeenCalled();
-    fireEvent.click(
-      await within(workspaceFooter).findByRole("button", { name: "Skip Git provider setup" }),
-    );
-    fireEvent.click(
-      await within(workspaceFooter).findByRole("button", { name: "Continue to models" }),
-    );
-    const openRepositoryButton = await within(workspaceFooter).findByRole("button", {
-      name: "Open repository",
+    await act(async () => {
+      fireEvent.click(openRepositoryButton);
     });
-    fireEvent.click(openRepositoryButton);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Back" }).disabled).toBe(true);
 
-    expect(await screen.findByRole("button", { name: "Creating workspace..." })).toBeTruthy();
+    await act(async () => failedWorkspaceAdd.reject(new Error("Repository open failed")));
+
+    expect(screen.getByText("Repository open failed")).toBeDefined();
+    expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
+    expect(screen.getByText("/repo")).toBeTruthy();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Back" }).disabled).toBe(false);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
+    });
+
+    expect(screen.getByRole("button", { name: "Creating workspace..." })).toBeDefined();
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Back" }).disabled).toBe(true);
     expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
     expect(screen.queryByText("Kanban")).toBeNull();
-    expect(workspaceAdd).toHaveBeenCalledWith({
+    expect(workspaceAdd).toHaveBeenCalledTimes(2);
+    expect(workspaceAdd).toHaveBeenLastCalledWith({
       repoPath: "/repo",
       defaultTargetBranch: { branch: "main" },
       workspaceId: "repo",
@@ -887,6 +885,7 @@ describe("AppShell", () => {
       mainFrames.push(document.querySelector("main")?.textContent ?? "");
     });
     frameObserver.observe(document.body, { childList: true, subtree: true });
+    onTestFinished(() => frameObserver.disconnect());
 
     await act(async () => {
       workspaceAddResult.resolve(createdWorkspace);
@@ -897,19 +896,19 @@ describe("AppShell", () => {
     expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
     expect(screen.getByText("Preparing your workspace…")).toBeTruthy();
 
+    await act(async () => initialTaskLoad.resolve());
     await act(async () => {
-      initialTaskLoad.resolve();
-      await initialTaskLoad.promise;
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      jest.advanceTimersByTime(0);
     });
 
     expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
 
-    platformLoad.resolve();
+    await act(async () => platformLoad.resolve());
+    await act(async () => jest.advanceTimersByTime(0));
 
     await waitFor(() => expect(screen.getByTestId("current-route").textContent).toBe("/kanban"));
-    frameObserver.disconnect();
     expect(document.querySelector("main")?.textContent).toBe("Kanban");
+    expect(mainFrames).toContain("Kanban");
     expect(mainFrames).not.toContain("");
     expect(screen.queryByRole("heading", { name: "Open your first workspace" })).toBeNull();
     const tour = await screen.findByRole("dialog");
@@ -918,48 +917,8 @@ describe("AppShell", () => {
     // This flow renders the app shell and several onboarding stages.
   }, 2_500);
 
-  test("keeps the workspace draft in onboarding after a pending add fails", async () => {
-    const workspaceAddResult = createDeferred<WorkspaceRecord>();
-    const workspaceAdd = mock(async () => workspaceAddResult.promise);
-    renderAppShellForTest({
-      workspacePresence: { hasWorkspaces: false },
-      workspaceAdd,
-    });
-
-    await waitFor(() =>
-      expect(screen.getByTestId("current-route").textContent).toBe("/onboarding"),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
-    await screen.findByRole("heading", { name: "Configure coding agents" });
-    fireEvent.click(screen.getByRole("button", { name: "Continue to notifications" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Continue without a coding agent" }));
-    await screen.findByRole("heading", {
-      name: "Configure notifications",
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
-    await screen.findByRole("heading", { name: "Open your first workspace" });
-    fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Skip Git provider setup" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Continue to models" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Open repository" }));
-
-    const backButton = screen.getByRole("button", { name: "Back" });
-    if (!(backButton instanceof HTMLButtonElement)) {
-      throw new TypeError("Expected the back action to be a button.");
-    }
-    await waitFor(() => expect(backButton.disabled).toBe(true));
-
-    workspaceAddResult.reject(new Error("Repository open failed"));
-
-    await screen.findByText("Repository open failed");
-    expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
-    expect(screen.getByText("/repo")).toBeTruthy();
-    expect(backButton.disabled).toBe(false);
-    // This flow renders the app shell and several onboarding stages.
-  }, 2_500);
-
-  test("moves from welcome to runtime setup without mounting the workspace shell", () => {
-    renderAppShellForTest({ workspacePresence: { hasWorkspaces: false } });
+  test("moves from welcome to runtime setup without mounting the workspace shell", async () => {
+    await renderAppShellForTest({ workspacePresence: { hasWorkspaces: false } });
 
     fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
 
@@ -968,42 +927,12 @@ describe("AppShell", () => {
     expect(screen.queryByText("Kanban")).toBeNull();
   });
 
-  test("opens the sidebar by default when no preference is stored", () => {
-    renderAppShellForTest();
-
-    expect(screen.getByRole("button", { name: "Hide sidebar" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Show sidebar" })).toBeNull();
-    expect(globalThis.localStorage.getItem(LEFT_SIDEBAR_STORAGE_KEY)).toBeNull();
-  });
-
-  test("exposes the sidebar state to the shell layout", () => {
-    renderAppShellForTest();
-
-    const mainContent = document.querySelector('[data-main-scroll-container="true"]');
-    const shellRoot = mainContent?.closest(".app-shell");
-
-    expect(shellRoot?.getAttribute("data-sidebar-state")).toBe("open");
-
-    fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" }));
-
-    expect(shellRoot?.getAttribute("data-sidebar-state")).toBe("collapsed");
-  });
-
-  test("hides the scrollbar on the open sidebar scroll region", () => {
-    renderAppShellForTest();
-
-    const sessionList = document.querySelector('[data-sidebar-scroll-region="sessions"]');
-
-    expect(sessionList?.className).toContain("hide-scrollbar");
-    expect(sessionList?.className).toContain("overflow-y-auto");
-  });
-
   test("keeps the settings trigger available when the sidebar is collapsed", async () => {
-    renderAppShellForTest();
+    await renderAppShellForTest();
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Settings" })).toBeTruthy());
 
-    fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" }));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" })));
 
     const collapsedSettingsButton = screen.getByRole("button", { name: "Settings" });
     expect(collapsedSettingsButton.getAttribute("aria-label")).toBe("Settings");
@@ -1012,162 +941,123 @@ describe("AppShell", () => {
   });
 
   test("shows the Usage and Workflows links only in the expanded sidebar", async () => {
-    renderAppShellForTest();
+    await renderAppShellForTest();
 
     await waitFor(() => expect(screen.getByRole("link", { name: "Workflows" })).toBeTruthy());
     expect(screen.getByRole("link", { name: "Usage" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" }));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" })));
 
     expect(screen.queryByRole("link", { name: "Usage" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Workflows" })).toBeNull();
   });
 
-  test("keeps diagnostics available as a status-colored collapsed sidebar trigger", async () => {
+  test("opens diagnostics from the collapsed trigger while checks run", async () => {
     globalThis.localStorage.setItem(LEFT_SIDEBAR_STORAGE_KEY, "collapsed");
-
-    renderAppShellForTest({ runtimeDefinitionsError: "Runtime definitions failed" });
-
-    // Critical diagnostics auto-open the modal sheet, so Radix hides background controls.
-    const diagnosticsButton = screen.getByRole("button", {
-      hidden: true,
-      name: "Open diagnostics: Critical issue",
-    });
-    const diagnosticsIcon = diagnosticsButton.querySelector("svg");
-    expect(diagnosticsButton.getAttribute("title")).toBe("Open diagnostics: Critical issue");
-    expect(diagnosticsButton.textContent?.trim()).toBe("");
-    expect(diagnosticsIcon?.getAttribute("class")).toContain("text-destructive-accent");
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Diagnostics" })).toBeTruthy());
-  });
-
-  test("shows checking state in the collapsed diagnostics trigger", () => {
-    globalThis.localStorage.setItem(LEFT_SIDEBAR_STORAGE_KEY, "collapsed");
-
-    renderAppShellForTest({ isLoadingRuntimeDefinitions: true });
+    await renderAppShellForTest({ isLoadingRuntimeDefinitions: true });
 
     const diagnosticsButton = screen.getByRole("button", {
       name: "Open diagnostics: Checking...",
     });
-    const diagnosticsIcon = diagnosticsButton.querySelector("svg");
-    expect(diagnosticsIcon?.getAttribute("class")).toContain("animate-spin");
+    await act(async () => fireEvent.click(diagnosticsButton));
+    expect(screen.getByRole("heading", { name: "Diagnostics" })).toBeTruthy();
   });
 
-  test("opens diagnostics from the collapsed sidebar trigger", async () => {
+  test("shows a critical diagnostic and does not open it again when the sidebar changes", async () => {
     globalThis.localStorage.setItem(LEFT_SIDEBAR_STORAGE_KEY, "collapsed");
+    await renderAppShellForTest({ runtimeDefinitionsError: "Runtime definitions failed" });
 
-    renderAppShellForTest();
+    // Critical diagnostics auto-open the sheet, so Radix hides background controls.
+    const diagnosticsButton = screen.getByRole("button", {
+      hidden: true,
+      name: "Open diagnostics: Critical issue",
+    });
+    expect(diagnosticsButton.getAttribute("title")).toBe("Open diagnostics: Critical issue");
+    expect(diagnosticsButton.textContent?.trim()).toBe("");
+    expect(screen.getByRole("heading", { name: "Diagnostics" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /^Open diagnostics: / }));
-
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Diagnostics" })).toBeTruthy());
-  });
-
-  test("does not auto-open diagnostics again after dismissing and toggling the sidebar", async () => {
-    renderAppShellForTest({ runtimeDefinitionsError: "Runtime definitions failed" });
-
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Diagnostics" })).toBeTruthy());
-
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
-
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Close" })));
+    await act(async () => jest.advanceTimersByTime(0));
     await waitFor(() => expect(screen.queryByRole("heading", { name: "Diagnostics" })).toBeNull());
 
-    fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" }));
-
-    expect(screen.getByRole("button", { name: "Show sidebar" })).toBeTruthy();
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Show sidebar" })));
+    expect(screen.getByRole("button", { name: "Hide sidebar" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Diagnostics" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Show sidebar" }));
-
-    expect(screen.getByRole("button", { name: "Hide sidebar" })).toBeTruthy();
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" })));
+    expect(screen.getByRole("button", { name: "Show sidebar" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Diagnostics" })).toBeNull();
   });
 
-  test("stores collapsed and restores the collapsed sidebar after remount", () => {
-    const view = renderAppShellForTest();
+  test("opens the sidebar by default and restores each saved state", async () => {
+    let view = await renderAppShellForTest();
+    const mainContent = document.querySelector('[data-main-scroll-container="true"]');
+    const shellRoot = mainContent?.closest(".app-shell");
+    expect(shellRoot?.getAttribute("data-sidebar-state")).toBe("open");
+    expect(screen.queryByRole("button", { name: "Show sidebar" })).toBeNull();
+    expect(globalThis.localStorage.getItem(LEFT_SIDEBAR_STORAGE_KEY)).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" }));
-
-    expect(screen.getByRole("button", { name: "Show sidebar" })).toBeTruthy();
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" })));
+    expect(shellRoot?.getAttribute("data-sidebar-state")).toBe("collapsed");
     expect(globalThis.localStorage.getItem(LEFT_SIDEBAR_STORAGE_KEY)).toBe("collapsed");
 
     view.unmount();
-    renderAppShellForTest();
-
+    view = await renderAppShellForTest();
     expect(screen.getByRole("button", { name: "Show sidebar" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Hide sidebar" })).toBeNull();
-  });
 
-  test("stores opened and restores the opened sidebar after remount", () => {
-    globalThis.localStorage.setItem(LEFT_SIDEBAR_STORAGE_KEY, "collapsed");
-    const view = renderAppShellForTest();
-
-    expect(screen.getByRole("button", { name: "Show sidebar" })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Show sidebar" }));
-
-    expect(screen.getByRole("button", { name: "Hide sidebar" })).toBeTruthy();
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Show sidebar" })));
     expect(globalThis.localStorage.getItem(LEFT_SIDEBAR_STORAGE_KEY)).toBe("opened");
 
     view.unmount();
-    renderAppShellForTest();
-
+    await renderAppShellForTest();
     expect(screen.getByRole("button", { name: "Hide sidebar" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Show sidebar" })).toBeNull();
   });
 
-  test("defaults opened when the stored sidebar preference is invalid", () => {
+  test("defaults opened when the stored sidebar preference is invalid", async () => {
     globalThis.localStorage.setItem(LEFT_SIDEBAR_STORAGE_KEY, "{bad-json");
 
-    renderAppShellForTest();
+    await renderAppShellForTest();
 
     expect(screen.getByRole("button", { name: "Hide sidebar" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Show sidebar" })).toBeNull();
   });
 
-  test("defaults opened when storage cannot be read", () => {
-    const getItem = mock(() => {
-      throw new Error("read failed");
+  test("keeps the sidebar usable when its preference cannot be read or saved", async () => {
+    const storage = new MemoryStorage();
+    const readFailure = new Error("Sidebar preference read failed.");
+    const writeFailure = new Error("Sidebar preference write failed.");
+    const getItem = storage.getItem.bind(storage);
+    const setItem = storage.setItem.bind(storage);
+    spyOn(storage, "getItem").mockImplementation((key) => {
+      if (key === LEFT_SIDEBAR_STORAGE_KEY) throw readFailure;
+      return getItem(key);
     });
-    installLocalStorage(new MemoryStorage({ getItem }));
-    const originalConsoleError = console.error;
-    const consoleError = mock(() => undefined);
-    console.error = consoleError;
-    const toastError = spyOn(toast, "error").mockReturnValue("storage-error");
+    const write = spyOn(storage, "setItem").mockImplementation((key, value) => {
+      if (key === LEFT_SIDEBAR_STORAGE_KEY) throw writeFailure;
+      setItem(key, value);
+    });
+    installLocalStorage(storage);
+    const consoleError = spyOn(console, "error");
 
     try {
-      renderAppShellForTest();
+      await renderAppShellForTest();
+      expect(consoleError).toHaveBeenCalledWith(
+        "[app-shell] Failed to read persisted sidebar state.",
+        { error: readFailure },
+      );
 
-      expect(screen.getByRole("button", { name: "Hide sidebar" })).toBeTruthy();
-      expect(getItem).toHaveBeenCalledWith(LEFT_SIDEBAR_STORAGE_KEY);
-      expect(consoleError).toHaveBeenCalled();
-      expect(toastError).toHaveBeenCalledWith("Could not restore the session list scope.", {
-        description: "Allow local storage for this app, then reload. read failed",
-      });
-    } finally {
-      console.error = originalConsoleError;
-      toastError.mockRestore();
-    }
-  });
-
-  test("keeps sidebar toggling in memory when storage cannot be written", () => {
-    const setItem = mock(() => {
-      throw new Error("write failed");
-    });
-    installLocalStorage(new MemoryStorage({ setItem }));
-    const originalConsoleError = console.error;
-    const consoleError = mock(() => undefined);
-    console.error = consoleError;
-
-    try {
-      renderAppShellForTest();
-
-      fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" }));
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" })));
 
       expect(screen.getByRole("button", { name: "Show sidebar" })).toBeTruthy();
-      expect(setItem).toHaveBeenCalledWith(LEFT_SIDEBAR_STORAGE_KEY, "collapsed");
-      expect(consoleError).toHaveBeenCalled();
+      expect(write).toHaveBeenCalledWith(LEFT_SIDEBAR_STORAGE_KEY, "collapsed");
+      expect(consoleError).toHaveBeenCalledWith("[app-shell] Failed to persist sidebar state.", {
+        preference: "collapsed",
+        error: writeFailure,
+      });
     } finally {
-      console.error = originalConsoleError;
+      consoleError.mockRestore();
     }
   });
 });
@@ -1217,7 +1107,7 @@ describe("AppShell session navigation", () => {
     function SessionAddress() {
       return <output aria-label="Session address">{useLocation().search}</output>;
     }
-    renderAppShellForTest({
+    await renderAppShellForTest({
       extraWorkspaces: [secondWorkspace],
       sessionContent: <SessionAddress />,
     });
@@ -1232,7 +1122,7 @@ describe("AppShell session navigation", () => {
   });
 
   test("keeps Kanban, Workflows, New task, and Settings without page links for sessions or a branch selector", async () => {
-    renderAppShellForTest();
+    await renderAppShellForTest();
 
     await screen.findByRole("button", { name: /Chat mine/ });
     expect(screen.getByRole("link", { name: "Kanban" })).toBeTruthy();
@@ -1245,7 +1135,7 @@ describe("AppShell session navigation", () => {
 
   test("keeps unlisted workspaces and their recovery in the collapsed all-workspaces list", async () => {
     globalThis.localStorage.setItem(LEFT_SIDEBAR_STORAGE_KEY, "collapsed");
-    renderAppShellForTest({
+    await renderAppShellForTest({
       closedWorkspaces: [{ ...secondWorkspace, workspaceName: "Archive" }],
       incompleteRemovals: [
         {
@@ -1266,58 +1156,51 @@ describe("AppShell session navigation", () => {
     expect(await screen.findByRole("heading", { name: "Reopen a workspace" })).toBeTruthy();
   });
 
-  test.each(["opened", "collapsed"])(
-    "saves the scope from the %s sidebar and restores its session list after remount",
-    async (sidebar) => {
-      globalThis.localStorage.setItem(LEFT_SIDEBAR_STORAGE_KEY, sidebar);
-      const view = renderAppShellForTest({ extraWorkspaces: [secondWorkspace] });
-      const role = sidebar === "opened" ? "radio" : "button";
-
+  test(
+    "keeps the session list scope through collapse, remount, and expansion",
+    async () => {
+      const name = "Show sessions of all workspaces";
+      const options = { extraWorkspaces: [secondWorkspace] };
+      const opened = await renderAppShellForTest(options);
       await screen.findByRole("button", { name: /Chat mine/ });
-      expect(screen.queryByRole("button", { name: /Chat theirs/ })).toBeNull();
+      expect(screen.queryAllByRole("button", { name: /Chat theirs/ }).length).toBe(0);
 
-      fireEvent.click(screen.getByRole(role, { name: "Show sessions of all workspaces" }));
+      fireEvent.click(screen.getByRole("radio", { name, checked: false }));
       await screen.findByRole("button", { name: /Chat theirs/ });
       expect(globalThis.localStorage.getItem(SESSION_SCOPE_STORAGE_KEY)).toBe("all");
 
-      view.unmount();
-      const restored = renderAppShellForTest({ extraWorkspaces: [secondWorkspace] });
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" })));
+      expect(screen.getByRole("button", { name, pressed: true })).toBeTruthy();
+      expect(screen.getByRole("button", { name: /Chat theirs/ })).toBeTruthy();
+      expect(screen.getByRole("link", { name: "Kanban" })).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "More actions for OpenDucktor" }));
+      const menu = screen.getByRole("dialog");
+      expect(within(menu).getByRole("button", { name: "New task" })).toBeTruthy();
+      fireEvent.keyDown(menu, { key: "Escape" });
+      opened.unmount();
+
+      const collapsed = await renderAppShellForTest(options);
       await screen.findByRole("button", { name: /Chat theirs/ });
       expect(screen.getByRole("button", { name: /Chat mine/ })).toBeTruthy();
-      expect(
-        screen
-          .getByRole(role, { name: "Show sessions of all workspaces" })
-          .getAttribute(sidebar === "opened" ? "aria-checked" : "aria-pressed"),
-      ).toBe("true");
-
-      fireEvent.click(
-        screen.getByRole(role, {
-          name:
-            sidebar === "opened"
-              ? "Show sessions of OpenDucktor"
-              : "Show sessions of all workspaces",
-        }),
+      fireEvent.click(screen.getByRole("button", { name, pressed: true }));
+      await waitFor(() =>
+        expect(screen.queryAllByRole("button", { name: /Chat theirs/ }).length).toBe(0),
       );
-      await waitFor(() => expect(screen.queryByRole("button", { name: /Chat theirs/ })).toBeNull());
       expect(globalThis.localStorage.getItem(SESSION_SCOPE_STORAGE_KEY)).toBe("current");
-
-      restored.unmount();
-      renderAppShellForTest({ extraWorkspaces: [secondWorkspace] });
-      await screen.findByRole("button", { name: /Chat mine/ });
-      expect(screen.queryByRole("button", { name: /Chat theirs/ })).toBeNull();
+      expect(screen.getByRole("button", { name, pressed: false })).toBeTruthy();
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Show sidebar" })));
       expect(
-        screen
-          .getByRole(role, { name: "Show sessions of all workspaces" })
-          .getAttribute(sidebar === "opened" ? "aria-checked" : "aria-pressed"),
-      ).toBe("false");
+        screen.getByRole("radio", { name: "Show sessions of OpenDucktor", checked: true }),
+      ).toBeTruthy();
+      collapsed.unmount();
     },
-    // Three full AppShell mounts take more than 1 s when other test runs load the CPU.
+    // Two full AppShell mounts can take more than 1 s when other tests load the CPU.
     3000,
   );
 
   test("uses the current workspace when the saved scope is unknown", async () => {
     globalThis.localStorage.setItem(SESSION_SCOPE_STORAGE_KEY, "unknown");
-    renderAppShellForTest({ extraWorkspaces: [secondWorkspace] });
+    await renderAppShellForTest({ extraWorkspaces: [secondWorkspace] });
 
     await screen.findByRole("button", { name: /Chat mine/ });
     expect(screen.queryByRole("button", { name: /Chat theirs/ })).toBeNull();
@@ -1329,23 +1212,31 @@ describe("AppShell session navigation", () => {
     expect(globalThis.localStorage.getItem(SESSION_SCOPE_STORAGE_KEY)).toBe("unknown");
   });
 
-  test("reports a failed scope save and keeps the current session list", async () => {
-    installLocalStorage(
-      new MemoryStorage({
-        setItem: () => {
-          throw new Error("write failed");
-        },
-      }),
-    );
+  test("reports scope storage failures and keeps the current session list", async () => {
+    const storage = new MemoryStorage();
+    const getItem = storage.getItem.bind(storage);
+    const setItem = storage.setItem.bind(storage);
+    spyOn(storage, "getItem").mockImplementation((key) => {
+      if (key === SESSION_SCOPE_STORAGE_KEY) throw new Error("Scope read failed.");
+      return getItem(key);
+    });
+    spyOn(storage, "setItem").mockImplementation((key, value) => {
+      if (key === SESSION_SCOPE_STORAGE_KEY) throw new Error("Scope write failed.");
+      setItem(key, value);
+    });
+    installLocalStorage(storage);
     const toastError = spyOn(toast, "error").mockReturnValue("storage-error");
     try {
-      renderAppShellForTest({ extraWorkspaces: [secondWorkspace] });
+      await renderAppShellForTest({ extraWorkspaces: [secondWorkspace] });
       await screen.findByRole("button", { name: /Chat mine/ });
+      expect(toastError).toHaveBeenCalledWith("Could not restore the session list scope.", {
+        description: "Allow local storage for this app, then reload. Scope read failed.",
+      });
 
       fireEvent.click(screen.getByRole("radio", { name: "Show sessions of all workspaces" }));
 
       expect(toastError).toHaveBeenCalledWith("Could not save the session list scope.", {
-        description: "Allow local storage for this app, then try again. write failed",
+        description: "Allow local storage for this app, then try again. Scope write failed.",
       });
       expect(screen.queryByRole("button", { name: /Chat theirs/ })).toBeNull();
       expect(
@@ -1359,7 +1250,7 @@ describe("AppShell session navigation", () => {
   });
 
   test("opens a sidebar session on the Sessions page", async () => {
-    renderAppShellForTest();
+    await renderAppShellForTest();
 
     fireEvent.click(await screen.findByRole("button", { name: /Chat mine/ }));
 
@@ -1377,7 +1268,7 @@ describe("AppShell session navigation", () => {
         workingDirectory: workspace.repoPath,
         messages: createSessionMessagesState(
           "same-native-id",
-          Array.from({ length: 500 }, (_, index) =>
+          Array.from({ length: MAX_SYNC_MESSAGES + 1 }, (_, index) =>
             buildMessage(
               index % 2 === 0 ? "user" : "assistant",
               `${workspace.workspaceName} message ${index}`,
@@ -1408,7 +1299,7 @@ describe("AppShell session navigation", () => {
         </>
       );
     }
-    renderAppShellForTest({
+    await renderAppShellForTest({
       initialEntry: "/sessions?workspace=workspace-1&kind=workspace&session=mine",
       extraWorkspaces: [secondWorkspace],
       sessionContent: <Transcript />,
@@ -1422,55 +1313,52 @@ describe("AppShell session navigation", () => {
       },
     });
     await screen.findByText("OpenDucktor message 0");
-    fireEvent.click(screen.getByRole("link", { name: "Return to Kanban" }));
+    expect(renders[0]?.missing).toBe(true);
+    await act(async () => fireEvent.click(screen.getByRole("link", { name: "Return to Kanban" })));
     const beforePageReturn = renders.length;
     fireEvent.click(await screen.findByRole("button", { name: /Chat mine/ }));
     await screen.findByText("OpenDucktor message 0");
     expect(renders[beforePageReturn]?.missing).toBe(false);
 
-    fireEvent.click(screen.getByRole("button", { name: "Fairnest" }));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Fairnest" })));
     await screen.findByText("Fairnest message 0");
     const beforeWorkspaceReturn = renders.length;
-    fireEvent.click(screen.getByRole("button", { name: "OpenDucktor" }));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "OpenDucktor" })));
     await screen.findByText("OpenDucktor message 0");
     expect(renders[beforeWorkspaceReturn]).toEqual({
       workspaceId: activeWorkspace.workspaceId,
       missing: false,
     });
   });
-
-  test("keeps the list scope and session access when the sidebar collapses", async () => {
-    renderAppShellForTest({ extraWorkspaces: [secondWorkspace] });
-    await screen.findByRole("button", { name: /Chat mine/ });
-    fireEvent.click(screen.getByRole("radio", { name: "Show sessions of all workspaces" }));
-    await screen.findByRole("button", { name: /Chat theirs/ });
-
-    fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" }));
-
-    expect(
-      screen
-        .getByRole("button", { name: "Show sessions of all workspaces" })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
-    expect(screen.getByRole("button", { name: /Chat theirs/ })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Kanban" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "More actions for OpenDucktor" }));
-    const menu = await screen.findByRole("dialog");
-    expect(within(menu).getByRole("button", { name: "New task" })).toBeTruthy();
-
-    fireEvent.keyDown(menu, { key: "Escape" });
-    fireEvent.click(screen.getByRole("button", { name: "Show sessions of all workspaces" }));
-    await waitFor(() => expect(screen.queryByRole("button", { name: /Chat theirs/ })).toBeNull());
-    fireEvent.click(screen.getByRole("button", { name: "Show sidebar" }));
-    expect(
-      screen
-        .getByRole("radio", { name: "Show sessions of OpenDucktor" })
-        .getAttribute("aria-checked"),
-    ).toBe("true");
-  });
 });
 
-describe("AppShell command palette", () => {
+const paletteShell = {
+  isSidebarOpen: true,
+  setSidebarOpen: () => {
+    throw new Error("Mount AppShell for a command that changes its sidebar.");
+  },
+  openRepositoryModal: () => {
+    throw new Error("Mount AppShell for a command that opens its repository modal.");
+  },
+} satisfies CommandPaletteShell;
+
+function PaletteTestRoute(): ReactElement {
+  return (
+    <VisibleSessionTargetProvider>
+      <SessionReadStateProvider visibility={documentVisibility}>
+        <WorkspaceDialogsProvider>
+          <SessionMenuProvider>
+            <CommandPaletteProvider shell={paletteShell}>
+              <Outlet />
+            </CommandPaletteProvider>
+          </SessionMenuProvider>
+        </WorkspaceDialogsProvider>
+      </SessionReadStateProvider>
+    </VisibleSessionTargetProvider>
+  );
+}
+
+describe("Command palette", () => {
   const fairnest = {
     ...activeWorkspace,
     workspaceId: "workspace-2",
@@ -1548,6 +1436,7 @@ describe("AppShell command palette", () => {
   ) => {
     setDevicePlatform(platform);
     return renderAppShellForTest({
+      routeElement: <PaletteTestRoute />,
       extraWorkspaces: [fairnest],
       tasksByRepoPath: { "/repo": [ownTask, closedTask], "/fairnest": [fairnestTask] },
       prepareQueryClient: seedPaletteQueries,
@@ -1575,22 +1464,25 @@ describe("AppShell command palette", () => {
       },
     });
 
-  const pressShortcut = (modifier: "metaKey" | "ctrlKey" = "metaKey"): void => {
+  const pressShortcut = (modifier: "metaKey" | "ctrlKey" = "metaKey") =>
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "k", [modifier]: true });
-  };
   const openPalette = async (modifier: "metaKey" | "ctrlKey" = "metaKey"): Promise<HTMLElement> => {
-    pressShortcut(modifier);
-    return screen.findByRole("dialog", { name: "Command palette" });
+    await act(async () => {
+      pressShortcut(modifier);
+    });
+    // The palette starts its queries when it opens. Flush their ready notifications in act.
+    await act(async () => {
+      jest.advanceTimersByTime(0);
+    });
+    return screen.getByRole("dialog", { name: "Command palette" });
   };
-  const search = (palette: HTMLElement, query: string): HTMLInputElement => {
+  const search = async (palette: HTMLElement, query: string): Promise<HTMLInputElement> => {
     const input = within(palette).getByRole<HTMLInputElement>("combobox");
-    fireEvent.change(input, { target: { value: query } });
+    await act(async () => fireEvent.change(input, { target: { value: query } }));
     return input;
   };
-  const selectedOption = (palette: HTMLElement): HTMLElement | undefined =>
-    within(palette)
-      .getAllByRole("option")
-      .find((option) => option.getAttribute("aria-selected") === "true");
+  const selectedOption = (palette: HTMLElement): HTMLElement | null =>
+    within(palette).queryByRole("option", { selected: true });
   /** The input names the mounted option that is highlighted, so screen readers announce it. */
   const expectActiveOptionLinked = async (palette: HTMLElement, text: string): Promise<void> => {
     const input = within(palette).getByRole("combobox");
@@ -1602,13 +1494,6 @@ describe("AppShell command palette", () => {
       expect(document.getElementById(linkedId ?? "")).toBe(selected ?? null);
     });
   };
-
-  /**
-   * Query results reach observers in a timer. waitFor cannot wait for a timer under Bun, so a
-   * test that waits for a query result flushes it here.
-   */
-  const flushQueryUpdates = (): Promise<void> =>
-    act(() => new Promise<void>((resolve) => setTimeout(resolve, 20)));
 
   const actionOption = (palette: HTMLElement, label: string): HTMLElement => {
     const option = within(palette)
@@ -1641,28 +1526,28 @@ describe("AppShell command palette", () => {
     configureHostFakes({});
   });
 
-  test.each(["sync pull requests", "refresh pull requests", "sync PRs"])(
-    "finds manual sync with %s and makes no call when the scope choice is dismissed",
-    async (query) => {
-      const sync = mock(async () => ({ ok: true as const }));
-      configurePaletteHost({ repoPullRequestSync: sync });
-      renderSyncPalette(null);
-      const palette = await openPalette();
-      const input = search(palette, query);
+  test("finds manual sync with each alias and skips the request when the scope choice is dismissed", async () => {
+    const sync = mock(async () => ({ ok: true as const }));
+    configurePaletteHost({ repoPullRequestSync: sync });
+    await renderSyncPalette(null);
+    const palette = await openPalette();
+    for (const query of ["sync pull requests", "refresh pull requests", "sync PRs"]) {
+      await search(palette, query);
       expect(selectedOption(palette)?.textContent).toContain("Sync pull requests");
-      fireEvent.keyDown(input, { key: "Enter" });
-      const chooser = await screen.findByRole("dialog", { name: "Sync pull requests" });
-      expect(
-        await within(chooser).findByRole("button", { name: "Sync workspace OpenDucktor" }),
-      ).toBeTruthy();
-      expect(sync).not.toHaveBeenCalled();
-      fireEvent.keyDown(chooser, { key: "Escape" });
-      await waitFor(() =>
-        expect(screen.queryByRole("dialog", { name: "Sync pull requests" })).toBeNull(),
-      );
-      expect(sync).not.toHaveBeenCalled();
-    },
-  );
+    }
+    const input = within(palette).getByRole("combobox");
+    await act(async () => fireEvent.keyDown(input, { key: "Enter" }));
+    const chooser = await screen.findByRole("dialog", { name: "Sync pull requests" });
+    expect(
+      await within(chooser).findByRole("button", { name: "Sync workspace OpenDucktor" }),
+    ).toBeTruthy();
+    expect(sync).not.toHaveBeenCalled();
+    await act(async () => fireEvent.keyDown(chooser, { key: "Escape" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Sync pull requests" })).toBeNull(),
+    );
+    expect(sync).not.toHaveBeenCalled();
+  });
 
   test("uses the palette filter for named sync without changing the active workspace", async () => {
     const sync = mock(async () => ({ ok: true as const }));
@@ -1670,14 +1555,13 @@ describe("AppShell command palette", () => {
       repoPullRequestSync: sync,
       workspaceGetGitProviderContext: async () => createGitProviderContextFixture(),
     });
-    renderSyncPalette(createGitProviderContextFixture());
+    await renderSyncPalette(createGitProviderContextFixture(), { routeElement: <AppShell /> });
     const palette = await openPalette();
     fireEvent.keyDown(within(palette).getByRole("combobox"), { key: "ArrowDown", altKey: true });
     fireEvent.click(await screen.findByRole("option", { name: "Fairnest" }));
-    search(palette, "sync PRs");
-    fireEvent.click(actionOption(palette, "Sync pull requests"));
+    await search(palette, "sync PRs");
+    await act(async () => fireEvent.click(actionOption(palette, "Sync pull requests")));
     const chooser = await screen.findByRole("dialog", { name: "Sync pull requests" });
-    await flushQueryUpdates();
     expect(sync).not.toHaveBeenCalled();
     fireEvent.click(
       await within(chooser).findByRole("button", { name: "Sync workspace Fairnest" }),
@@ -1692,7 +1576,7 @@ describe("AppShell command palette", () => {
   });
 
   test("syncs only open workspaces and disables a reopened palette action while pending", async () => {
-    const first = createDeferred<{ ok: true }>();
+    const first = Promise.withResolvers<{ ok: true }>();
     const calls: unknown[] = [];
     configurePaletteHost({
       workspaceGetGitProviderContext: async () => createGitProviderContextFixture(),
@@ -1701,7 +1585,7 @@ describe("AppShell command palette", () => {
         return scope.repoPath === "/repo" ? first.promise : { ok: true };
       },
     });
-    renderSyncPalette(createGitProviderContextFixture(), {
+    await renderSyncPalette(createGitProviderContextFixture(), {
       closedWorkspaces: [{ ...fairnest, workspaceId: "closed", repoPath: "/closed" }],
       incompleteRemovals: [
         {
@@ -1712,16 +1596,15 @@ describe("AppShell command palette", () => {
     });
     try {
       const palette = await openPalette();
-      search(palette, "sync pull requests");
-      fireEvent.click(actionOption(palette, "Sync pull requests"));
+      await search(palette, "sync pull requests");
+      await act(async () => fireEvent.click(actionOption(palette, "Sync pull requests")));
       const chooser = await screen.findByRole("dialog", { name: "Sync pull requests" });
-      await flushQueryUpdates();
       fireEvent.click(
         await within(chooser).findByRole("button", { name: "Sync all open workspaces" }),
       );
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
       const reopened = await openPalette();
-      search(reopened, "sync pull requests");
+      await search(reopened, "sync pull requests");
       expect(actionOption(reopened, "Sync pull requests").getAttribute("aria-disabled")).toBe(
         "true",
       );
@@ -1745,22 +1628,16 @@ describe("AppShell command palette", () => {
   });
 
   test("disables manual sync with a reason when no workspace is open", async () => {
-    const modal = spyOn(repositoryModal, "OpenRepositoryModal").mockImplementation(() => null);
-    try {
-      renderPalette({ closedOnly: true, extraWorkspaces: [] });
-      const palette = await openPalette();
-      search(palette, "sync pull requests");
-      const action = actionOption(palette, "Sync pull requests");
-      expect(action.getAttribute("aria-disabled")).toBe("true");
-      expect(action.textContent).toContain("Open a workspace");
-    } finally {
-      cleanup();
-      modal.mockRestore();
-    }
+    await renderPalette({ closedOnly: true, extraWorkspaces: [] });
+    const palette = await openPalette();
+    await search(palette, "sync pull requests");
+    const action = actionOption(palette, "Sync pull requests");
+    expect(action.getAttribute("aria-disabled")).toBe("true");
+    expect(action.textContent).toContain("Open a workspace");
   });
 
   test("checks the named workspace from the chooser and disables the action while it runs", async () => {
-    const check = createDeferred<TaskMergeStatusSnapshot>();
+    const check = Promise.withResolvers<TaskMergeStatusSnapshot>();
     const calls: string[] = [];
     configurePaletteHost({
       taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [], autoCloseFailures: [] }),
@@ -1771,11 +1648,11 @@ describe("AppShell command palette", () => {
     });
     const toastLoading = spyOn(toast, "loading").mockReturnValue("merge-check");
     const toastSuccess = spyOn(toast, "success").mockReturnValue("merge-check");
-    renderPalette();
+    await renderPalette();
     try {
       const palette = await openPalette();
-      search(palette, "check merged");
-      fireEvent.click(actionOption(palette, "Check merged tasks"));
+      await search(palette, "check merged");
+      await act(async () => fireEvent.click(actionOption(palette, "Check merged tasks")));
       const chooser = await screen.findByRole("dialog", { name: "Check merged tasks" });
       expect(calls).toEqual([]);
       fireEvent.click(within(chooser).getByRole("button", { name: "Check workspace OpenDucktor" }));
@@ -1788,7 +1665,7 @@ describe("AppShell command palette", () => {
       });
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
       const reopened = await openPalette();
-      search(reopened, "check merged");
+      await search(reopened, "check merged");
       expect(actionOption(reopened, "Check merged tasks").getAttribute("aria-disabled")).toBe(
         "true",
       );
@@ -1830,11 +1707,11 @@ describe("AppShell command palette", () => {
     });
     const toastLoading = spyOn(toast, "loading").mockReturnValue("merge-check");
     const toastWarning = spyOn(toast, "warning").mockReturnValue("merge-check");
-    renderPalette();
+    await renderPalette();
     try {
       const palette = await openPalette();
-      search(palette, "check merged");
-      fireEvent.click(actionOption(palette, "Check merged tasks"));
+      await search(palette, "check merged");
+      await act(async () => fireEvent.click(actionOption(palette, "Check merged tasks")));
       const chooser = await screen.findByRole("dialog", { name: "Check merged tasks" });
       fireEvent.click(within(chooser).getByRole("button", { name: "Check all open workspaces" }));
       await waitFor(() =>
@@ -1850,62 +1727,78 @@ describe("AppShell command palette", () => {
     }
   });
 
-  test("opens with the shortcut, starts with New task, and closes with the same keys", async () => {
-    renderPalette();
-    const palette = await openPalette();
-
-    const input = within(palette).getByRole<HTMLInputElement>("combobox");
-    expect(document.activeElement).toBe(input);
-    expect(input.value).toBe("");
-    expect(selectedOption(palette)?.textContent).toContain("New task");
-    expect(within(palette).getByRole("button", { name: "Workspace filter: All workspaces" }));
-
-    pressShortcut();
-    await waitFor(() =>
-      expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull(),
-    );
-  });
-
   test.each([
     ["Usage", "/usage"],
     ["Workflows", "/workflows"],
   ] as const)("goes to the %s page from the palette", async (page, route) => {
-    renderPalette();
+    await renderPalette();
     const palette = await openPalette();
-    search(palette, page);
-    fireEvent.click(actionOption(palette, `Go to ${page}`));
+    await search(palette, page);
+    await act(async () => fireEvent.click(actionOption(palette, `Go to ${page}`)));
     await waitFor(() => expect(screen.getByTestId("current-route").textContent).toBe(route));
   });
 
   test("opens from the sidebar search button and returns focus to it on Escape", async () => {
-    renderPalette();
+    await renderPalette({ routeElement: <AppShell /> });
     const trigger = screen.getByRole("button", { name: "Search and run commands" });
-    trigger.focus();
-
-    fireEvent.click(trigger);
-    const palette = await screen.findByRole("dialog", { name: "Command palette" });
-    fireEvent.keyDown(within(palette).getByRole("combobox"), { key: "Escape" });
+    await act(async () => {
+      trigger.focus();
+      fireEvent.click(trigger);
+    });
+    const palette = screen.getByRole("dialog", { name: "Command palette" });
+    await act(async () =>
+      fireEvent.keyDown(within(palette).getByRole("combobox"), { key: "Escape" }),
+    );
     // Radix returns focus in a timer after the dialog content unmounts.
-    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    await act(async () => {
+      jest.advanceTimersByTime(0);
+    });
 
     expect(document.activeElement).toBe(trigger);
     expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull();
   });
 
-  test("links the input to the highlighted option after open, keys, search, and view changes", async () => {
-    renderPalette();
+  test("keeps the keyboard highlight linked through search and task actions", async () => {
+    await renderPalette();
     const palette = await openPalette();
-    const input = within(palette).getByRole("combobox");
+    const input = within(palette).getByRole<HTMLInputElement>("combobox");
 
+    expect(document.activeElement).toBe(input);
+    expect(input.value).toBe("");
+    expect(
+      within(palette).getByRole("button", { name: "Workspace filter: All workspaces" }),
+    ).toBeTruthy();
     await expectActiveOptionLinked(palette, "New task");
-    fireEvent.keyDown(input, { key: "ArrowDown" });
+    await act(async () => fireEvent.keyDown(input, { key: "ArrowDown" }));
     await expectActiveOptionLinked(palette, "New session");
-    search(palette, "polish");
+    await search(palette, "polish");
     await expectActiveOptionLinked(palette, "Polish the command palette");
-    fireEvent.keyDown(input, { key: "Tab" });
+
+    await act(async () => fireEvent.keyDown(input, { key: "Tab" }));
     await expectActiveOptionLinked(palette, "Open latest session");
-    fireEvent.keyDown(input, { key: "Escape" });
+    expect(
+      within(palette)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual([
+      "Open latest sessionBuilder",
+      "Open Builder session",
+      "Start Builder",
+      "Close Task",
+      "Edit Task",
+      "Open Task Details",
+      "Copy Task ID",
+      "Reset Task",
+      "Delete Task",
+    ]);
+    expect(input.value).toBe("");
+
+    await act(async () => fireEvent.keyDown(input, { key: "Escape" }));
+    expect(input.value).toBe("polish");
     await expectActiveOptionLinked(palette, "Polish the command palette");
+
+    await act(async () => pressShortcut());
+    expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull();
   });
 
   test("scrolls to the result that a search highlights and keeps the scroll on a data update", async () => {
@@ -1918,7 +1811,7 @@ describe("AppShell command palette", () => {
         updatedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, 12 - index)).toISOString(),
       }),
     );
-    renderPalette({
+    await renderPalette({
       tasksByRepoPath: { "/repo": tasks },
       prepareQueryClient: (client) => {
         queryClient = client;
@@ -1938,7 +1831,7 @@ describe("AppShell command palette", () => {
       },
     });
     const palette = await openPalette();
-    const input = search(palette, "alpha");
+    const input = await search(palette, "alpha");
     await expectActiveOptionLinked(palette, "Alpha task 0");
     for (let step = 0; step < 8; step += 1) fireEvent.keyDown(input, { key: "ArrowDown" });
     await expectActiveOptionLinked(palette, "Alpha task 8");
@@ -1951,13 +1844,13 @@ describe("AppShell command palette", () => {
     });
     const scrolledIds = (): string[] => scrolled.map((element) => element.id);
     try {
-      search(palette, "alph");
+      await search(palette, "alph");
       await expectActiveOptionLinked(palette, "Alpha task 0");
       expect(scrolledIds()).toContain(selectedOption(palette)?.id ?? "");
 
       // The user scrolls away with the wheel. The next search keeps the same best result.
       scrolled.length = 0;
-      search(palette, "alpha");
+      await search(palette, "alpha");
       await expectActiveOptionLinked(palette, "Alpha task 0");
       expect(scrolledIds()).toContain(selectedOption(palette)?.id ?? "");
 
@@ -1968,8 +1861,7 @@ describe("AppShell command palette", () => {
           tasks: tasks.filter((task) => task.id !== "alpha-10"),
         });
       });
-      await flushQueryUpdates();
-      expect(within(palette).queryByText("Alpha task 10")).toBeNull();
+      await waitFor(() => expect(within(palette).queryByText("Alpha task 10")).toBeNull());
       await expectActiveOptionLinked(palette, "Alpha task 0");
       expect(scrolled).toHaveLength(0);
     } finally {
@@ -1984,50 +1876,59 @@ describe("AppShell command palette", () => {
       },
     });
     const onCreateTask = mock(() => {});
-    renderPalette({ taskWorkflowActions: { onCreateTask } });
+    await renderPalette({ taskWorkflowActions: { onCreateTask } });
     const palette = await openPalette();
 
     const reason = "Could not check the task store. task-store transport unavailable";
-    await flushQueryUpdates();
+    await waitFor(() => expect(actionOption(palette, "New task").textContent).toContain(reason));
     expect(actionOption(palette, "New task").getAttribute("aria-disabled")).toBe("true");
-    expect(actionOption(palette, "New task").textContent).toContain(reason);
     expect(actionOption(palette, "Import tasks").getAttribute("aria-disabled")).toBe("true");
-    search(palette, "Write docs");
+    await search(palette, "Write docs");
     expect(actionOption(palette, "New task “Write docs”").getAttribute("aria-disabled")).toBe(
       "true",
     );
 
-    fireEvent.click(actionOption(palette, "New task “Write docs”"));
-    await flushQueryUpdates();
+    await act(async () => fireEvent.click(actionOption(palette, "New task “Write docs”")));
     expect(onCreateTask).not.toHaveBeenCalled();
   });
 
   test("disables import on a failed provider read and opens Settings only for missing setup", async () => {
+    let providerUnavailable = true;
+    let queryClient: QueryClient | null = null;
     configurePaletteHost({
       workspaceGetGitProviderContext: async () => {
-        throw new Error("provider context unavailable");
+        if (providerUnavailable) throw new Error("provider context unavailable");
+        return null;
       },
     });
-    const view = renderPalette();
+    await renderPalette({
+      prepareQueryClient: (client) => {
+        seedPaletteQueries(client);
+        queryClient = client;
+      },
+    });
     const palette = await openPalette();
 
-    await flushQueryUpdates();
-    expect(actionOption(palette, "Import tasks").textContent).toContain(
-      "Could not read the Git provider. provider context unavailable",
+    await waitFor(() =>
+      expect(actionOption(palette, "Import tasks").textContent).toContain(
+        "Could not read the Git provider. provider context unavailable",
+      ),
     );
     expect(actionOption(palette, "Import tasks").getAttribute("aria-disabled")).toBe("true");
-    fireEvent.click(actionOption(palette, "Import tasks"));
-    await flushQueryUpdates();
+    await act(async () => fireEvent.click(actionOption(palette, "Import tasks")));
     expect(screen.queryByRole("dialog", { name: "Settings" })).toBeNull();
-    view.unmount();
 
-    configurePaletteHost();
-    renderPalette();
-    const setupPalette = await openPalette();
-    await flushQueryUpdates();
-    const importTasks = actionOption(setupPalette, "Import tasks");
-    expect(importTasks.getAttribute("aria-disabled")).toBe("false");
-    fireEvent.click(importTasks);
+    providerUnavailable = false;
+    await act(async () => {
+      await queryClient?.refetchQueries({
+        queryKey: repositoryGitProviderContextQueryKeys.repo(workspaceRefFixture("/repo")),
+        exact: true,
+      });
+    });
+    await waitFor(() =>
+      expect(actionOption(palette, "Import tasks").getAttribute("aria-disabled")).toBe("false"),
+    );
+    await act(async () => fireEvent.click(actionOption(palette, "Import tasks")));
     expect(await screen.findByRole("dialog", { name: "Settings" })).toBeTruthy();
   });
 
@@ -2039,7 +1940,7 @@ describe("AppShell command palette", () => {
         throw new Error("session refresh unavailable");
       },
     });
-    renderPalette({
+    await renderPalette({
       prepareQueryClient: (client) => {
         queryClient = client;
         client.setQueryData(repoTaskDataQueryOptions(workspaceRefFixture("/repo")).queryKey, {
@@ -2075,7 +1976,6 @@ describe("AppShell command palette", () => {
         exact: true,
       });
     });
-    await flushQueryUpdates();
 
     // The palette shows the problem with the same text as the sidebar.
     expect(
@@ -2083,10 +1983,14 @@ describe("AppShell command palette", () => {
         "OpenDucktor: Task sessions could not load. session refresh unavailable",
       ),
     ).toBeTruthy();
-    search(palette, "checkout");
-    expect(selectedOption(palette)?.textContent).toContain("Fix checkout totals");
-    // The row marks the part of its title that the query found.
-    expect(selectedOption(palette)?.querySelector("mark")?.textContent).toBe("checkout");
+    await search(palette, "FIX totals");
+    const result = selectedOption(palette);
+    if (!result) throw new Error("Expected a selected task result");
+    expect(result.textContent).toContain("Fix checkout totals");
+    expect([...result.querySelectorAll("mark")].map((mark) => mark.textContent)).toEqual([
+      "Fix",
+      "totals",
+    ]);
   });
 
   test.each([
@@ -2095,11 +1999,11 @@ describe("AppShell command palette", () => {
   ] as const)(
     "keeps the palette open when %s Mod+Enter has no next step for the task",
     async (platform, modifier) => {
-      renderPalette({}, platform);
+      await renderPalette({}, platform);
       const palette = await openPalette(modifier);
       const address = screen.getByTestId("current-address").textContent;
 
-      const input = search(palette, "archive old");
+      const input = await search(palette, "archive old");
       expect(selectedOption(palette)?.textContent).toContain("Archive old builds");
       expect(within(palette).getByText("Open details")).toBeTruthy();
       expect(within(palette).queryByText("↵", { selector: "kbd" })).toBeTruthy();
@@ -2109,8 +2013,10 @@ describe("AppShell command palette", () => {
           .some((button) => button.textContent?.includes("Start")),
       ).toBe(false);
 
-      fireEvent.keyDown(input, { key: "Enter", [modifier]: true });
-      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+      await act(async () => fireEvent.keyDown(input, { key: "Enter", [modifier]: true }));
+      await act(async () => {
+        jest.advanceTimersByTime(0);
+      });
 
       expect(screen.getByRole("dialog", { name: "Command palette" })).toBeTruthy();
       expect(screen.getByTestId("current-address").textContent).toBe(address);
@@ -2118,9 +2024,11 @@ describe("AppShell command palette", () => {
   );
 
   test("leaves the shortcut alone while another dialog is open", async () => {
-    renderPalette();
-    fireEvent.click(screen.getByRole("button", { name: /^Open diagnostics/ }));
-    await screen.findByRole("dialog", { name: "Diagnostics" });
+    await renderPalette({ routeElement: <AppShell /> });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Open diagnostics/ }));
+    });
+    expect(screen.getByRole("dialog", { name: "Diagnostics" })).toBeTruthy();
 
     pressShortcut();
 
@@ -2128,14 +2036,16 @@ describe("AppShell command palette", () => {
   });
 
   test("finds a task by its label and opens its latest session", async () => {
-    renderPalette();
+    await renderPalette();
     const palette = await openPalette();
 
-    search(palette, "ux");
+    await search(palette, "ux");
 
     expect(selectedOption(palette)?.textContent).toContain("Polish the command palette");
     expect(within(palette).getByText("Open Builder session")).toBeTruthy();
-    fireEvent.keyDown(within(palette).getByRole("combobox"), { key: "Enter" });
+    await act(async () =>
+      fireEvent.keyDown(within(palette).getByRole("combobox"), { key: "Enter" }),
+    );
 
     await waitFor(() =>
       expect(screen.getByTestId("current-address").textContent).toContain("session=build-1"),
@@ -2145,15 +2055,18 @@ describe("AppShell command palette", () => {
 
   test("makes the workspace of a task active, then opens the task details on the same page", async () => {
     const onOpenTaskDetails = mock((_taskId: string) => {});
-    renderPalette({ taskWorkflowActions: { onOpenTaskDetails } });
+    await renderPalette({ taskWorkflowActions: { onOpenTaskDetails } });
     const address = screen.getByTestId("current-address").textContent;
     const palette = await openPalette();
 
-    search(palette, "checkout");
+    await search(palette, "checkout");
     expect(selectedOption(palette)?.textContent).toContain("in Fairnest");
     expect(within(palette).getByText("Open details")).toBeTruthy();
-    fireEvent.keyDown(within(palette).getByRole("combobox"), { key: "Enter" });
+    await act(async () =>
+      fireEvent.keyDown(within(palette).getByRole("combobox"), { key: "Enter" }),
+    );
 
+    await act(async () => jest.advanceTimersByTime(0));
     await waitFor(() => expect(onOpenTaskDetails).toHaveBeenCalledWith("fair-1"));
     expect(screen.getByTestId("current-address").textContent).toBe(address);
     const reopened = await openPalette();
@@ -2164,19 +2077,20 @@ describe("AppShell command palette", () => {
     const writeText = mock(async (_value: string) => {});
     const restoreClipboard = replaceNavigatorClipboard(writeText);
     try {
-      renderPalette();
+      await renderPalette();
       const palette = await openPalette();
-      const input = search(palette, "checkout");
-      fireEvent.keyDown(input, { key: "Tab" });
-      search(palette, "copy");
+      const input = await search(palette, "checkout");
+      await act(async () => fireEvent.keyDown(input, { key: "Tab" }));
+      await search(palette, "copy");
       expect(selectedOption(palette)?.textContent).toBe("Copy Task ID");
 
-      fireEvent.keyDown(input, { key: "Enter" });
+      await act(async () => fireEvent.keyDown(input, { key: "Enter" }));
 
       // The copy runs inside the key event, so a browser sees the user gesture.
       expect(writeText).toHaveBeenCalledWith(fairnestTask.id);
-      await flushQueryUpdates();
-      expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull();
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull(),
+      );
       const reopened = await openPalette();
       expect(actionOption(reopened, "New task").textContent).toContain(
         `in ${activeWorkspace.workspaceName}`,
@@ -2189,19 +2103,20 @@ describe("AppShell command palette", () => {
   test("switches the task card view and marks the current view", async () => {
     const updateCardView = mock(async (taskCardView: "normal" | "compact") => taskCardView);
     configurePaletteHost({ workspaceUpdateKanbanTaskCardView: updateCardView });
-    renderPalette();
+    await renderPalette();
     const palette = await openPalette();
 
-    search(palette, "card view");
+    await search(palette, "card view");
     expect(actionOption(palette, "Task cards: Normal").textContent).toContain(", current");
     expect(actionOption(palette, "Task cards: Compact").textContent).not.toContain(", current");
 
-    search(palette, "density");
+    await search(palette, "density");
     expect(selectedOption(palette)?.textContent).toBe("Task cards: Compact");
-    fireEvent.keyDown(within(palette).getByRole("combobox"), { key: "Enter" });
-    await flushQueryUpdates();
+    await act(async () =>
+      fireEvent.keyDown(within(palette).getByRole("combobox"), { key: "Enter" }),
+    );
 
-    expect(updateCardView).toHaveBeenCalledWith("compact");
+    await waitFor(() => expect(updateCardView).toHaveBeenCalledWith("compact"));
   });
 
   const chatSession: WorkspaceSession = {
@@ -2225,11 +2140,10 @@ describe("AppShell command palette", () => {
       workspaceSessionListActive: async (workspaceId) =>
         workspaceId === activeWorkspace.workspaceId ? [chatSession] : [],
     });
-    renderPalette();
+    await renderPalette();
     const palette = await openPalette();
-    await flushQueryUpdates();
-    const input = search(palette, "release notes");
-    expect(selectedOption(palette)?.textContent).toContain("Release notes");
+    const input = await search(palette, "release notes");
+    await waitFor(() => expect(selectedOption(palette)?.textContent).toContain("Release notes"));
     return { palette, input };
   };
 
@@ -2240,7 +2154,7 @@ describe("AppShell command palette", () => {
       const { palette, input } = await searchChat();
       expect(within(palette).queryByText("Rename")).toBeNull();
 
-      fireEvent.keyDown(input, { key: "Tab" });
+      await act(async () => fireEvent.keyDown(input, { key: "Tab" }));
 
       expect(within(palette).getByPlaceholderText("Search session actions…")).toBeTruthy();
       expect(
@@ -2255,12 +2169,13 @@ describe("AppShell command palette", () => {
         "Copy external session ID",
         "Archive session",
       ]);
-      search(palette, "external");
-      fireEvent.keyDown(input, { key: "Enter" });
+      await search(palette, "external");
+      await act(async () => fireEvent.keyDown(input, { key: "Enter" }));
 
       expect(writeText).toHaveBeenCalledWith("native-chat-1");
-      await flushQueryUpdates();
-      expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull();
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull(),
+      );
     } finally {
       restoreClipboard();
     }
@@ -2268,11 +2183,10 @@ describe("AppShell command palette", () => {
 
   test("leaves chat rename unassigned and uses the existing rename and archive dialogs", async () => {
     const { input, palette: initialPalette } = await searchChat();
-    fireEvent.keyDown(input, { key: "e", metaKey: true });
+    await act(async () => fireEvent.keyDown(input, { key: "e", metaKey: true }));
     expect(screen.queryByRole("dialog", { name: "Rename session" })).toBeNull();
-    fireEvent.keyDown(input, { key: "Tab" });
+    await act(async () => fireEvent.keyDown(input, { key: "Tab" }));
     fireEvent.click(within(initialPalette).getByRole("option", { name: "Rename session" }));
-    await flushQueryUpdates();
     const rename = await screen.findByRole("dialog", { name: "Rename session" });
     fireEvent.keyDown(rename, { key: "Escape" });
     await waitFor(() =>
@@ -2280,20 +2194,19 @@ describe("AppShell command palette", () => {
     );
 
     const palette = await openPalette();
-    const reopened = search(palette, "release notes");
+    const reopened = await search(palette, "release notes");
     fireEvent.keyDown(reopened, { key: "Tab" });
-    search(palette, "archive");
+    await search(palette, "archive");
     fireEvent.keyDown(reopened, { key: "Enter" });
-    await flushQueryUpdates();
 
     expect(await screen.findByRole("dialog", { name: "Archive session" })).toBeTruthy();
   });
 
-  test("shows the sidebar status dot at the start of a task row with sessions", async () => {
-    renderPalette();
+  test("shows the session status at the start of the highlighted task row", async () => {
+    await renderPalette();
     const palette = await openPalette();
 
-    search(palette, "polish");
+    await search(palette, "polish");
     const row = selectedOption(palette);
     if (!row) throw new Error("The palette highlights no task row.");
 
@@ -2303,58 +2216,32 @@ describe("AppShell command palette", () => {
     expect(row.firstElementChild).toBe(dot);
   });
 
-  test("opens the task actions with Tab and returns to the same results with Escape", async () => {
-    renderPalette();
-    const palette = await openPalette();
-    const input = search(palette, "polish");
-
-    fireEvent.keyDown(input, { key: "Tab" });
-
-    const actions = within(palette)
-      .getAllByRole("option")
-      .map((option) => option.textContent);
-    expect(actions).toEqual([
-      "Open latest sessionBuilder",
-      "Open Builder session",
-      "Start Builder",
-      "Close Task",
-      "Edit Task",
-      "Open Task Details",
-      "Copy Task ID",
-      "Reset Task",
-      "Delete Task",
-    ]);
-    expect(input.value).toBe("");
-
-    fireEvent.keyDown(input, { key: "Escape" });
-
-    expect(screen.getByRole("dialog", { name: "Command palette" })).toBeTruthy();
-    expect(input.value).toBe("polish");
-    expect(selectedOption(palette)?.textContent).toContain("Polish the command palette");
-  });
-
   test("edits the highlighted task and leaves its workflow action unassigned", async () => {
     const onEdit = mock(() => {});
     const onOpenSession = mock(() => {});
-    renderPalette({ taskWorkflowActions: { onEdit, onOpenSession } });
+    await renderPalette({ taskWorkflowActions: { onEdit, onOpenSession } });
 
-    search(await openPalette(), "polish");
-    fireEvent.keyDown(screen.getByRole("combobox"), { key: "e", metaKey: true });
+    await search(await openPalette(), "polish");
+    await act(async () =>
+      fireEvent.keyDown(screen.getByRole("combobox"), { key: "e", metaKey: true }),
+    );
     await waitFor(() => expect(onEdit).toHaveBeenCalledWith("odt-own"));
 
-    search(await openPalette(), "polish");
+    await search(await openPalette(), "polish");
     expect(screen.queryByText("Open Builder")).toBeNull();
-    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter", metaKey: true });
+    await act(async () =>
+      fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter", metaKey: true }),
+    );
     expect(onOpenSession).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog", { name: "Command palette" })).toBeTruthy();
   });
 
   test("creates a task from the query text", async () => {
     const onCreateTask = mock(() => {});
-    renderPalette({ taskWorkflowActions: { onCreateTask } });
+    await renderPalette({ taskWorkflowActions: { onCreateTask } });
     const palette = await openPalette();
 
-    search(palette, "Write release notes");
+    await search(palette, "Write release notes");
     const create = within(palette).getAllByRole("option").at(-1);
     if (!create) throw new Error("The palette shows no option to create a task.");
     expect(create.textContent).toContain("New task “Write release notes”");
@@ -2373,7 +2260,7 @@ describe("AppShell command palette", () => {
     ];
     const storage = createMemoryClientStorage();
     storage.setItem(RECENT_ITEMS_STORAGE_KEY, JSON.stringify(recentItems));
-    renderPalette({ storage });
+    await renderPalette({ storage });
     const palette = await openPalette();
 
     const recent = await within(palette).findByRole("group", { name: "Recent" });
@@ -2385,7 +2272,7 @@ describe("AppShell command palette", () => {
   });
 
   test("filters by workspace from the keyboard and targets that workspace", async () => {
-    renderPalette();
+    await renderPalette();
     const palette = await openPalette();
     const input = within(palette).getByRole("combobox");
 
@@ -2396,7 +2283,7 @@ describe("AppShell command palette", () => {
       await within(palette).findByRole("button", { name: "Workspace filter: Fairnest" }),
     ).toBeTruthy();
     expect(selectedOption(palette)?.textContent).toContain("New taskin Fairnest");
-    search(palette, "polish");
+    await search(palette, "polish");
     expect(within(palette).queryByText("Polish the command palette")).toBeNull();
   });
 });

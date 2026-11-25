@@ -28,15 +28,11 @@ import {
 import {
   createAgentSessionFixture,
   createChecksStateContextValue,
-  createDeferred,
   createHostRuntimeStatusContextValue,
   createTaskCardFixture,
   createTaskStoreCheckFixture,
-  enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 import { useAgentStudioSessionStartFlow as useSessionStartFlow } from "./session-start/use-agent-studio-session-start-flow";
-
-enableReactActEnvironment();
 
 type ProductionHookArgs = Parameters<typeof useSessionStartFlow>[0];
 type HookArgs = Omit<ProductionHookArgs, "runSessionStartWorkflow"> & {
@@ -481,7 +477,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   });
 
   test("keeps starting state while fresh creation replaces a loaded selection", async () => {
-    const startDeferred = createDeferred<ReturnType<typeof sessionIdentity>>();
+    const startDeferred = Promise.withResolvers<ReturnType<typeof sessionIdentity>>();
     const startAgentSession = mock(() => startDeferred.promise);
     const loadedSession = createSession({
       sessionAssociation: {
@@ -592,9 +588,12 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("startLaunchKickoff uses the internal modal flow when no external request hook is provided", async () => {
-    const startAgentSession = mock(async () => sessionIdentity("session-new"));
+  test("confirming a kickoff sends one message and selects the new session", async () => {
+    const startAgentSession = mock<AgentStudioWorkflowFixture["startAgentSession"]>(async () =>
+      sessionIdentity("session-new"),
+    );
     const sendAgentMessage = mock(async () => null);
+    const scheduleQueryUpdate = mock((_updates: AgentStudioQueryUpdate) => {});
     const harness = createInternalModalHookHarness({
       ...createBaseArgs(),
       role: "planner",
@@ -604,34 +603,109 @@ describe("useAgentStudioSessionStartFlow", () => {
         startAgentSession,
         sendAgentMessage,
       }),
+      scheduleQueryUpdate,
     });
 
     await harness.mount();
+    try {
+      await harness.run((state) => {
+        void state.startLaunchKickoff();
+      });
+      await withMockedToast(async ({ toastErrorMock }) => {
+        await confirmSessionStartModal({
+          harness,
+          profileId: "planner",
+          modelId: "openai/gpt-5",
+          variant: "default",
+        });
+        await harness.waitFor(() => scheduleQueryUpdate.mock.calls.length > 0);
 
-    await harness.run((state) => {
-      void state.startLaunchKickoff();
+        expect(startAgentSession.mock.calls).toEqual([
+          [
+            {
+              taskId: "task-1",
+              role: "planner",
+              selectedModel: { ...MODEL_SELECTION, profileId: "planner" },
+              startMode: "fresh",
+            },
+          ],
+        ]);
+        expect(sendAgentMessage).toHaveBeenCalledTimes(1);
+        expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-new"), [
+          { kind: "text", text: expect.any(String) },
+        ]);
+        expect(scheduleQueryUpdate.mock.calls).toEqual([
+          [{ task: "task-1", session: "session-new", agent: "planner" }],
+        ]);
+        expect(toastErrorMock).not.toHaveBeenCalled();
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("a failed kickoff keeps the saved session and offers a retry without navigating", async () => {
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
+    const sendAgentMessage = mock(async () => {
+      throw new Error("kickoff failed");
     });
-    await confirmSessionStartModal({
-      harness,
-      profileId: "planner",
-      modelId: "openai/gpt-5",
-      variant: "default",
+    const scheduleQueryUpdate = mock((_updates: AgentStudioQueryUpdate) => {});
+    const harness = createInternalModalHookHarness({
+      ...createBaseArgs(),
+      repoSettings: null,
+      scheduleQueryUpdate,
+      workflow: createWorkflowFixture({
+        startAgentSession,
+        sendAgentMessage,
+        notifications: {
+          publishSessionStarted: () => {},
+          publishSessionError: async () => false,
+          markInAppFeedbackHandled: () => {},
+          reportFailure: () => {},
+        },
+      }),
     });
 
-    expect(startAgentSession).toHaveBeenCalledWith({
-      taskId: "task-1",
-      role: "planner",
-      selectedModel: {
-        runtimeKind: "opencode",
-        providerId: "openai",
-        modelId: "gpt-5",
-        variant: "default",
-        profileId: "planner",
-      },
-      startMode: "fresh",
-    });
+    await harness.mount();
+    try {
+      await harness.run((state) => {
+        void state.startLaunchKickoff();
+      });
+      await harness.waitFor((state) => {
+        const modal = state.sessionStartModal;
+        return modal !== null && !modal.isKickoffPromptLoading && modal.kickoffPromptError === null;
+      });
+      await withMockedToast(async ({ toastErrorMock }) => {
+        await confirmSessionStartModal({
+          harness,
+          profileId: "spec",
+          modelId: "openai/gpt-5",
+          variant: "default",
+        });
+        const attempts = harness.connection.startupAttempts;
+        await harness.waitFor(() =>
+          attempts.getSnapshot().some(({ status }) => status.phase === "failed"),
+        );
 
-    await harness.unmount();
+        expect(startAgentSession).toHaveBeenCalledTimes(1);
+        expect(sendAgentMessage).toHaveBeenCalledTimes(1);
+        expect(scheduleQueryUpdate).not.toHaveBeenCalled();
+        expect(attempts.getSnapshot()).toMatchObject([
+          {
+            status: { phase: "failed", confirmation: "current" },
+            ownership: {
+              state: "saved",
+              target: { kind: "task", record: { externalSessionId: "session-new" } },
+            },
+            error: expect.stringContaining("kickoff failed"),
+            recoveryActions: [{ kind: "retry_message" }],
+          },
+        ]);
+        expect(toastErrorMock).not.toHaveBeenCalled();
+      });
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("handleCreateSession uses the internal modal flow when no external request hook is provided", async () => {
@@ -1049,7 +1123,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   });
 
   test("keeps starting state while fresh session creation switches to the draft role", async () => {
-    const startDeferred = createDeferred<ReturnType<typeof sessionIdentity>>();
+    const startDeferred = Promise.withResolvers<ReturnType<typeof sessionIdentity>>();
     const startAgentSession = mock(() => startDeferred.promise);
     const sendAgentMessage = mock(async () => null);
 

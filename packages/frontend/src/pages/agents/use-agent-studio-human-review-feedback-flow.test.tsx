@@ -5,12 +5,9 @@ import {
   createAgentSessionSummaryFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
-  enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 import { useAgentStudioHumanReviewFeedbackFlow } from "./use-agent-studio-human-review-feedback-flow";
 import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
-
-enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioHumanReviewFeedbackFlow>[0];
 

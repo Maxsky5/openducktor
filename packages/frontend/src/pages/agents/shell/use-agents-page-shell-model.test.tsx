@@ -53,7 +53,6 @@ import {
   createSelectedSessionTranscriptStateFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
-  enableReactActEnvironment,
 } from "../agent-studio-test-utils";
 import type { AgentsPageModalContentModel } from "./agents-page-modal-content";
 import type { AgentStudioRightPanelBridgeModel } from "./use-agent-studio-right-panel-bridge";
@@ -74,8 +73,6 @@ import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-su
 type RepoSettingsStateContract = ReturnType<
   typeof repoSettingsModule.useWorkspaceRepositorySettings
 >;
-
-enableReactActEnvironment();
 
 const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
 const createSession = () =>

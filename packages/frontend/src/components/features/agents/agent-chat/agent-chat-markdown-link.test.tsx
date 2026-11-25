@@ -1,8 +1,7 @@
 import { createShellBridgeFixture, withShellPlatform } from "@/test-utils/focused-fixture";
 import { beforeAll, describe, expect, test, mock } from "bun:test";
-import { fireEvent, render as renderView, waitFor } from "@testing-library/react";
-import { act, type ReactElement } from "react";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { act, fireEvent, render as renderView, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { MermaidSvgCacheProvider } from "@/components/ui/markdown-mermaid-svg-cache-context";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
@@ -10,8 +9,6 @@ import { QueryProvider } from "@/test-utils/query-provider";
 import { CHAT_MARKDOWN_LINK_POLICY } from "./agent-chat-markdown-link-policy";
 import { ChatFileLinkContext } from "./agent-chat-file-link-context";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
-
-enableReactActEnvironment();
 
 const render = (element: ReactElement) => renderView(element, { wrapper: MermaidSvgCacheProvider });
 
@@ -23,48 +20,60 @@ beforeAll(async () => {
 });
 
 describe("chat Markdown links", () => {
-  for (const markdown of [
-    "[file](src/a.ts:42)",
-    "[`file`](file:///repo/a.ts#L42)",
-    "[file][source]\n\n[source]: <src/a b.ts>",
-    "[file](src/%E6%96%87.ts)\n\n$x^2$",
-    "[file](src/a.ts)\n\n```mermaid\ngraph TD; A-->B;\n```",
-    "[file](src/a.ts)\n\n$x^2$\n\n```mermaid\ngraph TD; A-->B;\n```",
-  ]) {
-    test(markdown, async () => {
-      const open = mock<(href: string, trigger: HTMLAnchorElement) => void>(() => {});
-      const view = render(
+  test.each([
+    ["inline code", "[`file`](file:///repo/a.ts#L42)", "file:///repo/a.ts#L42"],
+    ["references", "[file][source]\n\n[source]: <src/a b.ts>", "src/a%20b.ts"],
+    ["math", "[file](src/%E6%96%87.ts)\n\n$x^2$", "src/%E6%96%87.ts"],
+    ["a diagram", "[file](src/a.ts)\n\n```mermaid\ngraph TD; A-->B;\n```", "src/a.ts"],
+    [
+      "math and a diagram",
+      "[file](src/a.ts)\n\n$x^2$\n\n```mermaid\ngraph TD; A-->B;\n```",
+      "src/a.ts",
+    ],
+  ])("opens a file link with %s", async (_name, markdown, href) => {
+    const open = mock<(href: string, trigger: HTMLAnchorElement) => void>(() => {});
+    let view!: ReturnType<typeof render>;
+    await act(async () => {
+      view = render(
         <ChatFileLinkContext value={open}>
           <AgentChatMarkdownRenderer markdown={markdown} />
         </ChatFileLinkContext>,
       );
-      try {
-        await waitFor(() => expect(view.getByRole("link", { name: "file" })).toBeTruthy());
-        expect(open).not.toHaveBeenCalled();
-        const link = view.getByRole("link", { name: "file" });
-        expect(link.getAttribute("href")).toBe("#");
-        expect(link.className).toContain("focus-visible");
-        fireEvent.click(link);
-        expect(open).toHaveBeenCalledTimes(1);
-        for (const modifier of ["ctrlKey", "metaKey", "shiftKey", "altKey"])
-          fireEvent.click(link, { [modifier]: true });
-        expect(
-          fireEvent(
-            link,
-            new MouseEvent("auxclick", { button: 1, bubbles: true, cancelable: true }),
-          ),
-        ).toBe(false);
-        expect(open).toHaveBeenCalledTimes(1);
-        link.focus();
-        expect(fireEvent.keyDown(link, { key: "Enter" })).toBe(false);
-        expect(open).toHaveBeenCalledTimes(2);
-        fireEvent.keyDown(link, { key: "Enter", repeat: true });
-        expect(open).toHaveBeenCalledTimes(2);
-      } finally {
-        view.unmount();
-      }
     });
-  }
+    const link = view.getByRole("link", { name: "file" });
+    if (!(link instanceof HTMLAnchorElement)) throw new Error("Expected an anchor.");
+    expect(link.getAttribute("href")).toBe("#");
+    fireEvent.click(link);
+    expect(open.mock.calls).toEqual([[href, link]]);
+  });
+
+  test("opens a file link on click and Enter, and ignores modified input", () => {
+    const open = mock<(href: string, trigger: HTMLAnchorElement) => void>(() => {});
+    const view = render(
+      <ChatFileLinkContext value={open}>
+        <AgentChatMarkdownRenderer markdown="[file](src/a.ts:42)" />
+      </ChatFileLinkContext>,
+    );
+    const link = view.getByRole("link", { name: "file" });
+    if (!(link instanceof HTMLAnchorElement)) throw new Error("Expected an anchor.");
+    expect(open).not.toHaveBeenCalled();
+    expect(link.getAttribute("href")).toBe("#");
+    expect(link.className).toContain("focus-visible");
+    fireEvent.click(link);
+    expect(open.mock.calls).toEqual([["src/a.ts:42", link]]);
+    for (const modifier of ["ctrlKey", "metaKey", "shiftKey", "altKey"]) {
+      fireEvent.click(link, { [modifier]: true });
+    }
+    expect(
+      fireEvent(link, new MouseEvent("auxclick", { button: 1, bubbles: true, cancelable: true })),
+    ).toBe(false);
+    expect(open).toHaveBeenCalledTimes(1);
+    link.focus();
+    expect(fireEvent.keyDown(link, { key: "Enter" })).toBe(false);
+    expect(open).toHaveBeenCalledTimes(2);
+    fireEvent.keyDown(link, { key: "Enter", repeat: true });
+    expect(open).toHaveBeenCalledTimes(2);
+  });
 
   test("keeps file links active beside a blocked task asset in chat", async () => {
     const open = mock<(href: string, trigger: HTMLAnchorElement) => void>(() => {});
@@ -213,26 +222,24 @@ for (const [rendererName, { default: Renderer }] of [
     `the final ${rendererName} renderer retains the file action`,
     async () => {
       const open = mock<(href: string, trigger: HTMLAnchorElement) => void>(() => {});
-      const view = render(
-        <ChatFileLinkContext value={open}>
-          <Renderer
-            markdown={
-              "[file](file:///repo/a.ts:42)\n\n$x^2$\n\n```mermaid\ngraph TD; A-->B;\n```" +
-              (rendererName === "rich" ? "\n\n![asset](odt-asset://example)" : "")
-            }
-            components={{ a: CHAT_MARKDOWN_LINK_POLICY.anchor }}
-            linkPolicy={CHAT_MARKDOWN_LINK_POLICY}
-            fallbackContent={<div>Loading</div>}
-          />
-        </ChatFileLinkContext>,
-      );
-      try {
-        await waitFor(() => expect(view.getByRole("link", { name: "file" })).toBeTruthy());
-        fireEvent.click(view.getByRole("link", { name: "file" }));
-        expect(open.mock.calls.at(-1)?.[0]).toBe("file:///repo/a.ts:42");
-      } finally {
-        view.unmount();
-      }
+      await act(async () => {
+        render(
+          <ChatFileLinkContext value={open}>
+            <Renderer
+              markdown={
+                "[file](file:///repo/a.ts:42)\n\n$x^2$\n\n```mermaid\ngraph TD; A-->B;\n```" +
+                (rendererName === "rich" ? "\n\n![asset](odt-asset://example)" : "")
+              }
+              components={{ a: CHAT_MARKDOWN_LINK_POLICY.anchor }}
+              linkPolicy={CHAT_MARKDOWN_LINK_POLICY}
+              fallbackContent={<div>Loading</div>}
+            />
+          </ChatFileLinkContext>,
+        );
+      });
+      const link = screen.getByRole("link", { name: "file" });
+      fireEvent.click(link);
+      expect(open).toHaveBeenCalledWith("file:///repo/a.ts:42", link);
     },
     timeoutMs,
   );

@@ -1,22 +1,26 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { AppearanceSettings, ThemePreference } from "@openducktor/contracts";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { act } from "react";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import type { HostClient } from "@openducktor/host-client";
 import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { createSettingsSnapshotFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { SettingsAppearanceSection } from "./settings-appearance-section";
 
-enableReactActEnvironment();
-
-const createSettingsConnection = (client: Partial<HostClient> = {}): ClientConnection =>
-  createTestClientConnection({
+const createSettingsConnection = (client: Partial<HostClient> = {}): ClientConnection => {
+  const connection = createTestClientConnection({
     client: { systemListOpenInTools: async () => [{ toolId: "finder" }], ...client },
   });
+  connection.queryClient.setQueryData(
+    settingsSnapshotQueryOptions().queryKey,
+    createSettingsSnapshotFixture({ theme: "system" }),
+  );
+  return connection;
+};
 
 const createTestProvider =
   (connection: ClientConnection) =>
@@ -35,32 +39,11 @@ const createAppearanceSettings = (
 });
 
 const renderAppearanceSection = (
-  appearance: AppearanceSettings,
-  disabled = false,
-  connection = createSettingsConnection(),
-): void => {
-  let latestAppearance = appearance;
-  const onUpdateAppearance = mock(
-    (updater: (current: AppearanceSettings) => AppearanceSettings): void => {
-      latestAppearance = updater(latestAppearance);
-    },
-  );
-
-  render(
-    <SettingsAppearanceSection
-      appearance={latestAppearance}
-      system={{}}
-      onUpdateSystem={() => {}}
-      disabled={disabled}
-      onUpdateAppearance={onUpdateAppearance}
-    />,
-    { wrapper: createTestProvider(connection) },
-  );
-};
-
-const renderAppearanceSectionWithUpdates = (
-  appearance: AppearanceSettings,
-  connection = createSettingsConnection(),
+  appearance = createAppearanceSettings(),
+  {
+    disabled = false,
+    connection = createSettingsConnection(),
+  }: { disabled?: boolean; connection?: ClientConnection } = {},
 ) => {
   let latestAppearance = appearance;
   const onUpdateAppearance = mock(
@@ -69,31 +52,21 @@ const renderAppearanceSectionWithUpdates = (
     },
   );
 
-  const rendered = render(
+  const section = () => (
     <SettingsAppearanceSection
       appearance={latestAppearance}
       system={{}}
       onUpdateSystem={() => {}}
-      disabled={false}
+      disabled={disabled}
       onUpdateAppearance={onUpdateAppearance}
-    />,
-    { wrapper: createTestProvider(connection) },
+    />
   );
+  const rendered = render(section(), { wrapper: createTestProvider(connection) });
 
   return {
     onUpdateAppearance,
     getLatestAppearance: () => latestAppearance,
-    rerenderLatest: () => {
-      rendered.rerender(
-        <SettingsAppearanceSection
-          appearance={latestAppearance}
-          system={{}}
-          onUpdateSystem={() => {}}
-          disabled={false}
-          onUpdateAppearance={onUpdateAppearance}
-        />,
-      );
-    },
+    rerenderLatest: () => rendered.rerender(section()),
   };
 };
 
@@ -110,23 +83,12 @@ const changeHorizontalScrollbarVisibility = async (
     fireEvent.click(screen.getByRole("button", { name: "Horizontal scrollbars" }));
   });
 
-  const matchingLabels = await screen.findAllByText(labelByValue[value]);
-  await act(async () => {
-    const optionLabel = matchingLabels.at(-1);
-    if (!optionLabel) {
-      throw new Error(`Expected ${labelByValue[value]} option to be rendered`);
-    }
-    fireEvent.click(optionLabel);
-  });
+  await act(async () => fireEvent.click(screen.getByRole("option", { name: labelByValue[value] })));
 };
-
-afterEach(() => {
-  cleanup();
-});
 
 describe("settings appearance section", () => {
   test("switches task grouping without changing other appearance settings", () => {
-    const { getLatestAppearance, rerenderLatest } = renderAppearanceSectionWithUpdates(
+    const { getLatestAppearance, rerenderLatest } = renderAppearanceSection(
       createAppearanceSettings({ horizontalScrollbarVisibility: "hide" }),
     );
     expect(screen.getByRole("radio", { name: "By task" }).getAttribute("aria-checked")).toBe(
@@ -147,22 +109,12 @@ describe("settings appearance section", () => {
   });
 
   test("offers the three theme choices and persists a selection at once", async () => {
-    let savedTheme: ThemePreference = "system";
-    const setTheme = mock(async (theme: ThemePreference) => {
-      savedTheme = theme;
-    });
-
-    renderAppearanceSection(
-      createAppearanceSettings(),
-      false,
-      createSettingsConnection({
-        setTheme,
-        workspaceGetSettingsSnapshot: async () =>
-          createSettingsSnapshotFixture({ theme: savedTheme }),
-      }),
-    );
+    const setTheme = mock(async (_theme: ThemePreference) => {});
+    const connection = createSettingsConnection({ setTheme });
+    renderAppearanceSection(undefined, { connection });
 
     const themeTrigger = screen.getByRole("button", { name: "Theme" });
+    expect(themeTrigger.textContent).toBe("System default");
     expect(
       screen.getByText(
         "System default follows the current operating system appearance. Light and Dark keep the chosen appearance on every system.",
@@ -173,55 +125,41 @@ describe("settings appearance section", () => {
       fireEvent.click(themeTrigger);
     });
 
-    await screen.findByText("Dark");
-    expect(screen.getAllByText("System default").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("Light").length).toBeGreaterThanOrEqual(1);
-
-    const themeOptions = document.querySelectorAll("[data-slot='command-item']");
-    expect([...themeOptions].map((option) => option.textContent)).toEqual([
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
       "System default",
       "Light",
       "Dark",
     ]);
-    expect(document.querySelector("[data-slot='command-input']:not(.sr-only)")).toBeNull();
-    expect(screen.queryByPlaceholderText("Search theme...")).toBeNull();
+    expect(screen.getByRole("combobox").classList.contains("sr-only")).toBe(true);
 
-    await act(async () => {
-      const options = screen.getAllByText("Dark");
-      const option = options.at(-1);
-      if (!option) {
-        throw new Error("Expected the Dark theme option to be rendered");
-      }
-      fireEvent.click(option);
-    });
+    await act(async () => fireEvent.click(screen.getByRole("option", { name: "Dark" })));
+    await act(async () => Bun.sleep(0));
 
     expect(setTheme).toHaveBeenCalledWith("dark");
+    expect(themeTrigger.textContent).toBe("Dark");
   });
 
-  test("disables the theme picker while settings interactions are disabled", () => {
-    renderAppearanceSection(createAppearanceSettings(), true);
-
+  test("disables theme and scrollbar choices while settings interactions are disabled", () => {
+    renderAppearanceSection(undefined, { disabled: true });
     expect(screen.getByRole("button", { name: "Theme" }).hasAttribute("disabled")).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Horizontal scrollbars" }).hasAttribute("disabled"),
+    ).toBe(true);
   });
 
-  test("renders horizontal scrollbar visibility choices", async () => {
-    renderAppearanceSection(createAppearanceSettings());
+  test("starts with the saved scrollbar mode and offers every visibility choice", async () => {
+    renderAppearanceSection(createAppearanceSettings({ horizontalScrollbarVisibility: "show" }));
 
-    expect(screen.getByText("Appearance")).toBeDefined();
-    expect(screen.getByText("Horizontal scrollbars")).toBeDefined();
-    expect(screen.getByRole("button", { name: "Horizontal scrollbars" }).textContent).toContain(
+    const trigger = screen.getByRole("button", { name: "Horizontal scrollbars" });
+    expect(trigger.textContent).toBe("Show");
+
+    await act(async () => fireEvent.click(trigger));
+
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
       "System default",
-    );
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Horizontal scrollbars" }));
-    });
-
-    await screen.findByText("Show");
-
-    expect(screen.getAllByText("System default").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("Show")).toBeDefined();
-    expect(screen.getByText("Hide")).toBeDefined();
+      "Show",
+      "Hide",
+    ]);
     expect(
       screen.getByText(
         "System default shows horizontal scrollbars on Windows and Linux, and hides them on macOS. Choose Show or Hide to override it on every platform.",
@@ -229,26 +167,10 @@ describe("settings appearance section", () => {
     ).toBeDefined();
   });
 
-  test("selects the saved visibility mode", () => {
-    renderAppearanceSection(createAppearanceSettings({ horizontalScrollbarVisibility: "show" }));
-
-    expect(screen.getByRole("button", { name: "Horizontal scrollbars" }).textContent).toContain(
-      "Show",
-    );
-  });
-
-  test("disables the select while settings interactions are disabled", () => {
-    renderAppearanceSection(createAppearanceSettings(), true);
-
-    expect(
-      screen.getByRole("button", { name: "Horizontal scrollbars" }).hasAttribute("disabled"),
-    ).toBe(true);
-  });
-
   test("updates the horizontal scrollbar mode without dropping unrelated appearance settings", async () => {
     const appearance = createAppearanceSettings();
     const { getLatestAppearance, onUpdateAppearance, rerenderLatest } =
-      renderAppearanceSectionWithUpdates(appearance);
+      renderAppearanceSection(appearance);
 
     await changeHorizontalScrollbarVisibility("show");
     rerenderLatest();
@@ -265,8 +187,7 @@ describe("settings appearance section", () => {
 
   test("does not update when clicking the already active option", async () => {
     const appearance = createAppearanceSettings();
-    const { getLatestAppearance, onUpdateAppearance } =
-      renderAppearanceSectionWithUpdates(appearance);
+    const { getLatestAppearance, onUpdateAppearance } = renderAppearanceSection(appearance);
 
     await changeHorizontalScrollbarVisibility("system");
 

@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import { themePreferenceSchema, type ThemePreference } from "@openducktor/contracts";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { preloadTourScenes } from "@openducktor/product-scenes/react/tour";
 import { act, fireEvent, type RenderResult, render, waitFor, within } from "@testing-library/react";
 import { Activity, type ReactElement } from "react";
 import { ThemeProvider, useTheme } from "@/components/layout/theme-provider";
 import { QueryProvider } from "@/test-utils/query-provider";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { TourScene } from "./feature-tour-scenes";
 
 function DarkThemeButton(): ReactElement {
@@ -16,9 +18,19 @@ function DarkThemeButton(): ReactElement {
   );
 }
 
-const connection = createTestClientConnection({ client: { setTheme: async () => {} } });
+const createTourConnection = () => {
+  let theme: ThemePreference = "light";
+  return createTestClientConnection({
+    client: {
+      setTheme: async (next) => {
+        theme = themePreferenceSchema.parse(next);
+      },
+      workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture({ theme }),
+    },
+  });
+};
 
-const withProviders = (scene: ReactElement): ReactElement => (
+const withProviders = (scene: ReactElement, connection = createTourConnection()): ReactElement => (
   <QueryProvider connection={connection}>
     <ThemeProvider>
       {scene}
@@ -62,16 +74,22 @@ describe("TourScene", () => {
   });
 
   test("a scene stops while its slide hides and plays again when the slide shows", async () => {
+    const connection = createTourConnection();
     const slide = (mode: "visible" | "hidden"): ReactElement =>
       withProviders(
         <Activity mode={mode}>
           <TourScene scene="palette" platform="darwin" />
         </Activity>,
+        connection,
       );
     const view = await renderAsync(slide("visible"));
     try {
+      await waitFor(() => {
+        const scene = sceneRoot(view, "palette");
+        expect(scene.dataset.theme).toBe("light");
+        expect(scene.dataset.motion).toBe("running");
+      });
       const root = sceneRoot(view, "palette");
-      await waitFor(() => expect(root.dataset.motion).toBe("running"));
 
       view.rerender(slide("hidden"));
       // The hidden slide runs the cleanup of the scene, which stops its timeline.

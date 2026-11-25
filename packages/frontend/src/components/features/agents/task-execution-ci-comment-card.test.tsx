@@ -91,15 +91,11 @@ test("uses review-specific accessible action names and external link text", () =
   expect(view.getByRole("button", { name: "Open review from reviewer" })).toBeTruthy();
 });
 
-test.each(["light", "dark"] as const)("renders review outcome text in the %s theme", (theme) => {
+test("shows when a review was dismissed", () => {
   const view = render(
-    <QueryProvider>
-      <ThemeProvider defaultTheme={theme}>
-        <TooltipProvider>
-          <TaskExecutionCiCommentCard comment={createReview("dismissed")} isBot={false} />
-        </TooltipProvider>
-      </ThemeProvider>
-    </QueryProvider>,
+    <TooltipProvider>
+      <TaskExecutionCiCommentCard comment={createReview("dismissed")} isBot={false} />
+    </TooltipProvider>,
   );
 
   expect(view.getByText("Review dismissed")).toBeTruthy();

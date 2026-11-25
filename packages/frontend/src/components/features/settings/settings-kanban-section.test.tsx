@@ -1,39 +1,41 @@
-import { describe, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import type { KanbanSettings } from "@openducktor/contracts";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { SettingsKanbanSection } from "./settings-kanban-section";
 
-describe("settings kanban section", () => {
-  test("renders the Kanban settings with the selected task card view", () => {
-    const kanban: KanbanSettings = {
-      doneVisibleDays: 3,
-      emptyColumnDisplay: "collapsed",
-      taskCardView: "compact",
-    };
-
-    const html = renderToStaticMarkup(
-      createElement(SettingsKanbanSection, {
-        kanban,
-        disabled: false,
-        onUpdateKanban: () => kanban,
-      }),
-    );
-
-    expect(html).toContain("Kanban settings");
-    expect(html).toContain("Done tasks visible for");
-    expect(html).toContain("Empty columns");
-    expect(html).toContain("Show empty columns, hide them");
-    expect(html).toContain("Task card view");
-    expect(html).toContain('role="radiogroup"');
-    expect(html).toContain('aria-labelledby="kanban-task-card-view-label"');
-    expect(html).toContain('aria-label="Normal"');
-    expect(html).toContain('aria-label="Compact"');
-    expect(html.indexOf("lucide-rows-2")).toBeLessThan(html.indexOf("lucide-rows-3"));
-    expect(html).not.toContain(">Normal<");
-    expect(html).not.toContain(">Compact<");
-    const compactOption = html.match(/<button[^>]*aria-label="Compact"[^>]*>/)?.[0];
-    expect(compactOption).toContain('data-state="checked"');
-    expect(html).toContain('value="3"');
+function KanbanSettingsForm() {
+  const [kanban, setKanban] = useState<KanbanSettings>({
+    doneVisibleDays: 3,
+    emptyColumnDisplay: "collapsed",
+    taskCardView: "compact",
   });
+  return <SettingsKanbanSection kanban={kanban} disabled={false} onUpdateKanban={setKanban} />;
+}
+
+test("edits the Kanban draft through its labeled controls", async () => {
+  render(<KanbanSettingsForm />);
+
+  const visibleDays = screen.getByRole<HTMLInputElement>("spinbutton", {
+    name: "Done tasks visible for",
+  });
+  expect(visibleDays.value).toBe("3");
+  fireEvent.change(visibleDays, { target: { value: "-1" } });
+  expect(visibleDays.value).toBe("0");
+
+  const emptyColumns = screen.getByRole("button", { name: "Empty columns" });
+  expect(emptyColumns.textContent).toContain("Collapsed");
+  await act(async () => {
+    fireEvent.click(emptyColumns);
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("option", { name: /Hidden/ }));
+  });
+  expect(emptyColumns.textContent).toContain("Hidden");
+
+  expect(screen.getByRole("radio", { name: "Compact", checked: true })).toBeDefined();
+  fireEvent.click(screen.getByRole("radio", { name: "Normal", checked: false }));
+  expect(screen.getByRole("radio", { name: "Normal", checked: true })).toBeDefined();
+  expect(visibleDays.value).toBe("0");
+  expect(emptyColumns.textContent).toContain("Hidden");
 });

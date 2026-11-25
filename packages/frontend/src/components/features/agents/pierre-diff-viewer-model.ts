@@ -5,7 +5,7 @@ import type {
   SelectedLineRange,
   SelectionSide,
 } from "@pierre/diffs";
-import { getFiletypeFromFileName, getSingularPatch } from "@pierre/diffs";
+import { getFiletypeFromFileName } from "@pierre/diffs";
 import { z } from "zod";
 import type {
   InlineCommentContextLine,
@@ -16,7 +16,7 @@ import {
   buildInlineCommentContext,
   inlineCommentMatchesLines,
 } from "@openducktor/frontend-core/drafts/inline-comment-placement";
-import { selectRenderableDiff } from "./renderable-patch";
+import { parseRenderablePatch, selectRenderableDiff } from "./renderable-patch";
 
 const MAX_RENDERABLE_DIFF_CACHE_ENTRIES = 64;
 
@@ -111,14 +111,6 @@ export const getHunkActionAnnotations = (
   );
 };
 
-const tryGetSingularPatch = (patch: string) => {
-  try {
-    return getSingularPatch(patch);
-  } catch {
-    return null;
-  }
-};
-
 const normalizeDiffLineText = (value: string): string => value.replace(/\n$/, "");
 
 const renderableFileDiffCache = new Map<string, RenderableFileDiff>();
@@ -165,7 +157,7 @@ export const getRenderableFileDiff = (patch: string, filePath: string) => {
 
   const normalizedPatch = selectRenderableDiff(patch, filePath);
   const fileDiff = withWorkerCacheKey(
-    normalizedPatch ? tryGetSingularPatch(normalizedPatch) : null,
+    normalizedPatch ? parseRenderablePatch(normalizedPatch) : null,
     filePath,
     normalizedPatch,
   );

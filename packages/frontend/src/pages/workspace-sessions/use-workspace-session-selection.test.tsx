@@ -57,34 +57,46 @@ const record = (id: string): WorkspaceSession => ({
   archivedAt: null,
 });
 
-test("selection commits before the scheduled storage write and unmount flushes the last ID", () => {
+test("a revisited chat becomes the saved selection after reload", () => {
   const workspaceId = crypto.randomUUID();
   const key = workspaceSessionSelectionStorageKey(workspaceId);
   saved.setItem(key, "First");
   const commits: Array<{ selected: string | undefined; stored: string | null }> = [];
-  const sessions = [record("First"), record("Second")];
-  const h = renderHook<WorkspaceSession | null, string | undefined>(
-    (requestedSessionId: string | undefined) => {
-      const { selected } = useWorkspaceSessionSelection({
-        isActive: true,
-        workspaceId,
-        sessions,
-        requestedSessionId,
-      });
-      useLayoutEffect(() => {
-        commits.push({ selected: selected?.id, stored: saved.getItem(key) });
-      }, [selected]);
-      return selected;
-    },
-    { initialProps: undefined, wrapper },
-  );
+  const sessions = [record("First"), record("Second"), record("Third")];
+  const useSelection = (requestedSessionId: string | undefined) => {
+    const { selected } = useWorkspaceSessionSelection({
+      isActive: true,
+      workspaceId,
+      sessions,
+      requestedSessionId,
+    });
+    useLayoutEffect(() => {
+      commits.push({ selected: selected?.id, stored: saved.getItem(key) });
+    }, [selected]);
+    return selected;
+  };
+  const h = renderHook<WorkspaceSession | null, string | undefined>(useSelection, {
+    initialProps: undefined,
+    wrapper,
+  });
   try {
     h.rerender("Second");
     expect(h.result.current?.id).toBe("Second");
     expect(commits.at(-1)).toEqual({ selected: "Second", stored: "First" });
     expect(saved.getItem(key)).toBe("First");
+    h.rerender("Third");
+    expect(h.result.current?.id).toBe("Third");
+    h.rerender("Second");
+    expect(h.result.current?.id).toBe("Second");
     h.unmount();
     expect(saved.getItem(key)).toBe("Second");
+
+    const reopened = renderHook(useSelection, { initialProps: undefined, wrapper });
+    try {
+      expect(reopened.result.current?.id).toBe("Second");
+    } finally {
+      reopened.unmount();
+    }
   } finally {
     h.unmount();
     saved.removeItem(key);

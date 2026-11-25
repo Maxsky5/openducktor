@@ -53,7 +53,11 @@ export default {
     },
     "packages/frontend": {
       // The startup splash plugin reads the font faces as text.
-      entry: ["src/**/*.test.{ts,tsx}", "src/fonts/faces.css"],
+      entry: [
+        "src/**/*.test.{ts,tsx}",
+        "src/features/browser/browser-tab-content.fixture.tsx",
+        "src/fonts/faces.css",
+      ],
       project: ["src/**/*.{ts,tsx,css}"],
     },
     "packages/product-scenes": {

@@ -9,7 +9,7 @@ import {
   decodeBrowserClientMessage,
   encodeBrowserChannelMessage,
 } from "@openducktor/contracts";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { browserAnnotationStoreOf } from "@/features/browser-annotations/browser-annotation-store";
 import { QueryProvider } from "@/test-utils/query-provider";
@@ -27,7 +27,7 @@ import {
   type ElectronBrowserRuntime,
   useBrowserRuntime,
 } from "./browser-runtime";
-import { BROWSER_DEVTOOLS_DEFAULT_SIZE, useBrowserDevToolsStore } from "./browser-devtools-store";
+import { useBrowserDevToolsStore } from "./browser-devtools-store";
 import { BROWSER_TABS_NEED_LOCAL_APP } from "./browser-frame-display";
 import { browserRecentPagesOf } from "./browser-recent-pages";
 import { browserSurfaceKey, devToolsSurfaceKey } from "./browser-surface-registry";
@@ -95,8 +95,6 @@ const renderTab = (
     withLayer?: boolean;
     frames?: BrowserFrameBridge | null;
     listed?: boolean;
-    inPanel?: boolean;
-    shown?: boolean;
   } = {},
 ) => {
   const channel = createChannelFixture();
@@ -133,30 +131,27 @@ const renderTab = (
     runtime = useBrowserRuntime();
     return null;
   }
-  /** `inPanel` false leaves the tab out of the panels, as for an owner that no panel shows. */
-  const tree = (inPanel: boolean, shown = options.shown ?? true) =>
+  render(
     withShellPlatform(
       <QueryProvider connection={connection}>
         <BrowserRuntimeProvider>
           <Probe />
           {options.withLayer ? <BrowserLayer /> : null}
-          {inPanel ? (
-            <BrowserTabContent
-              entry={{
-                id: `browser:${TAB_ID}`,
-                kind: "browser",
-                tabId: TAB_ID,
-              }}
-              tab={options.listed === false ? null : tab}
-              isShown={shown}
-              addressFocusRequest={0}
-            />
-          ) : null}
+          <BrowserTabContent
+            entry={{
+              id: `browser:${TAB_ID}`,
+              kind: "browser",
+              tabId: TAB_ID,
+            }}
+            tab={options.listed === false ? null : tab}
+            isShown
+            addressFocusRequest={0}
+          />
         </BrowserRuntimeProvider>
       </QueryProvider>,
       shellPlatform,
-    );
-  const view = render(tree(options.inPanel ?? true));
+    ),
+  );
   const requireRuntime = (): BrowserRuntime => {
     if (runtime === null) throw new Error("The runtime did not render.");
     return runtime;
@@ -167,7 +162,6 @@ const renderTab = (
     return current;
   };
   return {
-    view,
     connection,
     channel,
     pickerSet,
@@ -177,12 +171,11 @@ const renderTab = (
     openExternalUrl,
     runtime: requireRuntime,
     electronRuntime,
-    setInPanel: (inPanel: boolean) => view.rerender(tree(inPanel)),
-    setShown: (shown: boolean) => view.rerender(tree(options.inPanel ?? true, shown)),
   };
 };
 
 afterEach(() => {
+  cleanup();
   useBrowserDevToolsStore.setState({ docks: {} });
 });
 
@@ -216,7 +209,7 @@ describe("BrowserTabContent", () => {
 
     fireEvent.click(devTools);
     expect(useBrowserDevToolsStore.getState().docks[TAB_ID]).toEqual({ open: true, size: 25 });
-    expect(BROWSER_DEVTOOLS_DEFAULT_SIZE).not.toBe(25);
+    expect(screen.getByRole("separator", { name: "Resize DevTools" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Close DevTools" }));
     expect(screen.queryByRole("separator", { name: "Resize DevTools" })).toBeNull();
@@ -391,46 +384,6 @@ describe("BrowserTabContent in the web runner", () => {
   const frames: BrowserFrameBridge = {
     source: async () => ({ kind: "preview", origin: PREVIEW }),
   };
-
-  test("a keyboard user enters the iframe from its slot, and F6 in the address bar too", async () => {
-    renderTab(
-      createBrowserTabSummaryFixture({ tabId: TAB_ID, page: "frame", started: false }),
-      READY,
-      {
-        withLayer: true,
-        frames,
-      },
-    );
-    const page = await screen.findByRole("group", { name: "Page" });
-    const frame = await screen.findByTestId("browser-frame");
-    const address = screen.getByLabelText("Address");
-
-    act(() => page.focus());
-    expect(document.activeElement).toBe(frame);
-    act(() => address.focus());
-    fireEvent.keyDown(address, { key: "F6" });
-
-    expect(document.activeElement).toBe(frame);
-    for (const name of ["Annotate", "Share with agents", "Site settings"]) {
-      expect(screen.queryByRole("button", { name })).toBeNull();
-    }
-  });
-
-  test("loads a frame page when the panels first show its tab, and keeps it after", async () => {
-    const { runtime, setInPanel } = renderTab(
-      createBrowserTabSummaryFixture({ tabId: TAB_ID, page: "frame", started: false }),
-      READY,
-      { withLayer: true, frames, inPanel: false },
-    );
-    await waitFor(() => expect(runtime().store.getSnapshot().tabs.has(TAB_ID)).toBe(true));
-    expect(screen.queryByTestId("browser-frame")).toBeNull();
-
-    setInPanel(true);
-    const frame = await screen.findByTestId("browser-frame");
-
-    setInPanel(false);
-    expect(screen.getByTestId("browser-frame")).toBe(frame);
-  });
 
   test("offers to open a site that refuses frames in the browser of the user", async () => {
     const { runtime, openExternalUrl } = renderTab(

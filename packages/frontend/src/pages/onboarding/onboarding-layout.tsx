@@ -101,7 +101,6 @@ export function OnboardingFrame({
     >
       <div
         className="electron-native-controls-surface fixed inset-x-0 top-0 z-10 w-full"
-        data-onboarding-native-titlebar=""
         aria-hidden="true"
       />
       <div
@@ -142,7 +141,6 @@ export function OnboardingLayout({
       <nav
         className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-10 sm:py-5"
         aria-label="Onboarding progress"
-        data-orientation="horizontal"
       >
         <ol className="grid grid-cols-4">
           {ONBOARDING_STAGES.map((item, index) => {
@@ -157,7 +155,6 @@ export function OnboardingLayout({
               >
                 {index < ONBOARDING_STAGES.length - 1 ? (
                   <span
-                    data-progress-connector=""
                     className={cn(
                       "absolute top-5 left-1/2 h-px w-full",
                       index < currentStageIndex ? "bg-primary" : "bg-border",

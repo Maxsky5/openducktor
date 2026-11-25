@@ -2,12 +2,9 @@ import { describe, expect, mock, test } from "bun:test";
 import type { RepoConfig, RepositoryGitProviderContext } from "@openducktor/contracts";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
-import { createDeferred, createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
+import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { useWorkspaceRepositorySettings } from "./use-workspace-repository-settings";
-
-enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useWorkspaceRepositorySettings>[0];
 
@@ -51,7 +48,7 @@ const createHookHarness = (
 
 describe("useWorkspaceRepositorySettings", () => {
   test("exposes repo settings loading while the canonical config query is pending", async () => {
-    const config = createDeferred<RepoConfig>();
+    const config = Promise.withResolvers<RepoConfig>();
     const hostClient = createRepoConfigHost(() => config.promise);
     const harness = createHookHarness(
       {
@@ -137,7 +134,7 @@ describe("useWorkspaceRepositorySettings", () => {
   });
 
   test("keeps pending, failed, and valid null provider reads distinct and supports retry", async () => {
-    const pendingContext = createDeferred<RepositoryGitProviderContext>();
+    const pendingContext = Promise.withResolvers<RepositoryGitProviderContext>();
     const loadProviderContext = mock(() => pendingContext.promise);
     const hostClient = createRepoConfigHost(undefined, loadProviderContext);
     const harness = createHookHarness(

@@ -299,7 +299,13 @@ test.each(
         ]);
       });
       await act(async () => done.resolve({ ...record, archivedAt: NOW }));
-      await waitFor(() => expect(view.queryByRole("dialog") === null).toBe(true));
+      await waitFor(
+        () => {
+          expect(view.queryByRole("dialog") === null).toBe(true);
+          expect(row.isConnected).toBe(false);
+        },
+        { timeout: 800 },
+      );
       expect(view.queryByRole("button", { name: /Chat archive/ })).toBeNull();
       expect(view.getByRole("button", { name: /Chat keep/ })).toBeTruthy();
       expect(view.getByLabelText("Current address").textContent).toBe(

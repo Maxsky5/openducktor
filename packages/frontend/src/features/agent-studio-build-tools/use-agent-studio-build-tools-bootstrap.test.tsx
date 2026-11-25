@@ -4,12 +4,9 @@ import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
-  enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import { toAgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { useAgentStudioBuildToolsBootstrap } from "./use-agent-studio-build-tools-bootstrap";
-
-enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioBuildToolsBootstrap>[0];
 

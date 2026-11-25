@@ -10,11 +10,7 @@ import type {
 import { gitChangeIntentKey } from "@openducktor/frontend-core/git/model/git-change-intent";
 import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import {
-  createDeferred,
-  createHookHarness as createSharedHookHarness,
-  enableReactActEnvironment,
-} from "./agent-studio-test-utils";
+import { createHookHarness as createSharedHookHarness } from "./agent-studio-test-utils";
 
 const actualSonnerModule = await import("sonner");
 
@@ -25,8 +21,6 @@ type GitChangeResult = Awaited<ReturnType<HostClient["gitChangeSelection"]>>;
 type GitPushResult = Awaited<ReturnType<HostClient["gitPushBranch"]>>;
 type GitPullResult = Awaited<ReturnType<HostClient["gitPullBranch"]>>;
 type GitRebaseResult = Awaited<ReturnType<HostClient["gitRebaseBranch"]>>;
-
-enableReactActEnvironment();
 
 const gitCommitAllMock = mock<HostClient["gitCommitAll"]>(async () => ({
   outcome: "committed",
@@ -235,7 +229,7 @@ beforeEach(() => {
 
 describe("useAgentStudioGitActions", () => {
   test("retains the original rebase request and operation lock after target selection changes", async () => {
-    const deferred = createDeferred<GitRebaseResult>();
+    const deferred = Promise.withResolvers<GitRebaseResult>();
     gitRebaseBranchMock.mockImplementationOnce(() => deferred.promise);
     const harness = createHookHarness(
       createBaseArgs({
@@ -280,7 +274,7 @@ describe("useAgentStudioGitActions", () => {
 
   test("tracks the staged commit lifecycle and rejects blank commit messages", async () => {
     const refreshDiffData = mock(async () => {});
-    const commitDeferred = createDeferred<GitCommitResult>();
+    const commitDeferred = Promise.withResolvers<GitCommitResult>();
     gitCommitStagedMock.mockImplementationOnce(() => commitDeferred.promise);
     const harness = createHookHarness(createBaseArgs({ refreshDiffData }));
     let running: Promise<boolean> | undefined;
@@ -494,7 +488,7 @@ describe("useAgentStudioGitActions", () => {
 
   test("tracks push action lifecycle and validates missing branch errors", async () => {
     const refreshDiffData = mock(async () => {});
-    const pushDeferred = createDeferred<GitPushResult>();
+    const pushDeferred = Promise.withResolvers<GitPushResult>();
     const harness = createHookHarness(
       createBaseArgs({
         branch: null,
@@ -552,7 +546,7 @@ describe("useAgentStudioGitActions", () => {
   });
 
   test("tracks rebase action transition and clears error boundaries", async () => {
-    const rebaseDeferred = createDeferred<GitRebaseResult>();
+    const rebaseDeferred = Promise.withResolvers<GitRebaseResult>();
     const refreshDiffData = mock(async () => {});
     const harness = createHookHarness(
       createBaseArgs({
@@ -586,7 +580,7 @@ describe("useAgentStudioGitActions", () => {
   });
 
   test("holds the commit operation lock until the soft refresh settles", async () => {
-    const refreshDeferred = createDeferred<void>();
+    const refreshDeferred = Promise.withResolvers<void>();
     const refreshDiffData = mock(async (_mode?: string) => refreshDeferred.promise);
     const harness = createHookHarness(createBaseArgs({ refreshDiffData }));
     let running: Promise<boolean> | undefined;
@@ -643,7 +637,7 @@ describe("useAgentStudioGitActions", () => {
   });
 
   test("queues a change that starts during another and sends it with the returned snapshots", async () => {
-    const first = createDeferred<GitChangeResult>();
+    const first = Promise.withResolvers<GitChangeResult>();
     gitChangeSelectionMock.mockImplementationOnce(() => first.promise);
     const harness = createHookHarness(createBaseArgs({ workingDir: "/tmp/worktree/task-10" }));
     const chunk = createIntent("stage", "unstaged", {
@@ -705,7 +699,7 @@ describe("useAgentStudioGitActions", () => {
       createIntent(action, "unstaged", { kind: "hunk", filePath, hunkIndex });
 
     test("stops a queued chunk change after an earlier change moved the chunks of its file", async () => {
-      const first = createDeferred<GitChangeResult>();
+      const first = Promise.withResolvers<GitChangeResult>();
       gitChangeSelectionMock.mockImplementationOnce(() => first.promise);
       const harness = createHookHarness(
         createBaseArgs({ localChanges: withUnstagedDiffs([fileDiff("src/main.ts", "@@ shown")]) }),
@@ -736,7 +730,7 @@ describe("useAgentStudioGitActions", () => {
     });
 
     test("runs a queued chunk change of a file that the earlier change did not move", async () => {
-      const first = createDeferred<GitChangeResult>();
+      const first = Promise.withResolvers<GitChangeResult>();
       gitChangeSelectionMock.mockImplementationOnce(() => first.promise);
       const other = fileDiff("src/other.ts", "@@ other");
       const harness = createHookHarness(
@@ -771,7 +765,7 @@ describe("useAgentStudioGitActions", () => {
     });
 
     test("does not open a chunk Discard after an earlier change moved the chunks", async () => {
-      const first = createDeferred<GitChangeResult>();
+      const first = Promise.withResolvers<GitChangeResult>();
       gitChangeSelectionMock.mockImplementationOnce(() => first.promise);
       const harness = createHookHarness(
         createBaseArgs({ localChanges: withUnstagedDiffs([fileDiff("src/main.ts", "@@ shown")]) }),
@@ -823,7 +817,7 @@ describe("useAgentStudioGitActions", () => {
 
   test("ends the queued changes after a failed change and reads the actual state", async () => {
     const failure = "The unstaged changes moved. Refresh and try again.";
-    const first = createDeferred<GitChangeResult>();
+    const first = Promise.withResolvers<GitChangeResult>();
     gitChangeSelectionMock.mockImplementationOnce(() => first.promise);
     const refreshDiffData = mock(async (_mode?: string) => {});
     const harness = createHookHarness(createBaseArgs({ refreshDiffData }));
@@ -933,7 +927,7 @@ describe("useAgentStudioGitActions", () => {
   );
 
   test("opens a Discard confirmation after the changes before it", async () => {
-    const first = createDeferred<GitChangeResult>();
+    const first = Promise.withResolvers<GitChangeResult>();
     gitChangeSelectionMock.mockImplementationOnce(() => first.promise);
     const harness = createHookHarness(createBaseArgs());
     let discard: Promise<void> | undefined;
@@ -1056,7 +1050,7 @@ describe("useAgentStudioGitActions", () => {
   });
 
   test("does not show a late change failure after the session changes", async () => {
-    const change = createDeferred<GitChangeResult>();
+    const change = Promise.withResolvers<GitChangeResult>();
     gitChangeSelectionMock.mockImplementationOnce(() => change.promise);
     const refreshDiffData = mock(async () => {});
     const args = createBaseArgs({
@@ -1097,7 +1091,7 @@ describe("useAgentStudioGitActions", () => {
     gitChangeSelectionMock.mockImplementationOnce(async () => {
       throw new Error("Session A discard failed.");
     });
-    const refresh = createDeferred<void>();
+    const refresh = Promise.withResolvers<void>();
     const refreshDiffData = mock(() => refresh.promise);
     const args = createBaseArgs({
       contextKey: "session-a",
@@ -1210,7 +1204,7 @@ describe("useAgentStudioGitActions", () => {
 
   test("keeps the pull confirmation state open until the confirmed pull completes", async () => {
     const refreshDiffData = mock(async () => {});
-    const pullDeferred = createDeferred<GitPullResult>();
+    const pullDeferred = Promise.withResolvers<GitPullResult>();
     gitPullBranchMock.mockImplementationOnce(async () => pullDeferred.promise);
     const harness = createHookHarness(
       createBaseArgs({
@@ -1576,7 +1570,7 @@ describe("useAgentStudioGitActions", () => {
       conflictedFiles: ["src/main.ts"],
       output: "CONFLICT (content): Merge conflict in src/main.ts",
     }));
-    const abortDeferred = createDeferred<{ output: string }>();
+    const abortDeferred = Promise.withResolvers<{ output: string }>();
     gitAbortConflictMock.mockImplementationOnce(async () => abortDeferred.promise);
     const refreshDiffData = mock(async () => {});
     const harness = createHookHarness(
@@ -1660,7 +1654,8 @@ describe("useAgentStudioGitActions", () => {
   });
 
   test("tracks ask-builder action lifecycle while request is pending", async () => {
-    const resolveDeferred = createDeferred<ReturnType<typeof createAgentMessageSendReceipt>>();
+    const resolveDeferred =
+      Promise.withResolvers<ReturnType<typeof createAgentMessageSendReceipt>>();
     const onResolveGitConflict = mock(async () => resolveDeferred.promise);
     const harness = createHookHarness(
       createBaseArgs({
@@ -1846,7 +1841,7 @@ describe("useAgentStudioGitActions", () => {
   });
 
   test("shows a force push confirmation only in the worktree that pushed", async () => {
-    const pushDeferred = createDeferred<GitPushResult>();
+    const pushDeferred = Promise.withResolvers<GitPushResult>();
     gitPushBranchMock.mockImplementationOnce(async () => pushDeferred.promise);
     const firstTaskArgs = createBaseArgs({ workingDir: "/tmp/worktree/task-10" });
     const harness = createHookHarness(firstTaskArgs);
@@ -1884,7 +1879,7 @@ describe("useAgentStudioGitActions", () => {
   });
 
   test("shows a rebase conflict only in the worktree that rebased", async () => {
-    const rebaseDeferred = createDeferred<GitRebaseResult>();
+    const rebaseDeferred = Promise.withResolvers<GitRebaseResult>();
     gitRebaseBranchMock.mockImplementationOnce(() => rebaseDeferred.promise);
     const firstTaskArgs = createBaseArgs({ workingDir: "/tmp/worktree/task-10" });
     const harness = createHookHarness(firstTaskArgs);
@@ -1917,7 +1912,7 @@ describe("useAgentStudioGitActions", () => {
   });
 
   test("keeps failure state isolated when rebase fails", async () => {
-    const rebaseDeferred = createDeferred<GitRebaseResult>();
+    const rebaseDeferred = Promise.withResolvers<GitRebaseResult>();
     gitRebaseBranchMock.mockImplementationOnce(() => rebaseDeferred.promise);
     const refreshDiffData = mock(async () => {});
     const harness = createHookHarness(
@@ -2134,7 +2129,7 @@ test.each(["repository", "directory", "branch"] as const)(
 );
 
 test("drops a late commit error after the directory changes", async () => {
-  const completed = createDeferred<GitCommitResult>();
+  const completed = Promise.withResolvers<GitCommitResult>();
   gitCommitAllMock.mockImplementationOnce(() => completed.promise);
   const refreshDiffData = mock(async () => {});
   const original = createBaseArgs({ workingDir: "/repo/a", refreshDiffData });

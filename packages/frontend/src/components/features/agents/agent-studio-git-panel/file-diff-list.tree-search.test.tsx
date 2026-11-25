@@ -105,8 +105,7 @@ const EXPANDED_TREE_ROW = fakeRowHeight(FILE_LIST_ROW_HEIGHT.tree, { expandedRow
 const THREE_DIRECTORY_FILES = ["a", "b", "c"].flatMap((directory) => numberedFiles(directory, 30));
 
 const directoryButton = (name: string): HTMLElement => screen.getByRole("button", { name });
-const fileToggle = (file: string): HTMLElement =>
-  screen.getByRole("button", { name: `Toggle diff for ${file}` });
+const fileToggle = (file: string): HTMLElement => screen.getByLabelText(`Toggle diff for ${file}`);
 const searchField = (): HTMLElement => screen.getByRole("textbox", { name: "Search files" });
 const typeSearch = (value: string): void => {
   fireEvent.change(searchField(), { target: { value } });
@@ -310,7 +309,7 @@ describe("FileDiffList tree view and search", () => {
       measurements.restore();
     });
 
-    test("keeps the top visible file and known row heights when the view changes", () => {
+    test("keeps the top file and the offset inside an open diff across view changes", () => {
       const files = Array.from(
         { length: 100 },
         (_, index) => `src/file-${String(index).padStart(3, "0")}.ts`,
@@ -334,15 +333,18 @@ describe("FileDiffList tree view and search", () => {
       // The tree adds the "src" row above the files, and each row header is shorter.
       expect(list.scrollTop).toBe(30 * TREE_ROW + EXPANDED_TREE_ROW);
 
-      fireEvent.scroll(list, { target: { scrollTop: 1_000 } });
-      expect(rowTop(fileToggle("src/file-005.ts"))).toBe(6 * TREE_ROW - 1_000);
+      fireEvent.scroll(list, { target: { scrollTop: 6 * TREE_ROW + 500 } });
+      expect(rowTop(fileToggle("src/file-005.ts"))).toBe(-500);
 
-      fireEvent.scroll(list, { target: { scrollTop: 30 * TREE_ROW + EXPANDED_TREE_ROW } });
+      // The list header is taller, so the same point in the diff is farther from the row top.
+      const headerDifference = FILE_LIST_ROW_HEIGHT.list - FILE_LIST_ROW_HEIGHT.tree;
       fireEvent.click(screen.getByRole("button", { name: "List view" }));
       fireEvent.scroll(list);
+      expect(rowTop(fileToggle("src/file-005.ts"))).toBe(-(500 + headerDifference));
+
+      fireEvent.scroll(list, { target: { scrollTop: 29 * LIST_ROW + 800 } });
       expect(rowTop(fileToggle("src/file-030.ts"))).toBe(0);
-      expect(list.scrollTop).toBe(29 * LIST_ROW + 800);
-      // Three full renders of 100 files and an expanded diff take over 1000 ms on CI runners.
+      // The view switches render a measured window of rows with a diff open.
     }, 3000);
 
     test("keeps the top visible file when a view switch changes only the row heights", () => {
@@ -368,34 +370,6 @@ describe("FileDiffList tree view and search", () => {
       expect(list.scrollTop).toBe(30 * LIST_ROW);
       // Three full renders of 100 files take up to 1.1 s on macOS CI runners.
     }, 3000);
-
-    test("keeps the scrolled place inside an expanded file when the view changes", () => {
-      const files = Array.from(
-        { length: 100 },
-        (_, index) => `src/file-${String(index).padStart(3, "0")}.ts`,
-      );
-      render(
-        <NavigableFileDiffListHarness
-          files={files}
-          initialViewMode="list"
-          initialExpandedFiles={["src/file-005.ts"]}
-        />,
-      );
-      measurements.resize(600, 800);
-      const list = screen.getByRole("list");
-      fireEvent.scroll(list, { target: { scrollTop: 5 * LIST_ROW + 500 } });
-      expect(rowTop(fileToggle("src/file-005.ts"))).toBe(-500);
-
-      // The diff body starts higher in tree view, because the row header is shorter.
-      const headerDifference = FILE_LIST_ROW_HEIGHT.list - FILE_LIST_ROW_HEIGHT.tree;
-      fireEvent.click(screen.getByRole("button", { name: "Tree view" }));
-      fireEvent.scroll(list);
-      expect(rowTop(fileToggle("src/file-005.ts"))).toBe(-(500 - headerDifference));
-
-      fireEvent.click(screen.getByRole("button", { name: "List view" }));
-      fireEvent.scroll(list);
-      expect(rowTop(fileToggle("src/file-005.ts"))).toBe(-500);
-    });
 
     test("finishes the scroll restore after a view switch, so a later expand does not jump", () => {
       render(<NavigableFileDiffListHarness files={PACKAGE_FILES} />);
@@ -495,9 +469,8 @@ describe("FileDiffList tree view and search", () => {
           fireEvent.click(toggle);
           fireEvent.click(toggle);
         } else {
-          const search = searchField();
-          fireEvent.change(search, { target: { value: "c/" } });
-          fireEvent.change(search, { target: { value: "" } });
+          typeSearch("c/");
+          typeSearch("");
         }
 
         scrollToDirectoryC();

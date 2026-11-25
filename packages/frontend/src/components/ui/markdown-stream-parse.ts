@@ -155,6 +155,14 @@ const listPrefixSpread = (list: List): boolean =>
     return itemStart > previousEnd + 1;
   });
 
+const readLineStart = (text: string, offset: number): number => {
+  let start = offset;
+  while (start > 0 && text[start - 1] !== "\n" && text[start - 1] !== "\r") {
+    start -= 1;
+  }
+  return start;
+};
+
 /**
  * Parses the text from `tailStart` on. Stub definitions for the identifiers in `definitions` come
  * first, because a reference parses as a reference only when its definition exists. Their
@@ -176,7 +184,7 @@ const parseTail = (
   return {
     blocks: nodes.map((node, index) => {
       const { start, end } = readOffsets(node, prefix.length);
-      const lineStart = index === 0 ? 0 : tail.lastIndexOf("\n", start - 1) + 1;
+      const lineStart = index === 0 ? 0 : readLineStart(tail, start);
       const blockText = tail.slice(lineStart, end);
       const block: ParsedBlock = {
         text: blockText,
@@ -189,10 +197,7 @@ const parseTail = (
       if (node.type === "list" && item) {
         const itemStart = readOffsets(item, prefix.length).start;
         listTails.set(block, {
-          start:
-            tailStart +
-            Math.max(tail.lastIndexOf("\n", itemStart - 1), tail.lastIndexOf("\r", itemStart - 1)) +
-            1,
+          start: tailStart + readLineStart(tail, itemStart),
           prefixSpread: listPrefixSpread(node),
         });
       }
@@ -251,7 +256,7 @@ const readOpenFenceCode = (node: RootContent, text: string): string | null => {
   if (last.type !== "code") {
     return null;
   }
-  const fence = CLOSING_FENCE_LINE.exec(text.slice(text.lastIndexOf("\n") + 1))?.[1];
+  const fence = CLOSING_FENCE_LINE.exec(text.slice(readLineStart(text, text.length)))?.[1];
   return fence === undefined || last.value.endsWith(fence) ? last.value : null;
 };
 

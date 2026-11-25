@@ -12,19 +12,17 @@ export type MarkdownLinkPolicy = {
   handlesDestination(href: string): boolean;
 };
 
-export const markdownLinkUrlTransform = (
-  transform: UrlTransform,
-  policy: MarkdownLinkPolicy | undefined,
-): UrlTransform => {
-  if (!policy) return transform;
-  return (url, key, node) => {
-    if (node.tagName !== "a" || key !== "href" || !policy.handlesDestination(url))
-      return transform(url, key, node);
-    // Keep the destination off the anchor's navigation URL.
-    destinations.set(node, url);
-    return "#";
+export const markdownLinkUrlTransform =
+  (transform: UrlTransform, policy: MarkdownLinkPolicy | undefined): UrlTransform =>
+  (url, key, node) => {
+    if (node.tagName === "a" && key === "href" && policy?.handlesDestination(url)) {
+      // Keep the destination off the anchor's navigation URL.
+      destinations.set(node, url);
+      return "#";
+    }
+    const transformed = transform(url, key, node);
+    return node.tagName === "img" && key === "src" && transformed === "" ? undefined : transformed;
   };
-};
 
 type LinkComponentsCacheEntry = {
   defaults: Components;

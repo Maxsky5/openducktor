@@ -1,20 +1,13 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { SystemOpenInToolInfo, SystemSettings } from "@openducktor/contracts";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { QueryProvider } from "@/test-utils/query-provider";
 import type { HostClient } from "@openducktor/host-client";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
-import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import { SettingsAppearanceSection } from "./settings-appearance-section";
 import { SETTINGS_SECTIONS } from "./settings-modal-constants";
-
-enableReactActEnvironment();
-afterEach(() => {
-  cleanup();
-});
 
 function Harness({
   listOpenInTools,
@@ -47,7 +40,7 @@ function Harness({
 
 describe("Open In settings", () => {
   test("keeps a fixed placeholder during discovery without showing an empty result", async () => {
-    const discovery = createDeferred<SystemOpenInToolInfo[]>();
+    const discovery = Promise.withResolvers<SystemOpenInToolInfo[]>();
     const listOpenInTools: HostClient["systemListOpenInTools"] = () => discovery.promise;
     render(<Harness listOpenInTools={listOpenInTools} />);
     expect(screen.getByRole("status", { name: "Loading supported apps" })).toBeDefined();

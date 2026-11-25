@@ -2,16 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX } from "@openducktor/core";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { buildSessionPolicyNoticeMessage } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-notice-messages";
 import {
   createMessageCardElement,
   LONG_TRANSCRIPT_SAMPLE,
-  renderMessageCardToHtml,
 } from "./agent-chat-message-card-test-harness";
 import { buildMessage } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
-
-enableReactActEnvironment();
 
 describe("AgentChatMessageCard system messages", () => {
   test("renders a Claude permission mismatch as a warning card", () => {
@@ -502,8 +498,8 @@ describe("AgentChatMessageCard system messages", () => {
     expect(html).toContain("whitespace-pre-wrap break-words text-sm font-medium text-destructive");
   });
 
-  test("renders reasoning rows as inline thinking transcript text without disclosure chrome", async () => {
-    const html = await renderMessageCardToHtml(
+  test("shows formatted reasoning in the transcript without a disclosure or copy button", async () => {
+    const view = render(
       createMessageCardElement({
         message: {
           id: "thinking-1",
@@ -519,16 +515,10 @@ describe("AgentChatMessageCard system messages", () => {
       }),
     );
 
-    expect(html).toContain("Thinking:");
-    expect(html).toContain("space-y-0.5");
-    expect(html).not.toContain("items-baseline");
-    expect(html).toContain("markdown-body");
-    expect(html).toMatch(/(<strong>diff<\/strong>|\*\*diff\*\*)/);
-    expect(html).toContain("diff");
-    expect(html).not.toContain("<details");
-    expect(html).not.toContain("cursor-pointer");
-    expect(html).not.toContain("lucide-brain");
-    expect(html).not.toContain("10:22:15");
-    expect(html).not.toContain("tracking-wide");
+    expect(view.getByText("Thinking:")).toBeDefined();
+    expect(await view.findByText("diff", { selector: "strong" })).toBeDefined();
+    expect(view.getByRole("listitem").textContent).toBe("Keep markdown output");
+    expect(view.container.querySelector("details, time")).toBeNull();
+    expect(view.queryByTestId("copy-assistant-message-content")).toBeNull();
   });
 });

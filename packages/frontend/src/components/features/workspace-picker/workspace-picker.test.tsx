@@ -1,11 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { act } from "react";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { createWorkspaceRecordFixture } from "@/test-utils/shared-test-fixtures";
 import { WorkspacePicker } from "./workspace-picker";
-
-enableReactActEnvironment();
 
 const fieldnotes = createWorkspaceRecordFixture({
   workspaceId: "fieldnotes",

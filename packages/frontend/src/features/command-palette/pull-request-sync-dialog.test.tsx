@@ -1,3 +1,4 @@
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import type { WorkspaceRef } from "@openducktor/contracts";
 import { expect, mock, test } from "bun:test";
 import type { RepositoryGitProviderContext, WorkspaceRecord } from "@openducktor/contracts";
@@ -8,12 +9,13 @@ import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import { ManualPullRequestSyncProvider } from "@/state/providers/manual-pull-request-sync-provider";
 import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-core/queries/git-provider-context";
 import {
-  createDeferred,
   createGitProviderContextFixture,
   createWorkspaceRecordFixture,
   createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
 import { PullRequestSyncDialog } from "./pull-request-sync-dialog";
+
+setupTestingLibraryFakeTimers();
 
 test.each([false, true])(
   "checks every open workspace before counting and syncing eligible targets, read failure=%s",
@@ -33,7 +35,7 @@ test.each([false, true])(
         repoPath: `/repo-${index}`,
       }),
     );
-    const read = createDeferred<RepositoryGitProviderContext>();
+    const read = Promise.withResolvers<RepositoryGitProviderContext>();
     const sync = mock(async (_scope: WorkspaceRef) => ({ ok: true as const }));
     const connection = createTestClientConnection({
       client: {
@@ -75,7 +77,6 @@ test.each([false, true])(
       await act(async () => {
         if (failed) read.reject(new Error("Provider settings could not be read. Reopen Settings."));
         else read.resolve(null);
-        await new Promise((resolve) => setTimeout(resolve, 20));
       });
       const all = await within(chooser).findByRole<HTMLButtonElement>("button", {
         name: "Sync all open workspaces",
@@ -240,7 +241,7 @@ test.each([
       workspaceName: "Chosen workspace",
       repoPath: "/chosen",
     });
-    const read = createDeferred<RepositoryGitProviderContext>();
+    const read = Promise.withResolvers<RepositoryGitProviderContext>();
     const sync = mock(async () => ({ ok: true as const }));
     const connection = createTestClientConnection({
       client: {
@@ -278,7 +279,6 @@ test.each([
       await act(async () => {
         if (provider instanceof Error) read.reject(provider);
         else read.resolve(provider);
-        await new Promise((resolve) => setTimeout(resolve, 20));
       });
       const named = await within(chooser).findByRole<HTMLButtonElement>("button", {
         name: "Sync workspace Chosen workspace",

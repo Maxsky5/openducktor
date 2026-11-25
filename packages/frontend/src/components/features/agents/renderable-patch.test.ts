@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { processPatch } from "@pierre/diffs";
-import { normalizePatchCandidate, selectRenderableDiff } from "./renderable-patch";
+import { selectRenderableDiff } from "./renderable-patch";
 
 describe("selectRenderableDiff", () => {
   test("chooses the matching file section from a multi-file patch", () => {
@@ -46,13 +46,5 @@ describe("selectRenderableDiff", () => {
     );
     // A strict parse fails when a hunk has fewer lines than its header declares.
     expect(() => processPatch(patch ?? "", { throwOnError: true })).not.toThrow();
-  });
-});
-
-describe("normalizePatchCandidate", () => {
-  test("synthesizes file headers for hunk-only diffs", () => {
-    expect(normalizePatchCandidate("@@ -1 +1 @@\n-old\n+new\n", "src/app.ts")).toBe(
-      "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n",
-    );
   });
 });

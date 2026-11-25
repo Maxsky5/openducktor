@@ -24,15 +24,15 @@ import type { HostClient } from "@openducktor/host-client";
 import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import {
   invalidateRepoIssueItemsQueries,
   issueItemsQueryKeys,
 } from "@openducktor/frontend-core/queries/issue-items";
-import { enableReactActEnvironment } from "../agents/agent-studio-test-utils";
 import { IssueImportDialog } from "./issue-import-dialog";
 import { useIssueSelectionState } from "@openducktor/frontend-core/tasks/issue-import/issue-import-state";
 
-enableReactActEnvironment();
+setupTestingLibraryFakeTimers();
 
 const provider = {
   descriptor: GITHUB_PROVIDER_DESCRIPTOR,
@@ -462,7 +462,6 @@ describe("Issue import dialog", () => {
       },
     },
   ]) {
-    // Each provider configuration opens a modal with its own 500 ms loader.
     test(`loads the new issue list when the configured ${scenario.name} changes`, async () => {
       const list = mock(async () => ({
         items: [issue(list.mock.calls.length === 1 ? "1" : "2")],
@@ -494,7 +493,7 @@ describe("Issue import dialog", () => {
       expect(screen.queryByRole("checkbox", { name: "Select Issue 1" })).toBeNull();
       expect(list).toHaveBeenCalledTimes(2);
       view.unmount();
-    }, 2000);
+    });
   }
 
   test("keeps comma-bearing source labels intact while editing labels", async () => {
@@ -579,7 +578,6 @@ describe("Issue import dialog", () => {
     view.unmount();
   });
 
-  // This flow renders two review cards and opens several portal controls.
   test("keeps each review edit after returning to selection", async () => {
     host.issueItemsList = async () => ({
       items: [issue("1"), issue("2")],
@@ -631,7 +629,7 @@ describe("Issue import dialog", () => {
       { sourceId: "2", issueType: "task", priority: 1, labels: ["triage"] },
     ]);
     view.unmount();
-  }, 3_000);
+  });
 
   for (const removal of ["checkbox", "selected chip"] as const) {
     test(`starts a new review after removal by ${removal}`, async () => {
@@ -900,9 +898,8 @@ describe("Issue import dialog", () => {
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(list.mock.calls.some(([input]) => input.search === "second")).toBe(true);
     view.unmount();
-  }, 3_000);
+  });
 
-  // This flow renders the search, review, refresh, and import states in one test.
   test("refreshes a changed item outside the current search before retry", async () => {
     host.issueItemsList = async (input: IssueItemsListInput) => ({
       items: [issue(input.search ? "2" : "1")],
@@ -980,7 +977,7 @@ describe("Issue import dialog", () => {
       { sourceId: "1", revision: "2", issueType: "bug", labels: ["reviewed"] },
     ]);
     view.unmount();
-  }, 3_000);
+  });
 
   test("keeps a closed item failure after refresh rejects it", async () => {
     host.issueItemsList = async () => ({

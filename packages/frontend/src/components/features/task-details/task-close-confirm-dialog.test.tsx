@@ -2,13 +2,10 @@ import { worktreeOwnersRead } from "@openducktor/frontend-core/test-support/work
 import { describe, expect, mock, test } from "bun:test";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { TaskCloseConfirmDialog } from "./task-close-confirm-dialog";
 import type { TaskCloseImpact } from "@openducktor/frontend-core/tasks/details/use-task-close-impact";
-
-enableReactActEnvironment();
 
 const buildImpact = (overrides: Partial<TaskCloseImpact> = {}): TaskCloseImpact => ({
   taskId: "TASK-1",

@@ -1,12 +1,9 @@
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { describe, expect, test } from "bun:test";
 import { DismissableLayer, DismissableLayerBranch } from "@radix-ui/react-dismissable-layer";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Toaster } from "./sonner";
-
-enableReactActEnvironment();
 
 function BranchDismissHarness() {
   const [open, setOpen] = useState(true);

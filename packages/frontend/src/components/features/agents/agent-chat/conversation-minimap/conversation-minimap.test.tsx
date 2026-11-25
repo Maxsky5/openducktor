@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, jest, mock, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { createAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import { buildMessage } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 import type { AgentChatUserMessageAnchor } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
@@ -9,6 +10,8 @@ import type {
 } from "../use-agent-chat-transcript-navigation";
 import { MINIMAP_TICK_SPACING_PX } from "./constants";
 import { ConversationMinimap } from "./conversation-minimap";
+
+setupTestingLibraryFakeTimers();
 
 const animationFrameDriver = createAnimationFrameTestDriver();
 const originalResizeObserver = globalThis.ResizeObserver;
@@ -143,7 +146,7 @@ describe("ConversationMinimap", () => {
     expect(readTickStates(rail)).toEqual(["rest", "rest", "active"]);
   });
 
-  test("moves keyboard focus between messages and jumps with Enter", () => {
+  test("moves keyboard focus between messages and jumps with Enter", async () => {
     const { navigation } = createNavigation({
       activeRow: 2,
       firstVisibleRow: 2,
@@ -151,29 +154,29 @@ describe("ConversationMinimap", () => {
     });
     const rail = renderMinimap(buildAnchors(4), navigation);
 
-    act(() => rail.focus());
+    await act(async () => rail.focus());
     expect(readFocusedOption(rail)).toBe("Message 2 of 4: Question 2");
-    fireEvent.keyDown(rail, { key: "ArrowDown" });
+    await act(async () => fireEvent.keyDown(rail, { key: "ArrowDown" }));
     expect(readFocusedOption(rail)).toBe("Message 3 of 4: Question 3");
-    fireEvent.keyDown(rail, { key: "End" });
+    await act(async () => fireEvent.keyDown(rail, { key: "End" }));
     expect(readFocusedOption(rail)).toBe("Message 4 of 4: Question 4");
-    fireEvent.keyDown(rail, { key: "ArrowRight" });
+    await act(async () => fireEvent.keyDown(rail, { key: "ArrowRight" }));
     expect(readFocusedOption(rail)).toBe("Message 4 of 4: Question 4");
-    fireEvent.keyDown(rail, { key: "Home" });
+    await act(async () => fireEvent.keyDown(rail, { key: "Home" }));
     expect(readFocusedOption(rail)).toBe("Message 1 of 4: Question 1");
-    fireEvent.keyDown(rail, { key: "ArrowUp" });
+    await act(async () => fireEvent.keyDown(rail, { key: "ArrowUp" }));
     expect(readFocusedOption(rail)).toBe("Message 1 of 4: Question 1");
 
-    fireEvent.keyDown(rail, { key: "ArrowDown" });
+    await act(async () => fireEvent.keyDown(rail, { key: "ArrowDown" }));
     expect(fireEvent.keyDown(rail, { key: "Enter" })).toBe(false);
 
     expect(navigation.jumpToRow).toHaveBeenCalledWith("row-2");
     expect(document.activeElement).toBe(rail);
-    act(() => rail.blur());
+    await act(async () => rail.blur());
     expect(rail.getAttribute("aria-activedescendant")).toBeNull();
   });
 
-  test("keeps keyboard focus on its message when older messages load above it", () => {
+  test("keeps keyboard focus on its message when older messages load above it", async () => {
     const { navigation } = createNavigation(null);
     const anchors = buildAnchors(3);
     const view = render(
@@ -185,28 +188,30 @@ describe("ConversationMinimap", () => {
       />,
     );
     const rail = screen.getByRole("listbox", { name: "User messages" });
-    act(() => rail.focus());
-    fireEvent.keyDown(rail, { key: "End" });
+    await act(async () => rail.focus());
+    await act(async () => fireEvent.keyDown(rail, { key: "End" }));
     expect(readFocusedOption(rail)).toBe("Message 3 of 3: Question 3");
 
     const older = buildMessage("user", "Older question", { id: "older" });
-    view.rerender(
-      <ConversationMinimap
-        anchors={[{ rowKey: "older-row", rowIndex: 0, message: older }, ...anchors]}
-        navigation={navigation}
-        railMaxHeight={400}
-        frame={document.body}
-      />,
-    );
+    await act(async () => {
+      view.rerender(
+        <ConversationMinimap
+          anchors={[{ rowKey: "older-row", rowIndex: 0, message: older }, ...anchors]}
+          navigation={navigation}
+          railMaxHeight={400}
+          frame={document.body}
+        />,
+      );
+    });
 
     expect(readFocusedOption(rail)).toBe("Message 4 of 4: Question 3");
   });
 
-  test("leaves other keys and focus to the page", () => {
+  test("leaves other keys and focus to the page", async () => {
     const { navigation } = createNavigation(null);
     const rail = renderMinimap(buildAnchors(2), navigation);
 
-    act(() => rail.focus());
+    await act(async () => rail.focus());
     expect(fireEvent.keyDown(rail, { key: "Tab" })).toBe(true);
     expect(fireEvent.mouseDown(rail)).toBe(false);
   });
@@ -226,11 +231,11 @@ describe("ConversationMinimap", () => {
     expect(navigation.jumpToRow).toHaveBeenLastCalledWith("row-4");
   });
 
-  test("previews the message under the pointer and jumps from the card", () => {
+  test("previews the message under the pointer and jumps from the card", async () => {
     const { navigation } = createNavigation(null);
     const rail = renderMinimap(buildAnchors(3), navigation);
 
-    fireEvent.pointerEnter(rail, { clientY: tickCenterY(1) });
+    await act(async () => fireEvent.pointerEnter(rail, { clientY: tickCenterY(1) }));
     expect(getCard().textContent).toBe("Question 2\nMore detail");
     // Chips in the card take no click or focus, so a click on the card always jumps.
     expect(
@@ -238,7 +243,7 @@ describe("ConversationMinimap", () => {
         .getByText(/Question 2/)
         .closest("[inert]"),
     ).not.toBeNull();
-    fireEvent.pointerMove(rail, { clientY: tickCenterY(2) });
+    await act(async () => fireEvent.pointerMove(rail, { clientY: tickCenterY(2) }));
     expect(getCard().textContent).toBe("Question 3\nMore detail");
 
     // No button wraps the message, because a chip in it can be a button.
@@ -249,11 +254,11 @@ describe("ConversationMinimap", () => {
     expect(navigation.jumpToRow).toHaveBeenLastCalledWith("row-4");
   });
 
-  test("fades a long message when the card caps its height after it opens", () => {
+  test("fades a long message when the card caps its height after it opens", async () => {
     const { navigation } = createNavigation(null);
     const rail = renderMinimap(buildAnchors(2), navigation);
 
-    fireEvent.pointerEnter(rail, { clientY: tickCenterY(0) });
+    await act(async () => fireEvent.pointerEnter(rail, { clientY: tickCenterY(0) }));
     const body = getCard().querySelector<HTMLElement>("[inert]");
     if (!body) throw new Error("Expected the preview body");
     expect(body.className).not.toContain("mask-b-from");
@@ -266,11 +271,11 @@ describe("ConversationMinimap", () => {
     expect(body.className).toContain("mask-b-from");
   });
 
-  test("lists the messages of a group tick and jumps to a row", () => {
+  test("lists the messages of a group tick and jumps to a row", async () => {
     const { navigation } = createNavigation(null);
     const rail = renderMinimap(buildAnchors(10), navigation, 30);
 
-    fireEvent.pointerEnter(rail, { clientY: tickCenterY(2, 6) });
+    await act(async () => fireEvent.pointerEnter(rail, { clientY: tickCenterY(2, 6) }));
     const rows = within(getCard()).getAllByRole("listitem", { hidden: true });
     expect(rows.map((row) => row.textContent)).toEqual([
       "Question 5\nMore detail",
@@ -291,11 +296,13 @@ describe("ConversationMinimap", () => {
     const { navigation } = createNavigation(null);
     const rail = renderMinimap(buildAnchors(2), navigation);
 
-    fireEvent.pointerEnter(rail, { clientY: tickCenterY(0) });
+    await act(async () => fireEvent.pointerEnter(rail, { clientY: tickCenterY(0) }));
     expect(readCard()).not.toBeNull();
     fireEvent.pointerLeave(rail);
     expect(readCard()).not.toBeNull();
-    await act(() => new Promise((resolve) => setTimeout(resolve, 200)));
+    await act(async () => jest.advanceTimersByTime(149));
+    expect(readCard()?.getAttribute("data-state")).toBe("open");
+    await act(async () => jest.advanceTimersByTime(1));
 
     expect(readCard()?.getAttribute("data-state") ?? "closed").toBe("closed");
   });
@@ -317,9 +324,9 @@ describe("ConversationMinimap", () => {
       const { navigation } = createNavigation(null);
       const rail = renderMinimap(buildAnchors(2), navigation);
 
-      fireEvent.pointerEnter(rail, { clientY: tickCenterY(1) });
+      await act(async () => fireEvent.pointerEnter(rail, { clientY: tickCenterY(1) }));
       fireEvent.pointerLeave(rail);
-      await act(() => new Promise((resolve) => setTimeout(resolve, 200)));
+      await act(async () => jest.advanceTimersByTime(150));
 
       expect(getCard().getAttribute("data-state")).toBe("closed");
       expect(getCard().textContent).toBe("Question 2\nMore detail");
@@ -328,13 +335,13 @@ describe("ConversationMinimap", () => {
     }
   });
 
-  test("opens each group list at its top", () => {
+  test("opens each group list at its top", async () => {
     const { navigation } = createNavigation(null);
     const rail = renderMinimap(buildAnchors(10), navigation, 30);
 
-    fireEvent.pointerEnter(rail, { clientY: tickCenterY(1, 6) });
+    await act(async () => fireEvent.pointerEnter(rail, { clientY: tickCenterY(1, 6) }));
     within(getCard()).getByRole("list", { hidden: true }).scrollTop = 40;
-    fireEvent.pointerMove(rail, { clientY: tickCenterY(2, 6) });
+    await act(async () => fireEvent.pointerMove(rail, { clientY: tickCenterY(2, 6) }));
 
     expect(within(getCard()).getByRole("list", { hidden: true }).scrollTop).toBe(0);
   });

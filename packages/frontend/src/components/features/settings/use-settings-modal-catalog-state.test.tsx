@@ -11,18 +11,14 @@ import type {
 } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { QueryProvider } from "@/test-utils/query-provider";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
-  createDeferred,
   createHostRuntimeStatusContextValue,
   createRuntimeCatalogFixture,
 } from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalCatalogState } from "./use-settings-modal-catalog-state";
-
-enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useSettingsModalCatalogState>[0];
 
@@ -169,7 +165,7 @@ describe("useSettingsModalCatalogState", () => {
   });
 
   test("exposes loading and errors for the requested runtime", async () => {
-    const catalogDeferred = createDeferred<AgentRuntimeCatalog>();
+    const catalogDeferred = Promise.withResolvers<AgentRuntimeCatalog>();
     const loadRepoRuntimeCatalog = mock(async () => catalogDeferred.promise);
 
     const loadingHarness = createHookHarness(

@@ -1,10 +1,7 @@
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { beforeEach, describe, expect, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
 import { ArrowUp } from "lucide-react";
 import { act } from "react";
-
-enableReactActEnvironment();
 
 describe("GitConfirmationDialog", () => {
   let GitConfirmationDialog: (typeof import("./git-confirmation-dialog"))["GitConfirmationDialog"];

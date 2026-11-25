@@ -12,7 +12,6 @@ import { createTestClientConnection } from "@openducktor/frontend-core/test-supp
 import type { GitChangeIntent, GitCommitMode } from "@openducktor/frontend-core/git/contracts";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { isApplePlatform } from "@/lib/device-platform";
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { AgentStudioGitPanel, type AgentStudioGitPanelModel } from "./agent-studio-git-panel";
 import {
   baseModel,
@@ -24,8 +23,6 @@ import {
   setupAgentStudioGitPanelTests,
   toFileDiff,
 } from "./agent-studio-git-panel.test-support";
-
-enableReactActEnvironment();
 
 type DomTestNode = {
   readonly element: Element;
@@ -1163,15 +1160,11 @@ describe("AgentStudioGitPanel", () => {
     expect(countByTestId(root, "agent-studio-git-conflict-modal")).toBe(0);
     expect(findByTestId(root, "agent-studio-git-force-push-modal")).toBeTruthy();
     expect(findByTestId(root, "agent-studio-git-confirm-force-push-button")).toBeTruthy();
-    expect(getNodeText(findByTestId(root, "agent-studio-git-force-push-safety-note"))).toContain(
-      "--force-with-lease",
-    );
-    expect(getNodeText(findByTestId(root, "agent-studio-git-force-push-safety-note"))).toContain(
-      "fails instead of overwriting their work",
-    );
-    expect(getNodeText(findByTestId(root, "agent-studio-git-force-push-safety-note"))).toContain(
-      "--force",
-    );
+    const safetyNote = findByTestId(root, "agent-studio-git-force-push-safety-note");
+    expect(
+      [...safetyNote.element.querySelectorAll("code")].map((code) => code.textContent),
+    ).toEqual(["--force-with-lease", "--force"]);
+    expect(getNodeText(safetyNote)).toContain("fails instead of overwriting their work");
     expect(findByTestId(root, "agent-studio-git-pull-rebase-modal")).toBeTruthy();
     expect(findByTestId(root, "agent-studio-git-confirm-pull-rebase-button")).toBeTruthy();
     expect(getNodeText(findByTestId(root, "agent-studio-git-pull-rebase-safety-note"))).toContain(

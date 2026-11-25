@@ -1,10 +1,7 @@
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
 import { createShellBridgeFixture, withShellPlatform } from "@/test-utils/focused-fixture";
-
-enableReactActEnvironment();
 
 describe("TaskPullRequestLink", () => {
   test("opens the pull request URL when clicked", async () => {

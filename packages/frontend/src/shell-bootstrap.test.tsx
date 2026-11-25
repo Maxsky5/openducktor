@@ -1,35 +1,31 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { afterEach, describe, expect, jest, mock, spyOn, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
-import { act, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import * as appModule from "./App";
-import { bootstrapOpenDucktorShell } from "./shell-bootstrap";
+import * as frontend from "./index";
 import { resolveRootElement } from "./shell-bootstrap-workflow";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
-
-const REPO_ROOT = resolve(import.meta.dir, "../../..");
-
-const readRepoFile = (relativePath: string): string =>
-  readFileSync(resolve(REPO_ROOT, relativePath), "utf8");
 
 const noRemoteHost = () => {
   throw new Error("This test uses the local host.");
 };
 
-afterEach(() => {
+afterEach(async () => {
   // A pagehide event that does not keep the page in the cache removes the bootstrap listeners.
-  window.dispatchEvent(new Event("pagehide"));
+  await act(async () => window.dispatchEvent(new Event("pagehide")));
   document.body.innerHTML = "";
   document.documentElement.classList.remove("light", "dark");
 });
 
-const bootLocalHost = async (readSettings: () => Promise<SettingsSnapshot>): Promise<void> => {
+const bootLocalHost = async (
+  readSettings: () => Promise<SettingsSnapshot>,
+  routerMode?: "hash",
+): Promise<void> => {
   const rootElement = document.createElement("div");
   document.body.append(rootElement);
   await act(async () => {
-    await bootstrapOpenDucktorShell({
+    const options: frontend.OpenDucktorShellBootstrapOptions = {
       createShellBridge: () =>
         createShellBridgeFixture({ client: { workspaceGetSettingsSnapshot: readSettings } }),
       hosts: {
@@ -38,23 +34,52 @@ const bootLocalHost = async (readSettings: () => Promise<SettingsSnapshot>): Pro
         confirmRemoteAccess: noRemoteHost,
       },
       rootElement,
-    });
+    };
+    if (routerMode) options.routerMode = routerMode;
+    await frontend.bootstrapOpenDucktorShell(options);
   });
 };
 
 describe("bootstrapOpenDucktorShell", () => {
-  test("applies the theme of the local host before it renders the app", async () => {
+  test("applies the host theme before the app renders and dismisses the startup splash", async () => {
     const themes: boolean[] = [];
+    const splash = document.createElement("div");
+    splash.id = "openducktor-startup";
+    document.body.append(splash);
     const appSpy = spyOn(appModule, "App").mockImplementation(() => {
       themes.push(document.documentElement.classList.contains("dark"));
       return <p>App</p>;
     });
+    jest.useFakeTimers();
     try {
       await bootLocalHost(async () => createSettingsSnapshotFixture({ theme: "dark" }));
 
-      expect(await screen.findByText("App")).toBeDefined();
+      expect(screen.getByText("App")).toBeTruthy();
       expect(themes[0]).toBe(true);
+      expect(splash.isConnected).toBe(true);
+      await act(async () => jest.advanceTimersByTime(1_250));
+      expect(splash.isConnected).toBe(false);
     } finally {
+      jest.useRealTimers();
+      appSpy.mockRestore();
+    }
+  });
+
+  test("a hash-routed shell opens the hash Kanban route after an app crash", async () => {
+    const appSpy = spyOn(appModule, "App").mockImplementation(() => {
+      throw new Error("App render failed.");
+    });
+    const consoleError = spyOn(console, "error").mockImplementation(() => {});
+    const replace = spyOn(window.location, "replace").mockImplementation(() => {});
+    try {
+      await bootLocalHost(async () => createSettingsSnapshotFixture(), "hash");
+
+      fireEvent.click(screen.getByRole("button", { name: "Go to Kanban" }));
+      expect(replace).toHaveBeenCalledWith("#/kanban");
+      expect(appSpy.mock.calls.at(0)?.[0].routerMode).toBe("hash");
+    } finally {
+      replace.mockRestore();
+      consoleError.mockRestore();
       appSpy.mockRestore();
     }
   });
@@ -84,7 +109,7 @@ describe("bootstrapOpenDucktorShell", () => {
     const createShellBridge = mock(() => createShellBridgeFixture());
 
     await expect(
-      bootstrapOpenDucktorShell({
+      frontend.bootstrapOpenDucktorShell({
         prepare: async () => {
           throw prepareError;
         },
@@ -138,21 +163,7 @@ describe("resolveRootElement", () => {
   });
 });
 
-describe("shell entrypoints", () => {
-  test("the production renderer keeps the crash shell and passes the selected router mode", () => {
-    const source = readRepoFile("packages/frontend/src/shell-bootstrap.tsx");
-
-    expect(source).toContain("<StartupSplashLifecycle />");
-    expect(source).toContain("<AppCrashShell kanbanLocation={kanbanLocationForRouter(mode)}>");
-    expect(source).toContain("<App routerMode={mode} />");
-  });
-
-  test("the frontend package root does not export bootstrap internals", () => {
-    const source = readRepoFile("packages/frontend/src/index.ts");
-
-    expect(source).toContain("bootstrapOpenDucktorShell");
-    expect(source).toContain("OpenDucktorShellBootstrapOptions");
-    expect(source).not.toMatch(/resolveRootElement/u);
-    expect(source).not.toMatch(/mountOpenDucktorApp|configureShellBridge|getShellBridge|\bApp\b/u);
-  });
+test("keeps root lookup and the app component private to the frontend package", () => {
+  expect("resolveRootElement" in frontend).toBe(false);
+  expect("App" in frontend).toBe(false);
 });

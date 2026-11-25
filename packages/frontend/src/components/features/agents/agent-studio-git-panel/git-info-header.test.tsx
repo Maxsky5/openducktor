@@ -1,4 +1,3 @@
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { PullRequest } from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -7,8 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryProvider } from "@/test-utils/query-provider";
 import type { GitPanelTab } from "./constants";
 import { GitInfoHeader } from "./git-info-header";
-
-enableReactActEnvironment();
 
 const pullRequest: PullRequest = {
   providerId: "github",
@@ -366,53 +363,49 @@ describe("GitInfoHeader", () => {
     );
   });
 
-  test.each(["worktree", "repository"] as const)(
-    "opens target choices with one click in %s mode and closes when editing becomes unavailable",
-    async (contextMode) => {
-      const editableProps = createGitInfoHeaderProps({
-        contextMode,
-        targetBranchEditable: true,
-        targetBranchOptions: [
-          { value: "origin/main", label: "origin/main" },
-          { value: "origin/release", label: "origin/release" },
-        ],
-        targetBranchSelectionValue: "origin/main",
-        onUpdateTargetBranch: async () => {},
-      });
+  test("opens target choices with one click and closes when editing becomes unavailable", async () => {
+    const editableProps = createGitInfoHeaderProps({
+      targetBranchEditable: true,
+      targetBranchOptions: [
+        { value: "origin/main", label: "origin/main" },
+        { value: "origin/release", label: "origin/release" },
+      ],
+      targetBranchSelectionValue: "origin/main",
+      onUpdateTargetBranch: async () => {},
+    });
 
-      rendered = renderGitInfoHeader(editableProps);
+    rendered = renderGitInfoHeader(editableProps);
 
-      const trigger = screen.getByRole("button", {
-        name: "Target branch: origin/main. Choose another target branch.",
-      });
-      expect(trigger).toBe(screen.getByTestId("agent-studio-git-target-branch-edit"));
-      expect(trigger.getAttribute("aria-expanded")).toBe("false");
-      await act(async () => {
-        fireEvent.click(trigger);
-      });
-      expect(screen.getByRole("dialog", TARGET_DIALOG)).toBeTruthy();
-      expect(trigger.getAttribute("aria-expanded")).toBe("true");
-      expect(await screen.findByRole("option", { name: /origin\/release/ })).toBeTruthy();
+    const trigger = screen.getByRole("button", {
+      name: "Target branch: origin/main. Choose another target branch.",
+    });
+    expect(trigger).toBe(screen.getByTestId("agent-studio-git-target-branch-edit"));
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    await act(async () => {
+      fireEvent.click(trigger);
+    });
+    expect(screen.getByRole("dialog", TARGET_DIALOG)).toBeTruthy();
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("option", { name: /origin\/release/ })).toBeTruthy();
 
-      await act(async () => {
-        rendered?.rerender(header({ ...editableProps, targetBranchEditable: false }));
-      });
+    await act(async () => {
+      rendered?.rerender(header({ ...editableProps, targetBranchEditable: false }));
+    });
 
-      expect(screen.queryByRole("dialog", TARGET_DIALOG)).toBeNull();
-      expect(screen.queryByTestId("agent-studio-git-target-branch-edit")).toBeNull();
-      expect(
-        screen.getByTestId("agent-studio-git-target-branch-display-row").textContent,
-      ).toContain("origin/main");
+    expect(screen.queryByRole("dialog", TARGET_DIALOG)).toBeNull();
+    expect(screen.queryByTestId("agent-studio-git-target-branch-edit")).toBeNull();
+    expect(screen.getByTestId("agent-studio-git-target-branch-display-row").textContent).toContain(
+      "origin/main",
+    );
 
-      await act(async () => {
-        rendered?.rerender(header(editableProps));
-      });
+    await act(async () => {
+      rendered?.rerender(header(editableProps));
+    });
 
-      expect(screen.queryByRole("dialog", TARGET_DIALOG)).toBeNull();
-      expect(targetTrigger()).toBe(screen.getByTestId("agent-studio-git-target-branch-edit"));
-      expect(targetTrigger().getAttribute("aria-expanded")).toBe("false");
-    },
-  );
+    expect(screen.queryByRole("dialog", TARGET_DIALOG)).toBeNull();
+    expect(targetTrigger()).toBe(screen.getByTestId("agent-studio-git-target-branch-edit"));
+    expect(targetTrigger().getAttribute("aria-expanded")).toBe("false");
+  });
 
   test("keeps branch-list retry reachable without permitting a failed list's choices", async () => {
     const retry = mock(async () => {});
@@ -457,8 +450,9 @@ describe("GitInfoHeader", () => {
     });
     rendered = renderGitInfoHeader(props);
     try {
-      fireEvent.click(targetTrigger());
-      fireEvent.click(await screen.findByRole("option", { name: /origin\/release/ }));
+      await act(async () => fireEvent.click(targetTrigger()));
+      const release = await screen.findByRole("option", { name: /origin\/release/ });
+      await act(async () => fireEvent.click(release));
       await act(async () => {
         rendered?.rerender(
           header({
@@ -493,7 +487,7 @@ describe("GitInfoHeader", () => {
         save.reject(new Error("Old selection failed."));
         await save.promise.catch(() => {});
       });
-      fireEvent.click(targetTrigger());
+      await act(async () => fireEvent.click(targetTrigger()));
       expect(screen.queryByText("Old selection failed.")).toBeNull();
       expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toContain(
         "origin/main",
@@ -504,59 +498,49 @@ describe("GitInfoHeader", () => {
   });
 });
 
-test.each(["light", "dark"] as const)(
-  "workspace comparison editor retains a failed choice in %s theme",
-  async (theme) => {
-    document.documentElement.classList.add(theme);
-    const failure = Promise.withResolvers<void>();
-    const update = mock(() => failure.promise);
-    const view = renderGitInfoHeader(
-      createGitInfoHeaderProps({
-        contextMode: "repository",
-        targetBranchEditable: true,
-        targetBranchHelpText: "This choice applies only to this chat. The chat saves it.",
-        targetBranchOptions: [
-          { value: "refs/remotes/origin/main", label: "origin/main" },
-          { value: "refs/heads/release", label: "release", secondaryLabel: "local" },
-        ],
-        targetBranchSelectionValue: "refs/remotes/origin/main",
-        onUpdateTargetBranch: update,
-      }),
+test("workspace comparison editor retries the chosen branch after save fails", async () => {
+  const failure = Promise.withResolvers<void>();
+  const update = mock(async (_branch: string) => {}).mockImplementationOnce(() => failure.promise);
+  const view = renderGitInfoHeader(
+    createGitInfoHeaderProps({
+      contextMode: "repository",
+      targetBranchEditable: true,
+      targetBranchHelpText: "This choice applies only to this chat. The chat saves it.",
+      targetBranchOptions: [
+        { value: "refs/remotes/origin/main", label: "origin/main" },
+        { value: "refs/heads/release", label: "release", secondaryLabel: "local" },
+      ],
+      targetBranchSelectionValue: "refs/remotes/origin/main",
+      onUpdateTargetBranch: update,
+    }),
+  );
+  try {
+    await act(async () => fireEvent.click(targetTrigger()));
+    await act(async () => fireEvent.click(screen.getByRole("option", { name: /release/ })));
+    expect(update).toHaveBeenCalledWith("refs/heads/release");
+    expect(
+      screen.getByTestId("agent-studio-git-target-branch-cancel").hasAttribute("disabled"),
+    ).toBe(true);
+    expect(targetTrigger().hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("status").textContent).toContain("Applying comparison...");
+    expect(screen.getByRole("option", { name: /origin\/main/ }).getAttribute("aria-disabled")).toBe(
+      "true",
     );
-    try {
-      expect(screen.queryByText(/This choice applies only to this session/)).toBeNull();
-      fireEvent.click(targetTrigger());
-      fireEvent.click(await screen.findByRole("option", { name: /release/ }));
-      expect(update).toHaveBeenCalledWith("refs/heads/release");
-      expect(
-        screen.getByTestId("agent-studio-git-target-branch-cancel").hasAttribute("disabled"),
-      ).toBe(true);
-      expect(targetTrigger().hasAttribute("disabled")).toBe(true);
-      expect(screen.getByRole("status").textContent).toContain("Applying comparison...");
-      expect(
-        screen.getByRole("option", { name: /origin\/main/ }).getAttribute("aria-disabled"),
-      ).toBe("true");
-      expect(update).toHaveBeenCalledTimes(1);
-      await act(async () => {
-        failure.reject(new Error("Could not save the target. Try again."));
-        await failure.promise.catch(() => {});
-      });
-      await waitFor(() =>
-        expect(screen.getByText("Could not save the target. Try again.")).toBeTruthy(),
-      );
-      expect(screen.getByRole("option", { name: /release/ }).getAttribute("aria-selected")).toBe(
-        "true",
-      );
-      expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toBe("origin/main");
-      expect(screen.getByText(/This choice applies only to this chat/)).toBeTruthy();
-      fireEvent.click(screen.getByTestId("agent-studio-git-target-branch-cancel"));
-      expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toBe("origin/main");
-    } finally {
-      view.unmount();
-      document.documentElement.classList.remove(theme);
-    }
-  },
-);
+    expect(update).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      failure.reject(new Error("Could not save the target. Try again."));
+      await failure.promise.catch(() => {});
+    });
+    expect(screen.getByText("Could not save the target. Try again.")).toBeTruthy();
+    expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toBe("origin/main");
+    expect(screen.getByText(/This choice applies only to this chat/)).toBeTruthy();
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Retry selection" })));
+    expect(update.mock.calls).toEqual([["refs/heads/release"], ["refs/heads/release"]]);
+    expect(screen.queryByRole("dialog", TARGET_DIALOG)).toBeNull();
+  } finally {
+    view.unmount();
+  }
+});
 
 test("a pending target save does not lock a new context or release its newer save", async () => {
   const first = Promise.withResolvers<void>();

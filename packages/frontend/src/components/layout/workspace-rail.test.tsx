@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useState } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import type { WorkspaceActivityState } from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
@@ -85,9 +84,6 @@ function DirtyPreview() {
   );
 }
 
-const renderRailMarkup = (): string =>
-  renderToStaticMarkup(withProviders(<WorkspaceRail onOpenRepositoryModal={() => {}} />));
-
 describe("WorkspaceRail", () => {
   beforeEach(() => {
     workspaceState = {
@@ -134,32 +130,13 @@ describe("WorkspaceRail", () => {
     reorderWorkspacesMock.mockClear();
   });
 
-  test("renders icon and initials variants with hidden-scrollbar overflow", () => {
-    workspaceState.workspaces = [
-      workspaceRecord("alpha", {
-        workspaceName: "Alpha Repo",
-        iconDataUrl: "data:image/png;base64,AAAA",
-        isActive: true,
-      }),
-      workspaceRecord("open-ducktor", {
-        workspaceName: "Open Ducktor",
-      }),
-    ];
-
-    const html = renderRailMarkup();
-
-    expect(html).toContain("hide-scrollbar");
-    expect(html).toContain('aria-label="Alpha Repo"');
-    expect(html).toContain('aria-label="Open Ducktor"');
-    expect(html).toContain('src="data:image/png;base64,AAAA"');
-    expect(html).toContain(">OD<");
-  });
-
-  test("switches inactive workspaces and exposes the open-repository button", async () => {
+  test("shows workspace icons and switches only inactive workspaces", async () => {
     const openRepositoryModal = mock(() => {});
+    const iconDataUrl = "data:image/png;base64,AAAA";
     workspaceState.workspaces = [
       workspaceRecord("alpha", {
         workspaceName: "Alpha Repo",
+        iconDataUrl,
         isActive: true,
       }),
       workspaceRecord("beta", {
@@ -169,8 +146,12 @@ describe("WorkspaceRail", () => {
 
     renderRail(openRepositoryModal);
 
-    fireEvent.click(screen.getByRole("button", { name: "Alpha Repo" }));
-    fireEvent.click(screen.getByRole("button", { name: "Beta Repo" }));
+    const alpha = screen.getByRole("button", { name: "Alpha Repo" });
+    const beta = screen.getByRole("button", { name: "Beta Repo" });
+    expect(alpha.querySelector("img")?.getAttribute("src")).toBe(iconDataUrl);
+    expect(within(beta).getByText("BR")).toBeTruthy();
+    fireEvent.click(alpha);
+    await act(async () => fireEvent.click(beta));
     fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
 
     expect(selectWorkspaceMock).toHaveBeenCalledTimes(1);
@@ -179,13 +160,8 @@ describe("WorkspaceRail", () => {
   });
 
   test("shows the clicked workspace as active while the switch runs", async () => {
-    let finishSwitch = () => {};
-    selectWorkspaceMock.mockImplementationOnce(
-      () =>
-        new Promise<void>((resolve) => {
-          finishSwitch = resolve;
-        }),
-    );
+    const pendingSwitch = Promise.withResolvers<void>();
+    selectWorkspaceMock.mockImplementationOnce(() => pendingSwitch.promise);
     workspaceState.workspaces = [
       workspaceRecord("alpha", { workspaceName: "Alpha Repo", isActive: true }),
       workspaceRecord("beta", { workspaceName: "Beta Repo" }),
@@ -194,11 +170,13 @@ describe("WorkspaceRail", () => {
     const tile = (name: string) =>
       screen.getByRole("button", { name }).closest("[data-active]")?.getAttribute("data-active");
 
-    fireEvent.click(screen.getByRole("button", { name: "Beta Repo" }));
-
-    await waitFor(() => expect(tile("Beta Repo")).toBe("true"));
-    expect(tile("Alpha Repo")).toBe("false");
-    await act(async () => finishSwitch());
+    try {
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Beta Repo" })));
+      expect(tile("Beta Repo")).toBe("true");
+      expect(tile("Alpha Repo")).toBe("false");
+    } finally {
+      await act(async () => pendingSwitch.resolve());
+    }
   });
 
   test("keeps a dirty draft when workspace selection fails", async () => {
@@ -281,42 +259,11 @@ describe("WorkspaceRail", () => {
     }
   });
 
-  test("uses the eye-off icon for the close workspace action", async () => {
+  test("shows the chosen workspace abbreviation and tile colors", () => {
     workspaceState.workspaces = [
       workspaceRecord("alpha", {
         workspaceName: "Alpha Repo",
-        isActive: true,
-      }),
-    ];
-
-    renderRail();
-
-    fireEvent.contextMenu(screen.getByRole("button", { name: "Alpha Repo" }));
-
-    const closeItem = await screen.findByRole("menuitem", { name: "Close workspace" });
-    const removeItem = screen.getByRole("menuitem", { name: "Remove workspace" });
-    expect(closeItem.querySelector(".lucide-eye-off")).not.toBeNull();
-    expect(closeItem.className).toContain("cursor-pointer");
-    expect(removeItem.className).toContain("cursor-pointer");
-  });
-
-  test("shows the abbreviation exactly as the user typed it", () => {
-    workspaceState.workspaces = [
-      workspaceRecord("alpha", { workspaceName: "Alpha Repo", abbreviation: "iOS" }),
-      workspaceRecord("beta", { workspaceName: "Beta Repo" }),
-    ];
-
-    const html = renderRailMarkup();
-
-    expect(html).toContain(">iOS<");
-    expect(html).toContain(">BR<");
-    expect(html).toContain('aria-label="Alpha Repo"');
-  });
-
-  test("paints every tile with its picked color at full strength", () => {
-    workspaceState.workspaces = [
-      workspaceRecord("alpha", {
-        workspaceName: "Alpha Repo",
+        abbreviation: "iOS",
         tileColor: "#3b82f6",
         isActive: true,
       }),
@@ -325,7 +272,8 @@ describe("WorkspaceRail", () => {
 
     renderRail();
 
-    expect(screen.getByText("AR").closest("[style]")?.getAttribute("style")).toContain(
+    const alpha = screen.getByRole("button", { name: "Alpha Repo" });
+    expect(within(alpha).getByText("iOS").closest("[style]")?.getAttribute("style")).toContain(
       "background-color: #3b82f6",
     );
     expect(screen.getByText("BR").closest("[style]")?.getAttribute("style")).toContain(
@@ -486,7 +434,7 @@ describe("WorkspaceRail", () => {
     expect(badges.textContent).toBe("Session activity unavailable: stream closed");
   });
 
-  test("selects the workspace when a click lands on a badge", () => {
+  test("selects the workspace when a click lands on a badge", async () => {
     workspaceState.workspaces = [
       workspaceRecord("alpha", { workspaceName: "Alpha Repo", isActive: true }),
       workspaceRecord("beta", { workspaceName: "Beta Repo" }),
@@ -501,8 +449,10 @@ describe("WorkspaceRail", () => {
 
     renderRail();
 
-    fireEvent.click(
-      within(screen.getByTestId("workspace-rail-activity-badges")).getByTitle("Sessions running"),
+    await act(async () =>
+      fireEvent.click(
+        within(screen.getByTestId("workspace-rail-activity-badges")).getByTitle("Sessions running"),
+      ),
     );
 
     expect(selectWorkspaceMock).toHaveBeenCalledWith("beta");

@@ -1,3 +1,4 @@
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { describe, expect, test } from "bun:test";
 import {
   repoConfigSchema,
@@ -14,6 +15,8 @@ import {
 } from "@openducktor/frontend-core/queries/workspace-sessions";
 import { WorkspaceSessionHistoryDialog } from "./workspace-session-history-dialog";
 import { repoConfigFixture } from "@openducktor/frontend-core/test-support/repo-config-fixture";
+
+setupTestingLibraryFakeTimers();
 
 const archivedRecord = (index: number): WorkspaceSession => ({
   id: `session-${index}`,

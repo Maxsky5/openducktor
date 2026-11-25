@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import type { GitCurrentBranch } from "@openducktor/contracts";
 import { CancelledError, type QueryClient, useQueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
 import { render } from "@testing-library/react";
@@ -7,7 +8,7 @@ import { toast } from "sonner";
 import { gitQueryKeys } from "@openducktor/frontend-core/queries/git";
 import { useWorkspaceBranchProbe } from "./use-workspace-branch-probe";
 import { createBrowserListenerHarness } from "./workspace-browser-test-utils";
-import { createDeferred, createWorkspaceHostClient, flush } from "./workspace-hook-test-fixtures";
+import { createWorkspaceHostClient, flush } from "./workspace-hook-test-fixtures";
 import { WorkspaceHostProvider } from "./workspace-hook-test-utils";
 
 interface QueryClientCaptureContract {
@@ -156,7 +157,7 @@ describe("use-workspace-branch-probe", () => {
 
   test("does not report degradation when a branch switch cancels the current branch probe", async () => {
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
-    const currentBranchDeferred = createDeferred<{ name: string | undefined; detached: boolean }>();
+    const currentBranchDeferred = Promise.withResolvers<GitCurrentBranch>();
     const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
     const queryClientCapture: QueryClientCaptureContract = { current: null };
     workspaceHost.gitGetCurrentBranch = mock(async () => currentBranchDeferred.promise);
@@ -303,7 +304,7 @@ describe("use-workspace-branch-probe", () => {
 
   test("suppresses stale degraded updates after the active repository changes", async () => {
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
-    const branchProbeDeferred = createDeferred<{ name: string | undefined; detached: boolean }>();
+    const branchProbeDeferred = Promise.withResolvers<GitCurrentBranch>();
     const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
 
     workspaceHost.gitGetCurrentBranch = mock(async () => branchProbeDeferred.promise);
@@ -343,8 +344,8 @@ describe("use-workspace-branch-probe", () => {
 
   test("uses the committed repository without letting a stale probe release its gate", async () => {
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
-    const repoAProbe = createDeferred<{ name: string | undefined; detached: boolean }>();
-    const repoBProbe = createDeferred<{ name: string | undefined; detached: boolean }>();
+    const repoAProbe = Promise.withResolvers<GitCurrentBranch>();
+    const repoBProbe = Promise.withResolvers<GitCurrentBranch>();
     const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
     const gitGetCurrentBranch = mock(async (repoPath: string) => {
       if (repoPath === "/repo-a") {
@@ -413,7 +414,7 @@ describe("use-workspace-branch-probe", () => {
 
   test("ignores stale synced outcomes after the repo changes during branch refresh", async () => {
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
-    const refreshDeferred = createDeferred<void>();
+    const refreshDeferred = Promise.withResolvers<void>();
     const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
 
     workspaceHost.gitGetCurrentBranch = mock(async () => ({
@@ -460,7 +461,7 @@ describe("use-workspace-branch-probe", () => {
 
   test("ignores stale refresh failures after the repo changes during branch refresh", async () => {
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
-    const refreshDeferred = createDeferred<void>();
+    const refreshDeferred = Promise.withResolvers<void>();
     const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
 
     workspaceHost.gitGetCurrentBranch = mock(async () => ({

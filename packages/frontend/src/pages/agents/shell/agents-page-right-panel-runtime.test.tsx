@@ -1,16 +1,14 @@
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
-import type { ComponentProps, PropsWithChildren } from "react";
+import type { PropsWithChildren } from "react";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { filesystemQueryKeys } from "@openducktor/frontend-core/queries/filesystem";
-import { enableReactActEnvironment } from "../agent-studio-test-utils";
+import type { WorktreeRefreshRef } from "./use-forwarded-worktree-refresh";
 
 interface QueryClientRefContract {
   current: QueryClient | null;
 }
-
-enableReactActEnvironment();
 
 type RuntimeModule = typeof import("./agents-page-right-panel-runtime");
 type RefreshModule =
@@ -57,19 +55,26 @@ afterEach(() => {
   refreshHookSpy.mockRestore();
 });
 
-test("observes builder mutations while the file explorer tab is active", () => {
-  const props = {
-    isPanelOpen: true,
-    selectedView: { role: "build", loadedSession: null },
-    refreshWorktreeRef: { current: async () => {} },
-  } satisfies ComponentProps<typeof AgentsPageBuildWorktreeRefreshRuntime>;
+test("forwards a builder refresh while the right panel is open", async () => {
+  const refreshWorktree = mock<NonNullable<WorktreeRefreshRef["current"]>>(async () => {});
+  const refreshWorktreeRef: WorktreeRefreshRef = { current: refreshWorktree };
+  render(
+    <AgentsPageBuildWorktreeRefreshRuntime
+      isPanelOpen
+      selectedView={{ role: "build", loadedSession: null }}
+      refreshWorktreeRef={refreshWorktreeRef}
+    />,
+  );
 
-  render(<AgentsPageBuildWorktreeRefreshRuntime {...props} />);
+  const args = useBuildWorktreeRefreshMock.mock.calls[0]?.[0];
+  if (!args) throw new Error("Expected the builder refresh callback");
+  expect(args.selectedView).toEqual({ role: "build", loadedSession: null });
+  await args.refreshWorktree("soft");
+  expect(refreshWorktree).toHaveBeenCalledWith("soft");
 
-  expect(useBuildWorktreeRefreshMock).toHaveBeenCalledWith({
-    selectedView: { role: "build", loadedSession: null },
-    refreshWorktree: expect.any(Function),
-  });
+  refreshWorktreeRef.current = null;
+  expect(await args.refreshWorktree("soft")).toBeUndefined();
+  expect(refreshWorktree).toHaveBeenCalledTimes(1);
 });
 
 test("invalidates the visible file when the panel is hidden", async () => {

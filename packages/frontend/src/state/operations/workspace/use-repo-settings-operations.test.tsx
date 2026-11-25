@@ -20,7 +20,6 @@ import {
 } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
-  createDeferred,
   createGitProviderConfigFixture,
   createGitProviderContextFixture,
   createRepoSettingsConfigFixture,
@@ -183,8 +182,8 @@ const startSettingsSave = async ({
     activeWorkspace: createWorkspaceRecord(),
     applyWorkspaceRecords,
   });
-  const providerRefresh = createDeferred<void>();
-  const providerRefreshStarted = createDeferred<void>();
+  const providerRefresh = Promise.withResolvers<void>();
+  const providerRefreshStarted = Promise.withResolvers<void>();
 
   await harness.mount();
   const queryClient = harness.getQueryClient();
@@ -592,8 +591,8 @@ describe("use-repo-settings-operations", () => {
   });
 
   test("replaces an in-flight task read after the retention setting changes", async () => {
-    const firstTaskRead = createDeferred<Awaited<ReturnType<typeof host.tasksList>>>();
-    const firstTaskReadStarted = createDeferred<void>();
+    const firstTaskRead = Promise.withResolvers<Awaited<ReturnType<typeof host.tasksList>>>();
+    const firstTaskReadStarted = Promise.withResolvers<void>();
     const refreshedTasks = [createWireTaskCardFixture({ title: "New retention" })];
     const tasksList = mock(async () => {
       if (tasksList.mock.calls.length === 1) {
@@ -821,9 +820,9 @@ describe("use-repo-settings-operations", () => {
   test("cancels an older settings read and publishes the refreshed snapshot after a save", async () => {
     const initial = createSettingsSnapshot();
     const saved = { ...initial, chat: { ...initial.chat, steerMessagesByDefault: true } };
-    const oldRead = createDeferred<SettingsSnapshot>();
-    const refresh = createDeferred<SettingsSnapshot>();
-    const refreshStarted = createDeferred<void>();
+    const oldRead = Promise.withResolvers<SettingsSnapshot>();
+    const refresh = Promise.withResolvers<SettingsSnapshot>();
+    const refreshStarted = Promise.withResolvers<void>();
     const original = {
       get: host.workspaceGetSettingsSnapshot,
       save: host.workspaceSaveSettingsSnapshot,

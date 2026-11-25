@@ -6,10 +6,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { Button } from "./button";
 import { Checkbox } from "./checkbox";
 import { Combobox } from "./combobox";
+import { Input } from "./input";
 import { RadioGroup, RadioGroupItem, RadioGroupSegmentItem } from "./radio-group";
 import { SegmentedControlItem } from "./segmented-control";
 import { Slider } from "./slider";
 import { Switch } from "./switch";
+import { Textarea } from "./textarea";
 
 const controls: Array<[string, ReactElement]> = [
   ["Button", createElement(Button, null, "Save")],
@@ -57,4 +59,20 @@ describe("control focus", () => {
     expect(html).toContain("focus-visible:border-ring");
     expect(html).toContain("focus-visible:ring-0");
   });
+
+  test.each([
+    ["Input", <Input />, <Input embedded />],
+    ["Textarea", <Textarea />, <Textarea embedded />],
+  ] as const)(
+    "%s draws a focus border only on a standalone field",
+    (_name, standalone, embedded) => {
+      const html = renderToStaticMarkup(standalone);
+      expect(html).toContain("border-input");
+      expect(html).toContain("focus-visible:border-ring");
+      expect(html).not.toMatch(/focus-visible:(ring|shadow)/);
+      expect(renderToStaticMarkup(embedded)).not.toMatch(
+        /border-input|focus-visible:(border-ring|ring|shadow)/,
+      );
+    },
+  );
 });

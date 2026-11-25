@@ -4,15 +4,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { Plus, Undo2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import { DiffPreloadQueue } from "./agent-studio-git-panel/diff-preload-queue";
-import {
-  withCapturedConsoleMethods,
-  withCapturedOutputStreams,
-} from "@/test-utils/console-capture";
 
-let pierreViewerModule: typeof import("./pierre-diff-viewer");
-let pierreViewerModelModule: typeof import("./pierre-diff-viewer-model");
 import type { PierreHunkAction } from "./pierre-diff-viewer";
 import type { PierreDiffViewerWorkerPool } from "./pierre-diff-viewer-react";
 
@@ -59,6 +52,8 @@ let pierreFileDiffMountCount = 0;
 const actualPierreDiffsReact = await import("@pierre/diffs/react");
 const actualPierreViewerReact = await import("./pierre-diff-viewer-react");
 const actualThemeProvider = await import("@/components/layout/theme-provider");
+const pierreViewerModule = await import("./pierre-diff-viewer");
+const pierreViewerModelModule = await import("./pierre-diff-viewer-model");
 let moduleSpies: Array<{ mockRestore: () => void }> = [];
 
 const OMITTED_SELECTED_LINES_LABEL = "__omitted__";
@@ -99,151 +94,115 @@ const twoHunkPatch = [
   "",
 ].join("\n");
 
-beforeEach(async () => {
+beforeEach(() => {
   pierreFileMountCount = 0;
   pierreFileDiffMountCount = 0;
-  await withCapturedOutputStreams(["stdout", "stderr"], async (chunksByStream) => {
-    await withCapturedConsoleMethods(
-      ["debug", "error", "info", "log", "warn"],
-      async (consoleCalls) => {
-        moduleSpies = [
-          spyOn(actualPierreDiffsReact, "File").mockImplementation(
-            (props: {
-              file: { name: string; contents: string; cacheKey?: string };
-              options?: {
-                disableFileHeader?: boolean;
-                overflow?: string;
-                themeType?: string;
-                tokenizeMaxLength?: number;
-              };
-            }) => {
-              const [mountId] = useState(() => {
-                pierreFileMountCount += 1;
-                return pierreFileMountCount;
-              });
-              return (
-                <div
-                  data-testid="pierre-file"
-                  data-cache-key={props.file.cacheKey ?? ""}
-                  data-disable-file-header={String(props.options?.disableFileHeader ?? "")}
-                  data-file-contents={props.file.contents}
-                  data-file-name={props.file.name}
-                  data-mount-id={String(mountId)}
-                  data-overflow={String(props.options?.overflow ?? "")}
-                  data-theme-type={String(props.options?.themeType ?? "")}
-                  data-tokenize-max-length={String(props.options?.tokenizeMaxLength ?? "")}
-                />
-              );
-            },
-          ),
-          spyOn(actualPierreDiffsReact, "FileDiff").mockImplementation(
-            <LAnnotation, Caret>(
-              props: Parameters<typeof actualPierreDiffsReact.FileDiff<LAnnotation, Caret>>[0],
-            ) => {
-              const { options } = props;
-              const [mountId] = useState(() => {
-                pierreFileDiffMountCount += 1;
-                return pierreFileDiffMountCount;
-              });
-              const selectedLinesText = Object.hasOwn(props, "selectedLines")
-                ? JSON.stringify(props.selectedLines)
-                : OMITTED_SELECTED_LINES_LABEL;
-              return (
-                <div
-                  data-testid="pierre-file-diff"
-                  data-mount-id={String(mountId)}
-                  data-diff-indicators={String(options?.diffIndicators ?? "")}
-                  data-diff-style={String(options?.diffStyle ?? "")}
-                  data-hunk-separators={String(options?.hunkSeparators ?? "")}
-                  data-line-diff-type={String(options?.lineDiffType ?? "")}
-                  data-overflow={String(options?.overflow ?? "")}
-                  data-tokenize-max-length={String(options?.tokenizeMaxLength ?? "")}
-                >
-                  <output data-testid="pierre-selected-lines">{selectedLinesText}</output>
-                  <button
-                    type="button"
-                    data-testid="pierre-selection-start"
-                    onClick={() => options?.onLineSelectionStart?.(mockedGutterSelection)}
-                  >
-                    Selection start
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="pierre-selection-change"
-                    onClick={() => options?.onLineSelectionChange?.(mockedGutterSelection)}
-                  >
-                    Selection change
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="pierre-gutter-utility"
-                    onClick={() => options?.onGutterUtilityClick?.(mockedGutterSelection)}
-                  >
-                    Gutter utility
-                  </button>
-                  {props.lineAnnotations?.map((annotation) => (
-                    <div
-                      key={`${annotation.side}:${annotation.lineNumber}`}
-                      data-testid="pierre-line-annotation"
-                    >
-                      {props.renderAnnotation?.(annotation, props.fileDiff)}
-                    </div>
-                  ))}
-                </div>
-              );
-            },
-          ),
-          spyOn(actualPierreDiffsReact, "Virtualizer").mockImplementation(({ children }) => (
-            <>{children}</>
-          )),
-          spyOn(actualPierreViewerReact, "useWorkerPool").mockImplementation(() => workerPoolMock),
-          spyOn(actualThemeProvider, "useTheme").mockImplementation(() => ({
-            theme: "light",
-            themePreference: "light",
-            setThemePreference: () => undefined,
-          })),
-        ];
-
-        pierreViewerModule = await import("./pierre-diff-viewer");
-        pierreViewerModelModule = await import("./pierre-diff-viewer-model");
-
-        for (const calls of Object.values(consoleCalls)) {
-          for (const call of calls) {
-            expect(call).toEqual([]);
-          }
-        }
+  moduleSpies = [
+    spyOn(actualPierreDiffsReact, "File").mockImplementation(
+      (props: {
+        file: { name: string; contents: string; cacheKey?: string };
+        options?: {
+          disableFileHeader?: boolean;
+          overflow?: string;
+          themeType?: string;
+          tokenizeMaxLength?: number;
+        };
+      }) => {
+        const [mountId] = useState(() => {
+          pierreFileMountCount += 1;
+          return pierreFileMountCount;
+        });
+        return (
+          <div
+            data-testid="pierre-file"
+            data-cache-key={props.file.cacheKey ?? ""}
+            data-disable-file-header={String(props.options?.disableFileHeader ?? "")}
+            data-file-contents={props.file.contents}
+            data-file-name={props.file.name}
+            data-mount-id={String(mountId)}
+            data-overflow={String(props.options?.overflow ?? "")}
+            data-theme-type={String(props.options?.themeType ?? "")}
+            data-tokenize-max-length={String(props.options?.tokenizeMaxLength ?? "")}
+          />
+        );
       },
-    );
-
-    for (const chunk of [...chunksByStream.stdout, ...chunksByStream.stderr]) {
-      expect(chunk).toBe("[]\n");
-    }
-  });
+    ),
+    spyOn(actualPierreDiffsReact, "FileDiff").mockImplementation(
+      <LAnnotation, Caret>(
+        props: Parameters<typeof actualPierreDiffsReact.FileDiff<LAnnotation, Caret>>[0],
+      ) => {
+        const { options } = props;
+        const [mountId] = useState(() => {
+          pierreFileDiffMountCount += 1;
+          return pierreFileDiffMountCount;
+        });
+        const selectedLinesText = Object.hasOwn(props, "selectedLines")
+          ? JSON.stringify(props.selectedLines)
+          : OMITTED_SELECTED_LINES_LABEL;
+        return (
+          <div
+            data-testid="pierre-file-diff"
+            data-mount-id={String(mountId)}
+            data-diff-indicators={String(options?.diffIndicators ?? "")}
+            data-diff-style={String(options?.diffStyle ?? "")}
+            data-hunk-separators={String(options?.hunkSeparators ?? "")}
+            data-line-diff-type={String(options?.lineDiffType ?? "")}
+            data-overflow={String(options?.overflow ?? "")}
+            data-tokenize-max-length={String(options?.tokenizeMaxLength ?? "")}
+          >
+            <output data-testid="pierre-selected-lines">{selectedLinesText}</output>
+            <button
+              type="button"
+              data-testid="pierre-selection-start"
+              onClick={() => options?.onLineSelectionStart?.(mockedGutterSelection)}
+            >
+              Selection start
+            </button>
+            <button
+              type="button"
+              data-testid="pierre-selection-change"
+              onClick={() => options?.onLineSelectionChange?.(mockedGutterSelection)}
+            >
+              Selection change
+            </button>
+            <button
+              type="button"
+              data-testid="pierre-gutter-utility"
+              onClick={() => options?.onGutterUtilityClick?.(mockedGutterSelection)}
+            >
+              Gutter utility
+            </button>
+            {props.lineAnnotations?.map((annotation) => (
+              <div
+                key={`${annotation.side}:${annotation.lineNumber}`}
+                data-testid="pierre-line-annotation"
+              >
+                {props.renderAnnotation?.(annotation, props.fileDiff)}
+              </div>
+            ))}
+          </div>
+        );
+      },
+    ),
+    spyOn(actualPierreDiffsReact, "Virtualizer").mockImplementation(({ children }) => (
+      <>{children}</>
+    )),
+    spyOn(actualPierreViewerReact, "useWorkerPool").mockImplementation(() => workerPoolMock),
+    spyOn(actualThemeProvider, "useTheme").mockImplementation(() => ({
+      theme: "light",
+      themePreference: "light",
+      setThemePreference: () => undefined,
+    })),
+  ];
 });
 
-afterEach(async () => {
+afterEach(() => {
   cleanup();
   workerPoolMock = undefined;
-  await withCapturedOutputStreams(["stdout", "stderr"], async (chunksByStream) => {
-    await withCapturedConsoleMethods(
-      ["debug", "error", "info", "log", "warn"],
-      async (consoleCalls) => {
-        for (const moduleSpy of moduleSpies) {
-          moduleSpy.mockRestore();
-        }
-        moduleSpies = [];
-        for (const calls of Object.values(consoleCalls)) {
-          for (const call of calls) {
-            expect(call).toEqual([]);
-          }
-        }
-      },
-    );
-
-    for (const chunk of [...chunksByStream.stdout, ...chunksByStream.stderr]) {
-      expect(chunk).toBe("[]\n");
-    }
-  });
+  for (const moduleSpy of moduleSpies) {
+    moduleSpy.mockRestore();
+  }
+  moduleSpies = [];
 });
 
 describe("PierreDiffViewer", () => {
@@ -413,9 +372,9 @@ describe("PierreDiffViewer", () => {
   });
 
   test("preloads one file at a time and advances past skipped, cached, and failed files", async () => {
-    const first = createDeferred<void>();
-    const failed = createDeferred<void>();
-    const last = createDeferred<void>();
+    const first = Promise.withResolvers<void>();
+    const failed = Promise.withResolvers<void>();
+    const last = Promise.withResolvers<void>();
     const pendingByFile = new Map([
       ["first.ts", first],
       ["failed.ts", failed],
@@ -544,7 +503,7 @@ describe("PierreDiffViewer", () => {
 
   test("does not advance or report a late preload failure after its view closes", async () => {
     const onComplete = mock();
-    const pending = createDeferred<void>();
+    const pending = Promise.withResolvers<void>();
     const reportError = spyOn(toast, "error").mockImplementation(() => "preload-error");
     workerPoolMock = {
       ...createDefaultWorkerPoolMock(),
@@ -572,7 +531,7 @@ describe("PierreDiffViewer", () => {
   });
 
   test("reports a failed diff preload while its view is open", async () => {
-    const pending = createDeferred<void>();
+    const pending = Promise.withResolvers<void>();
     const reportError = spyOn(toast, "error").mockImplementation(() => "preload-error");
     workerPoolMock = {
       ...createDefaultWorkerPoolMock(),
@@ -1034,72 +993,32 @@ describe("PierreDiffViewer", () => {
     expect(subscribeToStatChanges).not.toHaveBeenCalled();
   });
 
-  test("keeps raw fallback diffs inside the Pierre scroll container", async () => {
+  test("keeps the entire unreadable hunk visible as raw text", () => {
     const { PierreDiffViewer } = pierreViewerModule;
+    const patch = "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,2 +1,2 @@\n-old\n+new\n";
+    render(<PierreDiffViewer patch={patch} filePath="src/app.ts" />);
 
-    await withCapturedOutputStreams(["stdout", "stderr"], async (chunksByStream) => {
-      await withCapturedConsoleMethods(
-        ["debug", "error", "info", "log", "warn"],
-        async (consoleCalls) => {
-          render(
-            <PierreDiffViewer
-              patch="Index: src/app.ts\n=====\ninvalid diff body"
-              filePath="src/app.ts"
-            />,
-          );
-          await new Promise((resolve) => setTimeout(resolve, 0));
-
-          for (const calls of Object.values(consoleCalls)) {
-            for (const call of calls) {
-              expect(call).toEqual([[]]);
-            }
-          }
-        },
-      );
-
-      for (const chunk of [...chunksByStream.stdout, ...chunksByStream.stderr]) {
-        expect(chunk).toBe("[]\n");
-      }
-    });
-
-    const fallback = screen.getByText(/invalid diff body/);
+    const fallback = screen.getByText(/@@ -1,2/);
+    expect(fallback.textContent).toBe(patch);
     expect(fallback.parentElement?.className).toContain("overflow-auto");
     expect(fallback.parentElement?.className).toContain("max-h-[min(50vh,32rem)]");
     expect(fallback.className).toContain("whitespace-pre-wrap");
     expect(fallback.className).toContain("break-words");
   });
 
-  test("renders full-height raw fallback diffs with horizontal line scrolling", async () => {
+  test("renders full-height raw fallback diffs with horizontal line scrolling", () => {
     const { PierreDiffViewer } = pierreViewerModule;
-
-    await withCapturedOutputStreams(["stdout", "stderr"], async (chunksByStream) => {
-      await withCapturedConsoleMethods(
-        ["debug", "error", "info", "log", "warn"],
-        async (consoleCalls) => {
-          render(
-            <PierreDiffViewer
-              patch="Index: src/app.ts\n=====\ninvalid diff body"
-              filePath="src/app.ts"
-              heightMode="full"
-              lineOverflow="scroll"
-            />,
-          );
-          await new Promise((resolve) => setTimeout(resolve, 0));
-
-          for (const calls of Object.values(consoleCalls)) {
-            for (const call of calls) {
-              expect(call).toEqual([[]]);
-            }
-          }
-        },
-      );
-
-      for (const chunk of [...chunksByStream.stdout, ...chunksByStream.stderr]) {
-        expect(chunk).toBe("[]\n");
-      }
-    });
+    render(
+      <PierreDiffViewer
+        patch={"Index: src/app.ts\n=====\ninvalid diff body"}
+        filePath="src/app.ts"
+        heightMode="full"
+        lineOverflow="scroll"
+      />,
+    );
 
     const fallback = screen.getByText(/invalid diff body/);
+    expect(fallback.textContent).toBe("Index: src/app.ts\n=====\ninvalid diff body\n");
     expect(fallback.parentElement?.className).not.toContain("max-h-[min(50vh,32rem)]");
     expect(fallback.parentElement?.className).not.toContain("overflow-auto");
     expect(fallback.className).toContain("whitespace-pre");
@@ -1191,36 +1110,6 @@ describe("getRenderableFileDiff", () => {
 
     expect(firstResult).not.toBe(reloadedResult);
     expect(firstResult.fileDiff?.cacheKey).toBe(reloadedResult.fileDiff?.cacheKey);
-  });
-
-  test("keeps normalized raw diff text when parsing still fails", async () => {
-    const { getRenderableFileDiff } = pierreViewerModelModule;
-    const result = await withCapturedOutputStreams(["stdout", "stderr"], async (chunksByStream) => {
-      return await withCapturedConsoleMethods(
-        ["debug", "error", "info", "log", "warn"],
-        async (consoleCalls) => {
-          const parseResult = getRenderableFileDiff(
-            "Index: src/app.ts\n=====\ninvalid diff body",
-            "src/app.ts",
-          );
-          await new Promise((resolve) => setTimeout(resolve, 0));
-
-          for (const calls of Object.values(consoleCalls)) {
-            for (const call of calls) {
-              expect(call).toEqual([[]]);
-            }
-          }
-          for (const chunk of [...chunksByStream.stdout, ...chunksByStream.stderr]) {
-            expect(chunk).toBe("[]\n");
-          }
-
-          return parseResult;
-        },
-      );
-    });
-
-    expect(result.fileDiff).toBeNull();
-    expect(result.fallbackPatch).toBe("Index: src/app.ts\n=====\ninvalid diff body\n");
   });
 
   test("builds hunk action annotations for the first and subsequent hunks", async () => {

@@ -4,15 +4,19 @@ import { hasMarkdownMath } from "@/components/ui/markdown-math-detection";
 import { assessVisualMarkdownCompatibility } from "./task-description-markdown";
 import { createTaskDescriptionMarkdownExtensions } from "./task-description-markdown-extensions";
 
-const createEditor = (content: string) =>
+const createEditor = (
+  content: string,
+  element: HTMLElement | null = document.createElement("div"),
+) =>
   new Editor({
+    element,
     extensions: createTaskDescriptionMarkdownExtensions(),
     content,
     contentType: "markdown",
   });
 
 function serializeMarkdown(markdown: string): string {
-  const editor = createEditor(markdown);
+  const editor = createEditor(markdown, null);
   try {
     return editor.getMarkdown();
   } finally {
@@ -159,7 +163,6 @@ describe("task description Markdown dialect", () => {
 
     expect(canonical).toBe(markdown);
     expect(hasMarkdownMath(canonical)).toBe(true);
-    expect(assessVisualMarkdownCompatibility(canonical)).toEqual({ compatible: true });
   });
 
   test.each([

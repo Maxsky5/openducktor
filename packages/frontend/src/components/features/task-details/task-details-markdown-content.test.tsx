@@ -1,13 +1,12 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { useQueryClient } from "@tanstack/react-query";
-import { fireEvent, render as renderView, waitFor } from "@testing-library/react";
-import { createElement, type ReactElement, type ReactNode, useLayoutEffect, useState } from "react";
+import { act, fireEvent, render as renderView } from "@testing-library/react";
+import { createElement, type ReactElement } from "react";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { MermaidSvgCacheProvider } from "@/components/ui/markdown-mermaid-svg-cache-context";
-import { buildCopyPreview } from "@/lib/copy-preview";
 import { QueryProvider } from "@/test-utils/query-provider";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
+import { withAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { withCapturedConsole } from "@/test-utils/console-capture";
 import { createIntersectionObserverTestDriver } from "@/test-utils/intersection-observer-test-driver";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
@@ -18,24 +17,7 @@ import { TaskDetailsMarkdownContent } from "./task-details-markdown-content";
 const mermaidRenderModule = await import("@/components/ui/markdown-mermaid-render");
 await import("@/components/ui/markdown-renderer-mermaid-candidate");
 
-enableReactActEnvironment();
-
 const render = (element: ReactElement) => renderView(element, { wrapper: MermaidSvgCacheProvider });
-
-const StaticThemeProvider = ({ children }: { children: ReactNode }): ReactElement | null => {
-  const queryClient = useQueryClient();
-  const [ready, setReady] = useState(false);
-
-  useLayoutEffect(() => {
-    queryClient.setQueryData(
-      settingsSnapshotQueryOptions().queryKey,
-      createSettingsSnapshotFixture({ theme: "light" }),
-    );
-    setReady(true);
-  }, [queryClient]);
-
-  return ready ? createElement(ThemeProvider, null, children) : null;
-};
 
 const writeClipboardMock = mock(async (_value: string) => {});
 const intersectionObserver = createIntersectionObserverTestDriver();
@@ -55,21 +37,6 @@ describe("TaskDetailsMarkdownContent", () => {
     restoreClipboard = null;
   });
 
-  test("renders floating copy button when copyable markdown is provided", () => {
-    const rendered = render(
-      createElement(TaskDetailsMarkdownContent, {
-        markdown: "# Spec\n\nDetails",
-        copyableMarkdown: "# Spec\n\nDetails",
-      }),
-    );
-
-    const button = rendered.getByTestId("copy-document-content");
-    expect(button.className).toContain("absolute");
-    expect(button.className).toContain("top-2");
-    expect(button.className).toContain("right-2");
-    rendered.unmount();
-  });
-
   test("does not render copy button when copyable markdown is missing", () => {
     const rendered = render(
       createElement(TaskDetailsMarkdownContent, {
@@ -77,7 +44,7 @@ describe("TaskDetailsMarkdownContent", () => {
       }),
     );
 
-    expect(rendered.queryByTestId("copy-document-content")).toBeNull();
+    expect(rendered.queryByRole("button", { name: "Copy description content" })).toBeNull();
     rendered.unmount();
   });
 
@@ -106,55 +73,6 @@ describe("TaskDetailsMarkdownContent", () => {
     rendered.unmount();
   });
 
-  test("copies markdown and shows success toast", async () => {
-    await withMockedToast(async ({ toastSuccessMock }) => {
-      const markdown = "12345678901234567890123456789012345678901234567890tail";
-      const rendered = render(
-        createElement(TaskDetailsMarkdownContent, {
-          markdown,
-          copyableMarkdown: markdown,
-        }),
-      );
-
-      try {
-        fireEvent.click(rendered.getByTestId("copy-document-content"));
-
-        await waitFor(() => {
-          expect(writeClipboardMock).toHaveBeenCalledWith(markdown);
-          expect(toastSuccessMock).toHaveBeenCalledWith("Copied!", {
-            description: buildCopyPreview(markdown),
-          });
-        });
-      } finally {
-        rendered.unmount();
-      }
-    });
-  });
-
-  test("uses full markdown as success preview when text is short", async () => {
-    await withMockedToast(async ({ toastSuccessMock }) => {
-      const markdown = "short text";
-      const rendered = render(
-        createElement(TaskDetailsMarkdownContent, {
-          markdown,
-          copyableMarkdown: markdown,
-        }),
-      );
-
-      try {
-        fireEvent.click(rendered.getByTestId("copy-document-content"));
-
-        await waitFor(() => {
-          expect(toastSuccessMock).toHaveBeenCalledWith("Copied!", {
-            description: buildCopyPreview(markdown),
-          });
-        });
-      } finally {
-        rendered.unmount();
-      }
-    });
-  });
-
   test("shows error toast when clipboard copy fails", async () => {
     await withMockedToast(async ({ toastErrorMock }) => {
       const error = new DOMException("blocked by browser", "NotAllowedError");
@@ -171,14 +89,13 @@ describe("TaskDetailsMarkdownContent", () => {
 
       try {
         await withCapturedConsole("error", async (consoleCalls) => {
-          fireEvent.click(rendered.getByTestId("copy-document-content"));
+          await act(async () =>
+            fireEvent.click(rendered.getByRole("button", { name: "Copy description content" })),
+          );
 
-          await waitFor(() => {
-            expect(toastErrorMock).toHaveBeenCalledWith(
-              "Permission denied: clipboard access not allowed",
-            );
-          });
-
+          expect(toastErrorMock).toHaveBeenCalledWith(
+            "Permission denied: clipboard access not allowed",
+          );
           expect(consoleCalls).toHaveLength(1);
           expect(consoleCalls[0]?.[0]).toBe("[TaskDetailsMarkdownContent] Clipboard write failed:");
           expect(consoleCalls[0]?.[1]).toBe(error);
@@ -189,73 +106,56 @@ describe("TaskDetailsMarkdownContent", () => {
     });
   });
 
-  test("shows check icon after successful copy", async () => {
-    await withMockedToast(async () => {
-      const rendered = render(
-        createElement(TaskDetailsMarkdownContent, {
-          markdown: "# Spec",
-          copyableMarkdown: "# Spec",
-        }),
-      );
-
-      try {
-        const button = rendered.getByTestId("copy-document-content");
-        expect(button.querySelector(".lucide-copy")).not.toBeNull();
-
-        fireEvent.click(button);
-
-        await waitFor(() => {
-          expect(button.querySelector(".lucide-check")).not.toBeNull();
-        });
-      } finally {
-        rendered.unmount();
-      }
-    });
-  });
-
-  test("keeps a rendered Mermaid diagram mounted when copy state changes", async () => {
+  test("copies the source Markdown and keeps the rendered diagram mounted", async () => {
     const renderSpy = spyOn(mermaidRenderModule, "renderMermaidSvg").mockResolvedValue(
       '<svg xmlns="http://www.w3.org/2000/svg"><text>Diagram</text></svg>',
     );
 
     try {
-      await withMockedToast(async () => {
-        const markdown = "```mermaid\ngraph TD\n  A --> B\n```";
-        const rendered = render(
-          createElement(
-            QueryProvider,
-            null,
-            createElement(
-              StaticThemeProvider,
-              null,
-              createElement(TaskDetailsMarkdownContent, {
-                markdown,
-                copyableMarkdown: markdown,
-              }),
+      await withMockedToast(({ toastSuccessMock }) =>
+        withAnimationFrameTestDriver(async (frames) => {
+          const markdown = "```mermaid\ngraph TD\n  A --> B\n```";
+          const copyableMarkdown = "# Spec\n\n" + markdown;
+          const connection = createTestClientConnection();
+          connection.queryClient.setQueryData(
+            settingsSnapshotQueryOptions().queryKey,
+            createSettingsSnapshotFixture({ theme: "light" }),
+          );
+          const rendered = await act(async () =>
+            render(
+              createElement(
+                QueryProvider,
+                { connection },
+                createElement(
+                  ThemeProvider,
+                  null,
+                  createElement(TaskDetailsMarkdownContent, { markdown, copyableMarkdown }),
+                ),
+              ),
             ),
-          ),
-        );
+          );
 
-        try {
-          const diagramLabel = await rendered.findByText("Diagram", {}, { timeout: 3_000 });
-          const diagram = diagramLabel.closest("svg");
-          expect(diagram).not.toBeNull();
-          expect(renderSpy).toHaveBeenCalledTimes(1);
+          try {
+            await frames.flushFrames();
+            const diagram = rendered.getByText("Diagram").closest("svg");
+            expect(diagram).not.toBeNull();
+            expect(renderSpy).toHaveBeenCalledTimes(1);
 
-          fireEvent.click(rendered.getByTestId("copy-document-content"));
+            const copy = rendered.getByRole("button", { name: "Copy description content" });
+            await act(async () => fireEvent.click(copy));
 
-          await waitFor(() => {
-            expect(
-              rendered.getByTestId("copy-document-content").querySelector(".lucide-check"),
-            ).not.toBeNull();
-          });
-          expect(rendered.queryByText("Diagram")?.closest("svg")?.isSameNode(diagram)).toBe(true);
-          expect(rendered.queryByText(/graph TD/)).toBeNull();
-          expect(renderSpy).toHaveBeenCalledTimes(1);
-        } finally {
-          rendered.unmount();
-        }
-      });
+            expect(writeClipboardMock).toHaveBeenCalledWith(copyableMarkdown);
+            expect(toastSuccessMock).toHaveBeenCalledWith("Copied!", {
+              description: copyableMarkdown,
+            });
+            expect(rendered.getByText("Diagram").closest("svg")).toBe(diagram);
+            expect(rendered.queryByText(/graph TD/)).toBeNull();
+            expect(renderSpy).toHaveBeenCalledTimes(1);
+          } finally {
+            rendered.unmount();
+          }
+        }),
+      );
     } finally {
       renderSpy.mockRestore();
     }

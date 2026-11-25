@@ -32,15 +32,12 @@ import {
   createAgentSessionFixture,
   createHookHarness,
   createTaskCardFixture,
-  enableReactActEnvironment,
 } from "../agent-studio-test-utils";
 import {
   createBuildToolsSnapshotFixture,
   createGitActionsFixture,
   createBuildToolsFixture,
 } from "../shell/agents-page-build-tools.test-support";
-
-enableReactActEnvironment();
 
 type UseAgentsPageRightPanelModel =
   (typeof import("./use-agents-page-right-panel-model"))["useAgentsPageRightPanelModel"];
@@ -577,7 +574,7 @@ for (const outcome of [
     try {
       await h.open();
       await h.selectFile();
-      await h.edit();
+      h.edit();
       await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save file" })));
       expect(h.write).toHaveBeenCalledTimes(1);
       expect(refreshWorktreeMock).not.toHaveBeenCalled();

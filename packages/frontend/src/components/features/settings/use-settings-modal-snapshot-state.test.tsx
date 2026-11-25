@@ -4,18 +4,25 @@ import type { SettingsSnapshot } from "@openducktor/contracts";
 import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
 import { prepareSettingsSnapshotForSave } from "./settings-save/settings-snapshot";
 import { diffSettingsSnapshot } from "@openducktor/contracts";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import {
-  createHookHarness,
-  enableReactActEnvironment,
-} from "@/pages/agents/agent-studio-test-utils";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createRepoSettingsConfigFixture,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalSnapshotState } from "./use-settings-modal-snapshot-state";
 
-enableReactActEnvironment();
+const createSnapshotHarness = (
+  connection: ClientConnection,
+  props: Parameters<typeof useSettingsModalSnapshotState>[0],
+) =>
+  createHookHarness(useSettingsModalSnapshotState, props, {
+    wrapper: ({ children }) => (
+      <ClientConnectionProvider connection={connection}>{children}</ClientConnectionProvider>
+    ),
+  });
 
 test("a failed settings read ends loading and shows its error only while open", async () => {
   let rejectRead!: (cause: Error) => void;
@@ -29,10 +36,7 @@ test("a failed settings read ends loading and shows its error only while open", 
     open: true,
     workspaceSelectionPolicy: { kind: "preferred" as const, repoPath: null },
   };
-  const harness = createHookHarness(useSettingsModalSnapshotState, props, {
-    connection,
-    seedSettingsSnapshot: false,
-  });
+  const harness = createSnapshotHarness(connection, props);
   try {
     await harness.mount();
     expect(harness.getLatest().isLoadingSettings).toBe(true);
@@ -76,32 +80,24 @@ test.each(["partial", "failed"] as const)(
         },
       },
     };
-    let saved = original;
-    const connection = createTestClientConnection({
-      client: { workspaceGetSettingsSnapshot: async () => saved },
-    });
+    const connection = createTestClientConnection();
+    connection.queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), original);
     const props = {
       open: true,
       workspaceSelectionPolicy: { kind: "preferred" as const, repoPath: null },
     };
-    const first = createHookHarness(useSettingsModalSnapshotState, props, {
-      connection,
-      seedSettingsSnapshot: false,
-    });
-    const second = createHookHarness(useSettingsModalSnapshotState, props, {
-      connection,
-      seedSettingsSnapshot: false,
-    });
+    const first = createSnapshotHarness(connection, props);
+    const second = createSnapshotHarness(connection, props);
     try {
       await first.mount();
-      await waitFor(() => expect(first.getLatest().loadedSnapshot).not.toBeNull());
+      expect(first.getLatest().loadedSnapshot).toEqual(original);
       await first.run((state) => state.setSnapshotDraft(() => draft));
       if (outcome === "partial")
         await first.run((state) =>
           state.acknowledgeSave(true, prepareSettingsSnapshotForSave(draft, original)),
         );
       else await first.run((state) => state.retainDraft());
-      saved = {
+      const saved: SettingsSnapshot = {
         ...original,
         git: outcome === "partial" ? draft.git : original.git,
         appearance: { ...original.appearance, horizontalScrollbarVisibility: "hide" },
@@ -111,7 +107,7 @@ test.each(["partial", "failed"] as const)(
       await first.unmount();
       connection.queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), saved);
       await second.mount();
-      await waitFor(() => expect(second.getLatest().loadedSnapshot).not.toBeNull());
+      expect(second.getLatest().loadedSnapshot).toEqual(saved);
       expect(second.getLatest().snapshotDraft).toMatchObject({
         git: draft.git,
         system: draft.system,
@@ -159,23 +155,18 @@ test.each(["partial", "failed"] as const)(
 test.each([false, true])(
   "an open settings view refreshes clean fields and preserves edits: dirty=%s",
   async (dirty) => {
-    let saved = createSettingsSnapshotFixture({
+    const original = createSettingsSnapshotFixture({
       workspaces: { alpha: createRepoSettingsConfigFixture("alpha", "/repos/alpha") },
     });
-    const connection = createTestClientConnection({
-      client: { workspaceGetSettingsSnapshot: async () => saved },
+    const connection = createTestClientConnection();
+    connection.queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), original);
+    const harness = createSnapshotHarness(connection, {
+      open: true,
+      workspaceSelectionPolicy: { kind: "preferred", repoPath: null },
     });
-    const harness = createHookHarness(
-      useSettingsModalSnapshotState,
-      {
-        open: true,
-        workspaceSelectionPolicy: { kind: "preferred" as const, repoPath: null },
-      },
-      { connection, seedSettingsSnapshot: false },
-    );
     try {
       await harness.mount();
-      await waitFor(() => expect(harness.getLatest().snapshotDraft).not.toBeNull());
+      expect(harness.getLatest().snapshotDraft).toEqual(original);
       if (dirty)
         await harness.run((state) =>
           state.setSnapshotDraft(
@@ -183,7 +174,10 @@ test.each([false, true])(
               current && { ...current, chat: { ...current.chat, showThinkingMessages: true } },
           ),
         );
-      saved = { ...saved, git: { ...saved.git, defaultMergeMethod: "squash" } };
+      const saved: SettingsSnapshot = {
+        ...original,
+        git: { ...original.git, defaultMergeMethod: "squash" },
+      };
       await harness.run(() => {
         connection.queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), saved);
       });
@@ -212,25 +206,17 @@ test.each(["role", "workspace"] as const)(
       customAgentRoles: [{ id: "review", name: "Reviewer", systemPrompt: "Original" }],
       workspaces: { alpha: createRepoSettingsConfigFixture("alpha", "/repos/shared") },
     });
-    let saved = original;
-    const connection = createTestClientConnection({
-      client: { workspaceGetSettingsSnapshot: async () => saved },
-    });
+    const connection = createTestClientConnection();
+    connection.queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), original);
     const props = {
       open: true,
       workspaceSelectionPolicy: { kind: "preferred" as const, repoPath: null },
     };
-    const first = createHookHarness(useSettingsModalSnapshotState, props, {
-      connection,
-      seedSettingsSnapshot: false,
-    });
-    const second = createHookHarness(useSettingsModalSnapshotState, props, {
-      connection,
-      seedSettingsSnapshot: false,
-    });
+    const first = createSnapshotHarness(connection, props);
+    const second = createSnapshotHarness(connection, props);
     try {
       await first.mount();
-      await waitFor(() => expect(first.getLatest().snapshotDraft).not.toBeNull());
+      expect(first.getLatest().snapshotDraft).toEqual(original);
       await first.run((state) =>
         state.setSnapshotDraft(
           (current) =>
@@ -253,7 +239,7 @@ test.each(["role", "workspace"] as const)(
       await first.update({ ...props, open: false });
       await first.unmount();
       expect(connection.drafts.settings.retained).not.toBeNull();
-      saved = {
+      const saved: SettingsSnapshot = {
         ...original,
         customAgentRoles: target === "role" ? [] : original.customAgentRoles,
         workspaces:
@@ -263,7 +249,7 @@ test.each(["role", "workspace"] as const)(
       };
       connection.queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), saved);
       await second.mount();
-      await waitFor(() => expect(second.getLatest().loadedSnapshot).not.toBeNull());
+      expect(second.getLatest().loadedSnapshot).toEqual(saved);
       await waitFor(() =>
         expect(second.getLatest().unavailableTargetError).toContain("no longer available"),
       );

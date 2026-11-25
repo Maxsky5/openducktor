@@ -8,16 +8,6 @@ import {
   startRepositoryLoad,
 } from "./app-lifecycle-coordinator";
 
-const createDeferred = <T>() => {
-  let resolve!: (value: T) => void;
-  let reject!: (cause?: unknown) => void;
-  const promise = new Promise<T>((nextResolve, nextReject) => {
-    resolve = nextResolve;
-    reject = nextReject;
-  });
-  return { promise, resolve, reject };
-};
-
 const flush = async (): Promise<void> => {
   await Promise.resolve();
   await Promise.resolve();
@@ -113,7 +103,7 @@ describe("useAppLifecycle repository-load coordination", () => {
   });
 
   test("does not gate diagnostics and task loading on branch refresh completion", async () => {
-    const branches = createDeferred<void>();
+    const branches = Promise.withResolvers<void>();
     const lifecycle = start({ refreshBranches: async () => await branches.promise });
     await flush();
     expect(lifecycle.refreshTaskStoreCheckForRepo).toHaveBeenCalledWith(
@@ -128,8 +118,8 @@ describe("useAppLifecycle repository-load coordination", () => {
   });
 
   test("suppresses late branch and task-load toasts after the repository is deselected", async () => {
-    const branches = createDeferred<void>();
-    const tasks = createDeferred<void>();
+    const branches = Promise.withResolvers<void>();
+    const tasks = Promise.withResolvers<void>();
     let current = true;
     const lifecycle = start({
       isCurrent: () => current,
@@ -145,8 +135,8 @@ describe("useAppLifecycle repository-load coordination", () => {
   });
 
   test("shows then dismisses preparation feedback, suppresses ready-first-check feedback, and clears it on failures", async () => {
-    const check = createDeferred<TaskStoreCheck>();
-    const tasks = createDeferred<void>();
+    const check = Promise.withResolvers<TaskStoreCheck>();
+    const tasks = Promise.withResolvers<void>();
     const slow = start({
       refreshTaskStoreCheckForRepo: async () => await check.promise,
       loadWorkspaceTasks: async () => await tasks.promise,
@@ -163,7 +153,7 @@ describe("useAppLifecycle repository-load coordination", () => {
     expect(slow.notifications.dismiss).toHaveBeenCalledWith("preparing");
 
     const readyFirst = start({
-      loadWorkspaceTasks: async () => await createDeferred<void>().promise,
+      loadWorkspaceTasks: async () => await Promise.withResolvers<void>().promise,
     });
     await flush();
     readyFirst.timers.runAll();

@@ -1,9 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
-import { enableReactActEnvironment } from "../agent-studio-test-utils";
 import { useAgentStudioPullRequestModalModel } from "./use-agent-studio-pull-request-modal-model";
-
-enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioPullRequestModalModel>[0];
 

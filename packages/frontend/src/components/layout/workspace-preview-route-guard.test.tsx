@@ -49,7 +49,13 @@ function PreviewPage() {
   );
 }
 
-function renderHistoryExit() {
+function renderHistoryExit(
+  initialEntries = [
+    "/kanban",
+    "/sessions?workspace=w&kind=task&task=t-1",
+    "/sessions?workspace=w&kind=workspace&session=chat-1",
+  ],
+) {
   const router = createMemoryRouter(
     [
       {
@@ -67,23 +73,20 @@ function renderHistoryExit() {
       },
     ],
     {
-      initialEntries: [
-        "/kanban",
-        "/sessions?workspace=w&kind=task&task=t-1",
-        "/sessions?workspace=w&kind=workspace&session=chat-1",
-      ],
-      initialIndex: 2,
+      initialEntries,
+      initialIndex: initialEntries.length - 1,
     },
   );
   const view = render(<RouterProvider router={router} useTransitions={false} />);
-  return { ...view, router };
+  const goBack = () => act(() => router.navigate(-1));
+  return { ...view, router, goBack };
 }
 
 test("history exit keeps a dirty preview when editing continues and leaves after discard", async () => {
   const view = renderHistoryExit();
   try {
     fireEvent.click(screen.getByRole("button", { name: "Make dirty" }));
-    void view.router.navigate(-1);
+    await view.goBack();
     await screen.findByRole("dialog", { name: "Unsaved edits" });
     expect(view.router.state.location.search).toBe("?workspace=w&kind=workspace&session=chat-1");
 
@@ -91,7 +94,7 @@ test("history exit keeps a dirty preview when editing continues and leaves after
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Unsaved edits" })).toBeNull());
     expect(view.router.state.location.search).toBe("?workspace=w&kind=workspace&session=chat-1");
 
-    void view.router.navigate(-1);
+    await view.goBack();
     await screen.findByRole("dialog", { name: "Unsaved edits" });
     fireEvent.click(screen.getByRole("button", { name: "Discard edits" }));
     await waitFor(() =>
@@ -107,7 +110,7 @@ test("a guarded click replaces a blocked history exit", async () => {
   const view = renderHistoryExit();
   try {
     fireEvent.click(screen.getByRole("button", { name: "Make dirty" }));
-    void view.router.navigate(-1);
+    await view.goBack();
     await screen.findByRole("dialog", { name: "Unsaved edits" });
 
     fireEvent.click(screen.getByRole("button", { name: "Open Kanban" }));
@@ -119,7 +122,7 @@ test("a guarded click replaces a blocked history exit", async () => {
       ).toBe(false),
     );
     expect(view.router.state.location.search).toBe("?workspace=w&kind=workspace&session=chat-1");
-    void view.router.navigate(-1);
+    await view.goBack();
     await screen.findByRole("dialog", { name: "Unsaved edits" });
     fireEvent.click(screen.getByRole("button", { name: "Discard edits" }));
     await waitFor(() =>
@@ -135,9 +138,7 @@ test("history exit waits for a save before the preview can leave", async () => {
   const view = renderHistoryExit();
   try {
     fireEvent.click(screen.getByRole("button", { name: "Start save" }));
-    act(() => {
-      void view.router.navigate(-1);
-    });
+    await view.goBack();
     await waitFor(() =>
       expect(
         [...view.router.state.blockers.values()].some((blocker) => blocker.state === "blocked"),
@@ -160,7 +161,7 @@ test("a failed save returns the blocked history exit to the discard choice", asy
   const view = renderHistoryExit();
   try {
     fireEvent.click(screen.getByRole("button", { name: "Start save" }));
-    void view.router.navigate(-1);
+    await view.goBack();
     await waitFor(() =>
       expect(
         [...view.router.state.blockers.values()].some((blocker) => blocker.state === "blocked"),
@@ -180,34 +181,16 @@ test("a failed save returns the blocked history exit to the discard choice", asy
 });
 
 test("history exit from the Sessions page to another page also asks first", async () => {
-  const router = createMemoryRouter(
-    [
-      {
-        path: "/",
-        element: (
-          <WorkspacePreviewTransitionGuardProvider>
-            <WorkspacePreviewRouteGuard />
-            <Outlet />
-          </WorkspacePreviewTransitionGuardProvider>
-        ),
-        children: [
-          { path: "sessions", element: <PreviewPage /> },
-          { path: "kanban", element: <p>Kanban page</p> },
-        ],
-      },
-    ],
-    { initialEntries: ["/kanban", "/sessions?workspace=w&kind=task&task=t-1"], initialIndex: 1 },
-  );
-  const view = render(<RouterProvider router={router} useTransitions={false} />);
+  const view = renderHistoryExit(["/kanban", "/sessions?workspace=w&kind=task&task=t-1"]);
   try {
     fireEvent.click(screen.getByRole("button", { name: "Make dirty" }));
-    void router.navigate(-1);
+    await view.goBack();
     await screen.findByRole("dialog", { name: "Unsaved edits" });
-    expect(router.state.location.pathname).toBe("/sessions");
+    expect(view.router.state.location.pathname).toBe("/sessions");
     fireEvent.click(screen.getByRole("button", { name: "Discard edits" }));
     await screen.findByText("Kanban page");
   } finally {
     view.unmount();
-    router.dispose();
+    view.router.dispose();
   }
 });

@@ -1,13 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { LocalImageReadResult } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { BrowserToolMessage } from "./agent-chat-browser-tool";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
-
-enableReactActEnvironment();
 
 const screenshotCall: ToolMeta = {
   kind: "tool",

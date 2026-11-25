@@ -32,11 +32,7 @@ import {
   type RunSessionStartWorkflow,
 } from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
 import type { SessionStartWorkflowResult } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
-import {
-  createDeferred,
-  createTaskCardFixture,
-  enableReactActEnvironment,
-} from "../agent-studio-test-utils";
+import { createTaskCardFixture } from "../agent-studio-test-utils";
 import { useAgentStudioSendTarget } from "./use-agent-studio-send-target";
 
 const selectedModelDescriptor: AgentModelCatalog["models"][number] = {
@@ -55,8 +51,6 @@ const selectedModelDescriptor: AgentModelCatalog["models"][number] = {
     pdf: true,
   },
 };
-
-enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioSendTarget>[0] & {
   reusablePrompts: ReusablePrompt[];
@@ -128,7 +122,7 @@ const createCompactReusablePromptDraft = (): AgentChatComposerDraft => ({
   attachments: [],
 });
 
-const createAttachmentDraft = (): AgentChatComposerDraft => {
+const createAttachmentDraft = () => {
   const file = new File(["pdf"], "brief.pdf", { type: "application/pdf" });
   return {
     segments: [createTextSegment("please review")],
@@ -143,7 +137,7 @@ const createAttachmentDraft = (): AgentChatComposerDraft => {
         "attachment-1",
       ),
     ],
-  };
+  } satisfies AgentChatComposerDraft;
 };
 
 const sessionIdentity = (externalSessionId: string) => ({
@@ -221,7 +215,7 @@ describe("useAgentStudioSendTarget", () => {
   );
 
   test("checks the send policy after attachment staging", async () => {
-    const staged = createDeferred<StagedLocalAttachment>();
+    const staged = Promise.withResolvers<StagedLocalAttachment>();
     const stage = mock(() => staged.promise);
     let blocked = false;
     const send = mock(async () => null);
@@ -251,6 +245,80 @@ describe("useAgentStudioSendTarget", () => {
         expect.objectContaining({ message: "Answer the blocking question before sending." }),
       );
       expect(send).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("sends staged browser files even when the draft has a device path", async () => {
+    const stage = mock<HostClient["workspaceStageLocalAttachment"]>(async ({ name }) => ({
+      path: `/tmp/staged-${name}`,
+    }));
+    const sendAgentMessage = mock(async () => null);
+    const scan = new File(["scan"], "scan.pdf", { type: "application/pdf" });
+    const draft = createAttachmentDraft();
+    const harness = createTaskHarness(
+      { ...createBaseArgs(), sendAgentMessage },
+      { workspaceStageLocalAttachment: stage },
+    );
+
+    await harness.mount();
+    try {
+      await harness.run(async (state) => {
+        expect(
+          await state.onSend(
+            {
+              ...draft,
+              attachments: [
+                ...draft.attachments,
+                createComposerAttachment(
+                  {
+                    name: "scan.pdf",
+                    kind: "pdf",
+                    mime: "application/pdf",
+                    path: "/device/scan.pdf",
+                    file: scan,
+                  },
+                  "attachment-with-path",
+                ),
+              ],
+            },
+            "default",
+          ),
+        ).toBe(true);
+      });
+      expect(stage.mock.calls).toEqual([
+        [{ name: "brief.pdf", mime: "application/pdf", base64Data: "cGRm" }],
+        [{ name: "scan.pdf", mime: "application/pdf", base64Data: "c2Nhbg==" }],
+      ]);
+      expect(sendAgentMessage).toHaveBeenCalledTimes(1);
+      expect(sendAgentMessage).toHaveBeenCalledWith(
+        sessionIdentity("session-existing"),
+        [
+          { kind: "text", text: "please review" },
+          {
+            kind: "attachment",
+            attachment: {
+              id: "attachment-1",
+              name: "brief.pdf",
+              kind: "pdf",
+              mime: "application/pdf",
+              path: "/tmp/staged-brief.pdf",
+            },
+          },
+          {
+            kind: "attachment",
+            attachment: {
+              id: "attachment-with-path",
+              name: "scan.pdf",
+              kind: "pdf",
+              mime: "application/pdf",
+              path: "/tmp/staged-scan.pdf",
+            },
+          },
+        ],
+        expect.objectContaining({ mode: "default", assertCanSubmit: expect.any(Function) }),
+      );
     } finally {
       await harness.unmount();
     }
@@ -345,22 +413,32 @@ describe("useAgentStudioSendTarget", () => {
     await harness.unmount();
   });
 
-  test("sends system compaction to an existing Claude session", async () => {
+  test("sends system compaction to an existing Claude session only without attachments", async () => {
     const sendAgentMessage = mock(async () => null);
+    const stage = mock(async () => ({ path: "/tmp/staged-brief.pdf" }));
     const claudeSession = {
       externalSessionId: "claude-session",
       runtimeKind: "claude" as const,
       workingDirectory: "/repo/worktrees/claude-session",
     };
-    const harness = createTaskHarness({
-      ...createBaseArgs(),
-      selectedSessionIdentity: claudeSession,
-      sendAgentMessage,
-    });
+    const harness = createTaskHarness(
+      { ...createBaseArgs(), selectedSessionIdentity: claudeSession, sendAgentMessage },
+      { workspaceStageLocalAttachment: stage },
+    );
 
     await harness.mount();
     await harness.run(async (state) => {
-      await expect(state.onSend(createCompactionDraft(), "default")).resolves.toBe(true);
+      const draft = {
+        ...createCompactionDraft(),
+        attachments: createAttachmentDraft().attachments,
+      };
+      expect(await state.onSend(draft, "default")).toBe(false);
+    });
+    expect(stage).not.toHaveBeenCalled();
+    expect(sendAgentMessage).not.toHaveBeenCalled();
+
+    await harness.run(async (state) => {
+      expect(await state.onSend(createCompactionDraft(), "default")).toBe(true);
     });
 
     expect(sendAgentMessage).toHaveBeenCalledWith(
@@ -397,7 +475,7 @@ describe("useAgentStudioSendTarget", () => {
 
   test("blocks duplicate first Sends until selection changes and allows later preparation", async () => {
     const sendAgentMessage = mock(async () => null);
-    const launched = createDeferred<SessionStartWorkflowResult>();
+    const launched = Promise.withResolvers<SessionStartWorkflowResult>();
     const runSessionStartWorkflow = mock<RunSessionStartWorkflow>(() => launched.promise);
     const scheduleQueryUpdate = mock(() => {});
     const initialArgs: HookArgs = {
@@ -468,7 +546,7 @@ describe("useAgentStudioSendTarget", () => {
   test.each(["old session", "task", "task round trip"] as const)(
     "allows a new preparation after %s navigation before the launch replies",
     async (context) => {
-      const launched = createDeferred<SessionStartWorkflowResult>();
+      const launched = Promise.withResolvers<SessionStartWorkflowResult>();
       const runSessionStartWorkflow = mock<RunSessionStartWorkflow>(() => launched.promise);
       const scheduleQueryUpdate = mock(() => {});
       const args: HookArgs = {
@@ -524,7 +602,7 @@ describe("useAgentStudioSendTarget", () => {
   );
 
   test("keeps a completed launch guard in its own context", async () => {
-    const launched = createDeferred<SessionStartWorkflowResult>();
+    const launched = Promise.withResolvers<SessionStartWorkflowResult>();
     const runSessionStartWorkflow = mock<RunSessionStartWorkflow>((input) =>
       input.request.taskId === "task-1"
         ? launched.promise
@@ -684,7 +762,7 @@ describe("useAgentStudioSendTarget", () => {
   });
 
   test("allows sending in a different active context while another context is unresolved", async () => {
-    const firstSendDeferred = createDeferred<void>();
+    const firstSendDeferred = Promise.withResolvers<void>();
     const sendAgentMessage = mock((session: AgentSessionIdentity) => {
       if (session.externalSessionId === "session-existing") {
         return firstSendDeferred.promise.then(() => null);
@@ -743,7 +821,7 @@ describe("useAgentStudioSendTarget", () => {
   test.each(["workspace", "task", "role"] as const)(
     "cancels staged submission after a %s switch",
     async (context) => {
-      const staged = createDeferred<StagedLocalAttachment>();
+      const staged = Promise.withResolvers<StagedLocalAttachment>();
       const stage = mock(() => staged.promise);
       const sendAgentMessage = mock(async () => null);
       const runSessionStartWorkflow = mock(createBaseArgs().startPreparedSession);

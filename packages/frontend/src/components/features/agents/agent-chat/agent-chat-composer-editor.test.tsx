@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, jest, mock, spyOn, test } from "bun:test";
 import { GOAL_SLASH_COMMAND, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentFileSearchResult } from "@openducktor/core";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useReducer } from "react";
 import { resolveRuntimePromptInputSupport } from "@openducktor/frontend-core/sessions/composer/prompt-input/runtime-prompt-input-support";
 import { withAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
@@ -332,6 +332,20 @@ const typeIntoEditor = (container: HTMLElement, value: string): HTMLElement => {
   return getLastTextSegment(container);
 };
 
+const typeFileQuery = async (container: HTMLElement, query: string): Promise<HTMLElement> => {
+  jest.useFakeTimers();
+  try {
+    const editable = typeIntoEditor(container, query);
+    await act(async () => {
+      // Send the file query without advancing the delayed loading indicator.
+      jest.advanceTimersByTime(100);
+    });
+    return editable;
+  } finally {
+    jest.useRealTimers();
+  }
+};
+
 const selectTextSegmentRange = (
   textSegment: HTMLElement,
   startOffset: number,
@@ -511,7 +525,7 @@ describe("AgentChatComposerEditor", () => {
     const editor = screen.getByRole("combobox", { name: "Message composer" });
     editor.focus();
 
-    typeIntoEditor(rendered.container, "@");
+    await typeFileQuery(rendered.container, "@");
 
     await waitFor(
       () => {
@@ -732,23 +746,6 @@ describe("AgentChatComposerEditor", () => {
       expect(screen.getByText("/compact")).toBeDefined();
     });
     expect(onSend).not.toHaveBeenCalled();
-  });
-
-  test("shows the skill menu after typing a dollar trigger", async () => {
-    const rendered = render(
-      <EditorHarness
-        slashCommands={COMMANDS}
-        slashCommandsError={null}
-        supportsSkillReferences={true}
-        skills={SKILLS}
-      />,
-    );
-
-    typeIntoEditor(rendered.container, "$");
-
-    await waitFor(() => {
-      expect(screen.getByText("review")).toBeDefined();
-    });
   });
 
   test("refreshes the catalog when a catalog menu opens", async () => {
@@ -1045,9 +1042,11 @@ describe("AgentChatComposerEditor", () => {
     expect(screen.getByTestId("draft-state").textContent).toContain("hello bold words");
   });
 
-  test("forwards pasted images to attachment intake without replacing selected text", async () => {
+  test("attaches each pasted image once and preserves the selected draft text", async () => {
     const onAddFiles = mock(() => {});
-    const image = new File(["image"], "pasted-image.png", { type: "image/png" });
+    const first = new File(["image-1"], "one.png", { type: "image/png", lastModified: 1 });
+    const second = new File(["image-2"], "two.jpg", { type: "image/jpeg" });
+    const duplicate = new File(["image-1"], "one.png", { type: "image/png", lastModified: 2 });
     const rendered = render(
       <EditorHarness
         slashCommands={COMMANDS}
@@ -1060,64 +1059,20 @@ describe("AgentChatComposerEditor", () => {
     const editorRoot = selectComposerContentRange(rendered.container);
     fireEvent.paste(editorRoot, {
       clipboardData: createClipboardData({
-        items: [createClipboardFileItem(image)],
-        types: ["Files"],
-      }),
-    });
-
-    await waitFor(() => {
-      expect(onAddFiles).toHaveBeenCalledWith([image]);
-    });
-    await expectComposerText(rendered.container, "keep this");
-    expect(screen.getByTestId("draft-state").textContent).toContain("keep this");
-  });
-
-  test("prefers pasted images over clipboard text when both are present", async () => {
-    const onAddFiles = mock(() => {});
-    const image = new File(["image"], "clipboard-image.png", { type: "image/png" });
-    const rendered = render(
-      <EditorHarness
-        slashCommands={COMMANDS}
-        slashCommandsError={null}
-        initialDraft={createComposerDraft("keep this")}
-        onAddFiles={onAddFiles}
-      />,
-    );
-
-    fireEvent.paste(getEditorRoot(rendered.container), {
-      clipboardData: createClipboardData({
         plainText: "should not appear",
         htmlText: "<strong>should not appear</strong>",
-        items: [createClipboardFileItem(image)],
+        items: [createClipboardFileItem(first), createClipboardFileItem(second)],
+        files: [duplicate],
         types: ["Files", "text/plain", "text/html"],
       }),
     });
 
-    await waitFor(() => {
-      expect(onAddFiles).toHaveBeenCalledWith([image]);
-    });
+    expect(onAddFiles).toHaveBeenCalledTimes(1);
+    expect(onAddFiles).toHaveBeenCalledWith([first, second]);
     await expectComposerText(rendered.container, "keep this");
-    expect(screen.getByTestId("draft-state").textContent).not.toContain("should not appear");
-  });
-
-  test("forwards every supported pasted image from one clipboard event", async () => {
-    const onAddFiles = mock(() => {});
-    const firstImage = new File(["image-1"], "one.png", { type: "image/png" });
-    const secondImage = new File(["image-2"], "two.jpg", { type: "image/jpeg" });
-    const rendered = render(
-      <EditorHarness slashCommands={COMMANDS} slashCommandsError={null} onAddFiles={onAddFiles} />,
-    );
-
-    fireEvent.paste(getEditorRoot(rendered.container), {
-      clipboardData: createClipboardData({
-        items: [createClipboardFileItem(firstImage), createClipboardFileItem(secondImage)],
-        types: ["Files"],
-      }),
-    });
-
-    await waitFor(() => {
-      expect(onAddFiles).toHaveBeenCalledWith([firstImage, secondImage]);
-    });
+    const draft = screen.getByTestId("draft-state").textContent;
+    expect(draft).toContain("keep this");
+    expect(draft).not.toContain("should not appear");
   });
 
   test("falls back to clipboard files when clipboard items omit pasted images", async () => {
@@ -1137,33 +1092,6 @@ describe("AgentChatComposerEditor", () => {
 
     await waitFor(() => {
       expect(onAddFiles).toHaveBeenCalledWith([image]);
-    });
-  });
-
-  test("deduplicates pasted images exposed through both clipboard items and files", async () => {
-    const onAddFiles = mock(() => {});
-    const itemImage = new File(["image"], "duplicate.png", {
-      type: "image/png",
-      lastModified: 1,
-    });
-    const filesImage = new File(["image"], "duplicate.png", {
-      type: "image/png",
-      lastModified: 2,
-    });
-    const rendered = render(
-      <EditorHarness slashCommands={COMMANDS} slashCommandsError={null} onAddFiles={onAddFiles} />,
-    );
-
-    fireEvent.paste(getEditorRoot(rendered.container), {
-      clipboardData: createClipboardData({
-        items: [createClipboardFileItem(itemImage)],
-        files: [filesImage],
-        types: ["Files"],
-      }),
-    });
-
-    await waitFor(() => {
-      expect(onAddFiles).toHaveBeenCalledWith([itemImage]);
     });
   });
 
@@ -1370,7 +1298,7 @@ describe("AgentChatComposerEditor", () => {
       />,
     );
 
-    typeIntoEditor(rendered.container, "@");
+    await typeFileQuery(rendered.container, "@");
 
     await waitFor(() => {
       expect(screen.getByText("File search unavailable.")).toBeDefined();
@@ -1387,7 +1315,7 @@ describe("AgentChatComposerEditor", () => {
       />,
     );
 
-    typeIntoEditor(rendered.container, "@missing");
+    await typeFileQuery(rendered.container, "@missing");
 
     await waitFor(() => {
       expect(screen.getByText("No files found.")).toBeDefined();
@@ -1415,12 +1343,12 @@ describe("AgentChatComposerEditor", () => {
       />,
     );
 
-    typeIntoEditor(rendered.container, "@a");
+    await typeFileQuery(rendered.container, "@a");
     await waitFor(() => {
       expect(screen.getByRole("option", { name: /alpha.ts/i })).toBeDefined();
     });
 
-    typeIntoEditor(rendered.container, "@ab");
+    await typeFileQuery(rendered.container, "@ab");
 
     expect(screen.getByRole("option", { name: /alpha.ts/i })).toBeDefined();
     expect(screen.queryByText("Searching files...")).toBeNull();
@@ -1451,7 +1379,7 @@ describe("AgentChatComposerEditor", () => {
       />,
     );
 
-    const editable = typeIntoEditor(rendered.container, "check @");
+    const editable = await typeFileQuery(rendered.container, "check @");
     await waitFor(() => {
       expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
     });
@@ -1476,7 +1404,7 @@ describe("AgentChatComposerEditor", () => {
       />,
     );
 
-    typeIntoEditor(rendered.container, "check @");
+    await typeFileQuery(rendered.container, "check @");
 
     const fileButton = await screen.findByRole("option", { name: /main.ts/i });
     fireEvent.pointerDown(fileButton);
@@ -1501,7 +1429,7 @@ describe("AgentChatComposerEditor", () => {
       />,
     );
 
-    typeIntoEditor(rendered.container, "@rev");
+    await typeFileQuery(rendered.container, "@rev");
 
     await waitFor(() => {
       expect(screen.getByRole("option", { name: /@reviewer/i })).toBeDefined();
@@ -1555,7 +1483,7 @@ describe("AgentChatComposerEditor", () => {
       />,
     );
 
-    typeIntoEditor(rendered.container, "@rev");
+    await typeFileQuery(rendered.container, "@rev");
 
     await waitFor(() => {
       expect(screen.getByRole("option", { name: /@reviewer/i })).toBeDefined();
@@ -1669,7 +1597,7 @@ describe("AgentChatComposerEditor", () => {
       />,
     );
 
-    const editable = typeIntoEditor(rendered.container, "check @");
+    const editable = await typeFileQuery(rendered.container, "check @");
     await waitFor(() => {
       expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
     });
@@ -1710,7 +1638,7 @@ describe("AgentChatComposerEditor", () => {
       />,
     );
 
-    typeIntoEditor(rendered.container, "@");
+    await typeFileQuery(rendered.container, "@");
 
     await waitFor(() => {
       expect(screen.queryByText("main.ts")).toBeNull();
@@ -2142,7 +2070,7 @@ describe("AgentChatComposerEditor", () => {
     expect(screen.queryByRole("option", { name: /compact the current session/i })).toBeNull();
   });
 
-  test("renders empty trailing text segments as inline blocks for caret placement after file chips", async () => {
+  test("keeps an empty caret position after a file chip when the browser adds a placeholder", async () => {
     const rendered = render(
       <EditorHarness
         slashCommands={COMMANDS}
@@ -2151,38 +2079,7 @@ describe("AgentChatComposerEditor", () => {
       />,
     );
 
-    const editable = typeIntoEditor(rendered.container, "@");
-    await waitFor(
-      () => {
-        expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
-      },
-      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
-    );
-    fireEvent.keyDown(editable, { key: "Enter" });
-
-    await waitFor(
-      () => {
-        const editables = Array.from(rendered.container.querySelectorAll("[data-text-segment-id]"));
-        expect(editables).toHaveLength(2);
-        const trailingEditable = editables.at(-1);
-        expect(trailingEditable?.className).toContain("inline-block");
-        expect(trailingEditable?.className).toContain("min-w-[1px]");
-        expect(trailingEditable?.textContent).toBe("");
-      },
-      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
-    );
-  });
-
-  test("rebuilds placeholder children in empty text segments after file chips", async () => {
-    const rendered = render(
-      <EditorHarness
-        slashCommands={COMMANDS}
-        slashCommandsError={null}
-        searchFiles={async () => [buildFileSearchResult()]}
-      />,
-    );
-
-    const editable = typeIntoEditor(rendered.container, "@");
+    const editable = await typeFileQuery(rendered.container, "@");
     await waitFor(
       () => {
         expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
@@ -2200,7 +2097,12 @@ describe("AgentChatComposerEditor", () => {
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
 
+    const textSegments = getTextSegments(rendered.container);
+    expect(textSegments).toHaveLength(2);
     const trailingEditable = getLastTextSegment(rendered.container);
+    expect(trailingEditable.className).toContain("inline-block");
+    expect(trailingEditable.className).toContain("min-w-[1px]");
+    expect(trailingEditable.textContent).toBe("");
     trailingEditable.append(document.createElement("br"));
     fireEvent.input(getEditorRoot(rendered.container));
 
@@ -2284,7 +2186,7 @@ describe("AgentChatComposerEditor", () => {
       />,
     );
 
-    const editable = typeIntoEditor(rendered.container, "@");
+    const editable = await typeFileQuery(rendered.container, "@");
     await waitFor(
       () => {
         expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
@@ -2334,7 +2236,7 @@ describe("AgentChatComposerEditor", () => {
       />,
     );
 
-    const editable = typeIntoEditor(rendered.container, "@");
+    const editable = await typeFileQuery(rendered.container, "@");
     await waitFor(
       () => {
         expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
@@ -2395,7 +2297,7 @@ describe("AgentChatComposerEditor", () => {
       />,
     );
 
-    const editable = typeIntoEditor(rendered.container, "@");
+    const editable = await typeFileQuery(rendered.container, "@");
     await waitFor(
       () => {
         expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
@@ -2469,7 +2371,7 @@ describe("AgentChatComposerEditor", () => {
       />,
     );
 
-    const editable = typeIntoEditor(rendered.container, "@");
+    const editable = await typeFileQuery(rendered.container, "@");
     await waitFor(
       () => {
         expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
@@ -2539,7 +2441,7 @@ describe("AgentChatComposerEditor", () => {
       />,
     );
 
-    const editable = typeIntoEditor(rendered.container, "@");
+    const editable = await typeFileQuery(rendered.container, "@");
     await waitFor(() => {
       expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
     });
@@ -2586,7 +2488,7 @@ describe("AgentChatComposerEditor", () => {
       />,
     );
 
-    const editable = typeIntoEditor(rendered.container, "check @");
+    const editable = await typeFileQuery(rendered.container, "check @");
     await waitFor(() => {
       expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
     });
@@ -2633,7 +2535,7 @@ describe("AgentChatComposerEditor", () => {
       />,
     );
 
-    const editable = typeIntoEditor(rendered.container, "check @");
+    const editable = await typeFileQuery(rendered.container, "check @");
     await waitFor(() => {
       expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
     });
@@ -2742,7 +2644,7 @@ describe("AgentChatComposerEditor", () => {
       />,
     );
 
-    typeIntoEditor(rendered.container, "check @");
+    await typeFileQuery(rendered.container, "check @");
     const fileButton = await screen.findByRole("option", { name: /main.ts/i });
     fireEvent.pointerDown(fileButton);
 

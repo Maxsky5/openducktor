@@ -4,13 +4,12 @@ import type { RepoPullRequestSyncResponse } from "@openducktor/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { toast, type ToastT } from "sonner";
 import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
-import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import type { WorkspaceScopeTarget } from "@/types/workspace-scope";
 import { useManualPullRequestSync } from "./use-manual-pull-request-sync";
 
 describe("manual pull request sync", () => {
   test("keeps its chosen scope across rerenders and blocks duplicate calls until sync ends", async () => {
-    const first = createDeferred<RepoPullRequestSyncResponse>();
+    const first = Promise.withResolvers<RepoPullRequestSyncResponse>();
     const syncHost = mock(
       async ({ repoPath: path }: WorkspaceRef): Promise<RepoPullRequestSyncResponse> =>
         path === "/Alpha" ? first.promise : { ok: true },

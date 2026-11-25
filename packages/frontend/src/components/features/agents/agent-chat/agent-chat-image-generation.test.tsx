@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, jest, mock, spyOn, test } from "bun:test";
+import { EventEmitter, once } from "node:events";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
   DEFAULT_AGENT_RUNTIMES,
@@ -49,6 +50,7 @@ const payload = (input: AgentGeneratedImageReadInput): AgentGeneratedImageReadRe
   byteLength: atob(png).length,
 });
 const images: HTMLImageElement[] = [];
+let imageStarts: EventEmitter;
 const queryClients = new Set<QueryClient>();
 let decodeImage: ReturnType<typeof spyOn<typeof imageWorkerClient, "decodeGeneratedImage">>;
 const originalImage = globalThis.Image;
@@ -110,6 +112,7 @@ beforeEach(() => {
     },
   );
   images.length = 0;
+  imageStarts = new EventEmitter();
   initiallyVisible = true;
   observers.length = 0;
   globalThis.IntersectionObserver = PreviewIntersectionObserver;
@@ -117,6 +120,7 @@ beforeEach(() => {
     constructor() {
       super();
       images.push(this);
+      imageStarts.emit(String(images.length - 1));
     }
   };
   let next = 0;
@@ -221,16 +225,36 @@ const harness = (
   const view = render(content(ref, initialPart), { wrapper: Wrapper });
   return { client, read, view, content };
 };
-const waitForImage = (index = 0): Promise<HTMLImageElement> => {
-  return waitFor(
-    () => {
-      const image = images[index];
-      if (!image) throw new Error(`Preview ${index} has not started.`);
-      return image;
-    },
-    { timeout: 500 },
-  );
+const waitForImage = async (index = 0): Promise<HTMLImageElement> => {
+  if (!images[index]) {
+    await once(imageStarts, String(index), { signal: AbortSignal.timeout(500) }).catch((cause) => {
+      throw new Error(`Preview ${index} has not started.`, { cause });
+    });
+  }
+  return images[index]!;
 };
+
+const waitForImageCacheRelease = async (client: QueryClient): Promise<void> => {
+  const cache = client.getQueryCache();
+  const isEmpty = () => cache.findAll({ queryKey: agentGeneratedImageQueryKeys.all }).length === 0;
+  if (isEmpty()) return;
+
+  const released = Promise.withResolvers<void>();
+  const unsubscribe = cache.subscribe((event) => {
+    if (event.type === "removed" && isEmpty()) released.resolve();
+  });
+  const timeout = setTimeout(
+    () => released.reject(new Error("Generated image bytes stayed in the query cache.")),
+    500,
+  );
+  try {
+    await released.promise;
+  } finally {
+    clearTimeout(timeout);
+    unsubscribe();
+  }
+};
+
 const loadImage = async (index = 0) => {
   const image = await waitForImage(index);
   Object.defineProperties(image, { naturalWidth: { value: 200 }, naturalHeight: { value: 100 } });
@@ -298,7 +322,7 @@ test("keeps copy controls stable and prevents repeat writes while copying", asyn
       await loadImage();
       jest.useFakeTimers();
       const copyButton = screen.getByRole("button", { name: "Copy generated image" });
-      copyButton.focus();
+      act(() => copyButton.focus());
       const label = copyButton.textContent;
       fireEvent.click(copyButton);
       expect(copyButton.hasAttribute("disabled")).toBe(false);
@@ -398,11 +422,7 @@ test("waits for PNG decode then shares one URL between thumbnail and accessible 
   expect(document.activeElement).toBe(trigger);
   view.unmount();
   expect(revokeUrl).toHaveBeenCalledWith("blob:image-1");
-  await waitFor(() =>
-    expect(
-      client.getQueryCache().findAll({ queryKey: agentGeneratedImageQueryKeys.all }),
-    ).toHaveLength(0),
-  );
+  await waitForImageCacheRelease(client);
 });
 
 test("reveals the full prompt on request and keeps the preview header short", async () => {
@@ -534,11 +554,7 @@ test("history without media removes the preview, releases its URL, and stops obs
     expect(screen.getByText("Image generated")).toBeTruthy();
     expect(screen.getByText(/runtime did not report image output/)).toBeTruthy();
     expect(revokeUrl).toHaveBeenCalledWith("blob:image-1");
-    await waitFor(() =>
-      expect(
-        client.getQueryCache().findAll({ queryKey: agentGeneratedImageQueryKeys.all }),
-      ).toHaveLength(0),
-    );
+    await waitForImageCacheRelease(client);
     view.rerender(content(ref, mergeAgentImageGeneration(cleared, empty, "history", cleared)));
     expect(read).toHaveBeenCalledTimes(1);
   } finally {
@@ -709,11 +725,7 @@ test("offscreen previews do not read images and release bytes after leaving the 
     expect(read).toHaveBeenCalledTimes(1);
     await act(async () => observers[0]!.show(false));
     expect(revokeUrl).toHaveBeenCalledWith("blob:image-1");
-    await waitFor(() =>
-      expect(
-        client.getQueryCache().findAll({ queryKey: agentGeneratedImageQueryKeys.all }),
-      ).toHaveLength(0),
-    );
+    await waitForImageCacheRelease(client);
     await act(async () => observers[0]!.show(true));
     await loadImage(1);
     expect(read).toHaveBeenCalledTimes(2);
@@ -808,22 +820,14 @@ test("saved metadata survives scrolling and refreshes after offscreen invalidati
   try {
     await loadImage();
     await act(async () => observers[0]!.show(false));
-    await waitFor(() =>
-      expect(
-        client.getQueryCache().findAll({ queryKey: agentGeneratedImageQueryKeys.all }),
-      ).toHaveLength(0),
-    );
+    await waitForImageCacheRelease(client);
     expect(revokeUrl).toHaveBeenCalledWith("blob:image-1");
     await act(async () => observers[0]!.show(true));
     await loadImage(1);
     expect(describe).toHaveBeenCalledTimes(1);
     expect(read.mock.calls[1]?.[0].revision).toBe("saved-first");
     await act(async () => observers[0]!.show(false));
-    await waitFor(() =>
-      expect(
-        client.getQueryCache().findAll({ queryKey: agentGeneratedImageQueryKeys.all }),
-      ).toHaveLength(0),
-    );
+    await waitForImageCacheRelease(client);
     revision = "saved-replaced";
     await act(async () => {
       await client.invalidateQueries({ queryKey: ["agent-generated-image-metadata"] });

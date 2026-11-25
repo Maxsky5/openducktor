@@ -10,6 +10,7 @@ import type {
 } from "@openducktor/contracts";
 import { workflowArtifactId } from "@openducktor/contracts";
 import { ClientConnectionProvider } from "@openducktor/frontend-core";
+import { createAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { artifactQueryKeys } from "@openducktor/frontend-core/queries/artifacts";
 import {
@@ -606,26 +607,32 @@ describe("task artifacts collection", () => {
     }
   });
 
-  test("keeps focus in the artifact flow when opening and returning to the collection", async () => {
-    const view = setup([freeArtifact(), freeArtifact("file-2", "Other notes")]);
-    try {
-      const row = await screen.findByRole("button", { name: /^Notes / });
-      act(() => row.focus());
-      fireEvent.click(row);
-      await screen.findByText("hello");
-      const back = screen.getByRole("button", { name: "All artifacts" });
-      await waitFor(() =>
-        expect(document.activeElement?.getAttribute("aria-label")).toBe("All artifacts"),
-      );
-      fireEvent.click(back);
-      await waitFor(() =>
-        expect(document.activeElement?.getAttribute("data-artifact-id")).toBe("file-1"),
-      );
-    } finally {
-      view.unmount();
-      view.connection.queryClient.clear();
-    }
-  });
+  test.each(["panel", "section"] as const)(
+    "moves focus into the selected artifact and back to its row in the %s layout",
+    async (variant) => {
+      const view = setup([freeArtifact(), freeArtifact("file-2", "Other notes")], { variant });
+      const frames = createAnimationFrameTestDriver();
+      try {
+        const rowName = { name: /^Other notes / };
+        const row = await screen.findByRole("button", rowName);
+        frames.install();
+        act(() => row.focus());
+        fireEvent.click(row);
+        await frames.flushFrame();
+        const back = screen.getByRole("button", { name: "All artifacts" });
+        expect(document.activeElement === back).toBe(true);
+        await screen.findByText("hello");
+
+        fireEvent.click(back);
+        await frames.flushFrame();
+        expect(document.activeElement === screen.getByRole("button", rowName)).toBe(true);
+      } finally {
+        view.unmount();
+        frames.restore();
+        view.connection.queryClient.clear();
+      }
+    },
+  );
 
   test("reads only the selection, keeps it across other changes, and shows its deletion", async () => {
     const first = freeArtifact();
@@ -664,14 +671,18 @@ describe("task artifacts collection", () => {
   test("requires named confirmation before deletion and removes the selected item", async () => {
     const view = setup([freeArtifact()]);
     try {
-      fireEvent.click(await screen.findByRole("button", { name: /^Notes / }));
-      fireEvent.click(await screen.findByRole("button", { name: "Artifact actions" }));
-      fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+      const notes = await screen.findByRole("button", { name: /^Notes / });
+      await act(async () => fireEvent.click(notes));
+      const actions = await screen.findByRole("button", { name: "Artifact actions" });
+      await act(async () => fireEvent.click(actions));
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Delete" })));
       expect(screen.getByText("Delete this artifact? This cannot be undone.")).toBeTruthy();
       expect(screen.getByRole("dialog").textContent).toContain("Notes");
       expect(view.remove).not.toHaveBeenCalled();
-      fireEvent.click(screen.getByRole("button", { name: "Delete artifact" }));
-      await waitFor(() => expect(view.remove).toHaveBeenCalledTimes(1));
+      await act(async () =>
+        fireEvent.click(screen.getByRole("button", { name: "Delete artifact" })),
+      );
+      expect(view.remove).toHaveBeenCalledTimes(1);
       await waitFor(() =>
         expect(screen.getByText(/This artifact is no longer available/)).toBeTruthy(),
       );
@@ -803,28 +814,6 @@ describe("task artifacts collection", () => {
         fireEvent.click(await screen.findByRole("button", { name: "Add artifact" }));
         expect(await screen.findByRole("dialog", { name: "Add artifact" })).toBeTruthy();
         expect(header.getAttribute("aria-expanded")).toBe("false");
-      } finally {
-        view.unmount();
-        view.connection.queryClient.clear();
-      }
-    });
-
-    test("keeps focus in the artifact flow when opening and returning to the list", async () => {
-      const view = setup([freeArtifact(), freeArtifact("file-2", "Other notes")], {
-        variant: "section",
-      });
-      try {
-        const row = await screen.findByRole("button", { name: /^Notes / });
-        act(() => row.focus());
-        fireEvent.click(row);
-        expect(await screen.findByText("hello")).toBeTruthy();
-        await waitFor(() =>
-          expect(document.activeElement?.getAttribute("aria-label")).toBe("All artifacts"),
-        );
-        fireEvent.click(screen.getByRole("button", { name: "All artifacts" }));
-        await waitFor(() =>
-          expect(document.activeElement?.getAttribute("data-artifact-id")).toBe("file-1"),
-        );
       } finally {
         view.unmount();
         view.connection.queryClient.clear();

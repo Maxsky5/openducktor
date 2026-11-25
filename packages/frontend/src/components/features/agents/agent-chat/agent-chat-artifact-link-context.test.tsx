@@ -5,15 +5,12 @@ import type { TaskArtifactCollection } from "@openducktor/contracts";
 import { artifactQueryKeys } from "@openducktor/frontend-core/queries/artifacts";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import type { PropsWithChildren } from "react";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { QueryProvider } from "@/test-utils/query-provider";
 import {
   type ChatArtifactLinkOwner,
   useChatArtifactLinkAction,
 } from "./agent-chat-artifact-link-context";
 import { ChatArtifactLinkProvider } from "./agent-chat-artifact-link-provider";
-
-enableReactActEnvironment();
 
 const createCollection = (): TaskArtifactCollection => ({
   canManageFree: false,

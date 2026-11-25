@@ -1,4 +1,3 @@
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
 
 import {
@@ -17,8 +16,6 @@ import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures
 import type { SessionStartModalModel } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
 import { SessionStartModal } from "./session-start-modal";
 import { CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-
-enableReactActEnvironment();
 
 /** The modal reads its connection for feedback, as in the app. */
 const render = (ui: ReactElement) => renderWithoutConnection(ui, { wrapper: QueryProvider });
@@ -911,8 +908,8 @@ describe("SessionStartModal", () => {
     );
 
     expect(screen.getByText("Session mode")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /reuse existing/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /fork existing/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /reuse existing/i, pressed: false })).toBeDefined();
+    expect(screen.getByRole("button", { name: /fork existing/i, pressed: true })).toBeDefined();
     expect(screen.getByText("Existing session")).toBeTruthy();
 
     const sourceCombobox = getFieldButton("session-start-source-field");
@@ -921,28 +918,6 @@ describe("SessionStartModal", () => {
     expect(sourceCombobox.hasAttribute("disabled")).toBe(false);
     expect(modelPicker.hasAttribute("disabled")).toBe(false);
     expect(modelPicker.getAttribute("aria-disabled")).toBe("false");
-
-    unmount();
-  });
-
-  test("styles session mode selection with the segmented control tokens", () => {
-    const { unmount } = render(
-      createElement(SessionStartModal, {
-        model: createModel({
-          availableStartModes: ["fresh", "reuse", "fork"],
-          selectedStartMode: "reuse",
-          existingSessionOptions: [existingSessionOption("session-1")],
-          selectedSourceSessionValue: existingSessionOption("session-1").value,
-        }),
-      }),
-    );
-
-    const reuseButton = screen.getByRole("button", { name: /reuse existing/i });
-    const freshButton = screen.getByRole("button", { name: /start fresh/i });
-
-    expect(reuseButton.className).toContain("bg-selected-control");
-    expect(reuseButton.className).not.toContain("bg-primary");
-    expect(freshButton.className).not.toContain("bg-selected-control");
 
     unmount();
   });

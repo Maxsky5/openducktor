@@ -135,7 +135,7 @@ describe("KanbanPageContent", () => {
         window.dispatchEvent(new Event("scroll"));
         await frames.flushFrame();
         expect(view.queryByRole("button", { name: "Start Builder" })).toBeNull();
-        await waitFor(() => expect(document.activeElement).toBe(lane), { timeout: 500 });
+        await waitFor(() => expect(document.activeElement === lane).toBe(true), { timeout: 500 });
       } finally {
         view.unmount();
       }
@@ -357,9 +357,9 @@ describe("KanbanPageContent", () => {
   });
 
   test("collapses empty columns without collapsing populated columns", () => {
-    const html = renderToStaticMarkup(
-      createElement(KanbanPageContent, {
-        model: {
+    const view = render(
+      <KanbanPageContent
+        model={{
           ...model,
           emptyColumnDisplay: "collapsed",
           columns: [
@@ -367,13 +367,19 @@ describe("KanbanPageContent", () => {
             createKanbanColumnFixture("in_progress", [visibleTask], { title: "In progress" }),
           ],
           taskActivityStateByTaskId: visibleTaskActivityState,
-        },
-      }),
+        }}
+      />,
     );
-
-    expect(html).toContain("Backlog column is empty and collapsed");
-    expect(html).toContain("In progress");
-    expect(html).toContain("Visible task");
+    try {
+      const backlog = view.getByRole("button", { name: "Backlog column is empty and collapsed" });
+      expect(backlog.getAttribute("type")).toBe("button");
+      expect(backlog.hasAttribute("title")).toBe(false);
+      expect(backlog.querySelector(".bg-muted-foreground\\/45")).not.toBeNull();
+      expect(view.getByText("In progress")).toBeDefined();
+      expect(view.getByText("Visible task")).toBeDefined();
+    } finally {
+      view.unmount();
+    }
   });
 
   test("passes compact task card view through to populated columns", () => {

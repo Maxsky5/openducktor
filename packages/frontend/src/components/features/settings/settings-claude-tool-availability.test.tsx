@@ -1,5 +1,5 @@
 import { renderWithWorkflow as render } from "@/test-utils/render-with-workflow";
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import {
   claudeRuntimeConfigSchema,
   type ClaudeRuntimeConfig,
@@ -9,10 +9,6 @@ import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { useState } from "react";
 import { ClaudeToolAvailabilityEditor } from "./settings-claude-tool-availability";
 
-afterEach(() => {
-  cleanup();
-  document.documentElement.classList.remove("dark");
-});
 const catalog: ClaudeToolCatalog = {
   runtimeKind: "claude",
   runtimeId: "r",
@@ -60,8 +56,7 @@ function renderEditor(
   };
 }
 
-test.each(["light", "dark"])("tool choices and search retain edits in %s theme", (theme) => {
-  document.documentElement.classList.toggle("dark", theme === "dark");
+test("retains Claude tool edits while filtering and clearing the search", () => {
   const form = renderEditor(claudeRuntimeConfigSchema.parse({ enabled: true, executablePath: "" }));
   expect(
     screen.getByRole("switch", { name: "Default Artifact" }).getAttribute("aria-checked"),

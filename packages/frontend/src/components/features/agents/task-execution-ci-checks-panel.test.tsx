@@ -60,7 +60,7 @@ const loadedContext = {
       authorAvatarUrl: null,
       body: "**This thread still needs work.** Use `isAnyLoading` before redirecting.",
       patch:
-        "@@ -10,3 +10,3 @@\n-const isAnyLoading = isLoading;\n+const isAnyLoading = isGoogleLoading || isFacebookLoading || isLoading;\n",
+        "@@ -12,1 +12,1 @@\n-const isAnyLoading = isLoading;\n+const isAnyLoading = isGoogleLoading || isFacebookLoading || isLoading;\n",
       suggestionPatches: [
         "@@ -12,1 +12,1 @@\n-const isAnyLoading = isGoogleLoading || isFacebookLoading || isLoading;\n+const isAnyLoading = auth.isLoading;",
       ],

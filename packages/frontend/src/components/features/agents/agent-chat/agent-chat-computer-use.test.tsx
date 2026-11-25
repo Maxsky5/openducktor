@@ -1,10 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { act, fireEvent, render } from "@testing-library/react";
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { ComputerUseToolMessage } from "./agent-chat-computer-use";
-
-enableReactActEnvironment();
 
 const toolMeta = (overrides: Partial<ToolMeta>): ToolMeta => ({
   kind: "tool",

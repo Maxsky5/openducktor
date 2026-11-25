@@ -7,16 +7,13 @@ import { toast } from "sonner";
 import type { HostClient } from "@openducktor/host-client";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
-import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { ThemeProvider, useTheme } from "./theme-provider";
 
 interface QueryClientRefContract {
   current: QueryClient | null;
 }
-
-enableReactActEnvironment();
 
 const ThemeHarness = (): ReactElement => {
   const { theme, themePreference, setThemePreference } = useTheme();
@@ -177,7 +174,7 @@ afterEach(() => {
 
 describe("ThemeProvider", () => {
   test("updates the controlled theme before the settings snapshot is available", async () => {
-    const persistence = createDeferred<void>();
+    const persistence = Promise.withResolvers<void>();
     const setTheme = mock(async () => persistence.promise);
 
     renderThemeProvider({ setTheme, withSettingsSnapshot: false });
@@ -189,8 +186,8 @@ describe("ThemeProvider", () => {
   });
 
   test("keeps an initial snapshot load alive while theme persistence is pending", async () => {
-    const initialLoad = createDeferred<SettingsSnapshot>();
-    const persistence = createDeferred<void>();
+    const initialLoad = Promise.withResolvers<SettingsSnapshot>();
+    const persistence = Promise.withResolvers<void>();
     const setTheme = mock(async () => persistence.promise);
 
     const queryClient = renderThemeProvider({
@@ -224,7 +221,7 @@ describe("ThemeProvider", () => {
   });
 
   test("keeps the settings snapshot cache authoritative while persistence is in flight", async () => {
-    const persistence = createDeferred<void>();
+    const persistence = Promise.withResolvers<void>();
     const setTheme = mock(async () => persistence.promise);
 
     const queryClient = renderThemeProvider({ setTheme });
@@ -244,9 +241,9 @@ describe("ThemeProvider", () => {
   });
 
   test("discards a stale settings refresh when theme persistence succeeds", async () => {
-    const persistence = createDeferred<void>();
-    const staleRefresh = createDeferred<SettingsSnapshot>();
-    const authoritativeRefresh = createDeferred<SettingsSnapshot>();
+    const persistence = Promise.withResolvers<void>();
+    const staleRefresh = Promise.withResolvers<SettingsSnapshot>();
+    const authoritativeRefresh = Promise.withResolvers<SettingsSnapshot>();
     const loadStaleSnapshot = mock(async () => staleRefresh.promise);
     const loadAuthoritativeSnapshot = mock(async () => authoritativeRefresh.promise);
     let loadSnapshot = loadStaleSnapshot;
@@ -293,7 +290,7 @@ describe("ThemeProvider", () => {
   });
 
   test("keeps only one theme persistence request in flight during rapid changes", async () => {
-    const persistence = createDeferred<void>();
+    const persistence = Promise.withResolvers<void>();
     const setTheme = mock(async () => persistence.promise);
 
     renderThemeProvider({ setTheme });
@@ -316,9 +313,9 @@ describe("ThemeProvider", () => {
   });
 
   test("keeps the newest theme when a superseded persistence request fails", async () => {
-    const persistenceRequests: ReturnType<typeof createDeferred<void>>[] = [];
+    const persistenceRequests: PromiseWithResolvers<void>[] = [];
     const setTheme = mock(async () => {
-      const persistence = createDeferred<void>();
+      const persistence = Promise.withResolvers<void>();
       persistenceRequests.push(persistence);
       return persistence.promise;
     });
@@ -361,7 +358,7 @@ describe("ThemeProvider", () => {
   });
 
   test("rolls back to the persisted theme when the newest request fails", async () => {
-    const persistence = createDeferred<void>();
+    const persistence = Promise.withResolvers<void>();
     const setTheme = mock(async () => persistence.promise);
     const consoleError = spyOn(console, "error").mockImplementation(() => undefined);
     const toastError = spyOn(toast, "error").mockImplementation(() => "toast-id");
@@ -394,7 +391,7 @@ describe("ThemeProvider", () => {
   });
 
   test("accepts the loaded persisted theme after a pre-load request fails", async () => {
-    const persistence = createDeferred<void>();
+    const persistence = Promise.withResolvers<void>();
     const setTheme = mock(async () => persistence.promise);
     const consoleError = spyOn(console, "error").mockImplementation(() => undefined);
 
@@ -421,7 +418,7 @@ describe("ThemeProvider", () => {
   });
 
   test("keeps an authoritative theme that loads before a pending request fails", async () => {
-    const persistence = createDeferred<void>();
+    const persistence = Promise.withResolvers<void>();
     const setTheme = mock(async () => persistence.promise);
     const consoleError = spyOn(console, "error").mockImplementation(() => undefined);
 

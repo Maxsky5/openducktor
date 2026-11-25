@@ -14,11 +14,7 @@ import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace
 import { runtimeCatalogQueryKeys } from "@openducktor/frontend-core/queries/runtime-catalog";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceSelectionOperations } from "./use-workspace-selection-operations";
-import {
-  createDeferred,
-  createWorkspaceHostClient,
-  workspace,
-} from "./workspace-hook-test-fixtures";
+import { createWorkspaceHostClient, workspace } from "./workspace-hook-test-fixtures";
 import { WorkspaceHostProvider } from "./workspace-hook-test-utils";
 
 let workspaceHost = createWorkspaceHostClient();
@@ -135,7 +131,7 @@ const createRepoSelectionHarness = (
 
 describe("use-workspace-selection-operations", () => {
   test("commits workspace selection and session navigation together after the host accepts the switch", async () => {
-    const response = createDeferred<WorkspaceRecord>();
+    const response = Promise.withResolvers<WorkspaceRecord>();
     workspaceHost.workspaceSelect = mock(() => response.promise);
     const commits: string[] = [];
     let openSession: (() => Promise<void>) | undefined;
@@ -191,8 +187,8 @@ describe("use-workspace-selection-operations", () => {
   });
 
   test("does not navigate for a workspace switch that a newer switch supersedes", async () => {
-    const first = createDeferred<WorkspaceRecord>();
-    const second = createDeferred<WorkspaceRecord>();
+    const first = Promise.withResolvers<WorkspaceRecord>();
+    const second = Promise.withResolvers<WorkspaceRecord>();
     workspaceHost.workspaceSelect = mock((id) =>
       id === "repo-b" ? first.promise : second.promise,
     );
@@ -286,7 +282,7 @@ describe("use-workspace-selection-operations", () => {
   );
   test("waits for the workspace catalog before reporting loaded state", async () => {
     const catalogDeferred =
-      createDeferred<Awaited<ReturnType<typeof workspaceHost.workspaceCatalogGet>>>();
+      Promise.withResolvers<Awaited<ReturnType<typeof workspaceHost.workspaceCatalogGet>>>();
     workspaceHost.workspaceCatalogGet = mock(async () => catalogDeferred.promise);
     const harness = createRepoSelectionHarness(null);
 
@@ -511,8 +507,8 @@ describe("use-workspace-selection-operations", () => {
   });
 
   test("ignores stale reorder responses when a newer drag finishes first", async () => {
-    const firstReorder = createDeferred<ReturnType<typeof workspace>[]>();
-    const secondReorder = createDeferred<ReturnType<typeof workspace>[]>();
+    const firstReorder = Promise.withResolvers<ReturnType<typeof workspace>[]>();
+    const secondReorder = Promise.withResolvers<ReturnType<typeof workspace>[]>();
     const workspaceReorder = mock((workspaceOrder: string[]) => {
       if (workspaceOrder[0] === "repo-c") {
         return firstReorder.promise;
@@ -568,7 +564,7 @@ describe("use-workspace-selection-operations", () => {
   });
 
   test("reorders workspaces optimistically before the host confirms the new order", async () => {
-    const reorderDeferred = createDeferred<ReturnType<typeof workspace>[]>();
+    const reorderDeferred = Promise.withResolvers<ReturnType<typeof workspace>[]>();
     workspaceHost.workspaceReorder = mock(async () => reorderDeferred.promise);
 
     const harness = createRepoSelectionHarness("/repo-a");
@@ -633,7 +629,7 @@ describe("use-workspace-selection-operations", () => {
   });
 
   test("ignores a stale reorder response after a newer workspace switch starts", async () => {
-    const reorderDeferred = createDeferred<ReturnType<typeof workspace>[]>();
+    const reorderDeferred = Promise.withResolvers<ReturnType<typeof workspace>[]>();
     let latestActiveWorkspace: ActiveWorkspace | null = createActiveWorkspace("/repo-a");
     workspaceHost.workspaceReorder = mock(async () => reorderDeferred.promise);
     workspaceHost.workspaceSelect = mock(async () => workspace("/repo-b", true));
@@ -727,8 +723,8 @@ describe("use-workspace-selection-operations", () => {
   });
 
   test("restores the previous order locally when a stale reorder fails after a switch", async () => {
-    const reorderStarted = createDeferred<void>();
-    const reorderDeferred = createDeferred<ReturnType<typeof workspace>[]>();
+    const reorderStarted = Promise.withResolvers<void>();
+    const reorderDeferred = Promise.withResolvers<ReturnType<typeof workspace>[]>();
     let listCalls = 0;
     const workspaceCatalogGet = mock(async () => {
       listCalls += 1;
@@ -779,10 +775,10 @@ describe("use-workspace-selection-operations", () => {
   });
 
   test("keeps a newer optimistic order when an earlier reorder fails", async () => {
-    const firstReorderStarted = createDeferred<void>();
-    const secondReorderStarted = createDeferred<void>();
-    const firstReorder = createDeferred<ReturnType<typeof workspace>[]>();
-    const secondReorder = createDeferred<ReturnType<typeof workspace>[]>();
+    const firstReorderStarted = Promise.withResolvers<void>();
+    const secondReorderStarted = Promise.withResolvers<void>();
+    const firstReorder = Promise.withResolvers<ReturnType<typeof workspace>[]>();
+    const secondReorder = Promise.withResolvers<ReturnType<typeof workspace>[]>();
     let reorderCalls = 0;
     workspaceHost.workspaceReorder = mock(async () => {
       reorderCalls += 1;
@@ -843,7 +839,7 @@ describe("use-workspace-selection-operations", () => {
   });
 
   test("keeps a switch made while the first catalog read is pending", async () => {
-    const catalog = createDeferred<WorkspaceCatalog>();
+    const catalog = Promise.withResolvers<WorkspaceCatalog>();
     workspaceHost.workspaceCatalogGet = mock(() => catalog.promise);
     const select = mock(async () => workspace("/repo-b", true));
     workspaceHost.workspaceSelect = select;
@@ -924,7 +920,7 @@ describe("use-workspace-selection-operations", () => {
         queryClient.setQueryData(otherConfigKey, { workspaceId: "other" });
         queryClient.setQueryData(otherCatalogKey, { models: [] });
         const reads = [...catalogKeys, workspaceQueryKeys.repoConfig("repo")].map((queryKey) => {
-          const response = createDeferred<unknown>();
+          const response = Promise.withResolvers<unknown>();
           release.push(() => response.resolve(null));
           return queryClient
             .fetchQuery({ queryKey, queryFn: () => response.promise, staleTime: 0 })
@@ -1202,9 +1198,9 @@ describe("use-workspace-selection-operations", () => {
   });
 
   test("rejects a second lifecycle action while the first action is pending", async () => {
-    const closeStarted = createDeferred<void>();
+    const closeStarted = Promise.withResolvers<void>();
     const closeResult =
-      createDeferred<Awaited<ReturnType<typeof workspaceHost.workspaceCatalogGet>>>();
+      Promise.withResolvers<Awaited<ReturnType<typeof workspaceHost.workspaceCatalogGet>>>();
     workspaceHost.workspaceClose = mock(async () => {
       closeStarted.resolve();
       return closeResult.promise;

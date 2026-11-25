@@ -66,17 +66,6 @@ const persistedDraftScope = (
   },
 });
 
-const createDeferred = <T,>() => {
-  let resolve: ((value: T) => void) | null = null;
-  const promise = new Promise<T>((res) => {
-    resolve = res;
-  });
-  return {
-    promise,
-    resolve: (value: T) => resolve?.(value),
-  };
-};
-
 const getEditorRoot = (container: HTMLElement): HTMLElement => {
   const editorRoot = container.querySelector('[contenteditable="true"]');
   if (!(editorRoot instanceof HTMLElement)) {
@@ -275,7 +264,7 @@ describe("AgentChatComposer attachments", () => {
   test("does not rehydrate a submitted slash command while its send is pending", async () => {
     const storage = createMemoryStorage();
     const identity = sessionIdentity("session-a");
-    const sendResult = createDeferred<boolean>();
+    const sendResult = Promise.withResolvers<boolean>();
     const onSend = mock(() => sendResult.promise);
     const drafts = createDraftStore(storage);
     const slashCommand = {
@@ -323,7 +312,7 @@ describe("AgentChatComposer attachments", () => {
   test("keeps the composer empty when equivalent persistence refreshes during send", async () => {
     const storage = createMemoryStorage();
     const identity = sessionIdentity("session-a");
-    const sendResult = createDeferred<boolean>();
+    const sendResult = Promise.withResolvers<boolean>();
     const onSend = mock(() => sendResult.promise);
     const drafts = createDraftStore(storage);
     const buildPersistedModel = () => ({
@@ -361,8 +350,8 @@ describe("AgentChatComposer attachments", () => {
   test("cancels attachment draft persistence when send starts", async () => {
     const storage = createMemoryStorage();
     const identity = sessionIdentity("session-a");
-    const stagedPath = createDeferred<string>();
-    const sendResult = createDeferred<boolean>();
+    const stagedPath = Promise.withResolvers<string>();
+    const sendResult = Promise.withResolvers<boolean>();
     const onSend = mock(() => sendResult.promise);
     const file = new File(["pdf"], "brief.pdf", { type: "application/pdf" });
     const drafts = createDraftStore(
@@ -423,13 +412,8 @@ describe("AgentChatComposer attachments", () => {
   });
 
   test("restores the submitted draft when send returns false", async () => {
-    let resolveSend: (didSend: boolean) => void = () => {};
-    const onSend = mock(
-      () =>
-        new Promise<boolean>((resolve) => {
-          resolveSend = resolve;
-        }),
-    );
+    const sendResult = Promise.withResolvers<boolean>();
+    const onSend = mock(() => sendResult.promise);
     const storage = createMemoryStorage();
     const identity = sessionIdentity("session-a");
     const drafts = createDraftStore(storage);
@@ -450,7 +434,7 @@ describe("AgentChatComposer attachments", () => {
       expect(container.textContent).not.toContain("keep me");
     });
 
-    resolveSend(false);
+    sendResult.resolve(false);
 
     await waitFor(() => {
       expect(container.textContent).toContain("keep me");
@@ -582,13 +566,8 @@ describe("AgentChatComposer attachments", () => {
   });
 
   test("does not restore a failed send draft after the draft key changes", async () => {
-    let resolveSend: (didSend: boolean) => void = () => {};
-    const onSend = mock(
-      () =>
-        new Promise<boolean>((resolve) => {
-          resolveSend = resolve;
-        }),
-    );
+    const sendResult = Promise.withResolvers<boolean>();
+    const onSend = mock(() => sendResult.promise);
     const initialModel = {
       ...buildModel(),
       onSend,
@@ -611,7 +590,7 @@ describe("AgentChatComposer attachments", () => {
         }}
       />,
     );
-    resolveSend?.(false);
+    sendResult.resolve(false);
 
     await waitFor(() => {
       expect(container.textContent).not.toContain("old session draft");

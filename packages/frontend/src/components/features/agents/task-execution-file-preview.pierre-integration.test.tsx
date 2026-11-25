@@ -10,10 +10,7 @@ import {
 import { CodeView, EditProvider } from "@pierre/diffs/react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { restoreAfterTestBody } from "@/test-utils/restore-after-test-body";
-
-enableReactActEnvironment();
 
 const createTextMetrics = (width: number): TextMetrics => ({
   width,

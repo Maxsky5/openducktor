@@ -1,13 +1,10 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { act, render, waitFor } from "@testing-library/react";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { createIntersectionObserverTestDriver } from "@/test-utils/intersection-observer-test-driver";
 import { MarkdownMermaid } from "./markdown-mermaid";
 import * as renderModule from "./markdown-mermaid-render";
 import { drawMermaidSvg, type MermaidSvgCache, peekMermaidSvg } from "./markdown-mermaid-svg-cache";
 import { MermaidSvgCacheProvider } from "./markdown-mermaid-svg-cache-context";
-
-enableReactActEnvironment();
 
 const SOURCE = "graph TD\n  A --> B";
 

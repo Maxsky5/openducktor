@@ -6,13 +6,8 @@ import { describe, expect, mock, test } from "bun:test";
 import type { WorkspaceAgentStudioState } from "@openducktor/contracts";
 import { useLayoutEffect } from "react";
 import type { NavigateOptions, SetURLSearchParams } from "react-router";
-import {
-  createHookHarness as createSharedHookHarness,
-  enableReactActEnvironment,
-} from "../agent-studio-test-utils";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { useAgentStudioQuerySync } from "./use-agent-studio-query-sync";
-
-enableReactActEnvironment();
 
 const emptySearchParams = new URLSearchParams();
 const noopSetSearchParams: SetURLSearchParams = () => {};
@@ -22,7 +17,9 @@ type HookArgs = {
   enabled?: boolean;
   agentStudioState: WorkspaceAgentStudioState | null;
   searchParams?: URLSearchParams;
+  locationKey?: string;
   locationState?: unknown;
+  navigationType?: Parameters<typeof useAgentStudioQuerySync>[0]["navigationType"];
   isLoadingAgentStudioState?: boolean;
   agentStudioStateError?: Error | null;
   retry?: () => void;
@@ -36,7 +33,9 @@ const useHookHarness = ({
   enabled = true,
   agentStudioState,
   searchParams = emptySearchParams,
+  locationKey = "location-1",
   locationState,
+  navigationType = "REPLACE",
   isLoadingAgentStudioState = false,
   agentStudioStateError = null,
   retry = () => {},
@@ -51,9 +50,9 @@ const useHookHarness = ({
     isLoadingAgentStudioState,
     agentStudioStateError,
     retryAgentStudioStateLoad: retry,
-    locationKey: "location-1",
+    locationKey,
     locationState,
-    navigationType: "REPLACE",
+    navigationType,
     searchParams,
     setSearchParams,
   });
@@ -68,6 +67,41 @@ const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useHookHarness, initialProps);
 
 describe("useAgentStudioQuerySync", () => {
+  test("updates and follows the task address before a workspace is selected", async () => {
+    const setSearchParams = mock<SetURLSearchParams>(() => {});
+    const props: HookArgs = {
+      activeWorkspaceId: null,
+      agentStudioState: null,
+      searchParams: new URLSearchParams("task=task-1&agent=build"),
+      setSearchParams,
+    };
+    const harness = createHookHarness(props);
+    try {
+      await harness.mount();
+      expect(harness.getLatest()).toMatchObject({ taskIdParam: "task-1", roleFromQuery: "build" });
+      await harness.run((state) => state.updateQuery({ session: "session-1" }));
+
+      const [search, options] = setSearchParams.mock.calls.at(-1) ?? [];
+      expect(search).toBeInstanceOf(URLSearchParams);
+      expect(String(search)).toBe("task=task-1&session=session-1&agent=build");
+      expect(options).toMatchObject({ replace: true });
+
+      await harness.update({
+        ...props,
+        locationKey: "location-2",
+        navigationType: "POP",
+        searchParams: new URLSearchParams("task=task-2&session=session-2&agent=planner"),
+      });
+      expect(harness.getLatest()).toMatchObject({
+        taskIdParam: "task-2",
+        sessionExternalIdParam: "session-2",
+        roleFromQuery: "planner",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test.each(["same-address", "new-view"] as const)(
     "a fresh role keeps its intent on its own router entry: %s",
     async (mode) => {
@@ -212,22 +246,36 @@ describe("useAgentStudioQuerySync", () => {
     await harness.unmount();
   });
 
-  test("keeps an explicit URL selection", async () => {
-    const harness = createHookHarness({
+  test("keeps an explicit URL selection while a different workspace selection loads", async () => {
+    const props: HookArgs = {
       activeWorkspaceId: "repo-a",
-      agentStudioState: {
-        openTaskIds: ["task-saved"],
-        activeTask: { taskId: "task-saved", role: "planner" },
-      },
+      agentStudioState: null,
+      isLoadingAgentStudioState: true,
       searchParams: new URLSearchParams("task=task-url&session=session-url&agent=qa"),
-    });
-
-    await harness.mount();
-    await harness.waitFor((state) => state.isWorkspaceStateLoaded);
-    expect(harness.getLatest().taskIdParam).toBe("task-url");
-    expect(harness.getLatest().sessionExternalIdParam).toBe("session-url");
-    expect(harness.getLatest().roleFromQuery).toBe("qa");
-    await harness.unmount();
+    };
+    const harness = createHookHarness(props);
+    const selection = {
+      taskIdParam: "task-url",
+      sessionExternalIdParam: "session-url",
+      roleFromQuery: "qa",
+      isWorkspaceRestorePending: false,
+    };
+    try {
+      await harness.mount();
+      expect(harness.getLatest()).toMatchObject(selection);
+      await harness.update({
+        ...props,
+        agentStudioState: {
+          openTaskIds: ["task-saved"],
+          activeTask: { taskId: "task-saved", role: "planner" },
+        },
+        isLoadingAgentStudioState: false,
+      });
+      await harness.waitFor((state) => state.isWorkspaceStateLoaded);
+      expect(harness.getLatest()).toMatchObject(selection);
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("commits a new workspace's direct session without clearing it or showing the old selection", async () => {

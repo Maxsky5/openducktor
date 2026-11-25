@@ -1,12 +1,9 @@
 import { afterEach, beforeEach, describe, expect, jest, mock, test } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
 import { Activity, act, createElement, type ReactElement } from "react";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { useCopyToClipboard } from "./use-copy-to-clipboard";
-
-enableReactActEnvironment();
 
 const writeClipboardMock = mock(async (_value: string) => {});
 let restoreClipboard: (() => void) | null = null;

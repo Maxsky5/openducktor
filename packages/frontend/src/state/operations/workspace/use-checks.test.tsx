@@ -13,7 +13,6 @@ import { QueryProvider } from "@/test-utils/query-provider";
 import type { ScheduleTask } from "@openducktor/frontend-core/lib/scheduling";
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
-  createDeferred,
   createTaskStoreCheckFixture,
   type TaskStoreCheckFixtureOverrides,
 } from "@/test-utils/shared-test-fixtures";
@@ -214,7 +213,7 @@ describe("use-checks", () => {
   }, 5000);
 
   test("refreshChecks forces PATH resolution after an ordinary read settles", async () => {
-    const ordinaryCheck = createDeferred<PathCheck>();
+    const ordinaryCheck = Promise.withResolvers<PathCheck>();
     const pathError = "Failed to resolve PATH: login shell timed out.";
     pathCheckHandler = async (force) => (force ? makePathCheck() : ordinaryCheck.promise);
     const harness = createHookHarness({
@@ -240,9 +239,9 @@ describe("use-checks", () => {
 
   test("Git refresh waits for PATH but not for runtime status or task storage", async () => {
     const harness = createHookHarness({ activeRepo: "/repo-a" });
-    const runtime = createDeferred<void>();
-    const store = createDeferred<TaskStoreCheck>();
-    const path = createDeferred<PathCheck>();
+    const runtime = Promise.withResolvers<void>();
+    const store = Promise.withResolvers<TaskStoreCheck>();
+    const path = Promise.withResolvers<PathCheck>();
     let refreshed: Promise<void> | undefined;
     try {
       await waitForInitialChecksToSettle(harness);
@@ -275,7 +274,7 @@ describe("use-checks", () => {
   test("a runtime-status timeout releases Diagnostics Refresh and leaves PATH and Git observed", async () => {
     const runtimeQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const callbacks = new Set<() => void>();
-    const runtimeStatus = createDeferred<HostRuntimeSnapshot>();
+    const runtimeStatus = Promise.withResolvers<HostRuntimeSnapshot>();
     const runtimeOwner = createHostRuntimeStatusOwner({
       queryClient: runtimeQueryClient,
       ports: {
@@ -328,7 +327,7 @@ describe("use-checks", () => {
   });
 
   test("a forced Git refresh does not reuse an older pending discovery", async () => {
-    const older = createDeferred<GitCheck>();
+    const older = Promise.withResolvers<GitCheck>();
     let calls = 0;
     gitCheckHandler = async () =>
       ++calls === 1 ? older.promise : makeGitCheck({ executablePath: "/new/bin/git" });
@@ -552,9 +551,9 @@ describe("use-checks", () => {
     }
   }, 5000);
   test("keeps timed out reads unknown with separate errors", async () => {
-    const gitDeferred = createDeferred<GitCheck>();
-    const pathDeferred = createDeferred<PathCheck>();
-    const taskStoreDeferred = createDeferred<TaskStoreCheck>();
+    const gitDeferred = Promise.withResolvers<GitCheck>();
+    const pathDeferred = Promise.withResolvers<PathCheck>();
+    const taskStoreDeferred = Promise.withResolvers<TaskStoreCheck>();
     const scheduleTask = mock<ScheduleTask>((callback, delayMs) => {
       expect([15_000, 30_000]).toContain(delayMs);
       let cancelled = false;

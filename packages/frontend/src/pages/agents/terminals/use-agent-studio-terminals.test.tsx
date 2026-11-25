@@ -10,6 +10,7 @@ import {
 import { HostTerminalClientError } from "@openducktor/host-client";
 import { act, waitFor } from "@testing-library/react";
 import { terminalTabLabel } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import {
   bottomEntryId,
   bottomTerminalIds,
@@ -22,8 +23,10 @@ import {
   type TerminalTestDependencies,
 } from "./agent-studio-terminals-test-harness";
 
+setupTestingLibraryFakeTimers();
+
 describe("useAgentStudioTerminals", () => {
-  test("reloads the task worktree when the task version changes", async () => {
+  test("enables terminals when a task version adds a worktree", async () => {
     const baseDependencies = createTerminalTestDependencies();
     let worktreeReads = 0;
     const dependencies: TerminalTestDependencies = {
@@ -36,11 +39,16 @@ describe("useAgentStudioTerminals", () => {
         },
       },
     };
-    const view = renderTaskTerminalPanels(dependencies, { taskVersion: "version-1" });
+    const view = await act(async () =>
+      renderTaskTerminalPanels(dependencies, { taskVersion: "version-1" }),
+    );
     try {
-      await waitFor(() => expect(worktreeReads).toBe(1));
-      view.update({ taskVersion: "version-2" });
-      await waitFor(() => expect(worktreeReads).toBe(2));
+      await waitFor(() =>
+        expect(view.terminals().startBlockedReason).toBe("Task task-a has no available worktree."),
+      );
+      await act(async () => view.update({ taskVersion: "version-2" }));
+      await waitFor(() => expect(view.terminals().startBlockedReason).toBeNull());
+      expect(worktreeReads).toBe(2);
     } finally {
       view.unmount();
     }
@@ -186,23 +194,24 @@ describe("useAgentStudioTerminals", () => {
     const view = renderTaskTerminalPanels(dependencies);
     try {
       await waitFor(() => expect(view.terminals().startBlockedReason).toBeNull());
-      act(() => view.panels().bottomToggle.onToggle());
-      await waitFor(() => expect(view.terminals().tabs[0]?.requestState).toBe("creating"));
+      await act(async () => view.panels().bottomToggle.onToggle());
+      expect(view.terminals().tabs[0]?.requestState).toBe("creating");
       const pendingEntryId = view.panels().bottom.selectedTabId;
       if (!pendingEntryId) throw new Error("Expected the pending terminal tab.");
 
-      act(() => view.panels().bottom.onClose(pendingEntryId));
-      await waitFor(() => expect(view.panels().bottom.tabs).toEqual([]));
+      await act(async () => view.panels().bottom.onClose(pendingEntryId));
+      expect(view.panels().bottom.tabs).toEqual([]);
       expect(view.panels().bottom.isVisible).toBe(false);
 
-      create.resolve(
-        createdTerminal({ ...summaryForTask("task-a"), terminalId: "terminal-abandoned" }),
-      );
+      await act(async () => {
+        create.resolve(
+          createdTerminal({ ...summaryForTask("task-a"), terminalId: "terminal-abandoned" }),
+        );
+        await create.promise;
+      });
 
-      await waitFor(() =>
-        expect(closeCalls).toEqual([{ terminalId: "terminal-abandoned", confirmTerminate: true }]),
-      );
-      await waitFor(() => expect(view.terminals().mountedTabs).toEqual([]));
+      expect(closeCalls).toEqual([{ terminalId: "terminal-abandoned", confirmTerminate: true }]);
+      expect(view.terminals().mountedTabs).toEqual([]);
       expect(terminals).toEqual([]);
     } finally {
       view.unmount();
@@ -406,7 +415,7 @@ describe("useAgentStudioTerminals", () => {
     try {
       await waitFor(() => expect(view.panels().bottom.tabs).toHaveLength(1));
       await waitFor(() => expect(receiveFrame).not.toBeNull());
-      act(() => {
+      await act(async () => {
         receive({ version: TERMINAL_PROTOCOL_VERSION, type: "activity_snapshot_start" });
         receive({
           version: TERMINAL_PROTOCOL_VERSION,
@@ -415,9 +424,7 @@ describe("useAgentStudioTerminals", () => {
         });
         receive({ version: TERMINAL_PROTOCOL_VERSION, type: "activity_snapshot_end" });
       });
-      await waitFor(() =>
-        expect(view.terminals().runningCommandTerminalIds.has("terminal-task-a")).toBe(true),
-      );
+      expect(view.terminals().runningCommandTerminalIds.has("terminal-task-a")).toBe(true);
       const entryId = bottomEntryId(view.panels(), "terminal-task-a");
 
       isRecording = true;
@@ -428,11 +435,11 @@ describe("useAgentStudioTerminals", () => {
       expect(closeCalls).toEqual([]);
       expect(new Set(shown)).toEqual(new Set([`open:${entryId}:1`]));
 
-      act(() => view.panels().terminalClose.onConfirm());
+      await act(async () => view.panels().terminalClose.onConfirm());
 
-      await waitFor(() => expect(view.panels().terminalClose.candidate).toBeNull());
+      expect(view.panels().terminalClose.candidate).toBeNull();
       expect(closeCalls).toEqual([true]);
-      await waitFor(() => expect(view.panels().bottom.isVisible).toBe(false));
+      expect(view.panels().bottom.isVisible).toBe(false);
     } finally {
       view.unmount();
     }
@@ -459,19 +466,16 @@ describe("useAgentStudioTerminals", () => {
       await waitFor(() => expect(view.terminals().controller).not.toBeNull());
       const entryId = bottomEntryId(view.panels(), "terminal-task-a");
 
-      act(() => view.panels().bottom.onClose(entryId));
-
-      await waitFor(() =>
-        expect(view.panels().terminalClose.candidate?.terminalId).toBe("terminal-task-a"),
-      );
+      await act(async () => view.panels().bottom.onClose(entryId));
+      expect(view.panels().terminalClose.candidate?.terminalId).toBe("terminal-task-a");
       expect(view.panels().bottom.tabs.map((tab) => tab.id)).toEqual([entryId]);
       expect(view.panels().bottom.selectedTabId).toBe(entryId);
       expect(view.panels().bottom.isVisible).toBe(true);
       expect(closeCalls).toEqual([false]);
 
-      act(() => view.panels().terminalClose.onConfirm());
+      await act(async () => view.panels().terminalClose.onConfirm());
 
-      await waitFor(() => expect(view.panels().terminalClose.candidate).toBeNull());
+      expect(view.panels().terminalClose.candidate).toBeNull();
       expect(closeCalls).toEqual([false, true]);
       expect(view.panels().bottom.isVisible).toBe(false);
     } finally {

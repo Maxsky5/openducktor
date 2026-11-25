@@ -11,28 +11,15 @@ import {
 } from "./task-description-markdown-compatibility";
 import { createTaskDescriptionMarkdownExtensions } from "./task-description-markdown-extensions";
 
-const createMarkdownEditor = (body: string): Editor =>
-  new Editor({
+const readMarkdownEditor = <Value>(body: string, read: (editor: Editor) => Value): Value => {
+  const editor = new Editor({
+    element: null,
     extensions: createTaskDescriptionMarkdownExtensions(),
     content: body,
     contentType: "markdown",
   });
-
-const normalizeJson = (value: JSONContent): JSONContent => structuredClone(value);
-
-const parseBodyToJson = (body: string): JSONContent => {
-  const editor = createMarkdownEditor(body);
   try {
-    return normalizeJson(editor.getJSON());
-  } finally {
-    editor.destroy();
-  }
-};
-
-const canonicalizeBody = (body: string): string => {
-  const editor = createMarkdownEditor(body);
-  try {
-    return editor.getMarkdown();
+    return read(editor);
   } finally {
     editor.destroy();
   }
@@ -55,6 +42,9 @@ const semanticTree: (node: MarkdownJsonContent) => JSONContent = ({
   }
   return semanticNode;
 };
+
+const readEditorTree = (editor: Editor): JSONContent =>
+  semanticTree(structuredClone(editor.getJSON()));
 
 const visualEditorMathSemantics = (tree: JSONContent): MarkdownMathSemantic[] => {
   const semantics: MarkdownMathSemantic[] = [];
@@ -103,9 +93,11 @@ export const assessVisualMarkdownCompatibility = (
   }
 
   try {
-    const canonicalBody = canonicalizeBody(frontMatter.body);
-    const originalTree = semanticTree(parseBodyToJson(frontMatter.body));
-    const canonicalTree = semanticTree(parseBodyToJson(canonicalBody));
+    const { canonicalBody, originalTree } = readMarkdownEditor(frontMatter.body, (editor) => ({
+      canonicalBody: editor.getMarkdown(),
+      originalTree: readEditorTree(editor),
+    }));
+    const canonicalTree = readMarkdownEditor(canonicalBody, readEditorTree);
     const visualMath = visualEditorMathSemantics(originalTree);
     const rendererMath = canonicalRendererMathSemantics(frontMatter.body);
     if (JSON.stringify(visualMath) !== JSON.stringify(rendererMath)) {

@@ -1,4 +1,3 @@
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { RefObject } from "react";
 import { createAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
@@ -15,8 +14,6 @@ import {
   resolveTextSelectionTarget,
   useAgentChatComposerEditorSelection,
 } from "./use-agent-chat-composer-editor-selection";
-
-enableReactActEnvironment();
 
 const buildDraft = (text: string, segmentId = "segment-1") => ({
   segments: [createTextSegment(text, segmentId)],

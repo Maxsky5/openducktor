@@ -42,6 +42,37 @@ import { StartupNotifications } from "@/features/session-startup/session-startup
 import { WorkspaceSessionCreateDialog } from "./workspace-session-create-dialog";
 import { repoConfigFixture } from "@openducktor/frontend-core/test-support/repo-config-fixture";
 
+const creationRepoConfig = (overrides: Parameters<typeof repoConfigFixture>[0] = {}) =>
+  repoConfigFixture({
+    workspaceId: "a",
+    workspaceName: "A",
+    branchPrefix: "odt",
+    defaultModel: {
+      runtimeKind: "opencode",
+      providerId: "provider",
+      modelId: "model",
+      variant: "low",
+      profileId: "runtime-profile",
+    },
+    ...overrides,
+  });
+
+const createModelCatalog = (): AgentModelCatalog => ({
+  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+  models: [
+    {
+      id: "provider/model",
+      providerId: "provider",
+      providerName: "Provider",
+      modelId: "model",
+      modelName: "Test model",
+      variants: ["low", "high"],
+    },
+  ],
+  defaultModelsByProvider: {},
+  profiles: [{ name: "runtime-profile", mode: "primary", hidden: false }],
+});
+
 function mountCreation(
   create: (
     input: WorkspaceSessionCreateInput,
@@ -56,26 +87,11 @@ function mountCreation(
 ) {
   const snapshot = createSettingsSnapshotFixture();
   const workspace = createWorkspaceRecordFixture({
-    workspaceId: "A",
+    workspaceId: "a",
     workspaceName: "A",
     repoPath: "/repo",
   });
   let savedRecord: WorkspaceSession | null = null;
-  const catalog: AgentModelCatalog = {
-    runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-    models: [
-      {
-        id: "provider/model",
-        providerId: "provider",
-        providerName: "Provider",
-        modelId: "model",
-        modelName: "Test model",
-        variants: ["low", "high"],
-      },
-    ],
-    defaultModelsByProvider: {},
-    profiles: [{ name: "runtime-profile", mode: "primary", hidden: false }],
-  };
   const workspaceState: ComponentProps<typeof WorkspaceStateContext>["value"] = {
     isSwitchingWorkspace: false,
     isLoadingBranches: false,
@@ -126,7 +142,8 @@ function mountCreation(
     hasRuntimeSettingsSnapshot: true,
     refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
     refreshRuntimeSettings: async () => {},
-    loadRepoRuntimeCatalog: async () => createRuntimeCatalogFixture({ models: catalog }),
+    loadRepoRuntimeCatalog: async () =>
+      createRuntimeCatalogFixture({ models: createModelCatalog() }),
     loadRepoRuntimeFileSearch: async () => [],
     ...runtimeOverrides,
   };
@@ -141,12 +158,7 @@ function mountCreation(
     },
     client: {
       workspaceGetSettingsSnapshot: async () => snapshot,
-      workspaceGetRepoConfig: async () =>
-        repoConfigFixture({
-          workspaceId: "a",
-          workspaceName: "A",
-          branchPrefix: "odt",
-        }),
+      workspaceGetRepoConfig: async () => creationRepoConfig(),
       gitGetBranches: async () => [
         { name: "main", isRemote: false, isCurrent: true, worktreePath: "/repo" },
         {
@@ -294,8 +306,14 @@ function mountCreation(
 
 async function renderCreation(...args: Parameters<typeof mountCreation>) {
   const view = mountCreation(...args);
-  await view.findByRole("textbox", { name: /^Name/ });
-  return view;
+  try {
+    const create = view.getByRole("button", { name: "Create session" });
+    await waitFor(() => expect(create.hasAttribute("disabled")).toBe(false), { timeout: 800 });
+    return view;
+  } catch (error) {
+    view.unmount();
+    throw error;
+  }
 }
 
 test.each(["roles", "branches", "defaults", "models"] as const)(
@@ -326,11 +344,7 @@ test.each(["roles", "branches", "defaults", "models"] as const)(
         ...(read === "defaults" && {
           workspaceGetRepoConfig: async () => {
             await pending.promise;
-            return repoConfigFixture({
-              workspaceId: "A",
-              workspaceName: "A",
-              branchPrefix: "odt",
-            });
+            return creationRepoConfig();
           },
         }),
       },
@@ -338,7 +352,7 @@ test.each(["roles", "branches", "defaults", "models"] as const)(
         ? {
             loadRepoRuntimeCatalog: async () => {
               await pending.promise;
-              return createRuntimeCatalogFixture();
+              return createRuntimeCatalogFixture({ models: createModelCatalog() });
             },
           }
         : {},
@@ -350,17 +364,24 @@ test.each(["roles", "branches", "defaults", "models"] as const)(
       fireEvent.change(name, { target: { value: "My new chat" } });
       if (read === "defaults") {
         const picker = view.getByRole("button", { name: "Select model, Select a model" });
-        fireEvent.click(picker);
-        fireEvent.doubleClick(await view.findByRole("button", { name: "Select Test model model" }));
+        await act(async () => fireEvent.click(picker));
+        const model = await view.findByRole("button", { name: "Select Test model model" });
+        await act(async () => fireEvent.doubleClick(model));
         await waitFor(() => expect(document.activeElement === picker).toBe(true), { timeout: 800 });
       }
-      name.focus();
+      act(() => name.focus());
       expect(view.getByRole("button", { name: "Create session" }).hasAttribute("disabled")).toBe(
         true,
       );
       expect(view.getByRole("button", { name: "Cancel" }).hasAttribute("disabled")).toBe(false);
       await act(async () => pending.resolve());
-      await waitFor(() => expect(view.queryClient.isFetching()).toBe(0), { timeout: 800 });
+      await waitFor(
+        () =>
+          expect(
+            view.getByRole("button", { name: "Create session" }).hasAttribute("disabled"),
+          ).toBe(false),
+        { timeout: 800 },
+      );
       expect(dialog.hasAttribute("aria-busy")).toBe(false);
       expect(view.getByDisplayValue("My new chat")).toBe(name);
       expect(document.activeElement === name).toBe(true);
@@ -410,7 +431,7 @@ test("opening a saved failed current-checkout creation retains feedback and sess
             context: input.startup,
             hostInstanceId: "host",
             revision: 1,
-            workspaceId: "A",
+            workspaceId: "a",
             repoPath: "/repo",
             scope: { kind: "workspace" },
             phase: "failed",
@@ -439,7 +460,6 @@ test("opening a saved failed current-checkout creation retains feedback and sess
     },
   );
   try {
-    await selectModel(view);
     fireEvent.click(view.getByRole("button", { name: "Create session" }));
     const open = await view.findByRole("button", { name: "Open session" }, { timeout: 800 });
     const original = view.connection.startupAttempts.getSnapshot()[0];
@@ -450,7 +470,7 @@ test("opening a saved failed current-checkout creation retains feedback and sess
     expect(closes).toBe(1);
     expect(view.queryByRole("dialog")).toBeNull();
     expect(view.getByLabelText("Current location").textContent).toBe(
-      "/sessions?workspace=A&kind=workspace&session=retained-created",
+      "/sessions?workspace=a&kind=workspace&session=retained-created",
     );
     expect(view.connection.startupAttempts.getAttempt(original.id)).toMatchObject({
       id: original.id,
@@ -479,7 +499,7 @@ function worktreeOf(input: WorkspaceSessionCreateInput | undefined) {
   return input?.location === "local_worktree" ? input.worktree : undefined;
 }
 
-async function selectModel(view: Awaited<ReturnType<typeof renderCreation>>) {
+async function selectModel(view: ReturnType<typeof mountCreation>) {
   fireEvent.click(view.getByRole("button", { name: "Select model, Select a model" }));
   const choice = await view.findByRole(
     "button",
@@ -496,69 +516,53 @@ async function selectModel(view: Awaited<ReturnType<typeof renderCreation>>) {
   );
 }
 
-async function selectTarget(view: Awaited<ReturnType<typeof renderCreation>>, name: RegExp) {
+async function selectTarget(view: ReturnType<typeof mountCreation>, name: RegExp) {
   fireEvent.click(view.getByRole("button", { name: "Target branch" }));
   fireEvent.click(await view.findByRole("option", { name }, { timeout: 800 }));
 }
 
-/** Opens the Target branch list, runs the checks, and closes the list. */
-function inTargetOptions(view: Awaited<ReturnType<typeof renderCreation>>, check: () => void) {
+function expectNoTrackedUpstream(view: ReturnType<typeof mountCreation>) {
   fireEvent.click(view.getByRole("button", { name: "Target branch" }));
   try {
-    check();
+    expect(view.queryAllByRole("option", { name: /^Tracked upstream/ }).length).toBe(0);
   } finally {
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
   }
 }
 
-test("preselects the repository default target, marks it, and sends it", async () => {
+test("New worktree replaces a tracked upstream with the repository default target", async () => {
   const requests: WorkspaceSessionCreateInput[] = [];
   const view = await renderCreation(async (input) => {
     requests.push(input);
     throw new Error("Keep form open");
   });
   try {
-    await selectModel(view);
-    await waitFor(() =>
-      inTargetOptions(view, () => {
-        expect(view.getByRole("option", { name: /^origin\/remote-only/ })).toBeTruthy();
-        const defaultOption = view.getByRole("option", { name: /^origin\/main/ });
-        expect(within(defaultOption).getByText("default")).toBeTruthy();
-        expect(view.getByRole("option", { name: /^Tracked upstream/ })).toBeTruthy();
-      }),
-    );
-    fireEvent.click(view.getByRole("button", { name: "Create session" }));
-    await waitFor(() => expect(requests).toHaveLength(1), { timeout: 800 });
-    expect(requests[0]?.targetBranch).toEqual({ remote: "origin", branch: "main" });
-  } finally {
-    view.unmount();
-  }
-});
-
-test("New worktree hides Tracked upstream and returns an upstream pick to the default", async () => {
-  const requests: WorkspaceSessionCreateInput[] = [];
-  const view = await renderCreation(async (input) => {
-    requests.push(input);
-    throw new Error("Keep form open");
-  });
-  try {
-    await selectModel(view);
-    await selectTarget(view, /^Tracked upstream/);
+    const picker = view.getByRole("button", { name: "Target branch" });
+    expect(picker.textContent).toContain("origin/main");
+    fireEvent.click(picker);
+    await view.findByRole("option", { name: /^origin\/remote-only/ }, { timeout: 800 });
+    const defaultOption = view.getByRole("option", { name: /^origin\/main/ });
+    expect(within(defaultOption).getByText("default")).toBeTruthy();
+    fireEvent.click(view.getByRole("option", { name: /^Tracked upstream/ }));
+    expect(picker.textContent).toContain("Tracked upstream");
     fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
     expect(view.getByText("Creates a new branch from the target branch.")).not.toBeNull();
-    inTargetOptions(view, () =>
-      expect(view.queryByRole("option", { name: /^Tracked upstream/ })).toBeNull(),
-    );
+    expectNoTrackedUpstream(view);
     fireEvent.change(view.getByLabelText("Worktree name"), { target: { value: "my-feature" } });
     fireEvent.click(view.getByRole("button", { name: "Create session" }));
     await waitFor(() => expect(requests).toHaveLength(1), { timeout: 800 });
-    expect(requests[0]?.targetBranch).toEqual({ remote: "origin", branch: "main" });
+    expect(requests[0]).toMatchObject({
+      location: "local_worktree",
+      worktree: { mode: "from_name", name: "my-feature" },
+      targetBranch: { remote: "origin", branch: "main" },
+    });
     fireEvent.click(await view.findByRole("button", { name: "Edit choices" }));
     fireEvent.click(view.getByRole("radio", { name: /Current checkout/ }));
     fireEvent.click(view.getByRole("button", { name: "Create session" }));
     await waitFor(() => expect(requests).toHaveLength(2), { timeout: 800 });
     expect(requests[1]?.location).toBe("local_repo_root");
     expect(requests[1]?.targetBranch).toEqual({ remote: "origin", branch: "main" });
+    expect(requests[1]).not.toHaveProperty("worktree");
   } finally {
     view.unmount();
   }
@@ -571,77 +575,12 @@ test("sends a picked local target and keeps it across a location change", async 
     throw new Error("Keep form open");
   });
   try {
-    await selectModel(view);
     await selectTarget(view, /^feature\/existing/);
     fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
     fireEvent.change(view.getByLabelText("Worktree name"), { target: { value: "my-feature" } });
     fireEvent.click(view.getByRole("button", { name: "Create session" }));
     await waitFor(() => expect(requests).toHaveLength(1), { timeout: 800 });
     expect(requests[0]?.targetBranch).toEqual({ branch: "feature/existing" });
-  } finally {
-    view.unmount();
-  }
-});
-
-test("matches the task modal width and footer surface, separates actions and disables name autocomplete", async () => {
-  const view = await renderCreation(async () => {
-    throw new Error("Unexpected creation");
-  });
-  try {
-    expect(view.getByRole("dialog").classList.contains("sm:max-w-2xl")).toBe(true);
-    expect(view.getByLabelText("Name optional").getAttribute("autocomplete")).toBe("off");
-    const cancel = view.getByRole("button", { name: "Cancel" });
-    const create = view.getByRole("button", { name: "Create session" });
-    expect(cancel.parentElement).toBe(create.parentElement);
-    expect(cancel.parentElement?.firstElementChild).toBe(cancel);
-    expect(cancel.parentElement?.classList.contains("justify-between")).toBe(true);
-    // Sticky actions need the same opaque surface as the dialog in both themes.
-    expect(cancel.parentElement?.classList.contains("bg-popover")).toBe(true);
-  } finally {
-    view.unmount();
-  }
-});
-
-test("omits checkout help text for both work locations", async () => {
-  const view = await renderCreation(async () => {
-    throw new Error("Unexpected creation");
-  });
-  try {
-    expect(view.queryByText("Changes apply directly to this workspace checkout.")).toBeNull();
-    fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
-    expect(view.queryByText("Uncommitted changes stay in the current checkout.")).toBeNull();
-    expect(view.getByLabelText("Worktree name")).not.toBeNull();
-  } finally {
-    view.unmount();
-  }
-});
-
-test("uses the task modal label-to-control gap for every form field", async () => {
-  const view = await renderCreation(async () => {
-    throw new Error("Unexpected creation");
-  });
-  try {
-    await selectModel(view);
-    const fields = [
-      view.getByLabelText("Name optional").parentElement,
-      view.getByText("Runtime and model").parentElement,
-      view.getByText("Custom role", { exact: false, selector: "label" }).parentElement,
-    ];
-    for (const field of fields) {
-      expect(field?.classList.contains("grid")).toBe(true);
-      expect(field?.classList.contains("gap-1.5")).toBe(true);
-      expect(field?.classList.contains("space-y-2")).toBe(false);
-    }
-    const roleSelect = view.getByRole("button", { name: "Custom role optional" });
-    const manageRoles = view.getByRole("button", { name: "Manage roles" });
-    expect(manageRoles.classList.contains("h-9")).toBe(true);
-    expect(roleSelect.parentElement).toBe(manageRoles.parentElement);
-    expect(roleSelect.parentElement?.classList.contains("grid-cols-[minmax(0,1fr)_auto]")).toBe(
-      true,
-    );
-    expect(roleSelect.compareDocumentPosition(manageRoles) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
-    );
   } finally {
     view.unmount();
   }
@@ -664,7 +603,6 @@ test("a current-checkout creation keeps disabled choices pending and failure fee
     },
   );
   try {
-    await selectModel(view);
     const name = view.getByLabelText("Name optional");
     const submit = view.getByRole("button", { name: "Create session" });
     const form = submit.closest("form");
@@ -757,7 +695,6 @@ test("retries preparation of the saved draft and waits for native live evidence 
     },
   );
   try {
-    await selectModel(view);
     fireEvent.click(view.getByRole("button", { name: "Create session" }));
     const retry = await view.findByRole(
       "button",
@@ -796,7 +733,7 @@ test("retries preparation of the saved draft and waits for native live evidence 
           context: startup,
           hostInstanceId: "host",
           revision: 1,
-          workspaceId: "A",
+          workspaceId: "a",
           repoPath: "/repo",
           scope: { kind: "workspace", sessionId: draft.id },
           phase: "completed",
@@ -841,7 +778,7 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
     startup: StartupOperationContext | undefined;
   }[] = [];
   let closed = 0;
-  const view = await renderCreation(
+  const view = mountCreation(
     async (input, startup) => {
       requests.push({ input, startup });
       return new Promise<never>(() => {});
@@ -849,6 +786,8 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
     () => {
       closed += 1;
     },
+    undefined,
+    { workspaceGetRepoConfig: async () => creationRepoConfig({ defaultModel: null }) },
   );
   try {
     await selectModel(view);
@@ -871,7 +810,9 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
     const effortSlider = view.getByRole("slider", { name: "Effort" });
     fireEvent.keyDown(effortSlider, { key: "ArrowRight" });
     fireEvent.keyDown(effortSlider, { key: "Escape" });
-    fireEvent.change(view.getByLabelText("Name optional"), { target: { value: "My session" } });
+    const name = view.getByRole("textbox", { name: "Name optional" });
+    expect(name.getAttribute("autocomplete")).toBe("off");
+    fireEvent.change(name, { target: { value: "My session" } });
     fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
     fireEvent.change(view.getByLabelText("Worktree name"), { target: { value: "my-feature" } });
     await act(async () => {
@@ -879,7 +820,7 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
     });
     await waitFor(() => expect(requests.length).toBe(1), { timeout: 800 });
     expect(requests[0]?.input).toEqual({
-      workspaceId: "A",
+      workspaceId: "a",
       runtimeKind: "opencode",
       selectedModel: {
         runtimeKind: "opencode",
@@ -907,7 +848,7 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
         context: startup,
         hostInstanceId: "host",
         revision: 1,
-        workspaceId: "A",
+        workspaceId: "a",
         repoPath: "/repo",
         scope: { kind: "workspace" },
         phase: "running",
@@ -940,7 +881,7 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
 
 test("shows the repository defaults read failure, keeps a target pick usable and retries", async () => {
   let readAttempts = 0;
-  const view = await renderCreation(
+  const view = mountCreation(
     async () => {
       throw new Error("Unexpected creation");
     },
@@ -952,11 +893,7 @@ test("shows the repository defaults read failure, keeps a target pick usable and
       workspaceGetRepoConfig: async () => {
         readAttempts += 1;
         if (readAttempts === 1) throw new Error("Settings file is unreadable.");
-        return repoConfigFixture({
-          workspaceId: "a",
-          workspaceName: "A",
-          branchPrefix: "odt",
-        });
+        return creationRepoConfig();
       },
     },
   );
@@ -1011,7 +948,6 @@ test("creates a worktree chat with one request and no confirmation step", async 
     },
   );
   try {
-    await selectModel(view);
     fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
     fireEvent.change(view.getByLabelText("Worktree name"), { target: { value: "my-feature" } });
     fireEvent.click(view.getByRole("button", { name: "Create session" }));
@@ -1038,7 +974,6 @@ test("requires a safe worktree name and sends an optional custom branch from Adv
     throw new Error("Keep form open");
   });
   try {
-    await selectModel(view);
     fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
     const create = view.getByRole("button", { name: "Create session" });
     expect(create.hasAttribute("disabled")).toBe(true);
@@ -1077,16 +1012,12 @@ test("a naming model lets a new branch worktree keep a blank name", async () => 
     undefined,
     {
       workspaceGetRepoConfig: async () =>
-        repoConfigFixture({
-          workspaceId: "a",
-          workspaceName: "A",
-          branchPrefix: "odt",
+        creationRepoConfig({
           namingModel: { runtimeKind: "opencode", providerId: "provider", modelId: "model" },
         }),
     },
   );
   try {
-    await selectModel(view);
     fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
     const name = await view.findByLabelText("Worktree name optional", {}, { timeout: 800 });
     expect(name.getAttribute("value")).toBe("");
@@ -1113,19 +1044,14 @@ test("Existing branch accepts slash-separated worktree names and submits a safe 
     throw new Error("Keep form open");
   });
   try {
-    await selectModel(view);
     fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
-    const tabList = view.getByRole("tablist", { name: "Worktree creation mode" });
-    expect(tabList.classList.contains("bg-muted")).toBe(true);
-    expect(tabList.classList.contains("border-b")).toBe(false);
-    expect(view.getByRole("tab", { name: "New branch" }).className).toContain(
-      "data-[state=active]:bg-selected-control",
-    );
-    expect(view.getByRole("tab", { name: "New branch" })).not.toBeNull();
-    fireEvent.mouseDown(view.getByRole("tab", { name: "Existing branch" }), {
+    const tabs = within(view.getByRole("tablist", { name: "Worktree creation mode" }));
+    expect(tabs.getByRole("tab", { selected: true }).textContent).toBe("New branch");
+    fireEvent.mouseDown(tabs.getByRole("tab", { name: "Existing branch" }), {
       button: 0,
       ctrlKey: false,
     });
+    expect(tabs.getByRole("tab", { selected: true }).textContent).toBe("Existing branch");
     const selector = await view.findByRole("button", { name: "Existing branch" }, { timeout: 800 });
     await waitFor(() => expect(selector.hasAttribute("disabled")).toBe(false), { timeout: 800 });
     fireEvent.click(selector);
@@ -1168,7 +1094,6 @@ test("blocks submission when refreshed data shows the selected branch is now che
     throw new Error("Unexpected creation");
   });
   try {
-    await selectModel(view);
     fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
     fireEvent.mouseDown(view.getByRole("tab", { name: "Existing branch" }), {
       button: 0,
@@ -1216,7 +1141,6 @@ test.each(["worktree.name", "worktree.branchName"] as const)(
       throw new HostInvokeError(message, { kind: "workspace_session_validation", field });
     });
     try {
-      await selectModel(view);
       fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
       const name = view.getByLabelText("Worktree name");
       fireEvent.change(name, { target: { value: "collision" } });
@@ -1243,26 +1167,6 @@ test.each(["worktree.name", "worktree.branchName"] as const)(
   },
 );
 
-test("returning to Current checkout omits all worktree options", async () => {
-  const requests: WorkspaceSessionCreateInput[] = [];
-  const view = await renderCreation(async (input) => {
-    requests.push(input);
-    throw new Error("Keep form open");
-  });
-  try {
-    await selectModel(view);
-    fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
-    fireEvent.change(view.getByLabelText("Worktree name"), { target: { value: "my-feature" } });
-    fireEvent.click(view.getByRole("radio", { name: /Current checkout/ }));
-    fireEvent.click(view.getByRole("button", { name: "Create session" }));
-    await waitFor(() => expect(requests).toHaveLength(1), { timeout: 800 });
-    expect(requests[0]?.location).toBe("local_repo_root");
-    expect(requests[0]).not.toHaveProperty("worktree");
-  } finally {
-    view.unmount();
-  }
-});
-
 test("Existing worktree requires an explicit pick and sends only the selected directory", async () => {
   const requests: WorkspaceSessionCreateInput[] = [];
   let reads = 0;
@@ -1288,7 +1192,6 @@ test("Existing worktree requires an explicit pick and sends only the selected di
     },
   );
   try {
-    await selectModel(view);
     await selectTarget(view, /^Tracked upstream/);
     fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
     fireEvent.change(view.getByLabelText("Worktree name"), { target: { value: "unused" } });
@@ -1298,9 +1201,7 @@ test("Existing worktree requires an explicit pick and sends only the selected di
       view.getByText("Sessions that use this worktree share its files and branch."),
     ).toBeTruthy();
     expect(view.queryByLabelText("Worktree name")).toBeNull();
-    inTargetOptions(view, () =>
-      expect(view.queryByRole("option", { name: /^Tracked upstream/ })).toBeNull(),
-    );
+    expectNoTrackedUpstream(view);
     const selector = view.getByRole("button", { name: "Worktree" });
     await waitFor(() => expect(selector.hasAttribute("disabled")).toBe(false), { timeout: 800 });
     expect(reads).toBe(1);
@@ -1318,7 +1219,7 @@ test("Existing worktree requires an explicit pick and sends only the selected di
     fireEvent.click(create);
     await waitFor(() => expect(requests).toHaveLength(1), { timeout: 800 });
     expect(requests[0]).toEqual({
-      workspaceId: "A",
+      workspaceId: "a",
       runtimeKind: "opencode",
       selectedModel: {
         runtimeKind: "opencode",
@@ -1367,7 +1268,6 @@ test("Existing worktree shows the loading, failed, and empty states, and retries
     },
   );
   try {
-    await selectModel(view);
     fireEvent.click(view.getByRole("radio", { name: /Existing worktree/ }));
     const selector = view.getByRole("button", { name: "Worktree" });
     expect(selector.textContent).toContain("Loading worktrees…");
@@ -1421,7 +1321,6 @@ test("a failed creation reads the worktrees again and marks a removed choice as 
     },
   );
   try {
-    await selectModel(view);
     fireEvent.change(view.getByLabelText("Name optional"), { target: { value: "Kept name" } });
     fireEvent.click(view.getByRole("radio", { name: /Existing worktree/ }));
     const selector = view.getByRole("button", { name: "Worktree" });

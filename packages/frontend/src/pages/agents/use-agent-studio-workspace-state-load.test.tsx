@@ -9,10 +9,8 @@ import {
 } from "@openducktor/frontend-core/types/agent-session-read-model";
 import {
   createAgentSessionSummaryFixture,
-  createDeferred,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
-  enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 import { useAgentStudioQuerySync } from "./query-sync/use-agent-studio-query-sync";
 import type { AgentStudioQueryUpdate } from "./query-sync/agent-studio-navigation";
@@ -20,8 +18,6 @@ import { toAgentStudioSessionSelection } from "./shell/agent-studio-selection-st
 import { useAgentStudioSelectionState } from "./shell/use-agent-studio-selection-state";
 import { buildAgentStudioStateLoad } from "./agent-studio-workspace-state-load-model";
 import { useAgentStudioWorkspaceStateLoad } from "./use-agent-studio-workspace-state-load";
-
-enableReactActEnvironment();
 
 type LoadHookArgs = Parameters<typeof useAgentStudioWorkspaceStateLoad>[0];
 
@@ -213,7 +209,7 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
       openTaskIds: ["task-2", "task-1"],
       activeTask: { taskId: "task-2", role: "qa" },
     };
-    const repoBRead = createDeferred<RepoConfig>();
+    const repoBRead = Promise.withResolvers<RepoConfig>();
     const workspaceGetRepoConfig = mock(async (workspaceId: string) => {
       if (workspaceId === "repo-a") {
         return createRepoConfig(repoAState);
@@ -271,7 +267,7 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
       openTaskIds: ["task-1"],
       activeTask: { taskId: "task-1", role: "build" },
     };
-    const repoBRead = createDeferred<RepoConfig>();
+    const repoBRead = Promise.withResolvers<RepoConfig>();
     const workspaceGetRepoConfig = mock(async (workspaceId: string) => {
       if (workspaceId === "repo-a") {
         return createRepoConfig(repoAState);

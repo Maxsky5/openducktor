@@ -110,7 +110,7 @@ const renderQueue = (
 };
 
 describe("AgentChatMessageQueue", () => {
-  test("shows queued messages in order with their controls", () => {
+  test("shows queued messages in order with their controls", async () => {
     const { onAction } = renderQueue(queueOf([entry("s-1", "First"), entry("s-2", "Second")]));
 
     const items = within(screen.getByRole("list", { name: "Queued messages" })).getAllByRole(
@@ -121,8 +121,10 @@ describe("AgentChatMessageQueue", () => {
       expect.stringContaining("Second"),
     ]);
 
-    fireEvent.click(within(itemAt(items, 1)).getByRole("button", { name: /Steer now/ }));
-    fireEvent.click(within(itemAt(items, 0)).getByRole("button", { name: /Edit/ }));
+    await act(async () => {
+      fireEvent.click(within(itemAt(items, 1)).getByRole("button", { name: /Steer now/ }));
+      fireEvent.click(within(itemAt(items, 0)).getByRole("button", { name: /Edit/ }));
+    });
 
     expect(onAction.mock.calls).toEqual([
       [{ kind: "steer", submissionId: "s-2" }],
@@ -242,7 +244,7 @@ describe("AgentChatMessageQueue", () => {
   });
 
   // The table in agent-chat-steering.test.ts covers each steering rule.
-  test("explains why steering is unavailable, disables Steer now, and keeps the message", () => {
+  test("explains why steering is unavailable, disables Steer now, and keeps the message", async () => {
     const { onAction } = renderQueue(
       queueOf([entry("s-1", "First")]),
       "Update Codex to 0.106.0 or later.",
@@ -260,7 +262,9 @@ describe("AgentChatMessageQueue", () => {
     expect(
       screen.getByRole("button", { name: "Remove queued message" }).hasAttribute("disabled"),
     ).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "Edit queued message" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Edit queued message" }));
+    });
     expect(onAction).toHaveBeenCalledWith({ kind: "begin_edit", submissionId: "s-1" });
   });
 
@@ -441,21 +445,25 @@ describe("AgentChatMessageQueue", () => {
     }
   });
 
-  test("moves focus into the edit card while the Edit action still runs", () => {
+  test("moves focus into the edit card while the Edit action still runs", async () => {
     const { onAction, rerenderQueue } = renderQueue(queueOf([entry("s-1", "Original")]));
     onAction.mockImplementationOnce(() => new Promise<void>(() => {}));
     fireEvent.click(screen.getByRole("button", { name: "Edit queued message" }));
 
-    rerenderQueue(queueOf([editingEntry("s-1", "Original", "edit-1")]));
+    await act(async () => {
+      rerenderQueue(queueOf([editingEntry("s-1", "Original", "edit-1")]));
+    });
 
     const editor = screen.getByRole("combobox", { name: "Message composer" });
     expect(editor.getAttribute("aria-disabled")).toBe("false");
     expect(editor.contains(document.activeElement)).toBe(true);
   });
 
-  test("lets the menus of the editor show outside an edit card once it has opened", () => {
+  test("lets the menus of the editor show outside an edit card once it has opened", async () => {
     const { rerenderQueue } = renderQueue(queueOf([entry("s-1", "Original")]));
-    rerenderQueue(queueOf([editingEntry("s-1", "Original", "edit-1")]));
+    await act(async () => {
+      rerenderQueue(queueOf([editingEntry("s-1", "Original", "edit-1")]));
+    });
 
     const card = document.querySelector(".queued-message-edit");
     if (!card) throw new Error("Expected an edit card.");
@@ -555,7 +563,7 @@ describe("AgentChatMessageQueue", () => {
     expect(composer().textContent).toContain("Original");
   });
 
-  test("keeps the other cards in place when one leaves the queue", () => {
+  test("keeps the other cards in place when one leaves the queue", async () => {
     const { rerenderQueue } = renderQueue(
       queueOf([entry("s-1", "First"), entry("s-2", "Second"), entry("s-3", "Third")]),
     );
@@ -568,13 +576,14 @@ describe("AgentChatMessageQueue", () => {
     const third = cardOf("Third");
 
     rerenderQueue(queueOf([entry("s-1", "First"), entry("s-3", "Third")]));
+    await act(async () => {
+      // The leaving card shrinks out, hidden from assistive technology.
+      expect(cardOf("Second").getAttribute("data-presence")).toBe("exiting");
+      expect(screen.getAllByRole("listitem")).toEqual([first, third]);
+    });
 
-    // The leaving card shrinks out, hidden from assistive technology. The others keep their
-    // elements, so nothing redraws.
-    expect(cardOf("Second").getAttribute("data-presence")).toBe("exiting");
+    expect(screen.queryByText("Second")).toBeNull();
     expect(screen.getAllByRole("listitem")).toEqual([first, third]);
-    expect(cardOf("First")).toBe(first);
-    expect(cardOf("Third")).toBe(third);
   });
 
   test("renders nothing without a queue", () => {

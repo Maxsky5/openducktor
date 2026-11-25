@@ -1,3 +1,4 @@
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { describe, expect, test } from "bun:test";
 import {
   settingsSnapshotSchema,
@@ -11,7 +12,8 @@ import { createTestClientConnection } from "@openducktor/frontend-core/test-supp
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { WorkspaceSessionHistoryDialog } from "./workspace-session-history-dialog";
 import { WorkspaceSessionHeader } from "./workspace-session-header";
-import { WorkspaceSessionRenameDialog } from "./workspace-session-rename-dialog";
+
+setupTestingLibraryFakeTimers();
 
 const record = (): WorkspaceSession => ({
   id: "session-1",
@@ -135,42 +137,6 @@ describe("Workspace Session metadata UI", () => {
       }
     },
   );
-
-  test("rename separates the header, body, and footer with Cancel on the left", () => {
-    const view = render(
-      <QueryProvider>
-        <WorkspaceSessionRenameDialog
-          open
-          workspaceId="A"
-          record={record()}
-          onClose={() => {}}
-          onCloseAutoFocus={() => {}}
-        />
-      </QueryProvider>,
-    );
-    try {
-      const dialog = view.getByRole("dialog", { name: "Rename session" });
-      const header = view.getByRole("heading", { name: "Rename session" }).parentElement;
-      const body = view.getByRole("textbox", { name: "Name" }).parentElement;
-      const cancel = view.getByRole("button", { name: "Cancel" });
-      const save = view.getByRole("button", { name: "Save" });
-      const footer = cancel.parentElement;
-
-      expect(dialog.classList.contains("p-0")).toBe(true);
-      expect(header?.classList.contains("border-b")).toBe(true);
-      expect(body?.classList.contains("px-5")).toBe(true);
-      expect(body?.classList.contains("py-4")).toBe(true);
-      expect(footer?.classList.contains("border-t")).toBe(true);
-      expect(footer?.classList.contains("mt-0")).toBe(true);
-      expect(footer?.classList.contains("justify-between")).toBe(true);
-      expect(footer?.firstElementChild).toBe(cancel);
-      expect(footer?.lastElementChild).toBe(save);
-      expect(dialog.querySelector("form")?.classList.contains("min-h-0")).toBe(true);
-      expect(cancel.closest("fieldset")?.classList.contains("min-h-0")).toBe(true);
-    } finally {
-      view.unmount();
-    }
-  });
 
   test("Cancel discards a rename without saving and returns focus to session actions", async () => {
     const saved: string[] = [];

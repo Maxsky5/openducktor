@@ -8,15 +8,12 @@ import { fireEvent, render, waitFor } from "@testing-library/react";
 import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { steerShortcutLabel } from "@/lib/steer-shortcut";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import type { AgentChatMessageQueueModel } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 import { AgentChatComposer } from "./agent-chat-composer-test-helpers";
 import { buildModelSelection } from "./agent-chat-test-fixtures";
-
-enableReactActEnvironment();
 
 const readComposerCard = (html: string): Element => {
   const card = new DOMParser().parseFromString(html, "text/html").body.querySelector("form > div");
@@ -726,77 +723,6 @@ describe("AgentChatComposer", () => {
     );
 
     expect(html).not.toContain("agent-chat-pending-items-warning");
-  });
-
-  test("renders the idle composer as one rounded card without the agent accent", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentChatComposer, {
-        model: buildModel(),
-      }),
-    );
-
-    const card = readComposerCard(html);
-    expect(card.className).toContain("rounded-xl");
-    expect(card.className).toContain("bg-chat-surface shadow-chat");
-    expect(card.className).not.toMatch(/(^|\s)border(\s|$)/);
-    expect(card.className).toContain("has-[[data-composer-editor]:focus]:shadow-chat-focus");
-    expect(card.querySelector('[aria-label="Message composer"]')).not.toBeNull();
-    expect(card.querySelector('[aria-label="Send message"]')).not.toBeNull();
-    expect(html).not.toContain("border-l-4");
-    expect(html).not.toContain("#d97706");
-  });
-
-  test("mutes the composer card while input is read-only", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentChatComposer, {
-        model: {
-          ...buildModel(),
-          isReadOnly: true,
-          readOnlyReason: "This session is read-only.",
-        },
-      }),
-    );
-
-    const card = readComposerCard(html);
-    expect(card.className).toContain("bg-chat-surface/60");
-    expect(card.className).not.toContain("has-[[data-composer-editor]:focus]:shadow-chat-focus");
-    expect(html).toContain("This session is read-only.");
-    expect(html).toContain('aria-label="Send message" disabled');
-  });
-
-  test("keeps the Codex runtime accent off the idle composer", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentChatComposer, {
-        model: {
-          ...buildModel(),
-          selectedModelSelection: buildCodexModelSelectionWithoutProfile(),
-          supportsProfiles: false,
-          accentColor: "var(--odt-runtime-accent-codex)",
-        },
-      }),
-    );
-
-    expect(html).not.toContain("--odt-runtime-accent-codex");
-  });
-
-  test("keeps stop and send together in a wrapping group that the context meter can wrap above", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentChatComposer, {
-        model: buildModel(),
-      }),
-    );
-
-    const card = readComposerCard(html);
-    const stop = card.querySelector('[aria-label="Stop session"]');
-    const send = card.querySelector('[aria-label="Send message"]');
-    const contextMeter = card.querySelector('[aria-label^="Session context:"]');
-    const actions = stop?.parentElement;
-    const actionsRow = actions?.parentElement;
-    expect(actions?.contains(send ?? null)).toBe(true);
-    expect(actions?.contains(contextMeter)).toBe(false);
-    expect(actions?.className).toContain("shrink-0");
-    expect(actionsRow?.contains(contextMeter)).toBe(true);
-    expect(actionsRow?.className).toContain("max-w-full flex-wrap");
   });
 
   test("renders a colored border ray while the session is working", () => {

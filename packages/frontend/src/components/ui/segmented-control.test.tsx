@@ -1,47 +1,35 @@
-import { describe, expect, test } from "bun:test";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { expect, test } from "bun:test";
+import { render, screen, within } from "@testing-library/react";
 import { SegmentedControlItem, SegmentedControlRoot } from "./segmented-control";
-import { segmentedControlTriggerClassName } from "./segmented-control-classnames";
 
-describe("SegmentedControl", () => {
-  test("owns active item selected-control styling", () => {
-    const html = renderToStaticMarkup(
-      createElement(
-        SegmentedControlRoot,
-        { size: "md" },
-        createElement(SegmentedControlItem, { active: true }, "Selected"),
-        createElement(SegmentedControlItem, { active: false }, "Other"),
-      ),
-    );
+test("announces the active button as pressed", () => {
+  render(
+    <SegmentedControlRoot aria-label="Document view">
+      <SegmentedControlItem active>Preview</SegmentedControlItem>
+      <SegmentedControlItem active={false}>Source</SegmentedControlItem>
+    </SegmentedControlRoot>,
+  );
 
-    expect(html).toContain("bg-selected-control");
-    expect(html).toContain("text-selected-control-foreground");
-    expect(html).toContain('role="group"');
-    expect(html).toContain('aria-pressed="true"');
-    expect(html).not.toContain("bg-primary text-primary-foreground");
-  });
+  const views = within(screen.getByRole("group", { name: "Document view" }));
+  expect(views.getByRole("button", { pressed: true }).textContent).toBe("Preview");
+  expect(views.getByRole("button", { pressed: false }).textContent).toBe("Source");
+});
 
-  test("maps tab items to selected state without pressed state", () => {
-    const html = renderToStaticMarkup(
-      createElement(
-        SegmentedControlRoot,
-        { role: "tablist", size: "md" },
-        createElement(SegmentedControlItem, { active: true, role: "tab" }, "Selected"),
-      ),
-    );
+test("announces the active tab as selected", () => {
+  render(
+    <SegmentedControlRoot role="tablist" aria-label="Review stage">
+      <SegmentedControlItem active role="tab">
+        Specification
+      </SegmentedControlItem>
+      <SegmentedControlItem active={false} role="tab">
+        Plan
+      </SegmentedControlItem>
+    </SegmentedControlRoot>,
+  );
 
-    expect(html).toContain('role="tablist"');
-    expect(html).toContain('role="tab"');
-    expect(html).toContain('aria-selected="true"');
-    expect(html).not.toContain("aria-pressed");
-  });
-
-  test("owns active Radix trigger selected-control styling", () => {
-    const className = segmentedControlTriggerClassName({ size: "sm" });
-
-    expect(className).toContain("data-[state=active]:bg-selected-control");
-    expect(className).toContain("data-[state=active]:text-selected-control-foreground");
-    expect(className).not.toContain("data-[state=active]:bg-primary");
-  });
+  const stages = within(screen.getByRole("tablist", { name: "Review stage" }));
+  const active = stages.getByRole("tab", { selected: true });
+  expect(active.textContent).toBe("Specification");
+  expect(active.hasAttribute("aria-pressed")).toBe(false);
+  expect(stages.getByRole("tab", { selected: false }).textContent).toBe("Plan");
 });

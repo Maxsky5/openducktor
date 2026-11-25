@@ -1,4 +1,4 @@
-import { getSingularPatch } from "@pierre/diffs";
+import { parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs";
 
 const GIT_DIFF_HEADER = /^diff --git /m;
 const CLASSIC_DIFF_HEADER = /^Index: /m;
@@ -35,7 +35,7 @@ function applyPatchFileContentDiff(candidate: string, filePath: string): string 
   );
 }
 
-export function normalizePatchCandidate(candidate: string, filePath: string): string {
+function normalizePatchCandidate(candidate: string, filePath: string): string {
   const trimmed = trimPatch(candidate);
   if (trimmed.length === 0) {
     return "";
@@ -120,16 +120,14 @@ function patchMatchesFile(candidate: string, filePath: string): boolean {
   return suffixPattern.test(headerLines.join("\n"));
 }
 
-function canParseSingularPatch(candidate: string, filePath: string): boolean {
-  if (candidate.trim().length === 0) {
-    return false;
-  }
-
+export function parseRenderablePatch(patch: string): FileDiffMetadata | null {
   try {
-    getSingularPatch(normalizePatchCandidate(candidate, filePath));
-    return true;
+    const patches = parsePatchFiles(patch, { throwOnError: true });
+    const [first] = patches;
+    return patches.length === 1 && first?.files.length === 1 ? (first.files[0] ?? null) : null;
   } catch {
-    return false;
+    // An unreadable patch remains available as raw text in the diff viewer.
+    return null;
   }
 }
 
@@ -144,8 +142,8 @@ export function selectRenderableDiff(rawDiff: string, filePath: string): string 
     return normalizePatchCandidate(matchingCandidate, filePath);
   }
 
-  const singularCandidate = candidates.find((candidate) =>
-    canParseSingularPatch(candidate, filePath),
+  const singularCandidate = candidates.find(
+    (candidate) => parseRenderablePatch(normalizePatchCandidate(candidate, filePath)) !== null,
   );
   if (singularCandidate) {
     return normalizePatchCandidate(singularCandidate, filePath);

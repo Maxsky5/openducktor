@@ -1,12 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { act } from "react";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { fillStrengthFor } from "./step-track-animator";
 import { centerFor, nearestEnabled, shellPath, thumbBounds, valueAt } from "./step-track-geometry";
 import { StepTrackSlider, type StepTrackSliderStop } from "./step-track-slider";
-
-enableReactActEnvironment();
 
 const EFFORT_STOPS: readonly StepTrackSliderStop[] = [
   { value: "low", label: "low" },

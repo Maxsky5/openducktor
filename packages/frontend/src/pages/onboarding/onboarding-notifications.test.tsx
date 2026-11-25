@@ -7,7 +7,6 @@ import {
 } from "@openducktor/contracts";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import type { HostClient } from "@openducktor/host-client";
-import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import {
   createCheck,
   createOnboardingTestHarness,
@@ -109,7 +108,7 @@ describe("onboarding notifications", () => {
   }, 2_500);
 
   test("blocks duplicate notification saves while the first save is pending", async () => {
-    const pendingSave = createDeferred<void>();
+    const pendingSave = Promise.withResolvers<void>();
     let saveCalls = 0;
     const saveSettingsSnapshot = mock(async (_snapshot: SettingsSnapshotSaveInput) => {
       saveCalls += 1;

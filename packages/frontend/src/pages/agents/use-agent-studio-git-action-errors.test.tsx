@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHookHarness as createCoreHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
-import { enableReactActEnvironment } from "./agent-studio-test-utils";
 import { useAgentStudioGitActionErrors } from "./use-agent-studio-git-action-errors";
-
-enableReactActEnvironment();
 
 const createHookHarness = () =>
   createCoreHookHarness(() => useAgentStudioGitActionErrors("/repo"), undefined);

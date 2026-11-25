@@ -1,8 +1,8 @@
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, jest, mock, test } from "bun:test";
 import type { PullRequest } from "@openducktor/contracts";
 import { workflowStepRailState } from "@openducktor/frontend-core/lib/agent-workflow-state";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { act, type ComponentProps, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -12,7 +12,6 @@ import { QuickActionsMenu } from "./agent-studio-header-quick-actions";
 import { WorkflowRail, WorkflowRailPreview } from "./agent-studio-header-workflow-rail";
 import type { AgentWorkflowStep } from "./agent-studio-header.types";
 import type { WorkflowRailStep } from "@/types/agent-workflow";
-import { deriveSessionHistorySelectionFocusBehavior } from "./agent-studio-header-session-history-model";
 import { CLOSE_TASK_ACTION } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 
 const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
@@ -24,8 +23,6 @@ const immediateRequestAnimationFrame: typeof requestAnimationFrame = (
   callback(0);
   return 1;
 };
-
-enableReactActEnvironment();
 
 beforeEach(() => {
   globalThis.requestAnimationFrame = immediateRequestAnimationFrame;
@@ -211,6 +208,13 @@ const renderWorkflow = (
 };
 
 describe("AgentStudioHeader", () => {
+  setupTestingLibraryFakeTimers();
+
+  afterEach(async () => {
+    // The popovers restore focus on a timer after they close.
+    await act(async () => jest.advanceTimersByTime(0));
+  });
+
   test("renders the task title and session controls", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
@@ -294,11 +298,11 @@ describe("AgentStudioHeader", () => {
     );
     try {
       const trigger = view.getByRole("button", { name: "Open task details" });
-      act(() => trigger.focus());
-      const tooltip = await view.findByRole("tooltip", {}, { timeout: 800 });
+      await act(async () => trigger.focus());
+      const tooltip = view.getByRole("tooltip");
       expect(tooltip.textContent).toContain(model.taskTitle);
       expect(tooltip.textContent).toContain(model.taskId);
-      fireEvent.click(trigger);
+      await act(async () => fireEvent.click(trigger));
       expect(onOpenTaskDetails).toHaveBeenCalledTimes(1);
     } finally {
       view.unmount();
@@ -318,67 +322,11 @@ describe("AgentStudioHeader", () => {
       const trigger = view.getByRole("button", {
         name: "Session history, selected Spec Revision · Spec",
       });
-      act(() => trigger.focus());
-      expect((await view.findByRole("tooltip", {}, { timeout: 800 })).textContent).toBe(
-        "Session history · Spec Revision · Spec",
-      );
+      await act(async () => trigger.focus());
+      expect(view.getByRole("tooltip").textContent).toBe("Session history · Spec Revision · Spec");
     } finally {
       view.unmount();
     }
-  });
-
-  test("opens session history menu with grouped options and selects session", () => {
-    const onValueChange = mock(() => {});
-    const { unmount } = render(
-      createElement(AgentStudioHeader, {
-        repoActions: null,
-        viewControls: null,
-        openIn: null,
-        model: {
-          ...buildModel(),
-          sessionSelector: {
-            value: "spec-session",
-            groups: [
-              {
-                label: "Spec sessions",
-                options: [
-                  {
-                    value: "spec-session",
-                    label: "Spec Revision · Spec",
-                    description: "Today · idle",
-                  },
-                ],
-              },
-              {
-                label: "Build sessions",
-                options: [
-                  {
-                    value: "build-session",
-                    label: "Builder Draft · Build",
-                    description: "Today · running",
-                  },
-                ],
-              },
-            ],
-            disabled: false,
-            onValueChange,
-            shouldAutofocusComposerForValue: () => true,
-          },
-        },
-      }),
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: /Session history/i }));
-
-    expect(screen.getByPlaceholderText(/Search sessions/i)).toBeTruthy();
-    expect(screen.getByText("Spec sessions")).toBeTruthy();
-    expect(screen.getByText("Build sessions")).toBeTruthy();
-
-    fireEvent.click(screen.getByText("Builder Draft · Build"));
-
-    expect(onValueChange).toHaveBeenCalledWith("build-session");
-
-    unmount();
   });
 
   test("closes session history menu without changing selection when the current session is chosen again", async () => {
@@ -412,28 +360,23 @@ describe("AgentStudioHeader", () => {
     expect(screen.queryByPlaceholderText(/Search sessions/i)).toBeNull();
   });
 
-  test("does not restore focus to the history trigger after selecting a session", async () => {
-    const onValueChange = mock(() => {});
+  test.each([
+    { session: "an interactive session", restoreFocus: false },
+    { session: "a read-only session", restoreFocus: true },
+  ])("selects $session and restores trigger focus=$restoreFocus", async ({ restoreFocus }) => {
+    const model = buildModel();
+    const onValueChange = mock((_value: string) => {});
     render(
       createElement(AgentStudioHeader, {
         repoActions: null,
         viewControls: null,
         openIn: null,
         model: {
-          ...buildModel(),
+          ...model,
           sessionSelector: {
-            value: "spec-session",
+            ...model.sessionSelector,
             groups: [
-              {
-                label: "Spec sessions",
-                options: [
-                  {
-                    value: "spec-session",
-                    label: "Spec Revision · Spec",
-                    description: "Today · idle",
-                  },
-                ],
-              },
+              ...model.sessionSelector.groups,
               {
                 label: "Build sessions",
                 options: [
@@ -445,50 +388,24 @@ describe("AgentStudioHeader", () => {
                 ],
               },
             ],
-            disabled: false,
             onValueChange,
-            shouldAutofocusComposerForValue: (value) => value === "build-session",
+            shouldAutofocusComposerForValue: () => !restoreFocus,
           },
         },
       }),
     );
 
-    const sessionHistoryTrigger = screen.getByRole("button", { name: /Session history/i });
-    sessionHistoryTrigger.focus();
-    expect(document.activeElement).toBe(sessionHistoryTrigger);
+    const trigger = screen.getByRole("button", { name: /Session history/i });
+    await act(async () => fireEvent.click(trigger));
+    expect(screen.getByPlaceholderText(/Search sessions/i)).toBeTruthy();
+    expect(screen.getByText("Spec")).toBeTruthy();
+    expect(screen.getByText("Build sessions")).toBeTruthy();
+    await act(async () => fireEvent.click(screen.getByText("Builder Draft · Build")));
+    await act(async () => jest.advanceTimersByTime(0));
 
-    await act(async () => {
-      fireEvent.click(sessionHistoryTrigger);
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByText("Builder Draft · Build"));
-    });
-
-    await waitFor(() => {
-      expect(onValueChange).toHaveBeenCalledWith("build-session");
-      expect(document.activeElement).not.toBe(sessionHistoryTrigger);
-    });
-  });
-
-  test("restores focus to the history trigger after selecting a non-interactive session", async () => {
-    expect(
-      deriveSessionHistorySelectionFocusBehavior({
-        currentValue: "spec-session",
-        nextValue: "build-session",
-        shouldAutofocusComposerForValue: () => false,
-      }),
-    ).toBe("trigger");
-  });
-
-  test("does not request any focus change when the selected session stays the same", () => {
-    expect(
-      deriveSessionHistorySelectionFocusBehavior({
-        currentValue: "spec-session",
-        nextValue: "spec-session",
-        shouldAutofocusComposerForValue: () => true,
-      }),
-    ).toBe("none");
+    expect(onValueChange.mock.calls).toEqual([["build-session"]]);
+    expect(screen.queryByPlaceholderText(/Search sessions/i) === null).toBe(true);
+    expect(document.activeElement === trigger).toBe(restoreFocus);
   });
 
   test("opens quick-actions menu and selects message-first role", async () => {
@@ -660,10 +577,10 @@ describe("AgentStudioHeader", () => {
     await act(async () => {
       fireEvent.click(menuTrigger);
     });
-    await act(async () => {
-      fireEvent.click(screen.getByText("Approve Task"));
-    });
+    await act(async () => fireEvent.click(screen.getByText("Approve Task")));
+    await act(async () => jest.advanceTimersByTime(0));
 
+    expect(document.activeElement === menuTrigger).toBe(true);
     expect(onQuickAction).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "task_action",

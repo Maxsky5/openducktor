@@ -69,6 +69,29 @@ const settle = (state: SessionViewsState, value: SessionViewsInput): SessionView
 };
 
 describe("resolveSessionViews", () => {
+  test("opening a seventh chat evicts the least recently viewed chat", () => {
+    let state: SessionViewsState = { views: [], activeId: null };
+    let nextId = 0;
+    const openChat = (workspace: ActiveWorkspace, sessionId: string) => {
+      const search = `?workspace=${workspace.workspaceId}&kind=workspace&session=${sessionId}`;
+      state = settle(
+        state,
+        input({ workspace, kind: "workspace", ...at(search), createId: () => `chat-${++nextId}` }),
+      );
+      if (state.activeId === null) throw new Error(`Chat ${sessionId} did not open.`);
+      return state.activeId;
+    };
+
+    const first = openChat(alpha, "first");
+    const oldest = openChat(beta, "first");
+    const others = ["second", "third", "fourth", "fifth"].map((id) => openChat(alpha, id));
+    expect(state.views.map((view) => view.id)).toEqual([first, oldest, ...others]);
+
+    expect(openChat(alpha, "first")).toBe(first);
+    const newest = openChat(beta, "second");
+    expect(state.views.map((view) => view.id)).toEqual([...others, first, newest]);
+  });
+
   test("new content that restores a kept selection leaves it to the kept view", () => {
     const kept = taskView("kept", plannerSearch);
     const restored = taskView("restored", bareTaskSearch);

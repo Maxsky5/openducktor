@@ -1,82 +1,45 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { describe, expect, mock, test } from "bun:test";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { MarkdownPreviewModal } from "./markdown-preview-modal";
 
-enableReactActEnvironment();
-
-const writeClipboardMock = mock(async (_value: string) => {});
-let restoreClipboard: (() => void) | null = null;
-
 describe("MarkdownPreviewModal", () => {
-  beforeEach(() => {
-    writeClipboardMock.mockClear();
-    writeClipboardMock.mockImplementation(async () => {});
-    restoreClipboard = replaceNavigatorClipboard(writeClipboardMock);
-  });
-
-  afterEach(() => {
-    restoreClipboard?.();
-    restoreClipboard = null;
-  });
-
-  test("does not render dialog content when closed", () => {
-    render(
-      <MarkdownPreviewModal
-        open={false}
-        onOpenChange={() => {}}
-        markdown="# Hello"
-        title="Specification"
-      />,
-    );
-
-    expect(screen.queryByText((c) => c.includes("Hello"))).toBeNull();
-    expect(screen.queryByText("Specification")).toBeNull();
-  });
-
-  test("renders markdown content when open", () => {
-    render(<MarkdownPreviewModal open onOpenChange={() => {}} markdown="# Hello World" />);
-
-    expect(screen.getByText((c) => c.includes("Hello World"))).toBeDefined();
-  });
-
-  test("renders title when provided", () => {
-    render(
-      <MarkdownPreviewModal
-        open
-        onOpenChange={() => {}}
-        markdown="# Content"
-        title="Specification"
-      />,
-    );
-
-    expect(screen.getByText("Specification")).toBeDefined();
-  });
-
-  test("renders sr-only default title when no title prop is provided", () => {
-    render(<MarkdownPreviewModal open onOpenChange={() => {}} markdown="# Content" />);
-
-    const title = screen.getByText("Artifact preview");
-    expect(title).toBeDefined();
-    expect(title.className).toContain("sr-only");
-  });
-
-  test("renders copy button with expected test id", () => {
-    render(<MarkdownPreviewModal open onOpenChange={() => {}} markdown="# Content" />);
-
-    expect(screen.getByTestId("markdown-preview-modal-copy")).toBeDefined();
-  });
-
-  test("copies raw markdown to clipboard on copy button click", async () => {
-    await withMockedToast(async () => {
-      render(<MarkdownPreviewModal open onOpenChange={() => {}} markdown="# Raw Markdown" />);
-
-      const copyButton = screen.getByTestId("markdown-preview-modal-copy");
-      fireEvent.click(copyButton);
-
-      expect(writeClipboardMock).toHaveBeenCalledWith("# Raw Markdown");
+  test("uses an accessible default title when the artifact has no title", async () => {
+    await act(async () => {
+      render(<MarkdownPreviewModal open onOpenChange={() => {}} markdown="# Content" />);
     });
+
+    const dialog = screen.getByRole("dialog", { name: "Artifact preview" });
+    expect(within(dialog).getByRole("heading", { name: "Content" }).textContent).toBe("Content");
+  });
+
+  test("renders the named artifact and copies its raw markdown", async () => {
+    const writeClipboard = mock(async (_value: string) => {});
+    const restoreClipboard = replaceNavigatorClipboard(writeClipboard);
+    try {
+      await withMockedToast(async ({ toastSuccessMock }) => {
+        await act(async () => {
+          render(
+            <MarkdownPreviewModal
+              open
+              onOpenChange={() => {}}
+              markdown="# Raw Markdown"
+              title="Specification"
+            />,
+          );
+        });
+        const dialog = screen.getByRole("dialog", { name: "Specification" });
+        expect(within(dialog).getByRole("heading", { name: "Raw Markdown" })).toBeDefined();
+
+        await act(async () => {
+          fireEvent.click(within(dialog).getByRole("button", { name: "Copy artifact content" }));
+        });
+        expect(writeClipboard).toHaveBeenCalledWith("# Raw Markdown");
+        expect(toastSuccessMock).toHaveBeenCalledWith("Copied!", expect.anything());
+      });
+    } finally {
+      restoreClipboard();
+    }
   });
 });

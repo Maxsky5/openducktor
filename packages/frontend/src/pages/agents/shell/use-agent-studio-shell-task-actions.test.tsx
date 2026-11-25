@@ -9,10 +9,7 @@ import {
   createTaskCardFixture,
   createTaskWorkflowActionsFixture,
 } from "@/test-utils/shared-test-fixtures";
-import { enableReactActEnvironment } from "../agent-studio-test-utils";
 import { useAgentStudioShellTaskActions } from "./use-agent-studio-shell-task-actions";
-
-enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioShellTaskActions>[0];
 

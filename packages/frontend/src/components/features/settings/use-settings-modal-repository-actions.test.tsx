@@ -5,13 +5,8 @@ import {
   type WorkspaceRef,
 } from "@openducktor/contracts";
 import { useState } from "react";
-import {
-  createHookHarness as createSharedHookHarness,
-  enableReactActEnvironment,
-} from "@/pages/agents/agent-studio-test-utils";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { useSettingsModalRepositoryActions } from "./use-settings-modal-repository-actions";
-
-enableReactActEnvironment();
 
 type HookArgs = {
   selectedWorkspace: WorkspaceRef | null;

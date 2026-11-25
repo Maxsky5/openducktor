@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, jest, mock, test } from "bun:test";
 import {
   type SettingsSnapshotSaveResult,
   settingsSnapshotSchema,
@@ -9,18 +9,17 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { HostClient } from "@openducktor/host-client";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { toRightPanelStorageKey } from "@/pages/agents/agents-page-selection";
 import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
 import { withMockedToast } from "@/test-utils/mock-toast";
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
-import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import { OpenInMenu } from "./open-in-menu";
 
-enableReactActEnvironment();
-
 describe("OpenInMenu", () => {
+  setupTestingLibraryFakeTimers();
+
   let rendered: ReturnType<typeof render> | null = null;
 
   // Each test sets the host commands of its connection before it renders the menu.
@@ -43,7 +42,6 @@ describe("OpenInMenu", () => {
         settingsSnapshotSchema.parse({ theme: "light", system }),
       workspaceSaveSettingsSnapshot: saveSettings,
     };
-    enableReactActEnvironment();
   });
 
   afterEach(async () => {
@@ -90,9 +88,8 @@ describe("OpenInMenu", () => {
       screen.getByTestId("agent-studio-git-open-in-default-button").getAttribute("aria-label"),
     ).toBe("Open task worktree in Finder");
 
-    await act(async () => {
-      fireEvent.click(screen.getByTestId("agent-studio-git-open-in-trigger"));
-    });
+    const trigger = screen.getByRole("button", { name: "Choose a different tool" });
+    await act(async () => fireEvent.click(trigger));
 
     expect(await screen.findByTestId("agent-studio-git-open-in-icon-finder")).toBeTruthy();
     expect(screen.getByTestId("agent-studio-git-open-in-icon-ghostty")).toBeTruthy();
@@ -108,7 +105,10 @@ describe("OpenInMenu", () => {
     await act(async () => {
       fireEvent.click(screen.getByTestId("agent-studio-git-open-in-item-ghostty"));
     });
+    // Radix restores focus on the next timer after the popover closes.
+    await act(async () => jest.advanceTimersByTime(0));
 
+    expect(document.activeElement === trigger).toBe(true);
     expect(onOpenInTool).toHaveBeenCalledWith("ghostty");
     expect(saveSettings).not.toHaveBeenCalled();
     expect(screen.getByTestId("agent-studio-git-open-in-default-button").textContent).toContain(
@@ -119,7 +119,7 @@ describe("OpenInMenu", () => {
   });
 
   test("waits for the saved preference before enabling the default action", async () => {
-    const settings = createDeferred<ReturnType<typeof settingsSnapshotSchema.parse>>();
+    const settings = Promise.withResolvers<ReturnType<typeof settingsSnapshotSchema.parse>>();
     host.workspaceGetSettingsSnapshot = () => settings.promise;
     host.systemListOpenInTools = async () => [{ toolId: "finder" }, { toolId: "zed" }];
     const onOpenInTool = mock(async () => {});
@@ -157,10 +157,7 @@ describe("OpenInMenu", () => {
   test("opening another tool keeps the Settings preference in both mounted menus", async () => {
     system = { preferredOpenInToolId: "finder" };
     host.systemListOpenInTools = async () => [{ toolId: "finder" }, { toolId: "zed" }];
-    let completeLaunch!: () => void;
-    const launched = new Promise<void>((resolve) => {
-      completeLaunch = resolve;
-    });
+    const launched = Promise.withResolvers<void>();
     rendered = render(
       <QueryProvider connection={connectionForHost()}>
         <TooltipProvider>
@@ -168,7 +165,7 @@ describe("OpenInMenu", () => {
             contextMode="repository"
             targetPath="/tmp/repo"
             disabledReason={null}
-            onOpenInTool={() => launched}
+            onOpenInTool={() => launched.promise}
           />
           <OpenInMenu
             contextMode="worktree"
@@ -180,27 +177,22 @@ describe("OpenInMenu", () => {
       </QueryProvider>,
     );
     await screen.findByRole("button", { name: "Open repository root in Finder" });
-    await act(async () => {
-      fireEvent.click(screen.getAllByTestId("agent-studio-git-open-in-trigger")[0]!);
-    });
+    const trigger = screen.getAllByRole("button", { name: "Choose a different tool" })[0]!;
+    await act(async () => fireEvent.click(trigger));
     await act(async () => {
       fireEvent.click(screen.getByTestId("agent-studio-git-open-in-item-zed"));
     });
-    expect(saveSettings).not.toHaveBeenCalled();
     expect(
       screen.getByRole<HTMLButtonElement>("button", { name: "Open repository root in Finder" })
         .disabled,
     ).toBe(true);
     await act(async () => {
-      completeLaunch();
+      launched.resolve();
     });
-    await waitFor(
-      () =>
-        expect(screen.getByRole("button", { name: "Open task worktree in Finder" })).toBeTruthy(),
-      { timeout: 700 },
-    );
+    await act(async () => jest.advanceTimersByTime(0));
+    expect(document.activeElement === trigger).toBe(true);
+    expect(screen.getByRole("button", { name: "Open task worktree in Finder" })).toBeTruthy();
     expect(saveSettings).not.toHaveBeenCalled();
-    expect(system).toEqual({ preferredOpenInToolId: "finder" });
     expect(screen.getByRole("button", { name: "Open repository root in Finder" })).toBeTruthy();
   });
 
@@ -472,7 +464,7 @@ describe("OpenInMenu", () => {
     );
 
     await act(async () => {
-      fireEvent.click(await screen.findByTestId("agent-studio-git-open-in-trigger"));
+      fireEvent.click(screen.getByTestId("agent-studio-git-open-in-trigger"));
     });
 
     expect(await screen.findByTestId("agent-studio-git-open-in-error")).toBeTruthy();
@@ -482,8 +474,6 @@ describe("OpenInMenu", () => {
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-      await Promise.resolve();
-      await Promise.resolve();
     });
 
     expect(await screen.findByTestId("agent-studio-git-open-in-icon-finder")).toBeTruthy();
@@ -512,15 +502,13 @@ describe("OpenInMenu", () => {
       );
 
       await act(async () => {
-        fireEvent.click(await screen.findByTestId("agent-studio-git-open-in-trigger"));
+        fireEvent.click(screen.getByTestId("agent-studio-git-open-in-trigger"));
       });
 
       expect(await screen.findByTestId("agent-studio-git-open-in-error")).toBeTruthy();
 
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-        await Promise.resolve();
-        await Promise.resolve();
       });
 
       expect(toastErrorMock).toHaveBeenCalledWith("Failed to refresh supported apps", {

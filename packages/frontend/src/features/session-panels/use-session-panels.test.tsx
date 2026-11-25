@@ -621,18 +621,31 @@ describe("useSessionPanels", () => {
   test("tells the user once when it cannot restore a saved layout", async () => {
     await withMockedToast(async ({ toastErrorMock }) => {
       const owner = newTaskOwner();
-      connection.storage.setItem(sessionPanelLayoutStorageKey(owner), "{not json");
+      connection.storage.setItem(
+        sessionPanelLayoutStorageKey(owner),
+        JSON.stringify({
+          version: 2,
+          panels: { right: [], bottom: [{ kind: "browser", tabId: "not-a-tab-id" }] },
+          closedKinds: [],
+          selectedRight: {},
+          selectedBottom: null,
+        }),
+      );
 
       const view = renderPanels(owner, {});
-      view.setTerminals({});
-
       expect(view.result.current.right.tabs.map((tab) => tab.kind)).toEqual([
         "document",
         "diffs",
         "files",
       ]);
+      expect(view.result.current.bottom.tabs).toEqual([]);
+
+      view.unmount();
+      renderPanels(owner, {});
       expect(toastErrorMock).toHaveBeenCalledTimes(1);
-      expect(toastErrorMock.mock.calls[0]?.[0]).toBe("Could not restore the saved panel layout");
+      expect(toastErrorMock).toHaveBeenCalledWith("Could not restore the saved panel layout", {
+        description: expect.stringContaining("The default layout is shown."),
+      });
     });
   });
 });

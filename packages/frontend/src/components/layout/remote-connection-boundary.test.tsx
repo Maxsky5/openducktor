@@ -1,4 +1,5 @@
-import { expect, mock, test } from "bun:test";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
+import { expect, jest, mock, test } from "bun:test";
 import { act } from "react";
 import { toast } from "sonner";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -6,6 +7,8 @@ import { RemoteConnectionError, type RemoteConnectionState } from "@openducktor/
 import type { RemoteFailure } from "@openducktor/contracts";
 import { RemoteConnectionBoundary } from "./remote-connection-boundary";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
+
+setupTestingLibraryFakeTimers();
 
 test("blocks work until synchronization finishes and exposes the connection failure action", async () => {
   let state: RemoteConnectionState = { status: "synchronizing", generation: 1 };
@@ -141,7 +144,6 @@ test("keeps a failed retry busy for 500 ms and reports it outside blocked work",
     </RemoteConnectionBoundary>,
   );
   try {
-    const started = performance.now();
     const button = view.getByRole("button", { name: "Retry connection" });
     if (!(button instanceof HTMLButtonElement)) throw new Error("Expected a retry button.");
     await act(async () => fireEvent.click(button));
@@ -150,8 +152,14 @@ test("keeps a failed retry busy for 500 ms and reports it outside blocked work",
     fireEvent.click(button);
     expect(retry).toHaveBeenCalledTimes(1);
     expect(view.queryByText("Could not reconnect to host")).toBeNull();
-    await waitFor(() => expect(button.disabled).toBe(false), { timeout: 750 });
-    expect(performance.now() - started).toBeGreaterThanOrEqual(500);
+    await act(async () => {
+      jest.advanceTimersByTime(499);
+    });
+    expect(button.disabled).toBe(true);
+    await act(async () => {
+      jest.advanceTimersByTime(1);
+    });
+    expect(button.disabled).toBe(false);
     const notification = await view.findByText("Could not reconnect to host");
     expect(notification.closest("[inert]")).toBeNull();
     expect(view.getByText("Send work").parentElement?.hasAttribute("inert")).toBe(true);

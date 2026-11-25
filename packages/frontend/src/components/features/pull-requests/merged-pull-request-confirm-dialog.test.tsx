@@ -1,14 +1,14 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { PullRequest } from "@openducktor/contracts";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { WorkspaceProviders } from "@/test-utils/workspace-providers";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { MergedPullRequestConfirmDialog } from "./merged-pull-request-confirm-dialog";
 
-enableReactActEnvironment();
+setupTestingLibraryFakeTimers();
 
 const pullRequest: PullRequest = {
   providerId: "forgejo",

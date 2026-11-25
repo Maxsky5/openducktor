@@ -7,14 +7,8 @@ import type {
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { useSessionNavigationRecovery } from "@openducktor/frontend-core/sessions/navigation/use-session-navigation-recovery";
 import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
-import {
-  createHookHarness as createSharedHookHarness,
-  createDeferred,
-  enableReactActEnvironment,
-} from "./agent-studio-test-utils";
+import { createHookHarness as createSharedHookHarness } from "./agent-studio-test-utils";
 import { useAgentStudioWorkspaceStateSave } from "./use-agent-studio-workspace-state-save";
-
-enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioWorkspaceStateSave>[0];
 
@@ -126,7 +120,7 @@ describe("useAgentStudioWorkspaceStateSave", () => {
   test("saves a change back to the loaded snapshot after an older save", async () => {
     const loadedState = { openTaskIds: ["task-1"] };
     const pendingState = { openTaskIds: ["task-1", "task-2"] };
-    const pendingSave = createDeferred<RepoConfig>();
+    const pendingSave = Promise.withResolvers<RepoConfig>();
     const workspaceReplaceAgentStudioState = mock(
       async (_workspaceId: string, state: WorkspaceAgentStudioState) => {
         if (state.openTaskIds.at(-1) === "task-2") {
@@ -168,8 +162,8 @@ describe("useAgentStudioWorkspaceStateSave", () => {
     const loadedState = { openTaskIds: ["task-1"] };
     const pendingState = { openTaskIds: ["task-1", "task-2"] };
     const nextState = { openTaskIds: ["task-1", "task-3"] };
-    const pendingSave = createDeferred<RepoConfig>();
-    const nextSave = createDeferred<RepoConfig>();
+    const pendingSave = Promise.withResolvers<RepoConfig>();
+    const nextSave = Promise.withResolvers<RepoConfig>();
     const workspaceReplaceAgentStudioState = mock(
       async (_workspaceId: string, state: WorkspaceAgentStudioState) =>
         state.openTaskIds.at(-1) === "task-2" ? pendingSave.promise : nextSave.promise,
@@ -255,7 +249,7 @@ describe("useAgentStudioWorkspaceStateSave", () => {
     const loadedState = { openTaskIds: ["task-1"] };
     const failedState = { openTaskIds: ["task-1", "task-2"] };
     const nextState = { openTaskIds: ["task-1", "task-3"] };
-    const nextSave = createDeferred<RepoConfig>();
+    const nextSave = Promise.withResolvers<RepoConfig>();
     let requestCount = 0;
     const workspaceReplaceAgentStudioState = mock(async () => {
       requestCount += 1;
@@ -294,7 +288,7 @@ describe("useAgentStudioWorkspaceStateSave", () => {
   });
 
   test("ignores a save result from the prior workspace", async () => {
-    const workspaceASave = createDeferred<RepoConfig>();
+    const workspaceASave = Promise.withResolvers<RepoConfig>();
     const workspaceAState = { openTaskIds: ["task-a"] };
     const workspaceANextState = { openTaskIds: ["task-a", "task-a-2"] };
     const workspaceBState = { openTaskIds: ["task-b"] };
@@ -342,7 +336,7 @@ describe("useAgentStudioWorkspaceStateSave", () => {
   });
 
   test("keeps a prior workspace failure available after visiting an unchanged workspace", async () => {
-    const workspaceASave = createDeferred<RepoConfig>();
+    const workspaceASave = Promise.withResolvers<RepoConfig>();
     const workspaceAState = { openTaskIds: ["task-a"] };
     const workspaceANextState = { openTaskIds: ["task-a", "task-a-2"] };
     const workspaceBState = { openTaskIds: ["task-b"] };
@@ -394,8 +388,8 @@ describe("useAgentStudioWorkspaceStateSave", () => {
   test.each(["before switching", "after returning"] as const)(
     "ignores an older save failure that arrives %s when the same snapshot is saved again",
     async (failureTime) => {
-      const firstASave = createDeferred<RepoConfig>();
-      const nextASave = createDeferred<RepoConfig>();
+      const firstASave = Promise.withResolvers<RepoConfig>();
+      const nextASave = Promise.withResolvers<RepoConfig>();
       const workspaceAState = { openTaskIds: ["task-a"] };
       const workspaceANextState = { openTaskIds: ["task-a", "task-a-2"] };
       const workspaceBState = { openTaskIds: ["task-b"] };
@@ -469,7 +463,7 @@ describe("useAgentStudioWorkspaceStateSave", () => {
   test.each(["initial write", "explicit retry"] as const)(
     "retains the active workspace failure after a prior workspace %s rejects",
     async (priorWrite) => {
-      const pendingASave = createDeferred<RepoConfig>();
+      const pendingASave = Promise.withResolvers<RepoConfig>();
       const workspaceAState = { openTaskIds: ["task-a"] };
       const workspaceANextState = { openTaskIds: ["task-a", "task-a-2"] };
       const workspaceBState = { openTaskIds: ["task-b"] };

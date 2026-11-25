@@ -1,12 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { render, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createMessageCardElement } from "./agent-chat-message-card-test-harness";
 import { WorkflowToolMessage } from "./agent-chat-workflow-tool-message";
-
-enableReactActEnvironment();
 
 const TIMESTAMP = "2026-11-06T21:09:18.000Z";
 

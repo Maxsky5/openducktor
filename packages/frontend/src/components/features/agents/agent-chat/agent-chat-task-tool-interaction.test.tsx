@@ -4,10 +4,7 @@ import { fireEvent, render, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import type { ReactNode } from "react";
 import { QueryProvider } from "@/test-utils/query-provider";
-import {
-  createTaskCardFixture,
-  enableReactActEnvironment,
-} from "@/pages/agents/agent-studio-test-utils";
+import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
 import {
   ActiveWorkspaceContext,
   TaskSnapshotContext,
@@ -26,8 +23,6 @@ const RouterWithActivity = ({ children }: { children: ReactNode }) => (
     </WorkspaceActivityContext.Provider>
   </MemoryRouter>
 );
-
-enableReactActEnvironment();
 
 const task = createTaskCardFixture({
   id: "created-task",

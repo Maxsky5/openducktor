@@ -3,7 +3,7 @@ import { createTestClientConnection } from "@openducktor/frontend-core/test-supp
 import { QueryProvider } from "@/test-utils/query-provider";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { fireEvent, render as renderView, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render as renderView, screen } from "@testing-library/react";
 import { useReviewCommentComposer } from "@openducktor/frontend-core/sessions/composer/use-review-comment-composer";
 import { createAgentStudioChatDraftPersistence } from "@openducktor/frontend-core/sessions/composer/agent-studio-chat-draft";
 import { createWorkspaceSessionChatDraftPersistence } from "@openducktor/frontend-core/sessions/composer/workspace-session-chat-draft";
@@ -137,8 +137,8 @@ describe("AgentChatComposer review comments", () => {
         return <AgentChatComposer model={model} />;
       }
       const view = render(<CommentComposer selectedOwner={owner} />, connection);
-      fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-      await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Send message" })));
+      expect(send).toHaveBeenCalledTimes(1);
       const sent = send.mock.calls[0]?.[0];
       if (!sent) throw new Error("Expected submitted draft");
       expect(draftToSerializedText(sent)).toContain("Original text");
@@ -152,11 +152,9 @@ describe("AgentChatComposer review comments", () => {
       };
       view.rerender(<CommentComposer selectedOwner={otherOwner} />);
       typeIntoComposer(view.container, "Other chat text");
-      acceptance.resolve(outcome === "accepted");
-      await waitFor(() =>
-        expect(inlineComments.getState().draftsByOwner[ownerKey]?.[0]?.status ?? "cleared").toBe(
-          outcome === "accepted" ? "cleared" : "pending",
-        ),
+      await act(async () => acceptance.resolve(outcome === "accepted"));
+      expect(inlineComments.getState().draftsByOwner[ownerKey]?.[0]?.status ?? "cleared").toBe(
+        outcome === "accepted" ? "cleared" : "pending",
       );
       expect(view.container.textContent).toContain("Other chat text");
       view.rerender(<CommentComposer selectedOwner={owner} />);

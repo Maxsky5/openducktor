@@ -1,10 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { SettingsModalFooter } from "./settings-modal-footer";
-
-enableReactActEnvironment();
 
 const renderFooter = (overrides: Partial<Parameters<typeof SettingsModalFooter>[0]> = {}) => {
   return render(

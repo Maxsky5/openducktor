@@ -817,15 +817,17 @@ test("a branch change and later refresh each obtain a current read", async () =>
   const preview = mockFilePreview(() => <div />);
   const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(ChatWithTree);
   const queryClient = newQueryClient();
-  const view = renderClosedSession(queryClient, "main");
+  const view = await act(async () => renderClosedSession(queryClient, "main"));
   try {
     await waitFor(() => expect(treeReads).toBe(1));
 
-    view.setBranch("feature", undefined, true);
+    await act(async () => view.setBranch("feature", undefined, true));
     await act(async () => {
       await invalidateWorkspaceFileQueries(queryClient, "/repo");
     });
-    view.setBranch("feature");
+    expect(treeReads).toBe(2);
+
+    await act(async () => view.setBranch("feature"));
 
     await waitFor(() => expect(treeReads).toBe(3));
   } finally {

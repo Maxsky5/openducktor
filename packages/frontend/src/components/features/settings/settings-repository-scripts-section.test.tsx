@@ -2,11 +2,8 @@ import { describe, expect, mock, test } from "bun:test";
 import type { RepoAction, SettingsRepoConfig } from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createElement, useState } from "react";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import type { SettingsContentFocusRequest } from "./settings-deep-link";
 import { RepositoryScriptsSection } from "./settings-repository-scripts-section";
-
-enableReactActEnvironment();
 
 const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): SettingsRepoConfig => ({
   workspaceId: "repo",
@@ -118,6 +115,21 @@ describe("RepositoryScriptsSection", () => {
       expect(actions.defaultActionId).toBe(actions.items[0]?.id ?? "missing");
       expect(screen.queryByText("No actions yet.")).toBeNull();
       expect(screen.getByText("Default")).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("button", { name: "Add action" }));
+      const secondDialog = getActionDialog("Add action");
+      fireEvent.change(secondDialog.getByLabelText("Name"), { target: { value: "Lint" } });
+      fireEvent.change(secondDialog.getByLabelText("Command"), {
+        target: { value: "bun run lint" },
+      });
+      fireEvent.click(secondDialog.getByRole("button", { name: "Save action" }));
+      await waitForDialogToClose();
+
+      const updated = getLatestRepoConfig().actions;
+      expect(updated.items.map(({ name }) => name)).toEqual(["Build", "Lint"]);
+      expect(updated.items[1]).toMatchObject({ id: expect.any(String) });
+      expect(updated.items[1]?.id).not.toBe(actions.items[0]?.id);
+      expect(updated.defaultActionId).toBe(actions.defaultActionId);
     } finally {
       rendered.unmount();
     }
@@ -144,6 +156,15 @@ describe("RepositoryScriptsSection", () => {
       expect(dialog.queryByText("Enter an action name.")).toBeNull();
       expect(dialog.getByLabelText("Name").getAttribute("aria-invalid")).toBeNull();
       expect(dialog.getByText("Enter a command.")).toBeTruthy();
+
+      fireEvent.change(dialog.getByLabelText("Command"), {
+        target: { value: "# later\n" },
+      });
+      fireEvent.click(dialog.getByRole("button", { name: "Save action" }));
+      expect(
+        dialog.getByText("Add a command line. Lines that start with # are comments."),
+      ).toBeTruthy();
+      expect(getLatestRepoConfig().actions.items).toEqual([]);
     } finally {
       rendered.unmount();
     }
@@ -231,6 +252,14 @@ describe("RepositoryScriptsSection", () => {
       fireEvent.click(screen.getByRole("button", { name: "Delete Lint" }));
       expect(itemIds()).toEqual(["dev", "setup"]);
       expect(getLatestRepoConfig().actions.defaultActionId).toBe("dev");
+
+      fireEvent.click(screen.getByRole("button", { name: "Delete Setup" }));
+      expect(itemIds()).toEqual(["dev"]);
+      expect(getLatestRepoConfig().actions.defaultActionId).toBe("dev");
+
+      fireEvent.click(screen.getByRole("button", { name: "Delete Dev" }));
+      expect(getLatestRepoConfig().actions).toEqual({ items: [], defaultActionId: null });
+      expect(screen.getByText("No actions yet.")).toBeTruthy();
     } finally {
       rendered.unmount();
     }
@@ -257,8 +286,14 @@ describe("RepositoryScriptsSection", () => {
       expect(dialog.getByRole("button", { name: "Icon: Test" })).toBeTruthy();
 
       fireEvent.change(dialog.getByLabelText("Name"), { target: { value: "Unit tests" } });
+      fireEvent.change(dialog.getByLabelText("Command"), {
+        target: { value: "bun test --watch" },
+      });
       fireEvent.click(
         dialog.getByRole("switch", { name: "Run automatically on worktree creation" }),
+      );
+      fireEvent.click(
+        dialog.getByRole("switch", { name: "Wait for it to finish before the agent starts" }),
       );
       fireEvent.click(dialog.getByRole("button", { name: "Save action" }));
       await waitForDialogToClose();
@@ -270,8 +305,9 @@ describe("RepositoryScriptsSection", () => {
             id: "test",
             name: "Unit tests",
             icon: "test",
-            command: "bun test",
+            command: "bun test --watch",
             runOnWorktreeCreate: true,
+            waitBeforeAgentStart: true,
           }),
         ],
         defaultActionId: "dev",

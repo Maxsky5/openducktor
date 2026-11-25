@@ -1,22 +1,17 @@
 import { createShellBridgeFixture, withShellPlatform } from "@/test-utils/focused-fixture";
-import { expect, mock, test } from "bun:test";
+import { expect, mock, spyOn, test } from "bun:test";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import type { HostClient } from "@openducktor/host-client";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { taskWorktreeQueryOptions } from "@openducktor/frontend-core/queries/build-runtime";
 import { ChatFileLinkProvider } from "./agent-chat-file-link-provider";
-import { parseChatFileLink } from "@openducktor/frontend-core/sessions/messages/chat-file-link";
+import { toast } from "sonner";
 import type { ChatFileLinkOwner } from "./agent-chat-file-link-context";
-import {
-  chatFileLinkSuffixes,
-  validChatFileDestinations,
-  invalidChatFileDestinations,
-} from "@openducktor/frontend-core/test-support/chat-file-link-fixtures";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 
-enableReactActEnvironment();
+setupTestingLibraryFakeTimers();
 
 const defaultHost: Partial<HostClient> = {
   gitCanonicalizePath: async (path) => path,
@@ -216,13 +211,15 @@ for (const departure of ["session", "task", "repository", "close"] as const) {
   });
 }
 
-for (const [href, workingDirectory, message] of invalidChatFileDestinations) {
-  const destination = parseChatFileLink(href);
-  // Absolute targets have no worktree against which to check platform or root identity.
-  if (destination.kind === "path" && destination.absolute) continue;
-  test(`malformed destination reports its target and cause: ${href}`, async () => {
-    const { spyOn } = await import("bun:test");
-    const { toast } = await import("sonner");
+for (const [href, message] of [
+  ["file://server/repo/task/a", "Use a local file URI without a remote authority."],
+  ["C:42", "Drive-relative file paths are not supported."],
+  ["README.md:-1", "The file line reference is invalid."],
+  ["a?raw", "File links do not support query strings."],
+  ["a%00b", "The file path contains control characters."],
+  ["a%ZZ", "The file path has invalid percent encoding."],
+] as const) {
+  test(`malformed Markdown file link reports its target and cause: ${href}`, async () => {
     const error = spyOn(toast, "error").mockReturnValue("error");
     const openExternal = mock(async (_url: string) => {});
     const connection = createTestClientConnection({ client: defaultHost });
@@ -230,7 +227,7 @@ for (const [href, workingDirectory, message] of invalidChatFileDestinations) {
     client.setQueryData(
       taskWorktreeQueryOptions({ workspaceId: "workspace-1", repoPath: "/repo", taskId: "a" })
         .queryKey,
-      () => ({ workingDirectory }),
+      () => ({ workingDirectory: "/repo/task" }),
     );
     const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
     const view = render(
@@ -267,8 +264,6 @@ for (const [href, workingDirectory, message] of invalidChatFileDestinations) {
 
 for (const failure of ["missing-task", "absent-worktree", "rejected-worktree"] as const) {
   test(`unavailable worktree reports the cause without selecting another root: ${failure}`, async () => {
-    const { spyOn } = await import("bun:test");
-    const { toast } = await import("sonner");
     const error = spyOn(toast, "error").mockReturnValue("error");
     const connection = createTestClientConnection({
       client: {
@@ -327,8 +322,6 @@ for (const failure of ["missing-task", "absent-worktree", "rejected-worktree"] a
 
 for (const departure of ["session", "task", "repository", "close"] as const) {
   test(`late worktree failure is silent after ${departure}`, async () => {
-    const { spyOn } = await import("bun:test");
-    const { toast } = await import("sonner");
     const error = spyOn(toast, "error").mockReturnValue("error");
     const deferred = Promise.withResolvers<null>();
     const connection = createTestClientConnection({
@@ -381,53 +374,61 @@ for (const departure of ["session", "task", "repository", "close"] as const) {
   });
 }
 
-for (const [path, rootPath, relativePath] of validChatFileDestinations) {
-  for (const suffix of chatFileLinkSuffixes) {
-    test(`link activation selects the exact workspace path: ${path}${suffix}`, async () => {
-      const { spyOn } = await import("bun:test");
-      const { toast } = await import("sonner");
-      const error = spyOn(toast, "error").mockReturnValue("error");
-      const openExternal = mock(async (_url: string) => {});
-      const connection = createTestClientConnection({ client: defaultHost });
-      const client = connection.queryClient;
-      client.setQueryData(
-        taskWorktreeQueryOptions({ workspaceId: "workspace-1", repoPath: "C:/repo", taskId: "a" })
-          .queryKey,
-        () => ({ workingDirectory: rootPath }),
-      );
-      const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
-      const view = render(
-        withShellPlatform(
-          <ClientConnectionProvider connection={connection}>
-            <ChatFileLinkProvider
-              owner={{
-                workspaceId: "workspace-1",
-                repoPath: "C:/repo",
-                taskId: "a",
-                workingDirectory: rootPath,
-                ownerKey: "main",
-                onSelectFile,
-              }}
-            >
-              <AgentChatMarkdownRenderer markdown={`[file](${path}${suffix})`} />
-            </ChatFileLinkProvider>
-          </ClientConnectionProvider>,
-          createShellBridgeFixture({ bridge: { openExternalUrl: openExternal } }),
-        ),
-      );
-      try {
-        await act(async () => fireEvent.click(view.getByRole("link")));
-        expect(onSelectFile.mock.calls.at(-1)?.[0]).toEqual({ rootPath, relativePath });
-        expect(onSelectFile).toHaveBeenCalledTimes(1);
-        expect(openExternal).not.toHaveBeenCalled();
-        expect(error).not.toHaveBeenCalled();
-      } finally {
-        view.unmount();
-        client.clear();
-        error.mockRestore();
-      }
-    });
-  }
+// The resolver tests cover the full set of paths and suffixes. These cases check which
+// destinations Markdown passes through, and that it opens the local file instead of a browser.
+for (const [href, rootPath, relativePath] of [
+  ["src/app.ts", "/repo/task", "src/app.ts"],
+  ["./src/app.ts:42", "/repo/task", "src/app.ts"],
+  ["a%20b.ts:42:7", "/repo/task", "a b.ts"],
+  ["a%3A42#L42", "/repo/task", "a:42"],
+  ["a%23L42#L42-L50", "/repo/task", "a#L42"],
+  ["a%2520b", "/repo/task", "a%20b"],
+  ["file:///repo/task/src/app.ts", "/repo/task", "src/app.ts"],
+  [String.raw`C:\repo\task\src\app.ts`, "C:/Repo/Task", "src/app.ts"],
+  ["file:///%43:%5Crepo%5Ctask%5Csrc%5Capp.ts", "C:/repo/task", "src/app.ts"],
+] as const) {
+  test(`Markdown link opens the exact workspace file: ${href}`, async () => {
+    const error = spyOn(toast, "error").mockReturnValue("error");
+    const openExternal = mock(async (_url: string) => {});
+    const connection = createTestClientConnection({ client: defaultHost });
+    const client = connection.queryClient;
+    client.setQueryData(
+      taskWorktreeQueryOptions({ workspaceId: "workspace-1", repoPath: "C:/repo", taskId: "a" })
+        .queryKey,
+      () => ({ workingDirectory: rootPath }),
+    );
+    const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
+    const view = render(
+      withShellPlatform(
+        <ClientConnectionProvider connection={connection}>
+          <ChatFileLinkProvider
+            owner={{
+              workspaceId: "workspace-1",
+              repoPath: "C:/repo",
+              taskId: "a",
+              workingDirectory: rootPath,
+              ownerKey: "main",
+              onSelectFile,
+            }}
+          >
+            <AgentChatMarkdownRenderer markdown={`[file](${href})`} />
+          </ChatFileLinkProvider>
+        </ClientConnectionProvider>,
+        createShellBridgeFixture({ bridge: { openExternalUrl: openExternal } }),
+      ),
+    );
+    try {
+      await act(async () => fireEvent.click(view.getByRole("link")));
+      expect(onSelectFile.mock.calls.at(-1)?.[0]).toEqual({ rootPath, relativePath });
+      expect(onSelectFile).toHaveBeenCalledTimes(1);
+      expect(openExternal).not.toHaveBeenCalled();
+      expect(error).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+      client.clear();
+      error.mockRestore();
+    }
+  });
 }
 
 for (const [stage, pendingPath, href] of [
@@ -587,8 +588,6 @@ for (const scope of ["task", "workspace"] as const) {
 }
 
 test("canonical file resolution decodes once and opens an outside symlink target", async () => {
-  const { spyOn } = await import("bun:test");
-  const { toast } = await import("sonner");
   const error = spyOn(toast, "error").mockReturnValue("error");
   const canonicalize = mock(async (path: string) =>
     path === "/alias/a" ? "/real/a" : "/other/a%20b.ts",
@@ -640,8 +639,6 @@ for (const [href, failure] of [
 ] as const) {
   for (const departure of [false, true]) {
     test(`canonicalization failure has no raw-path fallback; target=${href}; departed=${departure}`, async () => {
-      const { spyOn } = await import("bun:test");
-      const { toast } = await import("sonner");
       const error = spyOn(toast, "error").mockReturnValue("error");
       const deferred = Promise.withResolvers<string>();
       const connection = createTestClientConnection({
@@ -691,8 +688,6 @@ for (const [href, failure] of [
 }
 
 test("streaming invalid and partial links do not read or report errors before activation", async () => {
-  const { spyOn } = await import("bun:test");
-  const { toast } = await import("sonner");
   const error = spyOn(toast, "error").mockReturnValue("error");
   const worktree = mock(async () => ({ workingDirectory: "/repo/a" }));
   const canonicalize = mock(async (path: string) => path);

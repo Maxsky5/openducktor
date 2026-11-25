@@ -6,7 +6,7 @@ import type { PropsWithChildren, ReactElement } from "react";
 import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
-import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import {
   loadSettingsSnapshotFromQuery,
   workspaceQueryKeys,
@@ -30,7 +30,7 @@ describe("useKanbanTaskCardView", () => {
     const initialSnapshot = createSettingsSnapshotFixture({
       kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
     });
-    const write = createDeferred<never>();
+    const write = Promise.withResolvers<never>();
     const workspaceGetSettingsSnapshot = mock(async () => initialSnapshot);
     const workspaceUpdateKanbanTaskCardView = mock(async () => write.promise);
     const harness = createKanbanTaskCardViewHarness({
@@ -90,7 +90,7 @@ describe("useKanbanTaskCardView", () => {
       theme: "dark",
       kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "compact" },
     });
-    const write = createDeferred<KanbanTaskCardView>();
+    const write = Promise.withResolvers<KanbanTaskCardView>();
     const workspaceGetSettingsSnapshot = mock(async () => initialSnapshot);
     const workspaceUpdateKanbanTaskCardView = mock(async () => write.promise);
     const harness = createKanbanTaskCardViewHarness({
@@ -137,7 +137,7 @@ describe("useKanbanTaskCardView", () => {
     const savedSnapshot = createSettingsSnapshotFixture({
       kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "compact" },
     });
-    const write = createDeferred<KanbanTaskCardView>();
+    const write = Promise.withResolvers<KanbanTaskCardView>();
     let shouldFailSettingsRead = false;
     const workspaceGetSettingsSnapshot = mock(async () => {
       if (shouldFailSettingsRead) {

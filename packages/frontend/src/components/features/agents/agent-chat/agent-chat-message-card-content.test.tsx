@@ -7,14 +7,11 @@ import {
   buildAnnotation,
   buildCapture,
 } from "@/features/browser-annotations/browser-annotation-test-support";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { MessageBody } from "./agent-chat-message-card-content";
 import { createMessageCardElement } from "./agent-chat-message-card-test-harness";
 import { resolveAgentChatRuntimePresentation } from "@openducktor/frontend-core/sessions/send/agent-chat-runtime-presentation";
 import { buildMessage } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
-
-enableReactActEnvironment();
 
 const createAssistantMessage = (content: string): AgentChatMessage => ({
   id: "assistant-streaming-markdown",
