@@ -3,13 +3,8 @@ import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { describe, expect, mock, test } from "bun:test";
 import { act } from "react";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
-import {
-  createHookHarness as createSharedHookHarness,
-  enableReactActEnvironment,
-} from "./agent-studio-test-utils";
+import { createHookHarness as createSharedHookHarness } from "./agent-studio-test-utils";
 import { useAgentStudioHeaderModel } from "./use-agent-studio-page-submodels";
-
-enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioHeaderModel>[0];
 

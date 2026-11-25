@@ -5,10 +5,8 @@ import type {
   SettingsSnapshotSaveInput,
 } from "@openducktor/contracts";
 import type { SettingsSaveOutcome } from "@/types/state-slices";
-import {
-  createHookHarness as createSharedHookHarness,
-  enableReactActEnvironment,
-} from "@/pages/agents/agent-studio-test-utils";
+import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { startHostRuntimeEventsHarness } from "@/test-utils/host-runtime-events-harness";
 import {
   createHostRuntimeStatusContextValue,
@@ -23,14 +21,17 @@ import {
 } from "@/components/features/runtimes/runtime-impact-review";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 
-enableReactActEnvironment();
-
 type HookArgs = Parameters<typeof useSettingsModalSaveOrchestration>[0];
 
 const createHookHarness = (
   initialProps: HookArgs,
-  options?: Parameters<typeof createSharedHookHarness>[2],
-) => createSharedHookHarness(useSettingsModalSaveOrchestration, initialProps, options);
+  runtimeStatus = createHostRuntimeStatusContextValue(),
+) =>
+  createSharedHookHarness(useSettingsModalSaveOrchestration, initialProps, {
+    wrapper: ({ children }) => (
+      <HostRuntimeStatusContext value={runtimeStatus}>{children}</HostRuntimeStatusContext>
+    ),
+  });
 
 const createSnapshot = (): SettingsSnapshot =>
   createSettingsSnapshotFixture({
@@ -90,18 +91,6 @@ const createArgs = (
 
 const isReviewReady = (review: RuntimeImpactReviewState | null): boolean =>
   review !== null && review.impact !== null && !review.isLoadingImpact;
-
-const createDeferred = <TValue,>() => {
-  let resolve!: (value: TValue | PromiseLike<TValue>) => void;
-  const promise = new Promise<TValue>((innerResolve) => {
-    resolve = innerResolve;
-  });
-
-  return {
-    promise,
-    resolve,
-  };
-};
 
 describe("useSettingsModalSaveOrchestration", () => {
   test("saves the preferred tool through the settings snapshot", async () => {
@@ -390,7 +379,7 @@ describe("useSettingsModalSaveOrchestration", () => {
   });
 
   test("blocks concurrent repository saves while the modal is busy", async () => {
-    const deferredSave = createDeferred<void>();
+    const deferredSave = Promise.withResolvers<void>();
     const saveSettingsSnapshot = mock(async () => {
       await deferredSave.promise;
       return savedSettingsResult();
@@ -642,11 +631,7 @@ describe("useSettingsModalSaveOrchestration runtime review", () => {
     const events = startHostRuntimeEventsHarness();
     const harness = createHookHarness(
       runtimeArgs({ previewSettingsSnapshotRuntime: preview, saveSettingsSnapshot: save }),
-      {
-        hostRuntimeStatusContext: createHostRuntimeStatusContextValue({
-          runtimeEvents: events.owner,
-        }),
-      },
+      createHostRuntimeStatusContextValue({ runtimeEvents: events.owner }),
     );
     try {
       await harness.mount();

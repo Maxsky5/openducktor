@@ -6,13 +6,10 @@ import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/
 import { SessionViewShownContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { workspaceFileTreeQueryOptions } from "@openducktor/frontend-core/queries/filesystem";
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { TaskExecutionFileExplorerPanel } from "./task-execution-file-explorer-panel";
 import { SessionPanel } from "@/features/session-panels";
 import { restoreAfterTestBody } from "@/test-utils/restore-after-test-body";
 import { createSessionPanelFixture } from "@/test-utils/session-panel-fixtures";
-
-enableReactActEnvironment();
 
 const actualThemeProvider = await import("@/components/layout/theme-provider");
 
@@ -29,11 +26,11 @@ const entry = (kind: WorkspaceFileTreeEntry["kind"], path: string): WorkspaceFil
 const TREE: WorkspaceFileTree = {
   rootPath: ROOT_PATH,
   entries: [
+    entry("file", "README.md"),
     entry("directory", "src"),
     entry("file", "src/app.ts"),
     entry("directory", "src/lib"),
     entry("file", "src/lib/util.ts"),
-    entry("file", "README.md"),
   ],
 };
 
@@ -124,6 +121,7 @@ describe("TaskExecutionFileExplorerPanel", () => {
   panelTest("keeps open folders when switching to Git and back", async () => {
     renderPanel();
     await flushTree();
+    expect(treeRowPaths()).toEqual(["src/", "README.md"]);
     await clickRow("src/");
     await clickRow("src/lib/");
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Diffs" }), { button: 0 });

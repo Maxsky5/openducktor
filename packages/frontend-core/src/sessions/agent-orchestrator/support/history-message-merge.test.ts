@@ -1917,8 +1917,8 @@ describe("agent-orchestrator/support/history-message-merge", () => {
       return reads.count;
     };
 
-    const smallReads = countMessageFieldReads(1_600, 16_000);
-    const largeReads = countMessageFieldReads(6_400, 64_000);
+    const smallReads = countMessageFieldReads(160, 1_600);
+    const largeReads = countMessageFieldReads(640, 6_400);
     expect(largeReads).toBeLessThan(smallReads * 8);
-  }, 30_000);
+  });
 });

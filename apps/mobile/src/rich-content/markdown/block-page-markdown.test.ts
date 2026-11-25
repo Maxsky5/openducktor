@@ -32,7 +32,10 @@ describe("blockPageMarkdown", () => {
   });
 
   test("returns null for a text longer than a page renders", () => {
-    expect(pageMarkdown(`$x$ ${"a".repeat(MAX_BLOCK_MARKDOWN_LENGTH)}`)).toBeNull();
-    expect(pageMarkdown(`$x$ ${"a".repeat(MAX_BLOCK_MARKDOWN_LENGTH - 4)}`)).not.toBeNull();
+    const atLimit = `$x$ ${"a".repeat(MAX_BLOCK_MARKDOWN_LENGTH - 4)}`;
+    const definitions = new Map();
+    expect(blockPageMarkdown(atLimit, { type: "text", value: atLimit }, definitions)).toBe(atLimit);
+    const tooLong = `${atLimit}a`;
+    expect(blockPageMarkdown(tooLong, { type: "text", value: tooLong }, definitions)).toBeNull();
   });
 });

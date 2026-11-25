@@ -94,6 +94,28 @@ const renderPage = (
   return read;
 };
 
+const advanceClock = (ms: number) => act(() => jest.advanceTimersByTime(ms));
+
+const flushQueryResult = async () => {
+  await act(async () => {});
+  // TanStack Query notifies its React subscribers on the next timer tick.
+  advanceClock(1);
+};
+
+const renderAfterInitialRead = async (
+  usageReportRead: (input: UsageReportReadInput) => Promise<UsageReport>,
+) => {
+  jest.useFakeTimers();
+  try {
+    const read = renderPage(usageReportRead);
+    await flushQueryResult();
+    advanceClock(SKELETON_MIN_MS);
+    return read;
+  } finally {
+    jest.useRealTimers();
+  }
+};
+
 const NO_COUNTS = "These requests have no token counts.";
 const UNCONFIRMED = "Some history could not be read, so a zero is not confirmed.";
 
@@ -102,8 +124,8 @@ const chooseMetric = (name: "Tokens" | "Cost") =>
 
 describe("UsagePage", () => {
   test("shows the headline tokens and switches to the estimated cost", async () => {
-    const read = renderPage(async () => report());
-    expect(await screen.findByText("Processed tokens")).toBeTruthy();
+    const read = await renderAfterInitialRead(async () => report());
+    expect(screen.getByText("Processed tokens")).toBeTruthy();
     expect(screen.getAllByText("2.01M").length).toBeGreaterThan(0);
     expect(screen.getByText("4 sessions · $12.50")).toBeTruthy();
     expect(read.mock.calls[0]?.[0]).toEqual({
@@ -118,8 +140,7 @@ describe("UsagePage", () => {
   });
 
   test("shows the cache hit rate, the busiest day, and averages", async () => {
-    renderPage(async () => report());
-    await screen.findByText("Processed tokens");
+    await renderAfterInitialRead(async () => report());
     const highlights = within(screen.getByRole("region", { name: "Highlights" }));
     // 2,000,000 cache reads of 2,001,500 input-side tokens.
     expect(highlights.getByText("99.9%")).toBeTruthy();
@@ -130,64 +151,71 @@ describe("UsagePage", () => {
 
   test("shows the progress of a first read of the history", async () => {
     const progress: ProgressChannel = { listener: null };
-    renderPage(() => new Promise<UsageReport>(() => {}), progress);
-    await waitFor(() => expect(progress.listener).not.toBeNull());
-    const runtime = (
-      runtime: "claude" | "opencode",
-      progress: number,
-      done: number,
-      total: number | null,
-    ) => ({ runtime, progress, done: progress === 1, sessions: { done, total } });
-    // A first read shows at once, already while it finds the history.
-    await act(() =>
-      progress.listener?.({
-        phase: "preparing",
-        summarized: 0,
-        first: true,
-        startedAt: "2026-11-21T09:59:59.000Z",
-        runtimes: [],
-      }),
-    );
-    // The skeleton stays half a second, then the card fades in.
-    expect(await screen.findByText("Finding your agent history")).toBeTruthy();
-    expect(screen.getAllByText("Finding sessions…")).toHaveLength(4);
-    await act(() =>
-      progress.listener?.({
-        phase: "reading",
-        summarized: 0,
-        first: true,
-        startedAt: "2026-11-21T10:00:00.000Z",
-        runtimes: [runtime("claude", 0.5, 2, 4), runtime("opencode", 0.25, 1, null)],
-      }),
-    );
-    expect(screen.getByText("Reading your agent history")).toBeTruthy();
-    expect(screen.getByText("2 of 4 sessions")).toBeTruthy();
-    expect(screen.getByText("1 session read, counting the rest…")).toBeTruthy();
-    // Codex and Antigravity have no history on this host.
-    expect(screen.getAllByText("No history")).toHaveLength(2);
-    // The parse is 80% of the ring: (50% + 25%) / 2 of it, before OpenCode knows its sessions.
-    expect(
-      screen.getByRole("progressbar", { name: "Usage history read" }).getAttribute("aria-valuenow"),
-    ).toBe("30");
-    await act(() =>
-      progress.listener?.({
-        phase: "summarizing",
-        summarized: 0.5,
-        first: true,
-        startedAt: "2026-11-21T10:00:00.000Z",
-        runtimes: [runtime("claude", 1, 4, 4), runtime("opencode", 1, 3, 3)],
-      }),
-    );
-    expect(screen.getByText("Building the daily totals")).toBeTruthy();
-    expect(screen.getByText("of 7")).toBeTruthy();
+    jest.useFakeTimers();
+    try {
+      renderPage(() => new Promise<UsageReport>(() => {}), progress);
+      const runtime = (
+        runtime: "claude" | "opencode",
+        progress: number,
+        done: number,
+        total: number | null,
+      ) => ({ runtime, progress, done: progress === 1, sessions: { done, total } });
+      // A first read shows at once, already while it finds the history.
+      await act(() =>
+        progress.listener?.({
+          phase: "preparing",
+          summarized: 0,
+          first: true,
+          startedAt: "2026-11-21T09:59:59.000Z",
+          runtimes: [],
+        }),
+      );
+      // The skeleton stays half a second, then the card fades in.
+      advanceClock(SKELETON_MIN_MS);
+      expect(screen.getByText("Finding your agent history")).toBeTruthy();
+      expect(screen.getAllByText("Finding sessions…")).toHaveLength(4);
+      await act(() =>
+        progress.listener?.({
+          phase: "reading",
+          summarized: 0,
+          first: true,
+          startedAt: "2026-11-21T10:00:00.000Z",
+          runtimes: [runtime("claude", 0.5, 2, 4), runtime("opencode", 0.25, 1, null)],
+        }),
+      );
+      expect(screen.getByText("Reading your agent history")).toBeTruthy();
+      expect(screen.getByText("2 of 4 sessions")).toBeTruthy();
+      expect(screen.getByText("1 session read, counting the rest…")).toBeTruthy();
+      // Codex and Antigravity have no history on this host.
+      expect(screen.getAllByText("No history")).toHaveLength(2);
+      // The parse is 80% of the ring: (50% + 25%) / 2 of it, before OpenCode knows its sessions.
+      expect(
+        screen
+          .getByRole("progressbar", { name: "Usage history read" })
+          .getAttribute("aria-valuenow"),
+      ).toBe("30");
+      await act(() =>
+        progress.listener?.({
+          phase: "summarizing",
+          summarized: 0.5,
+          first: true,
+          startedAt: "2026-11-21T10:00:00.000Z",
+          runtimes: [runtime("claude", 1, 4, 4), runtime("opencode", 1, 3, 3)],
+        }),
+      );
+      expect(screen.getByText("Building the daily totals")).toBeTruthy();
+      expect(screen.getByText("of 7")).toBeTruthy();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test("shows a later read only once it has parsed for a moment", async () => {
     const progress: ProgressChannel = { listener: null };
-    renderPage(() => new Promise<UsageReport>(() => {}), progress);
-    await waitFor(() => expect(progress.listener).not.toBeNull());
     jest.useFakeTimers();
     try {
+      jest.setSystemTime(new Date("2026-11-21T10:00:00.000Z"));
+      renderPage(() => new Promise<UsageReport>(() => {}), progress);
       await act(() =>
         progress.listener?.({
           phase: "reading",
@@ -200,38 +228,44 @@ describe("UsagePage", () => {
         }),
       );
       // A short read never shows the card.
+      advanceClock(1_499);
       expect(screen.queryByText("Reading your agent history")).toBeNull();
-      act(() => jest.advanceTimersByTime(1_500));
-      // The progress replaces the skeleton, which keeps its half second.
-      act(() => jest.advanceTimersByTime(500));
+      advanceClock(1);
+      // The skeleton has held for 500 ms already and releases on the next tick.
+      advanceClock(1);
+      expect(screen.getByText("Reading your agent history")).toBeTruthy();
+      expect(screen.getAllByText("Up to date")).toHaveLength(3);
     } finally {
       jest.useRealTimers();
     }
-    expect(screen.getByText("Reading your agent history")).toBeTruthy();
-    expect(screen.getAllByText("Up to date")).toHaveLength(3);
   });
 
   test("keeps the skeleton half a second, then reveals the result", async () => {
-    const startedAt = performance.now();
-    const read = renderPage(async () => report());
-    await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
-    // The read answered at once; the skeleton still shows.
-    expect(screen.getByText("Loading usage")).toBeTruthy();
-    expect(screen.queryByText("Processed tokens")).toBeNull();
-    expect(await screen.findByText("Processed tokens")).toBeTruthy();
-    expect(performance.now() - startedAt).toBeGreaterThanOrEqual(SKELETON_MIN_MS - 20);
+    jest.useFakeTimers();
+    try {
+      jest.setSystemTime(new Date("2026-11-21T10:00:00.000Z"));
+      const startedAt = Date.now();
+      renderPage(async () => report());
+      await flushQueryResult();
+      advanceClock(startedAt + 499 - Date.now());
+      expect(screen.getByText("Loading usage")).toBeTruthy();
+      expect(screen.queryByText("Processed tokens")).toBeNull();
+      advanceClock(1);
+      expect(screen.getByText("Processed tokens")).toBeTruthy();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test("checks the history again on Refresh only", async () => {
-    const read = renderPage(async () => report());
-    await screen.findByText("Processed tokens");
+    const read = await renderAfterInitialRead(async () => report());
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
     expect(read.mock.calls.map((call) => call[0].refresh)).toEqual([undefined, true]);
   });
 
   test("names a rate download problem under Sources", async () => {
-    renderPage(async () =>
+    await renderAfterInitialRead(async () =>
       report({
         pricing: {
           source: "models.dev",
@@ -241,23 +275,26 @@ describe("UsagePage", () => {
       }),
     );
     expect(
-      await screen.findByText("Usage could not load the API rates from models.dev: offline."),
+      screen.getByText("Usage could not load the API rates from models.dev: offline."),
     ).toBeTruthy();
     expect(screen.getByText(/Without API rates, costs show a dash/)).toBeTruthy();
   });
 
   test("keeps the shown result, marked as loading, until the next selection arrives", async () => {
     let finish: (value: UsageReport) => void = () => {};
-    const read = renderPage((input) =>
+    const read = await renderAfterInitialRead((input) =>
       input.range.kind === "last_30_days"
         ? Promise.resolve(report())
         : new Promise<UsageReport>((resolve) => {
             finish = resolve;
           }),
     );
-    await screen.findByText("Processed tokens");
     fireEvent.click(screen.getByRole("radio", { name: "90 days" }));
     await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    expect(read.mock.calls[1]?.[0]).toEqual({
+      range: { kind: "last_90_days" },
+      runtime: null,
+    });
     expect(screen.getByText("Loading the selected usage…")).toBeTruthy();
     expect(screen.getByText("Processed tokens")).toBeTruthy();
     expect(screen.queryByText(/first read of a large history/)).toBeNull();
@@ -267,55 +304,46 @@ describe("UsagePage", () => {
   });
 
   test("shows the failure of a new selection instead of the previous result", async () => {
-    renderPage(async (input) => {
+    await renderAfterInitialRead(async (input) => {
       if (input.range.kind === "last_30_days") return report();
       throw new Error("The usage index is locked.");
     });
-    await screen.findByText("Processed tokens");
     fireEvent.click(screen.getByRole("radio", { name: "7 days" }));
     expect(await screen.findByText("The usage index is locked.")).toBeTruthy();
     expect(screen.queryByText("Processed tokens")).toBeNull();
   });
 
-  test("reads the selected range preset", async () => {
-    const read = renderPage(async () => report());
-    await screen.findByText("Processed tokens");
-    fireEvent.click(screen.getByRole("radio", { name: "90 days" }));
-    await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
-    expect(read.mock.calls[1]?.[0]).toEqual({
-      range: { kind: "last_90_days" },
-      runtime: null,
-    });
-  });
-
   test("tells the user to update a host without Usage", async () => {
-    renderPage(async () => {
+    await renderAfterInitialRead(async () => {
       throw new RemoteConnectionError({
         code: "function_unavailable",
         message: "Shell function usage_report_read is unavailable remotely.",
         nextAction: "Use the local shell for this action.",
       });
     });
-    expect(await screen.findByText("This host does not have Usage")).toBeTruthy();
+    expect(screen.getByText("This host does not have Usage")).toBeTruthy();
     expect(screen.getByText("Update OpenDucktor on the host, then open Usage again.")).toBeTruthy();
   });
 
   test("shows a read failure with Retry, which reads again", async () => {
     let calls = 0;
-    const read = renderPage(async () => {
+    const read = await renderAfterInitialRead(async () => {
       calls++;
       if (calls === 1) throw new Error("The usage index is locked.");
       return report();
     });
-    expect(await screen.findByText("The usage index is locked.")).toBeTruthy();
+    expect(screen.getByText("The usage index is locked.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByText("Processed tokens")).toBeTruthy();
     expect(read).toHaveBeenCalledTimes(2);
   });
 
   test("checks a custom range before it reads it", async () => {
-    const read = renderPage(async () => report());
-    await screen.findByText("Processed tokens");
+    const read = await renderAfterInitialRead(async ({ range }) =>
+      range.kind === "custom"
+        ? report({ range: { start: range.start, end: range.end } })
+        : report(),
+    );
     fireEvent.click(screen.getByRole("radio", { name: "Custom" }));
 
     const start = screen.getByLabelText("From");
@@ -337,7 +365,7 @@ describe("UsagePage", () => {
 
     fireEvent.change(end, { target: { value: "2026-11-15" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
-    await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("Nov 10 – Nov 15, 2026")).toBeTruthy();
     expect(read.mock.calls[1]?.[0]).toEqual({
       range: { kind: "custom", start: "2026-11-10", end: "2026-11-15" },
       runtime: null,
@@ -345,7 +373,7 @@ describe("UsagePage", () => {
   });
 
   test("says when the host has no runtime history", async () => {
-    renderPage(async () =>
+    await renderAfterInitialRead(async () =>
       report({
         totals: emptyFigure(),
         periods: [],
@@ -358,11 +386,11 @@ describe("UsagePage", () => {
         ],
       }),
     );
-    expect(await screen.findByText("No runtime history on this host")).toBeTruthy();
+    expect(screen.getByText("No runtime history on this host")).toBeTruthy();
   });
 
   test("says when unreadable history can hide activity", async () => {
-    renderPage(async () =>
+    await renderAfterInitialRead(async () =>
       report({
         totals: { ...emptyFigure(), complete: false },
         periods: [],
@@ -378,7 +406,7 @@ describe("UsagePage", () => {
         ],
       }),
     );
-    expect(await screen.findByText("No readable activity in this range")).toBeTruthy();
+    expect(screen.getByText("No readable activity in this range")).toBeTruthy();
     expect(screen.getByText("Cannot read.")).toBeTruthy();
   });
 
@@ -390,7 +418,7 @@ describe("UsagePage", () => {
         sessions: 1,
         cost: { usd: 0, state: "unavailable", unpricedTokens: 0 },
       });
-    renderPage(async () =>
+    await renderAfterInitialRead(async () =>
       report({
         totals: unmeasured(),
         periods: [
@@ -405,7 +433,6 @@ describe("UsagePage", () => {
         byProject: [],
       }),
     );
-    await screen.findByText("Processed tokens");
     // The total and the runtime row give the reason; tokens by type names it too.
     expect(screen.getAllByLabelText(NO_COUNTS).length).toBeGreaterThan(1);
     expect(screen.getByText(NO_COUNTS)).toBeTruthy();
@@ -414,24 +441,27 @@ describe("UsagePage", () => {
   });
 
   test("keeps a date draft while the runtime changes, and keeps focus on Apply", async () => {
-    const read = renderPage(async () => report());
-    await screen.findByText("Processed tokens");
+    const read = await renderAfterInitialRead(async ({ range, runtime }) => {
+      if (range.kind === "custom") return report({ range: { start: range.start, end: range.end } });
+      return runtime === "codex" ? report({ totals: figure({ sessions: 2 }) }) : report();
+    });
     fireEvent.click(screen.getByRole("radio", { name: "Custom" }));
     const start = screen.getByLabelText("From");
     fireEvent.change(start, { target: { value: "2026-11-02" } });
     fireEvent.click(screen.getByRole("button", { name: "Runtime" }));
     fireEvent.click(await screen.findByRole("option", { name: /Codex/ }));
-    await waitFor(() => expect(read.mock.calls.at(-1)?.[0].runtime).toBe("codex"));
+    expect(await screen.findByText("2 sessions · $12.50")).toBeTruthy();
+    expect(read.mock.calls.at(-1)?.[0].runtime).toBe("codex");
     expect(screen.getByLabelText<HTMLInputElement>("From").value).toBe("2026-11-02");
     const apply = screen.getByRole("button", { name: "Apply" });
     apply.focus();
     fireEvent.click(apply);
-    await screen.findByText("Processed tokens");
+    expect(await screen.findByText("Nov 2 – Nov 21, 2026")).toBeTruthy();
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Apply" }));
   });
 
   test("names the selected runtime when it has no history", async () => {
-    renderPage(async () =>
+    await renderAfterInitialRead(async () =>
       report({
         totals: emptyFigure(),
         periods: [],
@@ -441,12 +471,12 @@ describe("UsagePage", () => {
         coverage: [{ runtime: "codex", state: "no_history", issues: [] }],
       }),
     );
-    expect(await screen.findByText("No Codex history on this host")).toBeTruthy();
+    expect(screen.getByText("No Codex history on this host")).toBeTruthy();
   });
 
   test("marks incomplete values and never shows an unconfirmed zero as zero", async () => {
     const zero = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, processed: 0 };
-    renderPage(async () =>
+    await renderAfterInitialRead(async () =>
       report({
         totals: figure({ complete: false }),
         byRuntime: [
@@ -462,7 +492,6 @@ describe("UsagePage", () => {
         ],
       }),
     );
-    await screen.findByText("Processed tokens");
     expect(screen.getAllByLabelText(/can be higher/).length).toBeGreaterThan(1);
     expect(screen.getAllByLabelText(UNCONFIRMED).length).toBeGreaterThan(0);
     chooseMetric("Cost");
@@ -479,7 +508,7 @@ describe("UsagePage", () => {
       sessions: 1,
       cost: { usd: 0, state: "unavailable", unpricedTokens: 11 },
     });
-    renderPage(async () =>
+    await renderAfterInitialRead(async () =>
       report({
         totals: unpriced,
         byRuntime: [{ runtime: "claude", figure: unpriced }],
@@ -492,7 +521,6 @@ describe("UsagePage", () => {
         ],
       }),
     );
-    await screen.findByText("Processed tokens");
     chooseMetric("Cost");
     expect(
       screen.getAllByLabelText("The rate catalog lists no rate for this usage.").length,
@@ -501,8 +529,7 @@ describe("UsagePage", () => {
   });
 
   test("breaks the usage down by model, project, and day", async () => {
-    renderPage(async () => report());
-    await screen.findByText("Processed tokens");
+    await renderAfterInitialRead(async () => report());
     expect(screen.getByText("claude-opus-5-5")).toBeTruthy();
     fireEvent.click(screen.getByRole("radio", { name: "Project" }));
     expect(screen.getByText("openducktor")).toBeTruthy();

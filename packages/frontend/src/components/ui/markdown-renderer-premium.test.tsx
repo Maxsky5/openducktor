@@ -1,10 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { render, waitFor } from "@testing-library/react";
 import type { Components } from "react-markdown";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import PremiumMarkdownRenderer from "./markdown-renderer-premium";
-
-enableReactActEnvironment();
 
 describe("PremiumMarkdownRenderer", () => {
   test("renders updated markdown when the fallback changes", async () => {

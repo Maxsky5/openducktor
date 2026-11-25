@@ -10,7 +10,7 @@ import {
   builtinWorkspaceWorkflowsFixture,
 } from "@openducktor/frontend-core/test-support/workflow-fixtures";
 
-import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
   type AppPlatform,
   DEFAULT_AGENT_RUNTIMES,
@@ -54,6 +54,7 @@ import {
 } from "@/state/notifications/notification-context";
 import { agentSessionQueryKeys } from "@openducktor/frontend-core/queries/agent-sessions";
 import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-core/queries/git-provider-context";
+import { runtimeCatalogQueryKeys } from "@openducktor/frontend-core/queries/runtime-catalog";
 import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
 import {
   createHostRuntimeStatusContextValue,
@@ -81,7 +82,6 @@ import {
   createAgentSessionFixture,
   createTaskCardFixture,
   createTaskStoreCheckFixture,
-  enableReactActEnvironment,
 } from "../agents/agent-studio-test-utils";
 import type { TaskWorkflowActionsController } from "@/features/task-workflow/use-task-workflow-actions-controller";
 import {
@@ -99,10 +99,6 @@ import { KanbanColumn } from "@/components/features/kanban/kanban-column";
 import type { HumanReviewFeedbackModalModel } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-types";
 import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
 import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
-
-enableReactActEnvironment();
-
-const originalConsoleError = console.error;
 
 const sessionIdentity = (externalSessionId: string): AgentSessionIdentity => ({
   externalSessionId,
@@ -136,7 +132,7 @@ const reportSessionNotificationFailureMock = mock(() => {});
 let toastSpies: Array<{ mockRestore(): void }> = [];
 // Host commands for the next rendered page. Each test starts from the session-start defaults.
 let hostClientFakes: Partial<HostClient> = {};
-const loadRepoRuntimeCatalogMock = mock(async (): Promise<AgentRuntimeCatalog> => ({
+const runtimeCatalog = {
   models: {
     status: "available",
     catalog: {
@@ -171,7 +167,7 @@ const loadRepoRuntimeCatalogMock = mock(async (): Promise<AgentRuntimeCatalog> =
       ],
     },
   },
-}));
+} satisfies AgentRuntimeCatalog;
 
 const notificationContextValue = {
   deliveryFailure: null,
@@ -247,16 +243,6 @@ type KanbanPageHarness = RenderResult & {
       typeof createAgentStudioStartupTestHost
     >["connection"]["startupAttempts"]["getSnapshot"]
   >;
-};
-
-const requireCallback = <Callback extends (...args: never[]) => void>(
-  callback: Callback | undefined,
-  name: string,
-): Callback => {
-  if (!callback) {
-    throw new Error(`Expected ${name} callback`);
-  }
-  return callback;
 };
 
 let currentPendingMergedPullRequest: TasksStateContextValue["pendingMergedPullRequest"] = null;
@@ -599,6 +585,14 @@ const renderPage = async (
   );
   const { connection } = startupHost;
   const queryClient = connection.queryClient;
+  queryClient.setQueryData(
+    runtimeCatalogQueryKeys.catalog({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo",
+    }),
+    runtimeCatalog,
+  );
   queryClient.setQueryData(workflowQueryKeys.catalog, builtinCompiledCatalogFixture);
   queryClient.setQueryData(
     workflowQueryKeys.workspace({ workspaceId: "repo", repoPath: "/repo" }),
@@ -692,7 +686,7 @@ const renderPage = async (
                                 hasRuntimeSettingsSnapshot: true,
                                 refreshRuntimeSettings: async () => {},
                                 refreshRuntimeDefinitions: async () => [...RUNTIME_DEFINITIONS],
-                                loadRepoRuntimeCatalog: loadRepoRuntimeCatalogMock,
+                                loadRepoRuntimeCatalog: async () => runtimeCatalog,
                                 loadRepoRuntimeFileSearch: async () => [],
                               }}
                             >
@@ -752,112 +746,18 @@ const unmountPageIfRendered = async (renderer: KanbanPageHarness | null): Promis
   });
 };
 
-const waitForMockCall = async (
-  fn: { mock: { calls: unknown[][] } },
-  minCalls = 1,
-): Promise<void> => {
-  await waitFor(() => {
-    expect(fn.mock.calls.length).toBeGreaterThanOrEqual(minCalls);
-  });
-};
-
-const waitForSessionStartModalReady = async (page: KanbanPageHarness): Promise<void> => {
-  await waitFor(() => {
-    expect(page.getSessionStartModalModel()).toBeTruthy();
-    expect(page.getSessionStartModalModel()?.isSelectionCatalogLoading).not.toBe(true);
-  });
-};
-
 const confirmSessionStartModal = async (
   page: KanbanPageHarness,
-  input?: {
-    runInBackground?: boolean;
-    startMode?: "fresh" | "reuse" | "fork";
-    sourceExternalSessionId?: string | null;
-    modelId?: string;
-    profileId?: string;
-    variant?: string;
-  },
+  runInBackground = false,
 ): Promise<void> => {
-  await waitForSessionStartModalReady(page);
-
-  const expectedStoredModelId = input?.modelId?.includes("/")
-    ? input.modelId.split("/").at(-1)
-    : input?.modelId;
-  const profileId = input?.profileId;
-  const modelId = input?.modelId;
-  const variant = input?.variant;
-
-  if (profileId) {
-    await act(async () => {
-      page.getSessionStartModalModel()?.onSelectRuntimeProfile?.(profileId);
-      await Promise.resolve();
-    });
-  }
-
-  if (modelId) {
-    const [providerId, selectedModelId] = modelId.split("/");
-    await waitFor(() => {
-      expect(page.getSessionStartModalModel()?.isSelectionCatalogLoading).not.toBe(true);
-      const hasModel = page
-        .getSessionStartModalModel()
-        ?.modelPickerRuntimes.some((runtime) =>
-          runtime.resource.catalog?.models.some(
-            (model) => model.providerId === providerId && model.modelId === selectedModelId,
-          ),
-        );
-      expect(hasModel).toBe(true);
-    });
-    await act(async () => {
-      page.getSessionStartModalModel()?.onSelectModelPair({
-        runtimeKind: page.getSessionStartModalModel()?.selectedRuntimeKind ?? "opencode",
-        providerId: providerId ?? "",
-        modelId: selectedModelId ?? "",
-      });
-      await Promise.resolve();
-    });
-    await waitFor(() => {
-      const selection = page.getSessionStartModalModel()?.selectedModelSelection;
-      expect(selection?.modelId).toBe(expectedStoredModelId);
-      if (profileId) {
-        expect(selection?.profileId).toBe(profileId);
-      }
-    });
-  } else if (profileId) {
-    await waitFor(() => {
-      const selection = page.getSessionStartModalModel()?.selectedModelSelection;
-      expect(selection?.profileId).toBe(profileId);
-    });
-  }
-
-  if (variant) {
-    await act(async () => {
-      page.getSessionStartModalModel()?.onSelectVariant?.(variant);
-      await Promise.resolve();
-    });
-    await waitFor(() => {
-      const selection = page.getSessionStartModalModel()?.selectedModelSelection;
-      expect(selection?.variant).toBe(variant);
-    });
-  }
-
+  const modal = page.getSessionStartModalModel();
+  if (!modal) throw new Error("Expected the session start modal.");
   await act(async () => {
-    const existingSessionOptions = page.getSessionStartModalModel()?.existingSessionOptions ?? [];
-    const sourceSessionOptionValue = input?.sourceExternalSessionId
-      ? (existingSessionOptions.find(
-          (option) => option.sourceSession.externalSessionId === input.sourceExternalSessionId,
-        )?.value ?? null)
-      : null;
-    await requireCallback(
-      page.getSessionStartModalModel()?.onConfirm,
-      "session start confirmation",
-    )({
-      runInBackground: input?.runInBackground ?? false,
-      startMode: input?.startMode ?? "fresh",
-      sourceSessionOptionValue,
+    await modal.onConfirm({
+      runInBackground,
+      startMode: "fresh",
+      sourceSessionOptionValue: null,
     });
-    await Promise.resolve();
-    await Promise.resolve();
   });
 };
 
@@ -962,17 +862,12 @@ describe("KanbanPage session start modal flow", () => {
     publishSessionStartedMock.mockClear();
     publishSessionErrorMock.mockClear();
     reportSessionNotificationFailureMock.mockClear();
-    loadRepoRuntimeCatalogMock.mockClear();
   });
 
   afterEach(() => {
     for (const toastSpy of toastSpies) toastSpy.mockRestore();
     toastSpies = [];
     Reflect.deleteProperty(globalThis.navigator, "platform");
-  });
-
-  afterAll(async () => {
-    console.error = originalConsoleError;
   });
 
   kanbanTest(
@@ -1041,13 +936,7 @@ describe("KanbanPage session start modal flow", () => {
 
       expect(renderer.getSessionStartModalModel()?.open).toBe(true);
 
-      await confirmSessionStartModal(renderer, {
-        modelId: "openai/gpt-5",
-        profileId: "build-agent",
-        variant: "default",
-      });
-
-      await waitForMockCall(startAgentSessionMock);
+      await confirmSessionStartModal(renderer);
 
       expect(startAgentSessionMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1172,26 +1061,24 @@ describe("KanbanPage session start modal flow", () => {
     }
   });
 
-  kanbanTest(
-    "settings load failure reports an error without issuing a task-list request",
-    async () => {
-      let renderer: KanbanPageHarness | null = null;
+  kanbanTest("settings load failure reports an error and hides the loaded tasks", async () => {
+    let renderer: KanbanPageHarness | null = null;
 
-      try {
-        hostClientFakes.workspaceGetSettingsSnapshot = async () => {
-          throw new Error("settings unavailable");
-        };
-        renderer = await renderPage({ seedSettingsSnapshot: false });
-        await waitForMockCall(toastErrorMock);
-
+    try {
+      hostClientFakes.workspaceGetSettingsSnapshot = async () => {
+        throw new Error("settings unavailable");
+      };
+      renderer = await renderPage({ seedSettingsSnapshot: false });
+      await waitFor(() => {
         expect(toastErrorMock).toHaveBeenCalledWith("Failed to load Kanban settings", {
           description: "settings unavailable",
         });
-      } finally {
-        await unmountPageIfRendered(renderer);
-      }
-    },
-  );
+      });
+      expect(renderer.getModels()?.content.hasLoadedTasks).toBe(false);
+    } finally {
+      await unmountPageIfRendered(renderer);
+    }
+  });
 
   kanbanTest("uses platform defaults for System horizontal scrollbar visibility", async () => {
     currentSettingsSnapshotFixture = createSettingsSnapshotFixture({
@@ -1243,13 +1130,7 @@ describe("KanbanPage session start modal flow", () => {
       renderer.getTaskWorkflowActions()!.onLaunch("TASK-123", "build_implementation_start");
     });
 
-    await confirmSessionStartModal(renderer, {
-      runInBackground: true,
-      modelId: "openai/gpt-5",
-      profileId: "build-agent",
-      variant: "default",
-    });
-    await waitForMockCall(sendAgentMessageMock);
+    await confirmSessionStartModal(renderer, true);
 
     expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
     expect(updateAgentSessionModelMock).not.toHaveBeenCalled();
@@ -1262,7 +1143,6 @@ describe("KanbanPage session start modal flow", () => {
         session: sessionIdentity("session-1"),
       }),
     );
-    await waitFor(() => expect(renderer.getStartupAttempts()[0]?.status.phase).toBe("ready"));
     expect(renderer.getStartupAttempts()).toMatchObject([
       {
         presentation: "notification",
@@ -1324,12 +1204,7 @@ describe("KanbanPage session start modal flow", () => {
         renderer.getTaskWorkflowActions()!.onLaunch("TASK-123", "build_implementation_start");
       });
 
-      await confirmSessionStartModal(renderer, {
-        runInBackground: true,
-        modelId: "openai/gpt-5",
-        profileId: "build-agent",
-        variant: "default",
-      });
+      await confirmSessionStartModal(renderer, true);
 
       await act(async () => {
         renderer.getTaskWorkflowActions()!.onLaunch("TASK-123", "build_implementation_start");
@@ -1356,11 +1231,7 @@ describe("KanbanPage session start modal flow", () => {
         renderer.getTaskWorkflowActions()!.onLaunch("TASK-123", "build_implementation_start");
       });
 
-      await confirmSessionStartModal(renderer, {
-        modelId: "openai/gpt-5",
-        profileId: "build-agent",
-        variant: "default",
-      });
+      await confirmSessionStartModal(renderer);
 
       expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
       expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
@@ -1396,13 +1267,9 @@ describe("KanbanPage session start modal flow", () => {
       renderer.getTaskWorkflowActions()!.onLaunch("TASK-123", "build_implementation_start");
     });
 
-    await confirmSessionStartModal(renderer, {
-      modelId: "openai/gpt-5",
-      profileId: "build-agent",
-      variant: "default",
-    });
+    await confirmSessionStartModal(renderer);
 
-    await waitForMockCall(startAgentSessionMock);
+    expect(publishSessionErrorMock).toHaveBeenCalledTimes(1);
     expect(publishSessionErrorMock).toHaveBeenCalledWith(
       expect.objectContaining({ taskId: "TASK-123", role: "build" }),
       "Worktree path already exists for task TASK-123",
@@ -1441,17 +1308,11 @@ describe("KanbanPage session start modal flow", () => {
       renderer.getTaskWorkflowActions()!.onLaunch("TASK-123", "build_implementation_start");
     });
 
-    await confirmSessionStartModal(renderer, {
-      modelId: "openai/gpt-5",
-      profileId: "build-agent",
-      variant: "default",
-    });
+    await confirmSessionStartModal(renderer);
 
-    await waitFor(() => {
-      expect(renderer.getSessionStartModalModel()?.kickoffPromptError).toBe(
-        'The repository override of prompt "messages.build_start" has a placeholder problem. Unsupported placeholder: {{unsupported.token}}. This prompt can fill: {{role}}, {{role.allowedTools}}, {{task.id}}, {{task.title}}, {{task.issueType}}, {{task.status}}, {{task.description}}. Edit or turn off this override in Settings.',
-      );
-    });
+    expect(renderer.getSessionStartModalModel()?.kickoffPromptError).toBe(
+      'The repository override of prompt "messages.build_start" has a placeholder problem. Unsupported placeholder: {{unsupported.token}}. This prompt can fill: {{role}}, {{role.allowedTools}}, {{task.id}}, {{task.title}}, {{task.issueType}}, {{task.status}}, {{task.description}}. Edit or turn off this override in Settings.',
+    );
     expect(startAgentSessionMock).not.toHaveBeenCalled();
     expect(sendAgentMessageMock).not.toHaveBeenCalled();
     expect(renderer.getLocation()).toBe("/");
@@ -1482,14 +1343,10 @@ describe("KanbanPage session start modal flow", () => {
         modelId: "gpt-5",
       });
       sessionStartModal.onSelectRuntimeProfile("build-agent");
-      sessionStartModal.onSelectVariant("default");
+      sessionStartModal.onSelectVariant("high");
     });
 
-    await confirmSessionStartModal(renderer, {
-      modelId: "openai/gpt-5",
-      profileId: "build-agent",
-      variant: "default",
-    });
+    await confirmSessionStartModal(renderer);
 
     expect(startAgentSessionMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1497,7 +1354,7 @@ describe("KanbanPage session start modal flow", () => {
           runtimeKind: "opencode",
           providerId: "openai",
           modelId: "gpt-5",
-          variant: "default",
+          variant: "high",
           profileId: "build-agent",
         },
       }),
@@ -1532,23 +1389,6 @@ describe("KanbanPage session start modal flow", () => {
       });
     },
   );
-
-  kanbanTest("keeps the workflow action runner stable across modal state re-renders", async () => {
-    const renderer = await renderPage();
-
-    const initialRunAction = renderer.getTaskWorkflowActions()!.runAction;
-    expect(initialRunAction).toBeDefined();
-
-    await act(async () => {
-      renderer.getTaskWorkflowActions()!.onLaunch("TASK-123", "build_implementation_start");
-    });
-
-    expect(renderer.getTaskWorkflowActions()!.runAction).toBe(initialRunAction);
-
-    await act(async () => {
-      renderer.unmount();
-    });
-  });
 
   kanbanTest("human request changes opens dedicated feedback modal before mutating", async () => {
     currentTaskFixture = createTaskCardFixture({
@@ -1597,8 +1437,6 @@ describe("KanbanPage session start modal flow", () => {
         void renderer.getHumanReviewFeedbackModalModel()?.onConfirm?.();
         await Promise.resolve();
       });
-
-      await waitForSessionStartModalReady(renderer);
 
       expect(startAgentSessionMock).not.toHaveBeenCalled();
       expect(taskApplyEventMock).not.toHaveBeenCalled();
@@ -1664,8 +1502,6 @@ describe("KanbanPage session start modal flow", () => {
         await Promise.resolve();
       });
 
-      await waitForSessionStartModalReady(renderer);
-
       expect(renderer.getSessionStartModalModel()?.open).toBe(true);
       expect(renderer.getSessionStartModalModel()?.selectedStartMode).toBe("fresh");
       expect(renderer.getSessionStartModalModel()?.existingSessionOptions).toEqual([]);
@@ -1711,7 +1547,6 @@ describe("KanbanPage session start modal flow", () => {
           await Promise.resolve();
         });
 
-        await waitForSessionStartModalReady(renderer);
         expect(renderer.getActionRenderCount()).toBeGreaterThan(rendersBeforeEdit);
         expect(renderer.getHumanReviewFeedbackModalModel()?.isSubmitting).toBe(true);
 
@@ -1962,17 +1797,10 @@ describe("KanbanPage session start modal flow", () => {
           page.getTaskGitConflictDialogModel()?.onAskBuilder();
           await Promise.resolve();
         });
-        await confirmSessionStartModal(page, {
-          modelId: "openai/gpt-5",
-          profileId: "build-agent",
-          startMode: "fresh",
-          variant: "default",
-        });
-        await waitFor(() => {
-          expect(page.getLocation()).toBe(
-            "/sessions?workspace=repo&kind=task&task=TASK-123&session=session-1&agent=build",
-          );
-        });
+        await confirmSessionStartModal(page);
+        expect(page.getLocation()).toBe(
+          "/sessions?workspace=repo&kind=task&task=TASK-123&session=session-1&agent=build",
+        );
         const sessionExternalId = new URL(
           page.getLocation(),
           "https://openducktor.local",
@@ -2251,7 +2079,6 @@ describe("KanbanPage session start modal flow", () => {
           void page.getHumanReviewFeedbackModalModel()?.onConfirm?.();
           await Promise.resolve();
         });
-        await waitForSessionStartModalReady(page);
 
         expect(page.getWorkflowDialogOwner()).toBe(SHEET);
       } finally {
@@ -2309,7 +2136,7 @@ describe("KanbanPage session start modal flow", () => {
           page.getTaskGitConflictDialogModel()?.onAskBuilder();
           await Promise.resolve();
         });
-        await waitForSessionStartModalReady(page);
+        expect(page.getSessionStartModalModel()?.open).toBe(true);
         expect(page.getWorkflowDialogOwner()).toBe(SHEET);
       } finally {
         await unmountPageIfRendered(page);

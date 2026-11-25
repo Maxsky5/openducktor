@@ -44,17 +44,6 @@ const loadedState = (health: GitProviderHealth): GitProviderState => ({
   },
 });
 
-const createDeferred = <T,>() => {
-  let resolve!: (value: T) => void;
-  let reject!: (cause?: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-
-  return { promise, resolve, reject };
-};
-
 const baseRepoConfig: SettingsRepoConfig = {
   workspaceId: "repo",
   workspaceName: "Repo",
@@ -500,7 +489,7 @@ describe("settings git sections", () => {
 
   test("does not replace a provider configured during origin detection", async () => {
     let repoConfig: SettingsRepoConfig = baseRepoConfig;
-    const pendingDetection = createDeferred<{
+    const pendingDetection = Promise.withResolvers<{
       host: string;
       owner: string;
       name: string;
@@ -564,7 +553,7 @@ describe("settings git sections", () => {
         },
       },
     };
-    const pendingDetection = createDeferred<{
+    const pendingDetection = Promise.withResolvers<{
       host: string;
       owner: string;
       name: string;
@@ -620,7 +609,7 @@ describe("settings git sections", () => {
 
   test("keeps successful origin-detection feedback visible after coordinates are saved", async () => {
     const detectedMessage = "Detected acme/widget from origin. Save settings to keep this mapping.";
-    const detection = createDeferred<{
+    const detection = Promise.withResolvers<{
       host: string;
       owner: string;
       name: string;
@@ -685,7 +674,7 @@ describe("settings git sections", () => {
   });
 
   test("auto-detect waits for repo config before consuming the repo attempt", async () => {
-    const detection = createDeferred<{
+    const detection = Promise.withResolvers<{
       host: string;
       owner: string;
       name: string;
@@ -1253,7 +1242,7 @@ describe("settings git sections", () => {
         },
       },
     };
-    const azureConnection = createDeferred<{ status: "connected"; account: null }>();
+    const azureConnection = Promise.withResolvers<{ status: "connected"; account: null }>();
     const getConnection = mock(() => azureConnection.promise);
     const listAreas = mock(async () => ["Desktop", "Desktop\\Team"]);
     const connection = createTestClientConnection({
@@ -1814,7 +1803,7 @@ describe("settings git sections", () => {
         },
       },
     };
-    const slowRefresh = createDeferred<{ status: "connected"; account: null }>();
+    const slowRefresh = Promise.withResolvers<{ status: "connected"; account: null }>();
     let patSaved = false;
     const replacePat = mock(async () => {
       patSaved = true;

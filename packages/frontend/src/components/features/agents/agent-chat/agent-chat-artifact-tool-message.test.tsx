@@ -3,13 +3,10 @@ import { describe, expect, mock, test } from "bun:test";
 import { act, fireEvent } from "@testing-library/react";
 import type { McpTaskArtifact, RuntimeKind } from "@openducktor/contracts";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { ChatArtifactLinkContext } from "./agent-chat-artifact-link-context";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { resolveAgentChatRuntimePresentation } from "@openducktor/frontend-core/sessions/send/agent-chat-runtime-presentation";
-
-enableReactActEnvironment();
 
 const freeArtifact: McpTaskArtifact = {
   classification: "free",

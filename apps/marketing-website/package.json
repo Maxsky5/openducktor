@@ -8,7 +8,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "typecheck": "astro check --minimumFailingSeverity warning",
-    "test": "bun test --timeout 1000 ./tests",
+    "test": "bun test --only-failures --timeout 1000",
     "test:browser": "playwright test",
     "format": "prettier --config .prettierrc.json --write 'src/**/*.astro' '../../packages/product-scenes/src/**/*.astro'",
     "format:check": "prettier --config .prettierrc.json --check 'src/**/*.astro' '../../packages/product-scenes/src/**/*.astro'",

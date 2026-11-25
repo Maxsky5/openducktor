@@ -1,4 +1,5 @@
-import { EventEmitter } from "node:events";
+import { describe, expect, jest, test } from "bun:test";
+import { EventEmitter, once } from "node:events";
 import { PassThrough, Writable } from "node:stream";
 import { Effect, Fiber } from "effect";
 import {
@@ -654,35 +655,45 @@ describe("createCodexAppServerTransport", () => {
     }
   });
 
-  test("keeps the transport usable after a late response to a timed-out sent request", async () => {
-    const child = createChild();
+  test.each([
+    {
+      name: "accepts a late response before its ID expires",
+      delay: 99,
+      expected: { _tag: "Success", success: { data: [], nextCursor: null } },
+    },
+    {
+      name: "rejects a late response at the end of the timeout window",
+      delay: 100,
+      expected: {
+        _tag: "Failure",
+        failure: { message: expect.stringContaining("unexpected id 1") },
+      },
+    },
+  ])("$name", async ({ delay, expected }) => {
+    const stdin = new PassThrough();
+    const child = createChild(stdin);
     const transport = createCodexAppServerTransport("runtime-1", child, 100, () => {});
+    jest.useFakeTimers();
     try {
-      await expect(
-        Effect.runPromise(transport.request({ method: "model/list", params: {} })),
-      ).rejects.toThrow("Timed out waiting for Codex app-server request model/list");
-      child.stdout.write(`${JSON.stringify({ id: 1, result: { data: [], nextCursor: null } })}\n`);
-      const response = Effect.runPromise(transport.request({ method: "model/list", params: {} }));
-      child.stdout.write(`${JSON.stringify({ id: 2, result: { data: [], nextCursor: null } })}\n`);
-      await expect(response).resolves.toEqual({ data: [], nextCursor: null });
-    } finally {
-      await Effect.runPromise(transport.close());
-    }
-  });
+      const sent = once(stdin, "data");
+      const first = Effect.runPromise(
+        Effect.flip(transport.request({ method: "model/list", params: {} })),
+      );
+      await sent;
+      jest.advanceTimersByTime(100);
+      expect((await first).message).toContain(
+        "Timed out waiting for Codex app-server request model/list",
+      );
 
-  test("expires late-response IDs after one timeout window", async () => {
-    const child = createChild();
-    const transport = createCodexAppServerTransport("runtime-1", child, 100, () => {});
-    try {
-      await expect(
-        Effect.runPromise(transport.request({ method: "model/list", params: {} })),
-      ).rejects.toThrow("Timed out waiting");
-      await new Promise((resolve) => setTimeout(resolve, 150));
-      child.stdout.write(`${JSON.stringify({ id: 1, result: { data: [], nextCursor: null } })}\n`);
-      await expect(
-        Effect.runPromise(transport.request({ method: "model/list", params: {} })),
-      ).rejects.toThrow("unexpected id 1");
+      jest.advanceTimersByTime(delay);
+      child.stdout.write('{"id":1,"result":{"data":[],"nextCursor":"stale"}}\n');
+      const second = Effect.runPromise(
+        Effect.result(transport.request({ method: "model/list", params: {} })),
+      );
+      child.stdout.write('{"id":2,"result":{"data":[],"nextCursor":null}}\n');
+      expect(await second).toMatchObject(expected);
     } finally {
+      jest.useRealTimers();
       await Effect.runPromise(transport.close());
     }
   });
@@ -746,16 +757,24 @@ describe("createCodexAppServerTransport", () => {
       // The process already exited, or still runs, while the close event waits for stderr.
       const child = Object.assign(createChild(), { exitCode, signalCode });
       const failures: Error[] = [];
+      const reported = Promise.withResolvers<void>();
       const transport = createCodexAppServerTransport(
         "runtime-1",
         child,
         1_000,
         () => {},
-        (error) => failures.push(error),
+        (error) => {
+          failures.push(error);
+          reported.resolve();
+        },
       );
       try {
         child.stdout.end();
-        await Bun.sleep(60);
+        await Effect.promise(() => reported.promise).pipe(
+          Effect.timeout("1 second"),
+          Effect.runPromise,
+        );
+        child.emit("close", exitCode, signalCode);
         expect(failures.map((failure) => failure.message)).toEqual([
           expect.stringContaining(reason),
         ]);

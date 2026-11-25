@@ -10,11 +10,7 @@ import type {
   CodexAppServerTurn,
 } from "@openducktor/contracts";
 import { createCodexAppServerClient } from "./app-server-client";
-import {
-  codexThreadFixture,
-  codexTurnFixture,
-  createDeferred,
-} from "./codex-app-server-adapter.test-harness";
+import { codexThreadFixture, codexTurnFixture } from "./codex-app-server-adapter.test-harness";
 import { codexThreadList, codexThreadStatusSnapshot } from "./codex-app-server-threads";
 import { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import {
@@ -180,10 +176,10 @@ describe("CodexThreadInventoryReader", () => {
 
   test("does not let a stale in-flight read overwrite a refreshed inventory", async () => {
     const reader = new CodexThreadInventoryReader(async (left, right) => left === right);
-    const firstLoaded = createDeferred<CodexAppServerThreadLoadedListResponse>();
-    const firstThreads = createDeferred<CodexAppServerThreadListResponse>();
-    const refreshedLoaded = createDeferred<CodexAppServerThreadLoadedListResponse>();
-    const refreshedThreads = createDeferred<CodexAppServerThreadListResponse>();
+    const firstLoaded = Promise.withResolvers<CodexAppServerThreadLoadedListResponse>();
+    const firstThreads = Promise.withResolvers<CodexAppServerThreadListResponse>();
+    const refreshedLoaded = Promise.withResolvers<CodexAppServerThreadLoadedListResponse>();
+    const refreshedThreads = Promise.withResolvers<CodexAppServerThreadListResponse>();
     const loadedResponses = [firstLoaded, refreshedLoaded];
     const threadResponses = [firstThreads, refreshedThreads];
     const client = createInventoryClient({
@@ -220,8 +216,8 @@ describe("CodexThreadInventoryReader", () => {
 
   test("does not reuse a directory inventory read after clearing its runtime", async () => {
     const reader = new CodexThreadInventoryReader(async (left, right) => left === right);
-    const staleLoaded = createDeferred<CodexAppServerThreadLoadedListResponse>();
-    const staleThreads = createDeferred<CodexAppServerThreadListResponse>();
+    const staleLoaded = Promise.withResolvers<CodexAppServerThreadLoadedListResponse>();
+    const staleThreads = Promise.withResolvers<CodexAppServerThreadListResponse>();
     let loadedCalls = 0;
     let threadCalls = 0;
     const client = createInventoryClient({
@@ -255,8 +251,8 @@ describe("CodexThreadInventoryReader", () => {
 
   test("coalesces concurrent refreshes for the same runtime", async () => {
     const reader = new CodexThreadInventoryReader(async (left, right) => left === right);
-    const loaded = createDeferred<CodexAppServerThreadLoadedListResponse>();
-    const threads = createDeferred<CodexAppServerThreadListResponse>();
+    const loaded = Promise.withResolvers<CodexAppServerThreadLoadedListResponse>();
+    const threads = Promise.withResolvers<CodexAppServerThreadListResponse>();
     const calls: string[] = [];
     const client = createInventoryClient({
       threadLoadedList: () => {
@@ -437,8 +433,8 @@ describe("CodexThreadInventoryReader", () => {
 
   test("applies runtime status updates to in-flight inventory reads", async () => {
     const reader = new CodexThreadInventoryReader(async (left, right) => left === right);
-    const loaded = createDeferred<CodexAppServerThreadLoadedListResponse>();
-    const threads = createDeferred<CodexAppServerThreadListResponse>();
+    const loaded = Promise.withResolvers<CodexAppServerThreadLoadedListResponse>();
+    const threads = Promise.withResolvers<CodexAppServerThreadListResponse>();
     const client = createInventoryClient({
       threadLoadedList: () => loaded.promise,
       threadList: () => threads.promise,
@@ -662,8 +658,8 @@ describe("CodexThreadInventoryReader", () => {
 
   test("read-only history does not wait for an in-flight inventory read", async () => {
     const reader = new CodexThreadInventoryReader(async (left, right) => left === right);
-    const loaded = createDeferred<CodexAppServerThreadLoadedListResponse>();
-    const threads = createDeferred<CodexAppServerThreadListResponse>();
+    const loaded = Promise.withResolvers<CodexAppServerThreadLoadedListResponse>();
+    const threads = Promise.withResolvers<CodexAppServerThreadListResponse>();
     const calls: string[] = [];
     const client = createInventoryClient({
       threadLoadedList: () => {

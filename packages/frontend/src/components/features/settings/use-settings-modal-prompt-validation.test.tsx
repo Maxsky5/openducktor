@@ -1,19 +1,17 @@
 import { specPlanBuildPromptKey, rolePromptKey } from "@openducktor/workflows/test-support";
 import { describe, expect, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
-import {
-  createHookHarness as createSharedHookHarness,
-  enableReactActEnvironment,
-} from "@/pages/agents/agent-studio-test-utils";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalPromptValidation } from "./use-settings-modal-prompt-validation";
-
-enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useSettingsModalPromptValidation>[0];
 
 const createHookHarness = (initialProps: HookArgs) =>
-  createSharedHookHarness(useSettingsModalPromptValidation, initialProps);
+  createSharedHookHarness(useSettingsModalPromptValidation, initialProps, {
+    wrapper: QueryProvider,
+  });
 
 const createSnapshot = (): SettingsSnapshot =>
   createSettingsSnapshotFixture({

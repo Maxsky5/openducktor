@@ -4,10 +4,7 @@ import type { WorkspaceRef } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { render as renderUi, waitFor } from "@testing-library/react";
 import { act, createElement, createRef, type ReactElement } from "react";
-import {
-  createTaskCardFixture,
-  enableReactActEnvironment,
-} from "@/pages/agents/agent-studio-test-utils";
+import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
@@ -26,8 +23,6 @@ const render = (element: ReactElement) =>
   renderUi(element, {
     wrapper: ({ children }) => createElement(QueryProvider, null, children),
   });
-enableReactActEnvironment();
-
 const actualTaskDetailsSheetModule = await import("./task-details-sheet");
 
 type TaskDetailsSheetRenderProps = Parameters<

@@ -8,6 +8,7 @@ import {
   createMemoryClientStorage,
 } from "@openducktor/frontend-core/platform/client-storage";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { act, type RenderHookResult, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
@@ -22,6 +23,8 @@ import {
 import type { SessionPanelOwner } from "./session-panel-layout";
 import { sessionPanelLayoutStorageKey } from "./session-panel-layout-store";
 import { useSessionPanelLayoutPruning } from "./use-session-panel-layout-pruning";
+
+setupTestingLibraryFakeTimers();
 
 const workspace = createWorkspaceRecordFixture({
   workspaceId: `workspace-${globalThis.crypto.randomUUID()}`,
@@ -329,6 +332,18 @@ describe("useSessionPanelLayoutPruning", () => {
 
   test("does not prune unchanged lists when another workspace or owner list changes", async () => {
     const queryClient = cachedLists();
+    const removedTask: SessionPanelOwner = {
+      kind: "task",
+      workspaceId: inactiveWorkspace.workspaceId,
+      taskId: "removed",
+    };
+    const removedChat: SessionPanelOwner = {
+      kind: "chat",
+      workspaceId: workspace.workspaceId,
+      sessionId: "removed",
+    };
+    saveLayout(removedTask);
+    saveLayout(removedChat);
     const view = renderPruning({
       ...current,
       workspaces: [workspace, inactiveWorkspace],
@@ -347,9 +362,13 @@ describe("useSessionPanelLayoutPruning", () => {
     saveLayout(newTask);
     saveLayout(newChat);
     try {
+      expect([removedTask, removedChat].map(isSaved)).toEqual([true, true]);
       await act(async () => {
         queryClient.setQueryData(taskQueryKeys.ids(inactiveWorkspace), ["kept"]);
         queryClient.setQueryData(workspaceSessionQueryKeys.ids(workspace.workspaceId), []);
+      });
+      await waitFor(() => expect([removedTask, removedChat].map(isSaved)).toEqual([false, false]), {
+        timeout: 500,
       });
       expect([newTask, newChat].map(isSaved)).toEqual([true, true]);
     } finally {

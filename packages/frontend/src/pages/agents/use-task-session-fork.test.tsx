@@ -10,6 +10,7 @@ import {
 } from "@openducktor/frontend-core/test-support/test-client-connection";
 import type { HostConnection } from "@openducktor/frontend-core/connection/host-connection";
 import { createStartupLiveSourceFake } from "@openducktor/frontend-core/test-support/startup-live-source-fake";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { AgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { SessionViewContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
@@ -23,6 +24,8 @@ import {
   createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
 import { useTaskSessionFork } from "./use-task-session-fork";
+
+setupTestingLibraryFakeTimers();
 
 const SOURCE_HREF = "/sessions?workspace=workspace&kind=task&task=task&session=source&agent=build";
 const CHILD_HREF = "/sessions?workspace=workspace&kind=task&task=task&session=child&agent=build";

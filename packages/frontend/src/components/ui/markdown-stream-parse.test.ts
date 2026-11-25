@@ -45,15 +45,19 @@ describe("parseMarkdown", () => {
   });
 
   test("splits top-level blocks without the blank lines between them", () => {
-    const markdown =
-      "# Title\n\nIntro text.\n\n```mermaid\ngraph TD\n\n  A --> B\n```\n\n- one\n- two";
+    for (const lineEnding of ["\n", "\r\n", "\r"]) {
+      const blocks = [
+        "# Title",
+        "Intro text.",
+        "```mermaid\ngraph TD\n\n  A --> B\n```",
+        "- one\n- two",
+      ].map((text) => text.replaceAll("\n", lineEnding));
+      const markdown = blocks.join(lineEnding.repeat(2));
 
-    expect(parseMarkdown(markdown, null).blocks.map(({ text }) => text)).toEqual([
-      "# Title",
-      "Intro text.",
-      "```mermaid\ngraph TD\n\n  A --> B\n```",
-      "- one\n- two",
-    ]);
+      expect(
+        parseMarkdown(markdown, null).blocks.map(({ text, start }) => ({ text, start })),
+      ).toEqual(blocks.map((text) => ({ text, start: markdown.indexOf(text) })));
+    }
   });
 
   test("parses the last two blocks again because new text can join them", () => {
@@ -109,12 +113,12 @@ describe("parseMarkdown", () => {
     ["a closed tilde fence", "~~~mermaid\ngraph TD\n~~~", null],
     ["a paragraph after a fence", "```mermaid\ngraph TD\n```\n\nAfter", null],
   ])("finds the code of %s at the end of the text", (_, markdown, code) => {
-    const { blocks } = parseMarkdown(markdown, null);
+    for (const lineEnding of ["\n", "\r"]) {
+      const { blocks } = parseMarkdown(markdown.replaceAll("\n", lineEnding), null);
 
-    expect(blocks.map(({ openFenceCode }) => openFenceCode)).toEqual([
-      ...blocks.slice(0, -1).map(() => null),
-      code,
-    ]);
+      expect(blocks.at(-1)?.openFenceCode?.replaceAll("\r", "\n") ?? null).toBe(code);
+      expect(blocks.slice(0, -1).every(({ openFenceCode }) => openFenceCode === null)).toBe(true);
+    }
   });
 
   test.each([

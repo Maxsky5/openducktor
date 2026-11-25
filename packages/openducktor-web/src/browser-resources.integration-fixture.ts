@@ -33,6 +33,7 @@ import { BufferedHostEventBus } from "@openducktor/remote-host/host-event-bus";
 import { startNodeFetchServer } from "@openducktor/remote-host/node-fetch-server";
 import { hostWebSocketHandler } from "@openducktor/remote-host/host-websocket-handler";
 import { createRemoteShellBridge } from "@openducktor/frontend/lib/remote/shell-bridge";
+import { waitForRemoteConnection } from "./test-support";
 import { watchClientPage } from "@openducktor/frontend/lib/client-page";
 import { createBrowserRemoteTransport } from "@openducktor/frontend/lib/remote/transport";
 import { createBrowserNotificationBridge } from "./browser-notification-bridge";
@@ -151,23 +152,6 @@ const fetch = spyOn(globalThis, "fetch").mockImplementation(
 const bridges: ReturnType<typeof createRemoteShellBridge>[] = [];
 const pages: EventTarget[] = [];
 const documents: Array<EventTarget & { hidden: boolean }> = [];
-const connected = (bridge: ReturnType<typeof createRemoteShellBridge>) =>
-  new Promise<void>((resolve, reject) => {
-    let stop = () => {};
-    let settled = false;
-    stop = bridge.remoteConnection!.subscribeState((state) => {
-      if (state.status === "connected") {
-        settled = true;
-        stop();
-        resolve();
-      } else if (state.status === "failed") {
-        settled = true;
-        stop();
-        reject(new Error(state.failure?.message));
-      }
-    });
-    if (settled) stop();
-  });
 const connect = async () => {
   const page = Object.assign(new EventTarget(), { location: { origin: "http://machine.test" } });
   const document = Object.assign(new EventTarget(), { hidden: false });
@@ -189,7 +173,7 @@ const connect = async () => {
   });
   watchClientPage(bridge, () => false);
   bridges.push(bridge);
-  await connected(bridge);
+  await waitForRemoteConnection(bridge.remoteConnection!);
   return bridge;
 };
 
@@ -202,20 +186,18 @@ try {
   assert.equal(await a.client.systemGetPlatform(), "linux");
   const document = documents[0]!;
   Object.defineProperty(globalThis, "document", { configurable: true, value: document });
-  for (let cycle = 0; cycle < 3; cycle += 1) {
-    const before = releases;
-    const beforeRequests = requests;
-    const generation = a.remoteConnection!.readState().generation;
-    for (const hidden of [true, false]) {
-      document.hidden = hidden;
-      document.dispatchEvent(new Event("visibilitychange"));
-      assert.equal(a.remoteConnection!.readState().status, "connected");
-      assert.equal(a.remoteConnection!.readState().generation, generation);
-      assert.equal(releases, before, "Switching tabs must keep the current admission.");
-      assert.equal(requests, beforeRequests, "Switching tabs must not restart transport.");
-    }
-    assert.equal(await a.client.systemGetPlatform(), "linux");
+  const visibleReleaseCount = releases;
+  const visibleRequestCount = requests;
+  const visibleGeneration = a.remoteConnection!.readState().generation;
+  for (const hidden of [true, false]) {
+    document.hidden = hidden;
+    document.dispatchEvent(new Event("visibilitychange"));
+    assert.equal(a.remoteConnection!.readState().status, "connected");
+    assert.equal(a.remoteConnection!.readState().generation, visibleGeneration);
+    assert.equal(releases, visibleReleaseCount, "Switching tabs must keep the current admission.");
+    assert.equal(requests, visibleRequestCount, "Switching tabs must not restart transport.");
   }
+  assert.equal(await a.client.systemGetPlatform(), "linux");
   for (const hidden of [false, true]) {
     released = Promise.withResolvers<string>();
     const before = releases;
@@ -230,7 +212,7 @@ try {
     assert.equal(expired.status, 409, "The released admission must not admit work.");
     await expired.body?.cancel();
     assert.equal(a.remoteConnection!.readState().status, "idle");
-    const ready = connected(a);
+    const ready = waitForRemoteConnection(a.remoteConnection!);
     const beforeRequests = requests;
     document.hidden = hidden;
     pages[0]!.dispatchEvent(Object.assign(new Event("pageshow"), { persisted: true }));

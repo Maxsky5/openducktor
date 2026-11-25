@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { createShellBridgeFixture, withShellPlatform } from "@/test-utils/focused-fixture";
@@ -66,7 +66,7 @@ describe("GitLab account auto-link", () => {
   test("keeps a saved Disconnect: a saved project without a link does not auto-link", async () => {
     const { result, onLink } = renderController(true);
     result.current.afterDraftChange(unlinkedProject);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await waitFor(() => expect(result.current.accounts).toEqual([account]));
     expect(onLink).not.toHaveBeenCalled();
   });
 });
@@ -79,7 +79,9 @@ describe("GitLab browser sign-in", () => {
       createShellBridgeFixture({ bridge: { openExternalUrl } }),
     );
 
-    result.current.startSignIn();
+    await act(async () => {
+      result.current.startSignIn();
+    });
 
     await waitFor(() =>
       expect(openExternalUrl).toHaveBeenCalledWith(deviceCode.verificationUriComplete),

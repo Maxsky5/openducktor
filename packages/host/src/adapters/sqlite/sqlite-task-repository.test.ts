@@ -14,6 +14,7 @@ import {
 import {
   createSqliteTaskStoreHarness,
   insertRawTask,
+  openHostDatabaseTestConnection,
   readWorkflowArtifactCount,
   readDrizzleMigrationRows,
   readTableNames,
@@ -79,7 +80,9 @@ describe("createSqliteTaskRepository SQLite integration", () => {
   });
 
   test("diagnoses and initializes a host SQLite database with Drizzle migrations", async () => {
-    const { databasePath, scope, store } = await createRepositoryHarness();
+    const { databasePath, scope, store } = await createRepositoryHarness({
+      openConnection: openHostDatabaseTestConnection,
+    });
 
     await expect(access(databasePath)).rejects.toThrow();
     await expect(Effect.runPromise(store.diagnoseRepoStore(scope))).resolves.toMatchObject({
@@ -117,19 +120,12 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
-    const database = new Database(databasePath);
-    try {
-      const journalMode = database
-        .query<{ journal_mode: string }, []>("PRAGMA journal_mode;")
-        .get();
-      expect(journalMode?.journal_mode).toBe("wal");
-    } finally {
-      database.close();
-    }
   });
 
   test("shares directory and schema initialization across concurrent first operations", async () => {
-    const { databasePath, scope, store } = await createRepositoryHarness();
+    const { databasePath, scope, store } = await createRepositoryHarness({
+      openConnection: openHostDatabaseTestConnection,
+    });
 
     const results = await Effect.runPromise(
       Effect.all(

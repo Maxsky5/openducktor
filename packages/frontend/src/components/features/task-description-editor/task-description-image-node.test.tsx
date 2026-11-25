@@ -77,30 +77,21 @@ describe("TaskDescriptionImageNode", () => {
       taskId: "task-1",
       scope: "description" as const,
     };
-    const view = render(
+    const image = (renderContext: typeof context) =>
       withShellPlatform(
-        <TaskDescriptionImageContext.Provider
-          value={{ previews: new Map(), renderContext: context }}
-        >
+        <TaskDescriptionImageContext.Provider value={{ previews: new Map(), renderContext }}>
           <TaskDescriptionImageNode {...props} />
         </TaskDescriptionImageContext.Provider>,
         shellPlatform,
-      ),
-    );
+      );
+    const view = await act(async () => render(image(context)));
+    const initialImage = await view.findByRole("img", { name: "Architecture" });
+    expect(initialImage.getAttribute("src")).toBe("openducktor-task-asset://resolved");
 
-    await waitFor(() => expect(resolveTaskAssetSource).toHaveBeenCalledTimes(1));
-    view.rerender(
-      <TaskDescriptionImageContext.Provider
-        value={{ previews: new Map(), renderContext: { ...context } }}
-      >
-        <TaskDescriptionImageNode {...props} />
-      </TaskDescriptionImageContext.Provider>,
-    );
-    await act(async () => {
-      await Promise.resolve();
-    });
+    await act(async () => view.rerender(image({ ...context })));
 
     expect(resolveTaskAssetSource).toHaveBeenCalledTimes(1);
+    expect(view.getByRole("img", { name: "Architecture" })).toBe(initialImage);
   });
 
   test("shows the image error state when a resolved asset response fails to load", async () => {

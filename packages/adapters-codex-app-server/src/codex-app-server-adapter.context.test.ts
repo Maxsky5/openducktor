@@ -6,7 +6,6 @@ import {
   codexStartSessionInput,
   codexThreadStartResultFixture,
   codexUserMessageInput,
-  createDeferred,
   createHarness,
   createRuntimeStreamSubscription,
   flushCodexAdapterWork,
@@ -147,8 +146,8 @@ describe("CodexAppServerAdapter context loading", () => {
     await adapter.resumeSession(codexSessionRuntimeRef());
     const transport = transports.get("runtime-live");
     const request = transport?.request.bind(transport);
-    const resumeStarted = createDeferred<void>();
-    const resume = createDeferred<void>();
+    const resumeStarted = Promise.withResolvers<void>();
+    const resume = Promise.withResolvers<void>();
     if (transport && request) {
       transport.request = async (input) => {
         if (input.method === "thread/resume") {

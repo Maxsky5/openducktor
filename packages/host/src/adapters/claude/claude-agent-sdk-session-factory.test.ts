@@ -11,14 +11,6 @@ import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-sto
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 import type { ClaudeLiveEvent, CreateClaudeAgentSdkServiceInput } from "./claude-agent-sdk-types";
 
-const deferred = <Value>() => {
-  let resolve!: (value: Value) => void;
-  const promise = new Promise<Value>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-  return { promise, resolve };
-};
-
 const createToolDiscovery = (): CreateClaudeAgentSdkServiceInput["toolDiscovery"] => ({
   discoverTool: () => Effect.die("unused"),
   resolveTool: () => Effect.die("unused"),
@@ -28,7 +20,7 @@ const createToolDiscovery = (): CreateClaudeAgentSdkServiceInput["toolDiscovery"
 
 describe("createClaudeAgentSdkSession", () => {
   test("fails a repository session when the workspace-bound OpenDucktor MCP is disconnected", async () => {
-    const streamFinished = deferred<void>();
+    const streamFinished = Promise.withResolvers<void>();
     const fakeQuery = createClaudeQueryFixture({
       close: () => streamFinished.resolve(),
       initializationResult: async () => ({
@@ -120,7 +112,7 @@ describe("createClaudeAgentSdkSession", () => {
   test.each([undefined, "auto"] as const)(
     "starts a session with %s mode without a policy notice before Claude reports its mode",
     async (permissionMode) => {
-      const streamFinished = deferred<void>();
+      const streamFinished = Promise.withResolvers<void>();
       const fakeQuery = createClaudeQueryFixture({
         close: () => streamFinished.resolve(),
         initializationResult: async () => ({
@@ -223,7 +215,7 @@ describe("createClaudeAgentSdkSession", () => {
       events: ["session_started", "session_idle"],
     },
   ])("publishes startup activity only for new sessions: $name", async (scenario) => {
-    const streamFinished = deferred<void>();
+    const streamFinished = Promise.withResolvers<void>();
     const fakeQuery = createClaudeQueryFixture({
       close: () => streamFinished.resolve(),
       initializationResult: async () => ({
@@ -316,7 +308,7 @@ describe("createClaudeAgentSdkSession", () => {
   });
 
   test("shares nested transcript state between SDK hooks and session events", async () => {
-    const streamFinished = deferred<void>();
+    const streamFinished = Promise.withResolvers<void>();
     const fakeQuery = createClaudeQueryFixture({
       close: () => streamFinished.resolve(),
       initializationResult: async () => ({
@@ -433,7 +425,7 @@ describe("createClaudeAgentSdkSession", () => {
 
   test("fails creation when the SDK stream ends before startup completes", async () => {
     const initialization =
-      deferred<Awaited<ReturnType<realClaudeSdk.Query["initializationResult"]>>>();
+      Promise.withResolvers<Awaited<ReturnType<realClaudeSdk.Query["initializationResult"]>>>();
     const fakeQuery = createClaudeQueryFixture({
       close: () => {},
       initializationResult: () => initialization.promise,
@@ -515,7 +507,7 @@ describe("createClaudeAgentSdkSession", () => {
   });
 
   test("starts a titled fresh session without renaming a transcript that does not exist yet", async () => {
-    const streamFinished = deferred<void>();
+    const streamFinished = Promise.withResolvers<void>();
     const fakeQuery = createClaudeQueryFixture({
       close: () => streamFinished.resolve(),
       initializationResult: async () => ({
@@ -613,10 +605,10 @@ describe("createClaudeAgentSdkSession", () => {
   });
 
   test("reports continuation admission before a resumed session rename fails", async () => {
-    const streamFinished = deferred<void>();
-    const teardownFinished = deferred<void>();
-    const teardownStarted = deferred<void>();
-    const renameStarted = deferred<void>();
+    const streamFinished = Promise.withResolvers<void>();
+    const teardownFinished = Promise.withResolvers<void>();
+    const teardownStarted = Promise.withResolvers<void>();
+    const renameStarted = Promise.withResolvers<void>();
     const queryReturn = mock(async () => {
       teardownStarted.resolve();
       await teardownFinished.promise;
@@ -738,7 +730,7 @@ describe("createClaudeAgentSdkSession", () => {
   });
 
   test("keeps a resumed repository session when the durable title cannot be reconciled", async () => {
-    const streamFinished = deferred<void>();
+    const streamFinished = Promise.withResolvers<void>();
     const fakeQuery = createClaudeQueryFixture({
       close: () => streamFinished.resolve(),
       initializationResult: async () => ({
@@ -832,8 +824,8 @@ describe("createClaudeAgentSdkSession", () => {
   });
 
   test("waits for continuation admission before clearing prior policy feedback", async () => {
-    const streamFinished = deferred<void>();
-    const admissionGate = deferred<void>();
+    const streamFinished = Promise.withResolvers<void>();
+    const admissionGate = Promise.withResolvers<void>();
     const fakeQuery = createClaudeQueryFixture({
       close: () => streamFinished.resolve(),
       async *[Symbol.asyncIterator]() {
@@ -974,7 +966,7 @@ describe("createClaudeAgentSdkSession", () => {
   });
 
   test("admits a continuation from the hidden synthetic user turn", async () => {
-    const streamFinished = deferred<void>();
+    const streamFinished = Promise.withResolvers<void>();
     const fakeQuery = createClaudeQueryFixture({
       close: () => streamFinished.resolve(),
       async *[Symbol.asyncIterator]() {

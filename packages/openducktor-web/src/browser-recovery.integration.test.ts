@@ -1,7 +1,5 @@
-import { test } from "bun:test";
-import { execFile } from "node:child_process";
+import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 
 // The rendered owners use global DOM, bridge, and Query state. A child keeps other web tests isolated.
 test.each([
@@ -20,14 +18,13 @@ test.each([
 ])(
   "%s",
   async (_name, fixture) => {
-    await promisify(execFile)(
-      process.execPath,
-      [fileURLToPath(new URL(fixture, import.meta.url))],
-      {
-        timeout: 10_000,
-        env: { ...process.env, VITE_ODT_APP_VERSION: "test-browser" },
-      },
-    );
+    const child = Bun.spawn([process.execPath, fileURLToPath(new URL(fixture, import.meta.url))], {
+      timeout: 10_000,
+      env: { ...process.env, VITE_ODT_APP_VERSION: "test-browser" },
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    expect(await child.exited).toBe(0);
   },
   15_000,
 );

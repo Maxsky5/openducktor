@@ -6,11 +6,14 @@ import { MemoryRouter } from "react-router";
 import type { ShortcutPreferences } from "@openducktor/contracts";
 import { ShortcutTestProviders } from "@/test-utils/shortcut-providers";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { SidebarNavigation } from "@/components/layout/sidebar/sidebar-navigation";
 import { useCommandPalettePageCommands } from "../command-palette/command-palette-context";
 import { ShortcutButton } from "./shortcut-controls";
 import { useShortcutDispatch } from "./use-shortcut-dispatch";
 import { useShortcutPreferences } from "./use-shortcut-preferences";
+
+setupTestingLibraryFakeTimers();
 
 test("shared controls follow committed assignments across the palette subtree and clear stale labels", async () => {
   const writes: { preferences: ShortcutPreferences; resolve(value: ShortcutPreferences): void }[] =

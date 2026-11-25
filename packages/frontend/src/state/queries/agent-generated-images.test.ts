@@ -37,6 +37,11 @@ const payload = (request: AgentGeneratedImageReadInput) => ({
   base64: "AAAA",
 });
 
+const mockDecoding = () =>
+  spyOn(imageWorkerClient, "decodeGeneratedImage").mockImplementation(
+    async ({ byteLength }) => new ArrayBuffer(byteLength),
+  );
+
 test("keys include every scope and the opaque output revision", () => {
   const key = agentGeneratedImageQueryKeys.image(input);
   for (const ref of [
@@ -131,33 +136,46 @@ test("rejects wrong echoed identity and does not retry errors", async () => {
 
 test("an unobserved pending read cannot publish and the last observer releases cached bytes", async () => {
   const client = new QueryClient();
-  let resolve!: (value: ReturnType<typeof payload>) => void;
-  const pending = new Promise<ReturnType<typeof payload>>((done) => {
-    resolve = done;
+  const started = Promise.withResolvers<void>();
+  const pending = Promise.withResolvers<ReturnType<typeof payload>>();
+  const released = Promise.withResolvers<void>();
+  const options = queryOptions(input, {
+    readGeneratedImage: () => {
+      started.resolve();
+      return pending.promise;
+    },
+    beginGeneratedImageBatch: async ({ ref, images }) => ({ ref, batchId, admittedImages: images }),
+    releaseGeneratedImageBatch: async () => released.resolve(),
   });
-  const options = agentGeneratedImageQueryOptions(input, () => pending);
   const observer = new QueryObserver(client, options);
   const unsubscribe = observer.subscribe(() => {});
-  unsubscribe();
-  resolve(payload(input));
-  await waitFor(
-    () => expect(client.getQueryCache().find({ queryKey: options.queryKey })).toBeUndefined(),
-    { timeout: 500, interval: 1 },
-  );
-  expect(client.getQueryData(options.queryKey)).toBeUndefined();
-  const finishedObserver = new QueryObserver(
-    client,
-    agentGeneratedImageQueryOptions(input, async (request) => payload(request)),
-  );
-  const remove = finishedObserver.subscribe(() => {});
-  await finishedObserver.refetch();
-  expect(client.getQueryData(options.queryKey)).toBeInstanceOf(Blob);
-  remove();
-  await waitFor(
-    () => expect(client.getQueryCache().find({ queryKey: options.queryKey })).toBeUndefined(),
-    { timeout: 500, interval: 1 },
-  );
-  client.clear();
+  try {
+    await started.promise;
+    unsubscribe();
+    pending.resolve(payload(input));
+    await released.promise;
+    expect(client.getQueryData(options.queryKey)).toBeUndefined();
+
+    const finishedObserver = new QueryObserver(
+      client,
+      agentGeneratedImageQueryOptions(input, async (request) => payload(request)),
+    );
+    const remove = finishedObserver.subscribe(() => {});
+    try {
+      await finishedObserver.refetch();
+      expect(client.getQueryData(options.queryKey)).toBeInstanceOf(Blob);
+    } finally {
+      remove();
+    }
+    await waitFor(
+      () => expect(client.getQueryCache().find({ queryKey: options.queryKey })).toBeUndefined(),
+      { timeout: 500, interval: 1 },
+    );
+  } finally {
+    unsubscribe();
+    pending.resolve(payload(input));
+    client.clear();
+  }
 });
 
 test("switching image revisions terminates decoding and rejects a late worker reply", async () => {
@@ -212,11 +230,16 @@ test("switching image revisions terminates decoding and rejects a late worker re
 
 test("limits pending host reads to two and removes cancelled previews from the queue", async () => {
   const client = new QueryClient();
+  const decode = mockDecoding();
   const gates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
+  const firstPairStarted = Promise.withResolvers<void>();
+  const nextReadStarted = Promise.withResolvers<void>();
   const calls: string[] = [];
   const read = async (request: AgentGeneratedImageReadInput) => {
     const index = calls.length;
     calls.push(request.itemId);
+    if (index === 1) firstPairStarted.resolve();
+    if (index === 2) nextReadStarted.resolve();
     if (index < 2) await gates[index]!.promise;
     return payload(request);
   };
@@ -226,30 +249,31 @@ test("limits pending host reads to two and removes cancelled previews from the q
   const observers = options.map((option) => new QueryObserver(client, option));
   const remove = observers.map((observer) => observer.subscribe(() => {}));
   try {
-    await waitFor(() => expect(calls).toEqual(["one", "two"]));
+    await firstPairStarted.promise;
+    expect(calls).toEqual(["one", "two"]);
     remove[0]!();
     remove[2]!();
     expect(calls).toEqual(["one", "two"]);
     gates[0]!.resolve();
-    await waitFor(() => expect(calls).toEqual(["one", "two", "four"]));
+    await nextReadStarted.promise;
     gates[1]!.resolve();
-    await observers[1]!.refetch();
-    await observers[3]!.refetch();
+    await Promise.all([client.fetchQuery(options[1]!), client.fetchQuery(options[3]!)]);
+    expect(calls).toEqual(["one", "two", "four"]);
     expect(client.getQueryData(options[2]!.queryKey)).toBeUndefined();
   } finally {
     gates.forEach((gate) => gate.resolve());
     remove.forEach((unsubscribe) => unsubscribe());
     client.clear();
+    decode.mockRestore();
   }
   // This test coordinates queued image queries and cache updates.
 }, 2_500);
 
 test("eight preview queries share one batch while two reads run and one bad image stays isolated", async () => {
   const client = new QueryClient();
-  const decode = spyOn(imageWorkerClient, "decodeGeneratedImage").mockImplementation(
-    async ({ byteLength }) => new ArrayBuffer(byteLength),
-  );
+  const decode = mockDecoding();
   const firstReads = Promise.withResolvers<void>();
+  const firstPairStarted = Promise.withResolvers<void>();
   let active = 0;
   let maximum = 0;
   const began = mock(
@@ -266,6 +290,7 @@ test("eight preview queries share one batch while two reads run and one bad imag
     readGeneratedImage: async (request: AgentGeneratedImageReadInput) => {
       active++;
       maximum = Math.max(maximum, active);
+      if (active === 2) firstPairStarted.resolve();
       try {
         await firstReads.promise;
         if (request.itemId === "image-3") throw new Error("Image file is missing");
@@ -280,7 +305,8 @@ test("eight preview queries share one batch while two reads run and one bad imag
   );
   const result = Promise.allSettled(queries.map((query) => client.fetchQuery(query)));
   try {
-    await waitFor(() => expect(active).toBe(2));
+    await firstPairStarted.promise;
+    expect(active).toBe(2);
     expect(began).toHaveBeenCalledTimes(1);
     expect(began.mock.calls[0]![0].images).toHaveLength(8);
     expect(released).not.toHaveBeenCalled();
@@ -304,6 +330,7 @@ test("eight preview queries share one batch while two reads run and one bad imag
 
 test("new work at batch completion and concurrent revisions both reach a fresh batch", async () => {
   const client = new QueryClient();
+  const decode = mockDecoding();
   const begin = mock(
     async ({ ref, images }: import("@openducktor/contracts").AgentGeneratedImageBatchInput) => ({
       ref,
@@ -329,12 +356,14 @@ test("new work at batch completion and concurrent revisions both reach a fresh b
       expect(new Set(request.images.map(({ itemId }) => itemId)).size).toBe(request.images.length);
   } finally {
     client.clear();
+    decode.mockRestore();
   }
   // This test coordinates queued image queries and cache updates.
 }, 2_500);
 
 test("partial batch admission queues excess images until release", async () => {
   const client = new QueryClient();
+  const decode = mockDecoding();
   const events: string[] = [];
   const begin = mock(
     async ({ ref, images }: import("@openducktor/contracts").AgentGeneratedImageBatchInput) => {
@@ -368,6 +397,7 @@ test("partial batch admission queues excess images until release", async () => {
     );
   } finally {
     client.clear();
+    decode.mockRestore();
   }
   // This test coordinates queued image queries and cache updates.
 }, 5_000);

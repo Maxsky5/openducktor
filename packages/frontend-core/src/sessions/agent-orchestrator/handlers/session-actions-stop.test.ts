@@ -16,7 +16,7 @@ import {
 } from "../events/session-events-test-harness";
 import { historyToChatMessages } from "../support/session-history-chat-messages";
 import { createSessionTurnMetadata } from "../support/session-turn-metadata";
-import { createDeferred, createTaskCardFixture } from "../test-utils";
+import { createTaskCardFixture } from "../test-utils";
 import {
   buildSession,
   createSessionActions,
@@ -322,7 +322,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
   test("records stop intent before awaiting authoritative session stop", async () => {
     const adapter = new AgentRuntimeTestAdapter();
-    const stopDeferred = createDeferred<void>();
+    const stopDeferred = Promise.withResolvers<void>();
     adapter.stopSession = async () => {
       await stopDeferred.promise;
     };

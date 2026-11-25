@@ -1,4 +1,3 @@
-import "../test-support/dom-environment";
 import { describe, expect, test } from "bun:test";
 import type {
   WorkspaceFileTreeRefreshResult,
@@ -7,10 +6,7 @@ import type {
   WorkspaceTextFileWriteResult,
 } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { act, renderHook, waitFor } from "@testing-library/react";
-import { createElement, type PropsWithChildren, type ReactElement } from "react";
-import { ClientConnectionProvider } from "../connection/client-connection-react";
+import type { QueryClient } from "@tanstack/react-query";
 import { createTestClientConnection } from "../test-support/test-client-connection";
 import {
   filesystemQueryKeys,
@@ -20,11 +16,57 @@ import {
   workspaceTextFileWriteMutationOptions,
 } from "./filesystem";
 
-const createHostWrapper = (client: Partial<HostClient>) => {
-  const connection = createTestClientConnection({ client });
-  return ({ children }: PropsWithChildren): ReactElement =>
-    createElement(ClientConnectionProvider, { connection }, children);
-};
+const saveTextFile = (queryClient: QueryClient, input: WorkspaceTextFileWriteInput) =>
+  queryClient
+    .getMutationCache()
+    .build(queryClient, workspaceTextFileWriteMutationOptions(queryClient))
+    .execute(input);
+
+const textResult = (rootPath: string, relativePath: string): WorkspaceTextFileWriteResult => ({
+  kind: "text",
+  rootPath,
+  relativePath,
+  contents: "text",
+  size: 4,
+  mtimeMs: 1,
+  revision: "revision-1",
+});
+
+test.each([".png", "nested/.PNG", "nested.png/jpg", "picture.avif"])(
+  "the preview reads saved text for %s",
+  async (relativePath) => {
+    const rootPath = "/tmp";
+    const scope = { kind: "local" } as const;
+    const initial = textResult(rootPath, relativePath);
+    const { queryClient } = createTestClientConnection({
+      client: {
+        filesystemReadTextFile: async () => initial,
+        filesystemWriteTextFile: async ({ contents }) => ({
+          ...initial,
+          contents,
+          size: contents.length,
+          mtimeMs: 2,
+          revision: "revision-2",
+        }),
+      },
+    });
+    try {
+      const preview = workspaceFilePreviewQueryOptions(rootPath, relativePath, scope);
+      await queryClient.fetchQuery(preview);
+      const saved = await saveTextFile(queryClient, {
+        rootPath,
+        relativePath,
+        scope,
+        contents: "saved",
+        revision: initial.revision,
+      });
+
+      expect(queryClient.getQueryData(preview.queryKey)).toEqual(saved);
+    } finally {
+      queryClient.clear();
+    }
+  },
+);
 
 describe("workspaceFileTreeQueryOptions", () => {
   test("passes the target branch to the filesystem tree host read", async () => {
@@ -69,27 +111,17 @@ describe("workspaceFileTreeQueryOptions", () => {
 
   for (const access of [undefined, "local"] as const) {
     test(`updates the exact text cache and invalidates only the workspace tree after save, access=${access}`, async () => {
-      const wrapper = createHostWrapper({
-        filesystemWriteTextFile: async (
-          input: WorkspaceTextFileWriteInput,
-        ): Promise<WorkspaceTextFileWriteResult> => ({
-          kind: "text",
-          ...input,
-          size: input.contents.length,
-          mtimeMs: 2,
-          revision: "revision-2",
-        }),
-      });
-      const { result } = renderHook(
-        () => {
-          const queryClient = useQueryClient();
-          return {
-            queryClient,
-            mutation: useMutation(workspaceTextFileWriteMutationOptions(queryClient)),
-          };
+      const { queryClient } = createTestClientConnection({
+        client: {
+          filesystemWriteTextFile: async (input) => ({
+            kind: "text",
+            ...input,
+            size: input.contents.length,
+            mtimeMs: 2,
+            revision: "revision-2",
+          }),
         },
-        { wrapper },
-      );
+      });
       const input: WorkspaceTextFileWriteInput = {
         rootPath: "/repo",
         relativePath: "file.txt",
@@ -104,27 +136,20 @@ describe("workspaceFileTreeQueryOptions", () => {
       );
       const treeKey = filesystemQueryKeys.treeRoot("/repo");
       const unrelatedKey = filesystemQueryKeys.treeRoot("/other");
-      act(() => {
-        result.current.queryClient.setQueryData(treeKey, { rootPath: "/repo", entries: [] });
-        result.current.queryClient.setQueryData(unrelatedKey, { rootPath: "/other", entries: [] });
-        result.current.queryClient.setQueryData<string>(otherFileKey, "other access mode");
-      });
-      let saved: WorkspaceTextFileWriteResult | undefined;
-      await act(async () => {
-        saved = await result.current.mutation.mutateAsync(input);
-      });
-      await waitFor(() => expect(result.current.mutation.isSuccess).toBe(true));
+      queryClient.setQueryData(treeKey, { rootPath: "/repo", entries: [] });
+      queryClient.setQueryData(unrelatedKey, { rootPath: "/other", entries: [] });
+      queryClient.setQueryData(otherFileKey, "other access mode");
+
+      const saved = await saveTextFile(queryClient, input);
 
       expect(
-        result.current.queryClient.getQueryData<WorkspaceTextFileWriteResult>(
+        queryClient.getQueryData<WorkspaceTextFileWriteResult>(
           filesystemQueryKeys.textFile("/repo", "file.txt", access ? { kind: access } : undefined),
         ),
       ).toEqual(saved);
-      expect(result.current.queryClient.getQueryState(treeKey)?.isInvalidated).toBe(true);
-      expect(result.current.queryClient.getQueryState(unrelatedKey)?.isInvalidated).toBe(false);
-      expect(result.current.queryClient.getQueryData<string>(otherFileKey)).toBe(
-        "other access mode",
-      );
+      expect(queryClient.getQueryState(treeKey)?.isInvalidated).toBe(true);
+      expect(queryClient.getQueryState(unrelatedKey)?.isInvalidated).toBe(false);
+      expect(queryClient.getQueryData(otherFileKey)).toBe("other access mode");
     });
   }
 
@@ -139,57 +164,29 @@ describe("workspaceFileTreeQueryOptions", () => {
       mtimeMs: 1,
       revision: "revision-1",
     };
-    const wrapper = createHostWrapper({
-      filesystemWriteTextFile: async () => {
-        throw new Error("The file changed after it was loaded.");
+    const { queryClient } = createTestClientConnection({
+      client: {
+        filesystemWriteTextFile: async () => {
+          throw new Error("The file changed after it was loaded.");
+        },
       },
     });
-    const { result } = renderHook(
-      () => {
-        const queryClient = useQueryClient();
-        return {
-          queryClient,
-          mutation: useMutation(workspaceTextFileWriteMutationOptions(queryClient)),
-        };
-      },
-      { wrapper },
-    );
-    act(() => result.current.queryClient.setQueryData(key, baseline));
+    queryClient.setQueryData(key, baseline);
 
-    let mutationError: unknown;
-    await act(async () => {
-      try {
-        await result.current.mutation.mutateAsync({
-          rootPath: "/repo",
-          relativePath: "file.txt",
-          contents: "draft",
-          revision: "revision-1",
-        });
-      } catch (cause) {
-        mutationError = cause;
-      }
-    });
-    await waitFor(() => expect(result.current.mutation.isError).toBe(true));
-    expect(mutationError).toBeInstanceOf(Error);
-    if (!(mutationError instanceof Error)) throw mutationError;
-    expect(mutationError.message).toBe("The file changed after it was loaded.");
-    expect(result.current.queryClient.getQueryData<WorkspaceTextFileReadResult>(key)).toEqual(
-      baseline,
-    );
+    await expect(
+      saveTextFile(queryClient, {
+        rootPath: "/repo",
+        relativePath: "file.txt",
+        contents: "draft",
+        revision: "revision-1",
+      }),
+    ).rejects.toThrow("The file changed after it was loaded.");
+    expect(queryClient.getQueryData(key)).toEqual(baseline);
   });
 });
 
 describe("workspace session file context", () => {
   const chat = { kind: "chat" as const, session: { workspaceId: "workspace", sessionId: "chat" } };
-  const textResult = (rootPath: string, relativePath: string): WorkspaceTextFileWriteResult => ({
-    kind: "text",
-    rootPath,
-    relativePath,
-    contents: "text",
-    size: 4,
-    mtimeMs: 1,
-    revision: "revision-1",
-  });
 
   test("tree and file reads send the session and keep entries under their directory keys", async () => {
     const treeInputs: Array<Parameters<HostClient["filesystemRefreshTree"]>[0]> = [];
@@ -249,41 +246,31 @@ describe("workspace session file context", () => {
 
   test("a save sends the session and updates the text entry that the chat reads", async () => {
     const writes: WorkspaceTextFileWriteInput[] = [];
-    const wrapper = createHostWrapper({
-      filesystemWriteTextFile: async (input) => {
-        writes.push(input);
-        return { ...textResult(input.rootPath, input.relativePath), contents: input.contents };
+    const { queryClient } = createTestClientConnection({
+      client: {
+        filesystemWriteTextFile: async (input) => {
+          writes.push(input);
+          return { ...textResult(input.rootPath, input.relativePath), contents: input.contents };
+        },
       },
     });
-    const { result } = renderHook(
-      () => {
-        const queryClient = useQueryClient();
-        return {
-          queryClient,
-          mutation: useMutation(workspaceTextFileWriteMutationOptions(queryClient)),
-        };
-      },
-      { wrapper },
-    );
     const unscopedKey = filesystemQueryKeys.textFile("/worktree", "a.ts");
-    act(() => result.current.queryClient.setQueryData<string>(unscopedKey, "unscoped"));
+    queryClient.setQueryData(unscopedKey, "unscoped");
 
-    await act(async () => {
-      await result.current.mutation.mutateAsync({
-        rootPath: "/worktree",
-        relativePath: "a.ts",
-        contents: "saved",
-        revision: "revision-1",
-        scope: chat,
-      });
+    await saveTextFile(queryClient, {
+      rootPath: "/worktree",
+      relativePath: "a.ts",
+      contents: "saved",
+      revision: "revision-1",
+      scope: chat,
     });
 
     expect(writes[0]?.scope).toEqual(chat);
     expect(
-      result.current.queryClient.getQueryData<WorkspaceTextFileReadResult>(
+      queryClient.getQueryData<WorkspaceTextFileReadResult>(
         workspaceTextFileQueryOptions("/worktree", "a.ts", chat).queryKey,
       ),
     ).toMatchObject({ contents: "saved" });
-    expect(result.current.queryClient.getQueryData<string>(unscopedKey)).toBe("unscoped");
+    expect(queryClient.getQueryData(unscopedKey)).toBe("unscoped");
   });
 });

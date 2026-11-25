@@ -9,11 +9,8 @@ import {
 } from "@openducktor/frontend-core/sessions/session-contexts";
 import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import { ToolDenialNotice } from "./agent-chat-tool-denial";
-
-enableReactActEnvironment();
 
 const session = createAgentSessionFixture({
   externalSessionId: "session-1",

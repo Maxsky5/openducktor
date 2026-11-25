@@ -4,15 +4,17 @@ import type { HostClient } from "@openducktor/host-client";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { QueryProvider } from "@/test-utils/query-provider";
-import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import { filesystemQueryKeys } from "@openducktor/frontend-core/queries/filesystem";
 import { MarkdownFileImage } from "./markdown-file-image";
+
+setupTestingLibraryFakeTimers();
 
 test("bounds image reads, cancels queued reads on close, and releases unused image data", async () => {
   const names = ["one.png", "two.png", "three.png", "four.png"];
   const pending = new Map(
-    names.map((name) => [name, createDeferred<WorkspaceTextFileReadResult>()]),
+    names.map((name) => [name, Promise.withResolvers<WorkspaceTextFileReadResult>()]),
   );
   const result = (name: string): WorkspaceTextFileReadResult => ({
     kind: "image",
@@ -96,7 +98,7 @@ test("bounds image reads, cancels queued reads on close, and releases unused ima
 });
 
 test("keeps each Markdown image tied to its file across pending reads and reports failures", async () => {
-  const pending = createDeferred<WorkspaceTextFileReadResult>();
+  const pending = Promise.withResolvers<WorkspaceTextFileReadResult>();
   const resolvePath = mock<HostClient["filesystemResolvePath"]>(async (path) => {
     if (path === "/repo/docs/plot.png") return path;
     if (path === "C:/repo/notes/../media/plot.png") return "C:/repo/media/plot.png";

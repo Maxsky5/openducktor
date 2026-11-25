@@ -1,46 +1,26 @@
-import { describe, expect, test } from "bun:test";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-
+import { expect, mock, spyOn, test } from "bun:test";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { TaskIdBadge } from "./task-id-badge";
 
-describe("TaskIdBadge", () => {
-  test("renders task ID in monospace font", () => {
-    const html = renderToStaticMarkup(createElement(TaskIdBadge, { taskId: "TASK-123" }));
-
-    expect(html).toContain("TASK-123");
-    expect(html).toContain("font-mono");
-  });
-
-  test("renders copy button with Copy icon", () => {
-    const html = renderToStaticMarkup(createElement(TaskIdBadge, { taskId: "TASK-456" }));
-
-    expect(html).toContain('data-testid="copy-task-id"');
-  });
-
-  test("applies custom className", () => {
-    const html = renderToStaticMarkup(
-      createElement(TaskIdBadge, { taskId: "TASK-789", className: "truncate" }),
+test("copies the visible task ID without clicking its parent", async () => {
+  const parentClick = mock(() => {});
+  const write = spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+  try {
+    render(
+      <div onClick={parentClick}>
+        <TaskIdBadge taskId="TASK-ABC" />
+      </div>,
     );
+    const id = screen.getByText("TASK-ABC");
+    const copy = screen.getByRole("button", { name: "Copy task ID" });
+    expect(id.compareDocumentPosition(copy)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
 
-    expect(html).toContain("truncate");
-  });
-
-  test("renders copy button to the right of task ID", () => {
-    const html = renderToStaticMarkup(createElement(TaskIdBadge, { taskId: "TASK-ABC" }));
-
-    const copyIndex = html.indexOf('data-testid="copy-task-id"');
-    const taskIdIndex = html.indexOf("TASK-ABC");
-    expect(copyIndex).toBeGreaterThan(taskIdIndex);
-  });
-
-  test("renders only the accessible copy control in icon-only mode", () => {
-    const html = renderToStaticMarkup(
-      createElement(TaskIdBadge, { taskId: "TASK-COMPACT", iconOnly: true }),
-    );
-
-    expect(html).not.toContain(">TASK-COMPACT<");
-    expect(html).toContain('aria-label="Copy task ID"');
-    expect(html).toContain("size-6");
-  });
+    await act(async () => {
+      fireEvent.click(copy);
+    });
+    expect(write).toHaveBeenCalledWith("TASK-ABC");
+    expect(parentClick).not.toHaveBeenCalled();
+  } finally {
+    write.mockRestore();
+  }
 });

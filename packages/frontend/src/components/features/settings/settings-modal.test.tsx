@@ -1,4 +1,4 @@
-import { expect, mock, test } from "bun:test";
+import { expect, jest, mock, test } from "bun:test";
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   knownRuntimeKindValues,
@@ -7,9 +7,11 @@ import {
   type ShortcutPreferences,
 } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
+import { notifyManager } from "@tanstack/react-query";
 import { act, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { useState, type PropsWithChildren, type ReactElement } from "react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { MINIMUM_LOADER_MS } from "@openducktor/frontend-core/lib/use-minimum-loader";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { IssueImportDialog } from "@/pages/kanban/issue-import-dialog";
 import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
@@ -25,7 +27,6 @@ import {
   createHostRuntimeStatusContextValue,
   createSettingsSnapshotFixture,
   createRepoSettingsConfigFixture,
-  createDeferred,
 } from "@/test-utils/shared-test-fixtures";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import {
@@ -34,6 +35,7 @@ import {
 } from "@/features/feature-tour/feature-tour-context";
 import { FeatureTourDialogHost } from "@/features/feature-tour/feature-tour-dialog-host";
 import { ShortcutPreferencesProvider } from "@/features/shortcuts/shortcut-preferences-provider";
+import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { SettingsModal, SettingsModalProvider } from "./settings-modal";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 
@@ -49,159 +51,171 @@ const isSelectedPrompt = (content: SettingsContent, label: string) =>
 // first load.
 await (await import("@/features/feature-tour/feature-tour-dialog-loader")).loadFeatureTourDialog();
 
-for (const shared of [true, false]) {
-  test(`${shared ? "shared" : "local"} settings opens and reopens cached settings without a loader`, async () => {
-    const settings = renderSettings(shared);
-    try {
-      for (let visit = 0; visit < 2; visit += 1) {
-        fireEvent.click(within(document.body).getByRole("button", { name: "Open settings" }));
-        const dialog = within(document.body).getByRole("dialog");
-        expect(dialog.hasAttribute("aria-busy")).toBe(false);
-        const content = within(dialog);
-        expect(content.getByRole("button", { name: "Repositories" })).toBeDefined();
-        expect(content.getByRole("button", { name: "Save settings" })).toBeDefined();
-        await settings.close(content);
-      }
-    } finally {
-      settings.unmount();
-    }
+test("cached shared Settings keeps navigation across triggers through Cancel and Save", async () => {
+  const settings = renderSettings(true, undefined, {
+    extraTrigger: <SettingsModal triggerLabel="Other settings" />,
   });
-
-  test(`${shared ? "shared" : "local"} settings keeps the ready form visible during executable checks`, async () => {
-    const discovery = createDeferred<RuntimeExecutableCheck>();
-    const validation = createDeferred<RuntimeExecutableCheck>();
-    const check = mock<HostClient["runtimeExecutablesCheck"]>((input) =>
-      input.mode === "discover" ? discovery.promise : validation.promise,
+  const openCached = async (label = "Open settings") => {
+    fireEvent.click(within(document.body).getByRole("button", { name: label }));
+    const dialog = within(document.body).getByRole("dialog");
+    expect(dialog.hasAttribute("aria-busy")).toBe(false);
+    const content = within(dialog);
+    await waitFor(
+      () => {
+        expect(
+          content.getByRole<HTMLButtonElement>("button", { name: "Repositories" }).disabled,
+        ).toBe(false);
+      },
+      { timeout: 800 },
     );
-    const settings = renderSettings(shared, check);
-    try {
-      const content = await settings.open();
-      fireEvent.click(content.getByRole("button", { name: "Agent runtimes" }));
-      fireEvent.click(content.getByRole("switch", { name: "Enabled" }));
-      const input = content.getByRole<HTMLInputElement>("textbox", { name: "Executable path" });
-      const result = (path: string): RuntimeExecutableCheck => ({
-        runtimes: [{ kind: "opencode", path, ok: true, version: "2.0.0", error: null }],
-      });
-      fireEvent.click(content.getByRole("button", { name: "Check again" }));
-      await waitFor(() => expect(check).toHaveBeenCalledTimes(1));
-      expect(content.queryByRole("button", { name: "Cancel" }) !== null).toBe(true);
-      expect(content.getByRole("button", { name: "Save settings" }).hasAttribute("disabled")).toBe(
-        true,
-      );
-      expect(content.getByRole("button", { name: "Checking…" }).hasAttribute("disabled")).toBe(
-        true,
-      );
-      expect(content.getByRole("button", { name: "Sessions" }).hasAttribute("disabled")).toBe(
-        false,
-      );
-      await act(async () => discovery.resolve(result(input.value)));
-      await waitFor(() =>
-        expect(
-          content.getByRole("button", { name: "Save settings" }).hasAttribute("disabled"),
-        ).toBe(false),
-      );
+    return content;
+  };
+  const thinkingSwitch = (content: SettingsContent) =>
+    content.getByRole("switch", { name: "Show thinking messages in session transcripts" });
+  try {
+    let content = await openCached();
+    expect(content.getByRole("button", { name: "Save settings" })).toBeDefined();
+    fireEvent.click(content.getByRole("button", { name: "System prompts" }));
+    expect(content.getByRole("textbox", { name: "Search all prompts" })).toBeDefined();
+    fireEvent.click(promptRow(content, "Builder"));
+    expect(isSelectedPrompt(content, "Builder Instructions")).toBe(true);
+    fireEvent.click(content.getByRole("button", { name: "Sessions" }));
+    expect(thinkingSwitch(content).getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(thinkingSwitch(content));
+    expect(thinkingSwitch(content).getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(content.getByRole("button", { name: "System prompts" }));
+    await settings.close(content);
+    expect(settings.saveSettingsSnapshot).not.toHaveBeenCalled();
 
-      input.focus();
-      fireEvent.change(input, { target: { value: "/tools/another-opencode" } });
-      await waitFor(() => expect(check).toHaveBeenCalledTimes(2));
-      expect(content.queryByRole("textbox", { name: "Executable path" }) === input).toBe(true);
-      expect(document.activeElement === input).toBe(true);
-      expect(content.getByRole("button", { name: "Save settings" }).hasAttribute("disabled")).toBe(
-        true,
-      );
-      expect(content.getByText("Checking executable path…")).toBeDefined();
-      await act(async () => validation.resolve(result(input.value)));
-      await waitFor(() =>
-        expect(
-          content.getByRole("button", { name: "Save settings" }).hasAttribute("disabled"),
-        ).toBe(false),
-      );
-      expect(document.activeElement === input).toBe(true);
-      await settings.close(content);
-      expect(settings.saveSettingsSnapshot).not.toHaveBeenCalled();
-    } finally {
-      settings.unmount();
-    }
-  });
+    content = await openCached("Other settings");
+    expect(isSelectedPrompt(content, "Builder Instructions")).toBe(true);
+    // The prompt keeps the screen that opened it, so Back returns to the first screen.
+    fireEvent.click(content.getByRole("button", { name: "Back to System prompts" }));
+    expect(content.getByRole("textbox", { name: "Search all prompts" })).toBeDefined();
+    fireEvent.click(promptRow(content, "Builder"));
+    fireEvent.click(content.getByRole("button", { name: "Sessions" }));
+    expect(thinkingSwitch(content).getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(thinkingSwitch(content));
+    await settings.close(content, true);
+    expect(settings.saveSettingsSnapshot.mock.calls).toEqual([
+      [{ global: { chat: { showThinkingMessages: true } } }, undefined],
+    ]);
 
-  test(`${shared ? "shared" : "local"} settings discards edits and keeps the selected prompt after cancel`, async () => {
-    const settings = renderSettings(shared);
-    try {
-      let content = await settings.open();
-      fireEvent.click(content.getByRole("button", { name: "System prompts" }));
-      expect(content.getByRole("textbox", { name: "Search all prompts" })).toBeDefined();
-      fireEvent.click(promptRow(content, "Builder"));
-      expect(isSelectedPrompt(content, "Builder Instructions")).toBe(true);
-      fireEvent.click(content.getByRole("button", { name: "Sessions" }));
-      const thinkingMessages = content.getByRole("switch", {
-        name: "Show thinking messages in session transcripts",
-      });
-      fireEvent.click(thinkingMessages);
-      expect(thinkingMessages.getAttribute("aria-checked")).toBe("true");
-      fireEvent.click(content.getByRole("button", { name: "System prompts" }));
-      await settings.close(content);
-      expect(settings.saveSettingsSnapshot).not.toHaveBeenCalled();
-      content = await settings.open(shared ? "Other settings" : "Open settings");
-      expect(isSelectedPrompt(content, "Builder Instructions")).toBe(true);
-      // The prompt keeps the screen that opened it, so Back returns to the first screen.
-      fireEvent.click(content.getByRole("button", { name: "Back to System prompts" }));
-      expect(content.getByRole("textbox", { name: "Search all prompts" })).toBeDefined();
-      fireEvent.click(content.getByRole("button", { name: "Sessions" }));
-      expect(
-        content
-          .getByRole("switch", { name: "Show thinking messages in session transcripts" })
-          .getAttribute("aria-checked"),
-      ).toBe("false");
-    } finally {
-      settings.unmount();
-    }
-  });
+    content = await openCached();
+    expect(content.getByRole("heading", { name: "Session settings" })).toBeDefined();
+    fireEvent.click(content.getByRole("button", { name: "System prompts" }));
+    expect(isSelectedPrompt(content, "Builder Instructions")).toBe(true);
+  } finally {
+    settings.unmount();
+  }
+});
 
-  test(`${shared ? "shared" : "local"} settings keeps navigation after saving edits`, async () => {
-    const settings = renderSettings(shared);
-    try {
-      let content = await settings.open();
-      fireEvent.click(content.getByRole("button", { name: "System prompts" }));
-      fireEvent.click(promptRow(content, "Builder"));
-      fireEvent.click(content.getByRole("button", { name: "Sessions" }));
-      const thinkingMessages = content.getByRole("switch", {
-        name: "Show thinking messages in session transcripts",
-      });
-      expect(thinkingMessages.getAttribute("aria-checked")).toBe("false");
-      fireEvent.click(thinkingMessages);
-      await settings.close(content, true);
-      expect(settings.saveSettingsSnapshot).toHaveBeenCalledTimes(1);
-      expect(settings.saveSettingsSnapshot).toHaveBeenCalledWith(
-        { global: { chat: { showThinkingMessages: true } } },
-        undefined,
-      );
-      content = await settings.open();
-      expect(content.getByRole("heading", { name: "Session settings" })).toBeDefined();
-      fireEvent.click(content.getByRole("button", { name: "System prompts" }));
-      expect(isSelectedPrompt(content, "Builder Instructions")).toBe(true);
-    } finally {
-      settings.unmount();
-    }
-  });
-}
-
-test("Settings stays open until the shortcut save finishes", async () => {
-  const write = createDeferred<ShortcutPreferences>();
-  const settings = renderSettings(false, undefined, { saveKeyboardShortcuts: () => write.promise });
+test("Settings keeps the ready form visible during executable checks", async () => {
+  const discovery = Promise.withResolvers<RuntimeExecutableCheck>();
+  const validation = Promise.withResolvers<RuntimeExecutableCheck>();
+  const check = mock<HostClient["runtimeExecutablesCheck"]>((input) =>
+    input.mode === "discover" ? discovery.promise : validation.promise,
+  );
+  const settings = renderSettings(true, check);
   try {
     const content = await settings.open();
+    fireEvent.click(content.getByRole("button", { name: "Agent runtimes" }));
+    fireEvent.click(content.getByRole("switch", { name: "Enabled" }));
+    const input = content.getByRole<HTMLInputElement>("textbox", { name: "Executable path" });
+    const result = (path: string): RuntimeExecutableCheck => ({
+      runtimes: [{ kind: "opencode", path, ok: true, version: "2.0.0", error: null }],
+    });
+    fireEvent.click(content.getByRole("button", { name: "Check again" }));
+    await waitFor(() => expect(check).toHaveBeenCalledTimes(1));
+    expect(content.queryByRole("button", { name: "Cancel" }) !== null).toBe(true);
+    expect(content.getByRole("button", { name: "Save settings" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect(content.getByRole("button", { name: "Checking…" }).hasAttribute("disabled")).toBe(true);
+    expect(content.getByRole("button", { name: "Sessions" }).hasAttribute("disabled")).toBe(false);
+    await act(async () => discovery.resolve(result(input.value)));
+    await waitFor(() =>
+      expect(content.getByRole("button", { name: "Save settings" }).hasAttribute("disabled")).toBe(
+        false,
+      ),
+    );
+
+    input.focus();
+    fireEvent.change(input, { target: { value: "/tools/another-opencode" } });
+    await waitFor(() => expect(check).toHaveBeenCalledTimes(2));
+    expect(content.queryByRole("textbox", { name: "Executable path" }) === input).toBe(true);
+    expect(document.activeElement === input).toBe(true);
+    expect(content.getByRole("button", { name: "Save settings" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect(content.getByText("Checking executable path…")).toBeDefined();
+    await act(async () => validation.resolve(result(input.value)));
+    await waitFor(() =>
+      expect(content.getByRole("button", { name: "Save settings" }).hasAttribute("disabled")).toBe(
+        false,
+      ),
+    );
+    expect(document.activeElement === input).toBe(true);
+    await settings.close(content);
+    expect(settings.saveSettingsSnapshot).not.toHaveBeenCalled();
+  } finally {
+    settings.unmount();
+  }
+});
+
+test("Settings locks shortcuts during save and shows the saved removal when reopened", async () => {
+  const write = Promise.withResolvers<ShortcutPreferences>();
+  const writing = Promise.withResolvers<void>();
+  const saveKeyboardShortcuts = mock<HostClient["workspaceSaveKeyboardShortcuts"]>(() => {
+    writing.resolve();
+    return write.promise;
+  });
+  const saved = { version: 1, overrides: { sidebar: null } } satisfies ShortcutPreferences;
+  const settings = renderSettings(false, undefined, { saveKeyboardShortcuts });
+  const sidebarRow = (content: SettingsContent) =>
+    within(content.getByText("Toggle sidebar").closest("li")!);
+  const openShortcuts = (content: SettingsContent) => {
     fireEvent.click(content.getByRole("button", { name: "Keyboard shortcuts" }));
-    fireEvent.click(content.getByRole("button", { name: "Remove shortcut for Toggle sidebar" }));
+    fireEvent.change(content.getByLabelText("Search commands"), {
+      target: { value: "Toggle sidebar" },
+    });
+    return sidebarRow(content);
+  };
+  try {
+    const content = await settings.open();
+    const sidebar = openShortcuts(content);
+    fireEvent.click(sidebar.getByRole("button", { name: "Remove shortcut for Toggle sidebar" }));
     await act(async () => {
       fireEvent.click(content.getByRole("button", { name: "Save settings" }));
+      await writing.promise;
+      await new Promise<void>((resolve) => notifyManager.schedule(resolve));
     });
-    await waitFor(() =>
-      expect(content.getByRole("button", { name: /Saving/ }).hasAttribute("disabled")).toBe(true),
+    expect(content.queryByRole<HTMLButtonElement>("button", { name: "Saving…" })?.disabled).toBe(
+      true,
     );
+    expect(
+      sidebar.getByRole<HTMLButtonElement>("button", { name: /^Toggle sidebar, .*Add keys$/ })
+        .disabled,
+    ).toBe(true);
+    expect(content.getByRole("button", { name: "Reset all" }).hasAttribute("disabled")).toBe(true);
     fireEvent.keyDown(within(document.body).getByRole("dialog"), { key: "Escape" });
     expect(within(document.body).queryByRole("dialog")).not.toBeNull();
-    await act(async () => write.resolve({ version: 1, overrides: { sidebar: null } }));
-    await waitFor(() => expect(within(document.body).queryByRole("dialog")).toBeNull());
+    await act(async () => {
+      write.resolve(saved);
+      await write.promise;
+    });
+    expect(within(document.body).queryByRole("dialog")).toBeNull();
+    expect(saveKeyboardShortcuts.mock.calls).toEqual([[saved]]);
+
+    const reopened = await settings.open();
+    fireEvent.change(reopened.getByLabelText("Search commands"), {
+      target: { value: "Toggle sidebar" },
+    });
+    expect(
+      sidebarRow(reopened)
+        .getByRole("button", { name: /^Toggle sidebar, .*Add keys$/ })
+        .hasAttribute("disabled"),
+    ).toBe(false);
   } finally {
     settings.unmount();
   }
@@ -273,25 +287,35 @@ test("Show tour leaves the focus return to the tour, also before the tour shows"
   }
 });
 
-test("local settings shows General without a tour provider and without Show tour", async () => {
+test("cached local Settings opens immediately and remembers General after Cancel", async () => {
   const settings = renderSettings(false);
   try {
-    const content = await settings.open();
-    fireEvent.click(content.getByRole("button", { name: "General" }));
+    const body = within(document.body);
+    fireEvent.click(body.getByRole("button", { name: "Open settings" }));
+    const dialog = body.getByRole("dialog");
+    expect(dialog.hasAttribute("aria-busy")).toBe(false);
+    const content = within(dialog);
+    const general = content.getByRole<HTMLButtonElement>("button", { name: "General" });
+    await waitFor(() => expect(general.disabled).toBe(false), { timeout: 800 });
+    fireEvent.click(general);
     expect(content.getByRole("heading", { name: "General settings" })).toBeDefined();
-    expect(content.queryByRole("button", { name: "Show tour" })).toBeNull();
+    expect(content.queryAllByRole("button", { name: "Show tour" }).length).toBe(0);
     await settings.close(content);
+    const reopened = await settings.open();
+    expect(reopened.queryAllByRole("heading", { name: "General settings" }).length).toBe(1);
   } finally {
     settings.unmount();
   }
 });
 
 test("cached settings stays visible while executable validation runs", async () => {
-  const pending = createDeferred<RuntimeExecutableCheck>();
+  const pending = Promise.withResolvers<RuntimeExecutableCheck>();
   const check = mock(async () => pending.promise);
   const settings = renderSettings(true, check, { cacheExecutables: false, enabledRuntime: true });
   try {
-    fireEvent.click(within(document.body).getByRole("button", { name: "Open settings" }));
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: "Open settings" }));
+    });
     const content = within(within(document.body).getByRole("dialog"));
     expect(content.getByRole("button", { name: "Repositories" })).toBeDefined();
     expect(content.getByRole("button", { name: "Save settings" }).hasAttribute("disabled")).toBe(
@@ -306,32 +330,48 @@ test("cached settings stays visible while executable validation runs", async () 
 });
 
 test("missing settings shows preparation, then a read error that stays during retry", async () => {
-  const first = createDeferred<SettingsSnapshot>();
-  const retry = createDeferred<SettingsSnapshot>();
+  const first = Promise.withResolvers<SettingsSnapshot>();
+  const retry = Promise.withResolvers<SettingsSnapshot>();
   const read = mock().mockReturnValueOnce(first.promise).mockReturnValueOnce(retry.promise);
   const settings = renderSettings(true, undefined, { cacheSnapshot: false, readSnapshot: read });
+  jest.useFakeTimers();
   try {
     fireEvent.click(within(document.body).getByRole("button", { name: "Open settings" }));
     const dialog = within(document.body).getByRole("dialog");
     expect(dialog.hasAttribute("aria-busy")).toBe(true);
     expect(within(dialog).getByRole("heading", { name: "Settings" })).toBeDefined();
     await act(async () => first.reject(new Error("Settings read failed")));
-    const button = await within(dialog).findByRole("button", { name: "Retry settings" });
+    await act(async () => {
+      jest.advanceTimersByTime(MINIMUM_LOADER_MS);
+    });
+    const button = within(dialog).getByRole("button", { name: "Retry settings" });
     fireEvent.click(button);
-    expect(within(dialog).getByText(/Settings read failed/)).toBeDefined();
+    expect(within(dialog).getByRole("alert").textContent).toContain(
+      "Failed to load settings: Settings read failed",
+    );
     expect(dialog.hasAttribute("aria-busy")).toBe(false);
     await act(async () => retry.resolve(createSettingsSnapshotFixture()));
-    await within(dialog).findByRole("button", { name: "Repositories" });
+    await act(async () => {
+      jest.advanceTimersByTime(0);
+    });
+    expect(within(dialog).getByRole("button", { name: "Repositories" })).toBeDefined();
     expect(read).toHaveBeenCalledTimes(2);
   } finally {
-    first.resolve(createSettingsSnapshotFixture());
-    retry.resolve(createSettingsSnapshotFixture());
-    settings.unmount();
+    try {
+      first.resolve(createSettingsSnapshotFixture());
+      retry.resolve(createSettingsSnapshotFixture());
+      settings.unmount();
+      await act(async () => {
+        jest.runOnlyPendingTimers();
+      });
+    } finally {
+      jest.useRealTimers();
+    }
   }
 });
 
 test("a client without a local host keeps settings controls and returns focus", async () => {
-  const settings = renderSettings(true, undefined, { featureTour: "dialog" });
+  const settings = renderSettings(true);
   try {
     const trigger = within(document.body).getByRole("button", { name: "Open settings" });
     trigger.focus();
@@ -347,7 +387,11 @@ test("a client without a local host keeps settings controls and returns focus", 
 });
 
 test("shared settings remembers the section opened by a deep link", async () => {
-  const settings = renderSettings(true);
+  const settings = renderSettings(true, undefined, {
+    extraTrigger: (
+      <SettingsModal triggerLabel="Open roles" deepLink={{ kind: "custom-agent-roles" }} />
+    ),
+  });
   try {
     let content = await settings.open("Open roles");
     expect(content.getByText("Custom agent roles", { selector: "p" })).toBeDefined();
@@ -359,10 +403,22 @@ test("shared settings remembers the section opened by a deep link", async () => 
   }
 });
 
-test("shared settings remembers the repository subsection and selected prompt", async () => {
-  const settings = renderSettings(true);
+test("shared Settings clears a missing repository target and remembers the selected prompt", async () => {
+  const settings = renderSettings(true, undefined, {
+    extraTrigger: (
+      <SettingsModal
+        triggerLabel="Open missing scripts"
+        deepLink={{ kind: "repository-actions", repositoryPath: "/missing" }}
+      />
+    ),
+  });
   try {
-    let content = await settings.open("Open scripts");
+    let content = await settings.open("Open missing scripts");
+    expect(content.getByRole("alert").textContent).toContain("/missing");
+    await settings.close(content);
+
+    content = await settings.open();
+    expect(content.queryByRole("alert") === null).toBe(true);
     expect(
       content.getByLabelText("Before worktree removal script (one command per line)"),
     ).toBeDefined();
@@ -377,40 +433,25 @@ test("shared settings remembers the repository subsection and selected prompt", 
   }
 });
 
-test("shared settings clears the repository target after closing", async () => {
-  const settings = renderSettings(true);
+test("issue import opens repository configuration after browsing scripts and sessions", async () => {
+  const settings = renderSettings(true, undefined, { extraTrigger: <ImportTrigger /> });
   try {
-    let content = await settings.open("Open missing scripts");
-    expect(content.getByRole("alert").textContent).toContain("/missing");
+    let content = await settings.open();
+    fireEvent.click(content.getByRole("button", { name: "Repositories" }));
+    const configuration = content.getByRole("button", { name: "Configuration" });
+    const scripts = content.getByRole("button", { name: "Scripts" });
+    const buttons = content.getAllByRole("button");
+    expect(buttons[buttons.indexOf(configuration) + 1]).toBe(scripts);
+    fireEvent.click(scripts);
+    fireEvent.click(content.getByRole("button", { name: "Sessions" }));
     await settings.close(content);
-    content = await settings.open();
-    expect(content.queryByRole("alert")).toBeNull();
-    expect(
-      content.getByLabelText("Before worktree removal script (one command per line)"),
-    ).toBeDefined();
+    fireEvent.click(within(document.body).getByRole("button", { name: "Import issues" }));
+    content = await settings.open("Open repository settings");
+    expect(content.getByLabelText<HTMLInputElement>("Repository path").value).toBe("/repo");
   } finally {
     settings.unmount();
   }
 });
-
-for (const section of ["Sessions", "Scripts"]) {
-  test(`issue import opens repository configuration after ${section}`, async () => {
-    const settings = renderSettings(true);
-    try {
-      let content = await settings.open();
-      if (section === "Scripts") {
-        fireEvent.click(content.getByRole("button", { name: "Repositories" }));
-      }
-      fireEvent.click(content.getByRole("button", { name: section }));
-      await settings.close(content);
-      fireEvent.click(within(document.body).getByRole("button", { name: "Import issues" }));
-      content = await settings.open("Open repository settings");
-      expect(content.getByLabelText<HTMLInputElement>("Repository path").value).toBe("/repo");
-    } finally {
-      settings.unmount();
-    }
-  });
-}
 
 function renderSettings(
   shared: boolean,
@@ -426,6 +467,7 @@ function renderSettings(
      */
     featureTour?: "dialog" | "state";
     saveKeyboardShortcuts?: HostClient["workspaceSaveKeyboardShortcuts"];
+    extraTrigger?: ReactElement | undefined;
   } = {},
 ) {
   const snapshot = createSettingsSnapshotFixture({
@@ -435,7 +477,9 @@ function renderSettings(
     },
   });
   if (options.enabledRuntime) snapshot.agentRuntimes.opencode.enabled = true;
-  const saveSettingsSnapshot = mock(async () => savedSettingsResult());
+  const saveSettingsSnapshot = mock<WorkspaceStateContextValue["saveSettingsSnapshot"]>(async () =>
+    savedSettingsResult(),
+  );
   const client: Partial<HostClient> = {
     workspaceGetSettingsSnapshot: options.readSnapshot ?? (async () => structuredClone(snapshot)),
   };
@@ -522,17 +566,7 @@ function renderSettings(
   const triggers = (
     <>
       <SettingsModal triggerLabel="Open settings" />
-      {shared ? <SettingsModal triggerLabel="Other settings" /> : null}
-      {shared ? <ImportTrigger /> : null}
-      <SettingsModal triggerLabel="Open roles" deepLink={{ kind: "custom-agent-roles" }} />
-      <SettingsModal
-        triggerLabel="Open scripts"
-        deepLink={{ kind: "repository-actions", repositoryPath: "/repo" }}
-      />
-      <SettingsModal
-        triggerLabel="Open missing scripts"
-        deepLink={{ kind: "repository-actions", repositoryPath: "/missing" }}
-      />
+      {options.extraTrigger}
     </>
   );
   function Wrapper({ children }: PropsWithChildren) {

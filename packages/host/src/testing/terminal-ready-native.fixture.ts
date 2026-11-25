@@ -6,21 +6,35 @@ import { formatTerminalPathInput } from "../application/terminals/terminal-path-
 
 import type { TerminalNativeFixture } from "./terminal-action-native.fixture";
 
+async function promptReaderCommand(
+  root: string,
+  shell: TerminalNativeFixture["shell"],
+): Promise<string> {
+  const script = join(root, "prompt-reader.sh");
+  await writeFile(
+    script,
+    `trap ': > prompt-read; exit 0' INT
+printf 'SERVER_READY\\n'
+while IFS= read -r line; do :; done
+`,
+  );
+  return formatTerminalPathInput(shell, ["/bin/sh", script]);
+}
+
 export async function checkReady({
   root,
   shell,
   engine,
   activities,
+  inputs,
   outputs,
   start,
+  write,
+  writeRaw,
+  exitShell,
   wait,
 }: TerminalNativeFixture) {
-  const server = join(root, "reader.cjs");
-  await writeFile(
-    server,
-    'process.on("SIGINT", () => { require("node:fs").writeFileSync("prompt-read", ""); process.exit(0); }); console.log("SERVER_READY"); setInterval(() => {}, 1000);',
-  );
-  const command = formatTerminalPathInput(shell, [process.execPath, server]);
+  const command = await promptReaderCommand(root, shell);
   for (const hook of ["precmd", "widget", "startup", "vared", "widget-error"] as const) {
     await rm(join(root, "prompt-read"), { force: true });
     await writeFile(
@@ -29,7 +43,7 @@ export async function checkReady({
         'PROMPT="fixture> "',
         "HISTSIZE=1000",
         "read_once=0",
-        `user_read() { if (( !read_once )) && ${hook === "startup" ? "true" : '[[ -f "$HOME/prompt-read" ]]'}; then read_once=1; print READER_WAITING; if read -k 1 -t 0.15 reply; then print -r -- "READER_STOLE=$reply"; fi; print READER_DONE; fi; }`,
+        `user_read() { if (( !read_once )) && ${hook === "startup" ? "true" : '[[ -f "$HOME/prompt-read" ]]'}; then read_once=1; print READER_WAITING; read -k 1 reply; print -r -- "READER_INPUT=$reply"; fi; }`,
         ...(hook === "widget-error"
           ? [
               'user_init() { setopt localoptions nounset; print "$ODT_MISSING_WIDGET_VALUE"; }',
@@ -51,30 +65,48 @@ export async function checkReady({
     );
     const id = `ready-${hook}`;
     await start(id, [command]);
-    await wait(() => outputs.get(id)!.includes("SERVER_READY\r\n"));
     if (hook !== "startup") {
-      await Effect.runPromise(engine.restart(id, activities.get(id)!.command));
-      await wait(() =>
-        outputs
-          .get(id)!
-          .includes(hook === "widget-error" ? "parameter not set" : "READER_DONE\r\n"),
+      await wait(
+        () =>
+          outputs.get(id)!.includes("SERVER_READY\r\n") && activities.get(id)?.restartable === true,
       );
     }
+    const restart =
+      hook === "startup"
+        ? null
+        : Effect.runPromise(Effect.result(engine.restart(id, activities.get(id)!.command)));
+    if (hook !== "widget-error") {
+      await wait(() => outputs.get(id)!.includes("READER_WAITING\r\n"));
+      // The hook must get our key before the host sends the Action input.
+      const written = inputs.get(id)!;
+      if (hook === "startup") assert.deepEqual(written, []);
+      else assert.equal(written.at(-1), "\u0003");
+      await writeRaw(id, "!");
+    }
+    if (restart !== null) {
+      const result = await restart;
+      if (result._tag === "Failure") throw result.failure;
+    }
+    const expectedStarts = hook === "startup" ? 1 : 2;
+    await wait(() => outputs.get(id)!.split("SERVER_READY\r\n").length === expectedStarts + 1);
     const output = outputs.get(id)!;
-    assert.ok(!output.includes("READER_STOLE="));
+    if (hook !== "widget-error") {
+      assert.deepEqual(output.match(/READER_INPUT=.*\r\n/gu), ["READER_INPUT=!\r\n"]);
+    }
     const done = output.indexOf(
       hook === "widget-error"
         ? "parameter not set"
         : hook === "vared"
           ? "VARED_DONE\r\n"
-          : "READER_DONE\r\n",
+          : "READER_INPUT=!\r\n",
     );
     assert.ok(done >= 0 && output.indexOf("\u001b]633;R;", done) > done);
     if (hook === "widget" || hook === "vared")
       assert.ok(output.includes("USER_WIDGET=zle-line-init:start:0\r\n"));
     if (hook === "vared") assert.ok(output.includes("USER_WIDGET=zle-line-init:vared:0\r\n"));
-    if (hook !== "startup")
-      await wait(() => outputs.get(id)!.split("SERVER_READY\r\n").length === 3);
+    await write(id, "\u0003");
+    await wait(() => !activities.has(id));
+    await exitShell(id);
   }
 }
 
@@ -87,24 +119,24 @@ export async function checkBuffer({
   start,
   write,
   writeRaw,
+  exitShell,
   wait,
 }: TerminalNativeFixture) {
-  const server = join(root, "buffer-server.cjs");
-  await writeFile(
-    server,
-    'process.on("SIGINT", () => { require("node:fs").writeFileSync("prompt-read", ""); process.exit(0); }); console.log("SERVER_READY"); setInterval(() => {}, 1000);',
-  );
-  const command = formatTerminalPathInput(shell, [process.execPath, server]);
-  for (const phase of ["initial", "restart"]) {
-    for (const side of ["left", "right", "both", "queued", "pending"]) {
-      if (phase === "restart" && side === "pending") continue;
+  const command = await promptReaderCommand(root, shell);
+  for (const [phase, buffers] of [
+    ["initial", ["left", "right", "queued", "pending"]],
+    ["restart", ["both", "queued"]],
+  ] as const) {
+    for (const side of buffers) {
       await rm(join(root, "prompt-read"), { force: true });
       const prefix = "print PRELOADED; ";
       const left = side === "left" || side === "both" ? prefix : "";
       const right = side === "right" || side === "both" ? "; print SUFFIX" : "";
       let setup = `LBUFFER='${left}'; RBUFFER='${right}';`;
       if (side === "queued") setup = `zle -U '${prefix}';`;
-      else if (side === "pending") setup = "print WIDGET_WAITING; read -k 1 trigger;";
+      else if (side === "pending")
+        setup =
+          "if (( !reader_started )); then reader_started=1; print WIDGET_WAITING; read -k 1 trigger; fi;";
       await writeFile(
         join(root, ".zshrc"),
         [
@@ -130,7 +162,11 @@ export async function checkBuffer({
           result.type === "failed" && result.message.includes("line editor already contains text"),
         );
       } else {
-        await wait(() => outputs.get(id)!.includes("SERVER_READY\r\n"));
+        await wait(
+          () =>
+            outputs.get(id)!.includes("SERVER_READY\r\n") &&
+            activities.get(id)?.restartable === true,
+        );
         const result = await Effect.runPromise(
           Effect.result(engine.restart(id, activities.get(id)!.command)),
         );
@@ -151,6 +187,9 @@ export async function checkBuffer({
       assert.ok(!output.includes("\r\nPRELOADED\r\n"));
       assert.ok(!output.includes("\r\nACTION_RAN\r\n"));
       assert.ok(!output.includes("\r\nSUFFIX\r\n"));
+      // Clear text left by the widget before typing the exit command.
+      await write(id, "\x18\x02");
+      await exitShell(id);
     }
   }
 }

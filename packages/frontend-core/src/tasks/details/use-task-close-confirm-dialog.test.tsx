@@ -2,7 +2,7 @@ import { createWireTaskCardFixture } from "../../test-support/shared-test-fixtur
 import type { WorkspaceRef } from "@openducktor/contracts";
 import { noTaskWorktreeOwners } from "../../test-support/worktree-owners-read";
 import "../../test-support/dom-environment";
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, jest, mock, test } from "bun:test";
 import { waitFor } from "@testing-library/react";
 import {
   createActiveWorkspaceWrapper,
@@ -12,13 +12,14 @@ import { enableReactActEnvironment } from "../../test-support/react-act-environm
 import { createHookHarness } from "../../test-support/react-hook-harness";
 import {
   createSettingsSnapshotFixture,
-  createDeferred,
   createTaskCardFixture,
 } from "../../test-support/shared-test-fixtures";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
+import { setupTestingLibraryFakeTimers } from "../../test-support/testing-library-fake-timers";
 import { useTaskCloseConfirmDialog } from "./use-task-close-confirm-dialog";
 
 enableReactActEnvironment();
+setupTestingLibraryFakeTimers();
 
 const task = createTaskCardFixture({ id: "TASK-1", title: "Add login", status: "human_review" });
 
@@ -32,8 +33,10 @@ describe("useTaskCloseConfirmDialog", () => {
     { choice: null, mergePending: false },
     { choice: false, mergePending: true },
   ])("only waits for required close data: %j", async ({ choice, mergePending }) => {
-    const settings = createDeferred<ReturnType<typeof createSettingsSnapshotFixture>>();
-    const mergeStatus = createDeferred<WorkspaceRef & { tasks: []; autoCloseFailures: [] }>();
+    const settings = Promise.withResolvers<ReturnType<typeof createSettingsSnapshotFixture>>();
+    const mergeStatus = Promise.withResolvers<
+      WorkspaceRef & { tasks: []; autoCloseFailures: [] }
+    >();
     const connection = createTestClientConnection({
       client: {
         taskWorktreeCleanupImpactGet: async () => ({
@@ -66,14 +69,13 @@ describe("useTaskCloseConfirmDialog", () => {
     );
     try {
       await harness.mount();
-      await harness.waitFor((state) => state.dialog.impact.isReady);
+      await waitFor(() => expect(harness.getLatest().dialog.impact.isReady).toBe(true));
       if (choice === null) {
         expect(harness.getLatest().dialog.isPreparing).toBe(true);
         expect(harness.getLatest().dialog.confirmDisabled).toBe(true);
         await harness.run(() => settings.resolve(createSettingsSnapshotFixture()));
       }
-      await harness.waitFor((state) => !state.dialog.isPreparing, 800);
-      expect(harness.getLatest().dialog.confirmDisabled).toBe(false);
+      await waitFor(() => expect(harness.getLatest().dialog.confirmDisabled).toBe(false));
       if (choice !== null) expect(harness.getLatest().dialog.removeWorktree).toBe(choice);
     } finally {
       settings.resolve(createSettingsSnapshotFixture());
@@ -89,7 +91,7 @@ describe("useTaskCloseConfirmDialog", () => {
   });
 
   test("shows its content only when the owner read has its first result", async () => {
-    const owners = createDeferred<typeof noTaskWorktreeOwners>();
+    const owners = Promise.withResolvers<typeof noTaskWorktreeOwners>();
     const connection = createTestClientConnection({
       client: {
         taskWorktreeCleanupImpactGet: async () => ({
@@ -126,12 +128,14 @@ describe("useTaskCloseConfirmDialog", () => {
     );
     try {
       await harness.mount();
-      await harness.waitFor((state) => state.dialog.impact.worktreePaths.length === 1);
+      await waitFor(() =>
+        expect(harness.getLatest().dialog.impact.worktreePaths).toEqual(["/worktrees/TASK-1"]),
+      );
       expect(harness.getLatest().dialog.impact.isReady).toBe(false);
       expect(harness.getLatest().dialog.isPreparing).toBe(true);
 
       await harness.run(() => owners.resolve(noTaskWorktreeOwners));
-      await harness.waitFor((state) => !state.dialog.isPreparing, 800);
+      await waitFor(() => expect(harness.getLatest().dialog.isPreparing).toBe(false));
       expect(harness.getLatest().dialog.impact.worktreeOwners.owners).toEqual(
         noTaskWorktreeOwners.owners,
       );
@@ -198,7 +202,9 @@ describe("useTaskCloseConfirmDialog", () => {
 
       // The closed dialog drops its read one timer tick later. A new opening then shows the
       // loader until its own read ends.
-      await harness.run(() => new Promise((resolve) => setTimeout(resolve, 0)));
+      await harness.run(() => {
+        jest.advanceTimersByTime(0);
+      });
       held.read = new Promise<void>((resolve) => {
         held.release = resolve;
       });

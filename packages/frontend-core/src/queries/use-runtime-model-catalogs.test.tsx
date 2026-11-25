@@ -19,7 +19,6 @@ import { HostRuntimeStatusContext } from "../sessions/session-contexts";
 import { IsolatedQueryWrapper } from "../test-support/isolated-query-wrapper";
 import { createHookHarness } from "../test-support/react-hook-harness";
 import {
-  createDeferred,
   createHostRuntimeStatusContextValue,
   createHostRuntimeStatusFixture,
   createRuntimeCatalogFixture,
@@ -117,7 +116,7 @@ describe("useRuntimeModelCatalogs", () => {
   });
 
   test("keeps cached catalog data without a loading state during a background refetch", async () => {
-    const refetch = createDeferred<AgentRuntimeCatalog>();
+    const refetch = Promise.withResolvers<AgentRuntimeCatalog>();
     let loadAttempt = 0;
     const loadCatalog = mock(async (runtimeRef: RuntimeWorkingDirectoryRef) => {
       loadAttempt += 1;
@@ -451,7 +450,7 @@ describe("useRuntimeModelCatalogs", () => {
       ...catalogFor("opencode"),
       defaultModelsByProvider: { worktree: "model" },
     };
-    const worktreeRead = createDeferred<AgentRuntimeCatalog>();
+    const worktreeRead = Promise.withResolvers<AgentRuntimeCatalog>();
     const loadCatalog = mock((runtimeRef: RuntimeWorkingDirectoryRef) =>
       runtimeRef.workingDirectory === "/repo"
         ? Promise.resolve(createRuntimeCatalogFixture({ models: rootCatalog }))

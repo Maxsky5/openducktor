@@ -11,7 +11,7 @@ import { ClientConnectionProvider } from "../../connection/client-connection-rea
 import { createTestClientConnection } from "../../test-support/test-client-connection";
 import { createFeedbackFake } from "../../test-support/feedback-fake";
 import { createHookHarness } from "../../test-support/react-hook-harness";
-import { createDeferred, toWireTaskCard } from "../../test-support/shared-test-fixtures";
+import { toWireTaskCard } from "../../test-support/shared-test-fixtures";
 import { useTaskActionTasks } from "../../queries/use-task-action-tasks";
 import { taskQueryKeys, unfilteredRepoTaskDataQueryOptions } from "../../queries/tasks";
 import { taskStopImpactQueryKeys } from "../../queries/task-stop-impact";
@@ -30,7 +30,7 @@ test("plain workflow events block duplicate taps and leave view updates to the t
       status: "alpha_hold",
     }),
   );
-  const saved = createDeferred<typeof after>();
+  const saved = Promise.withResolvers<typeof after>();
   const apply = mock(() => saved.promise);
   const feedback = createFeedbackFake();
   const launch = mock(() => {});
@@ -218,7 +218,7 @@ test.each([{ outcome: "terminal" }, { outcome: "nonterminal" }, { outcome: "deni
       startedAt: "2026-11-01T00:00:00.000Z",
       selectedModel: null,
     };
-    const saved = createDeferred<typeof after>();
+    const saved = Promise.withResolvers<typeof after>();
     const mutation = mock(() => saved.promise);
     const feedback = createFeedbackFake();
     const connection = createTestClientConnection({

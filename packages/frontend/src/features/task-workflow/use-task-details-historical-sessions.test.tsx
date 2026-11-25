@@ -9,8 +9,11 @@ import {
   agentSessionQueryKeys,
 } from "@openducktor/frontend-core/queries/agent-sessions";
 import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { useTaskDetailsHistoricalSessions } from "./use-task-details-historical-sessions";
+
+setupTestingLibraryFakeTimers();
 
 const sessionFixture: AgentSessionRecord = {
   externalSessionId: "external-1",

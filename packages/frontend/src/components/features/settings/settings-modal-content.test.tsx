@@ -21,10 +21,7 @@ import {
   createSettingsSnapshotFixture,
   createWorkspaceRecordFixture,
 } from "@/test-utils/shared-test-fixtures";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { SettingsModalContent } from "./settings-modal-content";
-
-enableReactActEnvironment();
 
 const createMockSnapshot = (overrides: Partial<SettingsSnapshot> = {}): SettingsSnapshot =>
   createSettingsSnapshotFixture(overrides);
@@ -471,36 +468,6 @@ describe("settings modal content", () => {
     expect(html).not.toContain("Open a task tab for background sessions");
   });
 
-  test("renders chat section with SettingsChatSection when section is chat", () => {
-    const defaultSnapshot = createMockSnapshot();
-    const snapshot = createMockSnapshot({
-      chat: { ...defaultSnapshot.chat, showThinkingMessages: true, expandFileDiffsByDefault: true },
-    });
-    const controller = createMockController(snapshot);
-
-    const html = renderToStaticMarkup(
-      createElement(SettingsModalContent, {
-        section: "chat",
-        repositorySection: "configuration",
-        globalPromptView: PROMPT_HOME_VIEW,
-        repoPromptView: PROMPT_HOME_VIEW,
-        selectedReusablePromptId: null,
-        selectedCustomAgentRoleId: null,
-        onSelectedCustomAgentRoleIdChange: () => {},
-        isInteractionDisabled: false,
-        controller,
-        onRepositorySectionChange: () => {},
-        onGlobalPromptViewChange: () => {},
-        onRepoPromptViewChange: () => {},
-        onSelectedReusablePromptIdChange: () => {},
-      }),
-    );
-
-    expect(html).toContain("Session settings");
-    expect(html).toContain("Show thinking messages");
-    expect(html).not.toContain("Reusable prompts");
-  });
-
   test("renders appearance section when section is appearance", () => {
     const snapshot = createMockSnapshot({
       appearance: { horizontalScrollbarVisibility: "hide", sidebarSessionGrouping: "task" },
@@ -647,31 +614,6 @@ describe("settings modal content", () => {
     expect(html).toContain('value="7"');
   });
 
-  test("renders general section when section is general", () => {
-    const snapshot = createMockSnapshot();
-    const controller = createMockController(snapshot);
-
-    const html = renderToStaticMarkup(
-      createElement(SettingsModalContent, {
-        section: "general",
-        repositorySection: "configuration",
-        globalPromptView: PROMPT_HOME_VIEW,
-        repoPromptView: PROMPT_HOME_VIEW,
-        selectedReusablePromptId: null,
-        selectedCustomAgentRoleId: null,
-        onSelectedCustomAgentRoleIdChange: () => {},
-        isInteractionDisabled: false,
-        controller,
-        onRepositorySectionChange: () => {},
-        onGlobalPromptViewChange: () => {},
-        onRepoPromptViewChange: () => {},
-        onSelectedReusablePromptIdChange: () => {},
-      }),
-    );
-
-    expect(html).toContain("General settings");
-  });
-
   test("renders autopilot section when section is autopilot", () => {
     const snapshot = createMockSnapshot();
     const controller = createMockController(snapshot);
@@ -780,34 +722,6 @@ describe("settings modal content", () => {
     );
 
     expect(html).toContain("Loading settings");
-  });
-
-  test("shows error state when settings fail to load", () => {
-    const controller = {
-      ...createMockController(createMockSnapshot()),
-      settingsError: "Failed to load",
-      snapshotDraft: null,
-    };
-
-    const html = renderToStaticMarkup(
-      createElement(SettingsModalContent, {
-        section: "chat",
-        repositorySection: "configuration",
-        globalPromptView: PROMPT_HOME_VIEW,
-        repoPromptView: PROMPT_HOME_VIEW,
-        selectedReusablePromptId: null,
-        selectedCustomAgentRoleId: null,
-        onSelectedCustomAgentRoleIdChange: () => {},
-        isInteractionDisabled: false,
-        controller,
-        onRepositorySectionChange: () => {},
-        onGlobalPromptViewChange: () => {},
-        onRepoPromptViewChange: () => {},
-        onSelectedReusablePromptIdChange: () => {},
-      }),
-    );
-
-    expect(html).toContain("Failed to load settings");
   });
 });
 

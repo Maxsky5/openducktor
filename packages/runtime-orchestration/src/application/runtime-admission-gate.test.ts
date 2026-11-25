@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Cause, Context, Deferred, Effect, Exit, Fiber } from "effect";
 import { RuntimeUnavailableError } from "../errors";
 import { createRuntimeAdmissionGate } from "./runtime-admission-gate";
+import { forkAtYieldOffset, yieldOffsets } from "./runtime-race.test-support";
 
 const unavailable = {
   state: "stopping",
@@ -43,17 +44,9 @@ describe("runtime admission gate", () => {
   });
 
   test("registers an admitted control before a lifecycle action can drain the gate", async () => {
-    // A fiber yields after a fixed number of operations. Each run starts admit after one more
-    // step, so one run yields between the open check and the control registration. A lifecycle
-    // action then closes and drains the gate before the fiber resumes.
-    const steps = (count: number) => {
-      let effect: Effect.Effect<void> = Effect.void;
-      for (let step = 0; step < count; step += 1) effect = effect.pipe(Effect.andThen(Effect.void));
-      return effect;
-    };
     let admitted = 0;
     let rejected = 0;
-    for (let count = 1000; count < 2100; count += 1) {
+    for (const offset of yieldOffsets) {
       const gate = createRuntimeAdmissionGate();
       gate.open("codex");
       const release = Deferred.makeUnsafe<void>();
@@ -61,9 +54,7 @@ describe("runtime admission gate", () => {
       const control = Effect.sync(() => {
         entered = true;
       }).pipe(Effect.andThen(Deferred.await(release)));
-      const caller = Effect.runFork(
-        steps(count).pipe(Effect.andThen(gate.admit("codex", control))),
-      );
+      const caller = forkAtYieldOffset(offset, gate.admit("codex", control));
       gate.close("codex", unavailable);
       const drain = Effect.runFork(gate.drain("codex"));
       await Effect.runPromise(Effect.yieldNow);

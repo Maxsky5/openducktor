@@ -7,6 +7,7 @@ import { Effect } from "effect";
 import { createGitCliAdapter } from "../../../adapters/git/git-cli-adapter";
 import { HostOperationError } from "../../../effect/host-errors";
 import { createDefaultGitRunner } from "../../../infrastructure/git/git-command-runner";
+import { gitFixtureCommand, gitFixtureEnv } from "../../../test-support/git-repository-fixture";
 import { createGitPortTestDouble } from "../../../test-support/service-test-doubles";
 import type { BoundGitPublication } from "../../../ports/git-port";
 import { createTaskCompletionState } from "../task-completion-state";
@@ -96,8 +97,8 @@ describe("task completion publication recovery", () => {
     const repoPath = path.join(root, "work");
     const remotePath = path.join(root, "origin.git");
     const runner = createDefaultGitRunner(
-      () => ({ ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" }),
-      { command: "git" },
+      () => ({ ...gitFixtureEnv, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" }),
+      { command: gitFixtureCommand },
     );
     const git = (directory: string, ...args: string[]) =>
       Effect.runPromise(
@@ -128,12 +129,12 @@ describe("task completion publication recovery", () => {
         }),
     });
     try {
-      await git(root, "init", "--initial-branch=main", repoPath);
-      await git(root, "init", "--bare", remotePath);
+      await git(root, "init", "--initial-branch=main", "--template=", repoPath);
       await git(repoPath, "commit", "--allow-empty", "-m", "Base");
+      await git(root, "clone", "--bare", "--template=", repoPath, remotePath);
       await git(repoPath, "remote", "add", "origin", remotePath);
-      await git(repoPath, "push", "origin", "main");
-      const baseOid = (await git(repoPath, "rev-parse", "refs/remotes/origin/main")).stdout.trim();
+      const baseOid = (await git(repoPath, "rev-parse", "HEAD")).stdout.trim();
+      await git(repoPath, "update-ref", "refs/remotes/origin/main", baseOid);
       // Recovery starts after the squash commit was applied to the target branch.
       await writeFile(path.join(repoPath, "change.txt"), "task change\n");
       await git(repoPath, "add", "change.txt");
@@ -182,7 +183,11 @@ describe("task completion publication recovery", () => {
           ),
         ),
       );
-      expect(first._tag).toBe("Failure");
+      const trackingFailure = {
+        _tag: "Failure",
+        failure: { message: expect.stringContaining("later tracking update failed") },
+      };
+      expect(first).toMatchObject(trackingFailure);
       expect(state.progress?.destinations.map(({ outcome }) => outcome)).toEqual(["confirmed"]);
       expect((await git(remotePath, "rev-parse", "refs/heads/main")).stdout.trim()).toBe(
         publication.sourceOid,
@@ -193,7 +198,7 @@ describe("task completion publication recovery", () => {
       const retry = await Effect.runPromise(
         Effect.result(completeTaskPublication(adapter, input, appliedMerge, state)),
       );
-      expect(retry._tag).toBe("Failure");
+      expect(retry).toMatchObject(trackingFailure);
       expect(trackingUpdates).toBe(2);
       expect(pushes).toBe(1);
       failTracking = false;

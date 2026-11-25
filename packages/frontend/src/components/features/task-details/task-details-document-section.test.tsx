@@ -1,119 +1,47 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { expect, mock, test } from "bun:test";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { FileText } from "lucide-react";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { TaskDetailsDocumentSection } from "./task-details-document-section";
 
-enableReactActEnvironment();
+await import("./task-details-markdown-content");
 
-const ICON = createElement(FileText, { className: "size-3.5" });
-const TITLE = "Description";
-const EMPTY = "No description.";
-
-describe("TaskDetailsDocumentSection", () => {
-  test("renders expand button when document has content", () => {
-    const html = renderToStaticMarkup(
-      createElement(TaskDetailsDocumentSection, {
-        title: TITLE,
-        icon: ICON,
-        markdown: "# Content",
-        empty: EMPTY,
-        defaultExpanded: true,
-      }),
-    );
-    expect(html).toContain('data-testid="expand-description"');
-  });
-
-  test("does not render expand button when document is empty", () => {
-    const html = renderToStaticMarkup(
-      createElement(TaskDetailsDocumentSection, {
-        title: TITLE,
-        icon: ICON,
-        markdown: "",
-        empty: EMPTY,
-        defaultExpanded: true,
-      }),
-    );
-    expect(html).not.toContain('data-testid="expand-description"');
-    expect(html).toContain(EMPTY);
-  });
-});
-
-describe("TaskDetailsDocumentSection snapshot persistence", () => {
-  const writeClipboardMock = mock(async (_value: string) => {});
-  let restoreClipboard: (() => void) | null = null;
-
-  beforeEach(() => {
-    writeClipboardMock.mockClear();
-    writeClipboardMock.mockImplementation(async () => {});
-    restoreClipboard = replaceNavigatorClipboard(writeClipboardMock);
-  });
-
-  afterEach(() => {
-    restoreClipboard?.();
-    restoreClipboard = null;
-  });
-
-  const renderSection = (markdown: string) =>
-    render(
-      createElement(TaskDetailsDocumentSection, {
-        title: TITLE,
-        icon: ICON,
-        markdown,
-        empty: EMPTY,
-        defaultExpanded: true,
-      }),
+test("keeps the fullscreen description readable and copyable after the task description clears", async () => {
+  await withMockedToast(async () => {
+    const original = "# Original description";
+    const writeClipboard = mock(async (_value: string) => {});
+    const restoreClipboard = replaceNavigatorClipboard(writeClipboard);
+    const section = (markdown: string) => (
+      <TaskDetailsDocumentSection
+        title="Description"
+        icon={<FileText />}
+        markdown={markdown}
+        empty="No description."
+        defaultExpanded
+      />
     );
 
-  test("modal retains original content after source becomes empty", () => {
-    const originalMarkdown = "# Original description content";
-    const { rerender } = renderSection(originalMarkdown);
+    try {
+      const view = render(section(original));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Open Description in fullscreen" }));
+      });
 
-    fireEvent.click(screen.getByTestId("expand-description"));
+      const dialog = screen.getByRole("dialog", { name: "Description" });
+      await act(async () => view.rerender(section("")));
+      expect(
+        screen.queryByRole("button", { name: "Open Description in fullscreen", hidden: true }),
+      ).toBeNull();
+      expect(view.container.textContent).toContain("No description.");
+      expect(within(dialog).getByRole("heading", { name: "Original description" })).toBeTruthy();
 
-    expect(screen.getByTestId("markdown-preview-modal-copy")).toBeDefined();
-
-    rerender(
-      createElement(TaskDetailsDocumentSection, {
-        title: TITLE,
-        icon: ICON,
-        markdown: "",
-        empty: EMPTY,
-        defaultExpanded: true,
-      }),
-    );
-
-    // Expand button gone, modal still open with original content
-    expect(screen.queryByTestId("expand-description")).toBeNull();
-    expect(screen.getByTestId("markdown-preview-modal-copy")).toBeDefined();
-    // After source becomes empty, only the modal snapshot has the content (card is empty)
-    const matching = screen.getAllByText((c) => c.includes("Original description content"));
-    expect(matching.length).toBe(1);
-  });
-
-  test("copy button in modal copies snapshot markdown after source becomes empty", async () => {
-    await withMockedToast(async () => {
-      const originalMarkdown = "# Copy this description";
-      const { rerender } = renderSection(originalMarkdown);
-
-      fireEvent.click(screen.getByTestId("expand-description"));
-
-      rerender(
-        createElement(TaskDetailsDocumentSection, {
-          title: TITLE,
-          icon: ICON,
-          markdown: "",
-          empty: EMPTY,
-          defaultExpanded: true,
-        }),
-      );
-
-      fireEvent.click(screen.getByTestId("markdown-preview-modal-copy"));
-      expect(writeClipboardMock).toHaveBeenCalledWith("# Copy this description");
-    });
+      await act(async () => {
+        fireEvent.click(within(dialog).getByRole("button", { name: "Copy artifact content" }));
+      });
+      expect(writeClipboard).toHaveBeenCalledWith(original);
+    } finally {
+      restoreClipboard();
+    }
   });
 });

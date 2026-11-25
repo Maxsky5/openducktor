@@ -1,10 +1,7 @@
-import { afterAll, afterEach, expect, mock, spyOn, test } from "bun:test";
+import { afterAll, expect, mock, spyOn, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import * as appStateProvider from "@/state/app-state-provider";
-
-enableReactActEnvironment();
 
 const workspace: WorkspaceRecord = {
   workspaceId: "workspace-1",
@@ -30,7 +27,6 @@ const workspaceStateSpy = spyOn(appStateProvider, "useWorkspaceState").mockRetur
 const { WorkspaceCloseDialog, WorkspaceRemoveDialog } =
   await import("./workspace-lifecycle-dialogs");
 
-afterEach(cleanup);
 afterAll(() => workspaceStateSpy.mockRestore());
 
 test("workspace close uses the standard layout and eye-off icon", () => {

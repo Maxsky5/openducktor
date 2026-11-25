@@ -4,17 +4,14 @@ import { createReviewTaskWorkflow } from "@openducktor/workflows/test-support";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { ComposerState } from "@openducktor/frontend-core/tasks/create/task-composer-types";
 import type { TaskCreateWorkspacePicker } from "@openducktor/frontend-core/tasks/create/use-task-create-workspace";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { act, createElement } from "react";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import {
   createTaskCardFixture,
   createWorkspaceRecordFixture,
 } from "@/test-utils/shared-test-fixtures";
 import * as taskDetailsFormModule from "@/components/features/task-composer/task-details-form";
 import * as taskCreateModalControllerModule from "./use-task-create-modal-controller";
-
-enableReactActEnvironment();
 
 const taskCreateDiscardDialogModule = await import("./task-create-discard-dialog");
 const taskDocumentEditorModule =
@@ -284,6 +281,10 @@ describe("TaskCreateModal", () => {
     expect(screen.getByText("Preview")).toBeTruthy();
     expect(screen.getByText("Save Spec")).toBeTruthy();
     const dialog = screen.getByRole("dialog", { name: "Edit task" });
+    const sections = within(dialog);
+    const spec = sections.getByRole("button", { name: "Spec", pressed: true });
+    expect(spec.closest('[role="tablist"]')).toBeNull();
+    expect(sections.getByRole("button", { name: "Details", pressed: false })).toBeTruthy();
     const scrollRegion = dialog.querySelector("fieldset .overflow-y-auto");
     expect(scrollRegion?.closest("fieldset")?.classList.contains("min-h-0")).toBe(true);
     expect(scrollRegion?.closest("fieldset")?.classList.contains("flex")).toBe(true);

@@ -390,9 +390,8 @@ describe("AppCrashShell", () => {
 
   describe("lazy-load failure", () => {
     test("shows fatal error page when a lazy module fails to load", async () => {
-      const LazyBroken = lazy(() =>
-        Promise.reject(new Error("Failed to fetch dynamically imported module")),
-      );
+      const load = Promise.withResolvers<never>();
+      const LazyBroken = lazy(() => load.promise);
 
       render(
         <AppCrashShell>
@@ -402,10 +401,10 @@ describe("AppCrashShell", () => {
         </AppCrashShell>,
       );
 
-      await waitFor(() => {
-        expect(screen.getByTestId("fatal-error-title")).toBeDefined();
-      });
+      expect(screen.getByText("Loading…")).toBeTruthy();
+      await act(async () => load.reject(new Error("Failed to fetch dynamically imported module")));
 
+      expect(screen.getByTestId("fatal-error-title")).toBeDefined();
       expect(screen.getByTestId("fatal-error-message").textContent).toBe(
         "Failed to fetch dynamically imported module",
       );

@@ -451,10 +451,7 @@ export function WorkspaceStage({
         </CardDescription>
       </CardHeader>
 
-      <CardContent
-        data-testid="onboarding-workspace-content"
-        className="bg-muted/20 px-6 py-5 sm:px-9 sm:py-6"
-      >
+      <CardContent className="bg-muted/20 px-6 py-5 sm:px-9 sm:py-6">
         <div className="relative rounded-xl border border-border bg-card p-4 sm:p-5">
           <WorkspaceCreationFields
             controller={workspaceCreation}
@@ -480,10 +477,7 @@ export function WorkspaceStage({
           ) : null}
         </div>
       </CardContent>
-      <div
-        data-testid="onboarding-workspace-footer"
-        className="flex flex-col-reverse justify-between gap-3 border-t border-border bg-card px-6 py-4 sm:flex-row sm:items-center sm:px-9"
-      >
+      <div className="flex flex-col-reverse justify-between gap-3 border-t border-border bg-card px-6 py-4 sm:flex-row sm:items-center sm:px-9">
         {workspaceCreation.stage === "repository" ? (
           <Button
             type="button"
@@ -500,10 +494,7 @@ export function WorkspaceStage({
         ) : (
           <WorkspaceCreationBackAction controller={workspaceCreation} />
         )}
-        <div
-          data-testid="onboarding-workspace-actions"
-          className="flex flex-col gap-3 sm:ml-auto sm:flex-row sm:items-center sm:justify-end"
-        >
+        <div className="flex flex-col gap-3 sm:ml-auto sm:flex-row sm:items-center sm:justify-end">
           {workspaceCreation.stage === "repository" && workspaceCreation.pickerOpen ? (
             <>
               {workspaceCreation.repoPath ? (

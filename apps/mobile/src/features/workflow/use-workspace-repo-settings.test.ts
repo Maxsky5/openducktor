@@ -5,10 +5,13 @@ import { repoConfigQueryOptions } from "@openducktor/frontend-core/queries/works
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createWorkspaceRecordFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
 import { useWorkspaceRepoSettings } from "./use-workspace-repo-settings";
 import { repoConfigFixture } from "@openducktor/frontend-core/test-support/repo-config-fixture";
+
+setupTestingLibraryFakeTimers();
 
 const main: GitBranch = { name: "main", isCurrent: true, isRemote: false };
 
@@ -88,15 +91,20 @@ describe("useWorkspaceRepoSettings", () => {
       createElement(ClientConnectionProvider, { connection }, children);
     const workspace = createWorkspaceRecordFixture({ repoPath: "/repo" });
 
-    const { result } = renderHook(() => useWorkspaceRepoSettings(workspace), { wrapper });
+    const { result, unmount } = renderHook(() => useWorkspaceRepoSettings(workspace), { wrapper });
+    try {
+      await waitFor(() =>
+        expect(result.current.branchesFailure?.message).toBe("Git is not installed."),
+      );
+      expect(result.current.branches).toEqual([]);
 
-    await waitFor(() => expect(result.current.branchesFailure).not.toBeNull());
-    expect(result.current.branchesFailure?.message).toBe("Git is not installed.");
-    expect(result.current.branches).toEqual([]);
+      act(() => result.current.branchesFailure?.retry());
 
-    act(() => result.current.branchesFailure?.retry());
-
-    await waitFor(() => expect(result.current.branches).toEqual([main]));
-    expect(result.current.branchesFailure).toBeNull();
+      await waitFor(() => expect(result.current.branches).toEqual([main]));
+      expect(result.current.branchesFailure).toBeNull();
+    } finally {
+      unmount();
+      await connection.dispose();
+    }
   });
 });

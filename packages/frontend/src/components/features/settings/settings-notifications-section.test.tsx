@@ -1,11 +1,11 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import {
   AGENT_NOTIFICATION_KIND_VALUES,
   TASK_NOTIFICATION_KIND_VALUES,
   type NotificationSettings,
   type NotificationOsCapability,
 } from "@openducktor/contracts";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { act, type ReactElement, useState } from "react";
 import { QueryProvider } from "@/test-utils/query-provider";
 import {
@@ -13,11 +13,13 @@ import {
   type NotificationContextValue,
 } from "@/state/notifications/notification-context";
 import { SettingsNotificationsSection } from "./settings-notifications-section";
+import {
+  notificationCueOptions,
+  resolveNotificationCuePickerValue,
+} from "./settings-notification-sound-options";
 import { createCuelumeNotificationSoundAdapter } from "@/features/notifications/notification-delivery";
 import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { createSpecPlanBuildNotificationSettings } from "@openducktor/workflows/test-support";
-
-afterEach(cleanup);
 
 const createNotificationContext = (
   overrides: Partial<NotificationContextValue> = {},
@@ -81,10 +83,15 @@ describe("SettingsNotificationsSection", () => {
     ["pulse", "Tap"],
     ["scan", "Select"],
     ["arrival", "Navigate"],
-  ] as const)("shows saved %s as %s without rewriting it", async (cue, label) => {
+  ] as const)("labels the saved %s sound %s", (cue, label) => {
+    const value = resolveNotificationCuePickerValue(cue);
+    expect(notificationCueOptions.find((option) => option.value === value)?.label).toBe(label);
+  });
+
+  test("shows saved sound aliases without rewriting them", async () => {
     const notifications = createSpecPlanBuildNotificationSettings();
-    notifications.globalCue = cue;
-    notifications.kinds["agent.permission_requested"].sound = cue;
+    notifications.globalCue = "chime";
+    notifications.kinds["agent.permission_requested"].sound = "whisper";
     const onUpdate = mock(
       (_updater: (current: NotificationSettings) => NotificationSettings) => {},
     );
@@ -100,21 +107,22 @@ describe("SettingsNotificationsSection", () => {
       </QueryProvider>,
     );
     await screen.findByText("Allow notifications to receive alerts outside the app.");
-    expect(screen.getByRole("button", { name: "Default sound" }).textContent).toBe(label);
-    expect(screen.getByRole("button", { name: "Sound for Permission request" }).textContent).toBe(
-      label,
-    );
     expect(onUpdate).not.toHaveBeenCalled();
-    for (const name of ["Default sound", "Sound for Permission request"]) {
-      fireEvent.click(screen.getByRole("button", { name }));
+    for (const [name, label] of [
+      ["Default sound", "Success"],
+      ["Sound for Permission request", "Select"],
+    ] as const) {
+      const picker = screen.getByRole("button", { name });
+      expect(picker.textContent).toBe(label);
+      fireEvent.click(picker);
       const menu = screen.getByRole("dialog", { name: `${name} menu` });
       fireEvent.click(within(menu).getByRole("button", { name: label }));
     }
     expect(onUpdate).not.toHaveBeenCalled();
     fireEvent.keyDown(screen.getByRole("slider", { name: "Volume" }), { key: "ArrowRight" });
     const updated = onUpdate.mock.calls[0]?.[0](notifications);
-    expect(updated?.globalCue).toBe(cue);
-    expect(updated?.kinds["agent.permission_requested"].sound).toBe(cue);
+    expect(updated?.globalCue).toBe("chime");
+    expect(updated?.kinds["agent.permission_requested"].sound).toBe("whisper");
   });
 
   test.each(["prompt", "denied"] as const)(
@@ -207,43 +215,47 @@ describe("SettingsNotificationsSection", () => {
   );
 
   // This flow renders the full form and retries a failed browser permission request.
-  test.each(["throw", "report"])(
-    "shows a %s permission failure and lets the user try again",
-    async (mode) => {
-      const requestPermission = mock(async () => {
-        if (mode === "throw") throw new Error("Browser permission request failed.");
-        return {
-          platform: "browser" as const,
-          supported: true,
-          permission: "prompt" as const,
-          canGuaranteeSilent: true,
-          canOpenSystemSettings: false,
-          failureMessage: "Browser permission request failed.",
-        };
-      });
-      render(<NotificationsHarness context={createNotificationContext({ requestPermission })} />);
-      fireEvent.click(await screen.findByRole("button", { name: "Allow notifications" }));
-      await screen.findByText("Browser permission request failed.");
-      const button = screen.getByRole("button", { name: "Allow notifications" });
-      expect(button.hasAttribute("disabled")).toBe(false);
-      fireEvent.click(button);
-      await waitFor(() => expect(requestPermission).toHaveBeenCalledTimes(2));
-      await screen.findByText("Browser permission request failed.");
-    },
-    2_500,
-  );
+  test("shows rejected and reported permission failures on consecutive attempts", async () => {
+    const requestPermission = mock(async () => ({
+      platform: "browser" as const,
+      supported: true,
+      permission: "prompt" as const,
+      canGuaranteeSilent: true,
+      canOpenSystemSettings: false,
+      failureMessage: "Browser did not grant permission.",
+    })).mockRejectedValueOnce(new Error("Browser permission request failed."));
+    render(<NotificationsHarness context={createNotificationContext({ requestPermission })} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Allow notifications" }));
+    await screen.findByText("Browser permission request failed.");
+    const button = screen.getByRole("button", { name: "Allow notifications" });
+    expect(button.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(button);
+    await screen.findByText("Browser did not grant permission.");
+    expect(
+      screen.getByRole("button", { name: "Allow notifications" }).hasAttribute("disabled"),
+    ).toBe(false);
+    expect(requestPermission).toHaveBeenCalledTimes(2);
+  }, 2_500);
 
-  test.each([
-    ["sound", "Last sound error"],
-    ["settings", "Last notification settings error"],
-    ["coordination", "Last browser notification coordination error"],
-    ["os", "Last system notification error"],
-  ] as const)(
-    "labels a %s failure separately from OS permission",
-    async (channel, label) => {
-      render(
+  // This flow renders the full form and handles async permissions.
+  test("labels the latest delivery failure separately from OS permission", async () => {
+    const context = createNotificationContext();
+    const view = render(<NotificationsHarness context={context} />);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Test system notification" }).hasAttribute("disabled"),
+      ).toBe(false),
+    );
+    for (const [channel, label] of [
+      ["sound", "Last sound error"],
+      ["settings", "Last notification settings error"],
+      ["coordination", "Last browser notification coordination error"],
+      ["os", "Last system notification error"],
+    ] as const) {
+      view.rerender(
         <NotificationsHarness
-          context={createNotificationContext({
+          context={{
+            ...context,
             deliveryFailure: {
               channel,
               kind: "agent.session_error",
@@ -251,23 +263,19 @@ describe("SettingsNotificationsSection", () => {
               repoPath: "/repo",
               message: "Delivery detail",
             },
-          })}
+          }}
         />,
       );
       const failure = screen.getByRole("alert");
       expect(failure.textContent).toBe(`${label}: Delivery detail`);
-      const permissionTitle = await screen.findByText("Turn on system notifications");
+      const permissionTitle = screen.getByText("Turn on system notifications");
       expect(permissionTitle.closest('[role="status"]')?.contains(failure)).toBe(false);
       if (channel !== "os") expect(screen.queryByText(/Last system notification error/)).toBeNull();
-      await waitFor(() =>
-        expect(
-          screen.getByRole("button", { name: "Test system notification" }).hasAttribute("disabled"),
-        ).toBe(false),
-      );
-      // This flow renders notification controls and handles async updates.
-    },
-    2_500,
-  );
+      expect(
+        screen.getByRole("button", { name: "Test system notification" }).hasAttribute("disabled"),
+      ).toBe(false);
+    }
+  }, 2_500);
 
   test("reports preview failure and clears it after a successful preview", async () => {
     let fail = true;
@@ -434,36 +442,16 @@ describe("SettingsNotificationsSection", () => {
 
     fireEvent.click(testOsButton);
     await waitFor(() => expect(testOs).toHaveBeenCalledTimes(1));
-    await screen.findByText(
+    const enabledDescription = await screen.findByText(
       "OS notifications are enabled. OpenDucktor can send alerts outside the app.",
     );
-    expect(getCapability).toHaveBeenCalledTimes(2);
-  }, 2_500);
-
-  test("explains when OS notifications are enabled", async () => {
-    render(
-      <NotificationsHarness
-        context={createNotificationContext({
-          getCapability: async () => ({
-            platform: "electron",
-            supported: true,
-            permission: "granted",
-            canGuaranteeSilent: true,
-            canOpenSystemSettings: true,
-          }),
-        })}
-      />,
-    );
-
-    const description = await screen.findByText(
-      "OS notifications are enabled. OpenDucktor can send alerts outside the app.",
-    );
-    const permissionStatus = description.closest("[role='status']");
+    const permissionStatus = enabledDescription.closest("[role='status']");
     expect(permissionStatus).not.toBeNull();
     expect(permissionStatus?.className).toContain("bg-success-surface");
     expect(permissionStatus?.textContent).toContain("System notifications are on");
-    expect(screen.queryByRole("button", { name: "Open system settings" }) !== null).toBe(true);
-  });
+    expect(screen.getByRole("button", { name: "Open system settings" })).toBeDefined();
+    expect(getCapability).toHaveBeenCalledTimes(2);
+  }, 2_500);
 
   test("uses a slider for volume", async () => {
     render(<NotificationsHarness context={createNotificationContext()} />);

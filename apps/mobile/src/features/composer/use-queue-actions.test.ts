@@ -1,14 +1,12 @@
 import "@openducktor/frontend-core/test-support/dom-environment";
 import { describe, expect, test } from "bun:test";
-import { createDeferred } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { useQueueActions } from "./use-queue-actions";
 
-// The frontend-core test of useQueuedMessageActionRuns covers the run of each message.
 describe("useQueueActions", () => {
-  test("runs the success step of an action and ends its run", async () => {
+  test("runs the success step only after the host action succeeds", async () => {
     const { result } = renderHook(() => useQueueActions());
-    const save = createDeferred<void>();
+    const save = Promise.withResolvers<void>();
     let successes = 0;
     act(() =>
       result.current.run(
@@ -20,23 +18,28 @@ describe("useQueueActions", () => {
         },
       ),
     );
-    expect(result.current.running.get("a")?.kind).toBe("save_edit");
+    expect(successes).toBe(0);
 
-    act(() => save.resolve());
-    await waitFor(() => expect(result.current.running.has("a")).toBe(false));
+    await act(async () => save.resolve());
     expect(successes).toBe(1);
   });
 
-  test("keeps the failure of a message until its next action", async () => {
+  test("clears a message failure only when that message runs another action", async () => {
     const { result } = renderHook(() => useQueueActions());
-    act(() =>
+    await act(async () =>
       result.current.run("a", "steer", () => Promise.reject(new Error("The host refused it."))),
     );
-    await waitFor(() =>
-      expect(result.current.failures.get("a")?.title).toBe("Queued message action failed"),
-    );
+    expect(result.current.failures.get("a")).toMatchObject({
+      title: "Queued message action failed",
+      message: "The host refused it.",
+    });
 
-    act(() => result.current.run("a", "remove", () => new Promise<void>(() => {})));
+    await act(async () => result.current.run("b", "remove", async () => {}));
+    expect(result.current.failures.has("a")).toBe(true);
+
+    const retry = Promise.withResolvers<void>();
+    act(() => result.current.run("a", "remove", () => retry.promise));
     expect(result.current.failures.has("a")).toBe(false);
+    await act(async () => retry.resolve());
   });
 });

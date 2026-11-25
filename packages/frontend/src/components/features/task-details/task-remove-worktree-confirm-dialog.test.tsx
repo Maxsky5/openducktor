@@ -1,11 +1,8 @@
 import { worktreeOwnersRead } from "@openducktor/frontend-core/test-support/worktree-owners-read";
 import { describe, expect, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { TaskRemoveWorktreeConfirmDialog } from "./task-remove-worktree-confirm-dialog";
 import type { TaskWorktreeImpact } from "@openducktor/frontend-core/tasks/details/use-task-close-impact";
-
-enableReactActEnvironment();
 
 const BRANCH_WARNING = "Commits that exist only on this branch may be lost.";
 

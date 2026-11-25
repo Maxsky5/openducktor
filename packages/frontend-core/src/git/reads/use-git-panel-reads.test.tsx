@@ -3,10 +3,13 @@ import { expect, mock, test } from "bun:test";
 import type { GitLocalChanges, GitWorktreeStatus } from "@openducktor/contracts";
 import { ClientConnectionProvider } from "../../connection/client-connection-react";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
+import { setupTestingLibraryFakeTimers } from "../../test-support/testing-library-fake-timers";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { toLocalChanges } from "../../test-support/local-changes-fixture";
 import { type GitPanelReadsInput, useGitPanelReads } from "./use-git-panel-reads";
+
+setupTestingLibraryFakeTimers();
 
 const status = (file: string, diffScope: "target" | "uncommitted"): GitWorktreeStatus => ({
   currentBranch: { name: "feature", detached: false },

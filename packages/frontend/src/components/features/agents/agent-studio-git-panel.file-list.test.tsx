@@ -3,7 +3,6 @@ import { fireEvent, type RenderResult, screen, within } from "@testing-library/r
 import { act, createElement, Fragment } from "react";
 import type { GitChangeIntent } from "@openducktor/frontend-core/git/contracts";
 import { gitChangeIntentKey } from "@openducktor/frontend-core/git/model/git-change-intent";
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { AgentStudioGitPanel } from "./agent-studio-git-panel";
 import { FILE_LIST_VIEW_MODE_STORAGE_KEY } from "./agent-studio-git-panel/file-list-view-preference";
 import {
@@ -18,8 +17,6 @@ import {
   toLocalChanges,
   toScopeState,
 } from "./agent-studio-git-panel.test-support";
-
-enableReactActEnvironment();
 
 describe("AgentStudioGitPanel file list", () => {
   setupAgentStudioGitPanelTests();

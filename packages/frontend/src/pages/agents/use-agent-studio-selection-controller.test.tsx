@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import type { PropsWithChildren, ReactElement } from "react";
+import { act, type PropsWithChildren, type ReactElement } from "react";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { createAgentSessionCollection } from "@openducktor/frontend-core/sessions/agent-session-collection";
 import {
@@ -43,7 +43,6 @@ import {
   createRuntimeDefinitionsContextValue,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
-  enableReactActEnvironment,
   taskSelectionFixture,
 } from "./agent-studio-test-utils";
 import {
@@ -73,8 +72,6 @@ interface LoadAgentSessionContextRefContract {
 interface GetSessionFaultRefContract {
   current: (session: AgentSessionIdentity | null) => AgentSessionTransientFault | null;
 }
-
-enableReactActEnvironment();
 
 type UseAgentStudioSelectionControllerHook =
   (typeof import("./use-agent-studio-selection-controller"))["useAgentStudioSelectionController"];
@@ -327,7 +324,9 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
       expect(harness.getLatest().routeSessionResolution.kind).toBe("found");
 
-      await harness.update(args([]));
+      await act(async () => {
+        await harness.update(args([]));
+      });
 
       const latest = harness.getLatest();
       expect(latest.routeSessionResolution).toEqual({ kind: "none" });

@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { AgentSessionTodoItem, PolicyBoundSessionRef } from "@openducktor/core";
 import { QueryClient, skipToken } from "@tanstack/react-query";
 import { SKIPPED_QUERY_KEY_SEGMENT } from "./skipped-query";
@@ -52,67 +52,7 @@ describe("agent session todos queries", () => {
     expect(liveKey[1]).not.toBe(SKIPPED_QUERY_KEY_SEGMENT);
   });
 
-  test("keeps absent, repository, and workflow session scopes distinct", () => {
-    expect(agentSessionTodosQueryKeys.todos(sessionRefFixture)).toEqual([
-      "agent-session-todos",
-      "/repo",
-      "opencode",
-      "/repo/worktree",
-      "session-1",
-      null,
-      null,
-      null,
-    ]);
-    expect(
-      agentSessionTodosQueryKeys.todos({
-        ...sessionRefFixture,
-        sessionScope: { kind: "repository", workspaceId: "workspace-1" },
-      }),
-    ).toEqual([
-      "agent-session-todos",
-      "/repo",
-      "opencode",
-      "/repo/worktree",
-      "session-1",
-      "repository",
-      null,
-      null,
-    ]);
-    expect(
-      agentSessionTodosQueryKeys.todos({
-        ...sessionRefFixture,
-        sessionScope: {
-          kind: "workflow",
-          workspaceId: "workspace-1",
-          taskId: "task-1",
-          role: "build",
-        },
-      }),
-    ).toEqual([
-      "agent-session-todos",
-      "/repo",
-      "opencode",
-      "/repo/worktree",
-      "session-1",
-      "workflow",
-      "task-1",
-      "build",
-    ]);
-  });
-
-  test("loads todos only for a concrete session ref", async () => {
-    const queryClient = new QueryClient();
-    const readSessionTodos = mock(async () => [todoFixture]);
-
-    const todos = await queryClient.fetchQuery(
-      sessionTodosQueryOptions(sessionRefFixture, readSessionTodos),
-    );
-
-    expect(todos).toEqual([todoFixture]);
-    expect(readSessionTodos).toHaveBeenCalledWith(sessionRefFixture);
-  });
-
-  test("applies transcript updates to every cached scope for the session", () => {
+  test("loads each task scope separately and applies transcript updates to every cached scope", async () => {
     const queryClient = new QueryClient();
     const refs: PolicyBoundSessionRef[] = [
       sessionRefFixture,
@@ -127,18 +67,27 @@ describe("agent session todos queries", () => {
         },
       },
     ];
-    for (const ref of refs) {
-      queryClient.setQueryData(agentSessionTodosQueryKeys.todos(ref), [todoFixture]);
-    }
+    const readTodos = async (ref: PolicyBoundSessionRef) => [
+      { ...todoFixture, content: ref.sessionScope?.kind ?? "unscoped" },
+    ];
+    const reads = await Promise.all(
+      refs.map((ref) => queryClient.fetchQuery(sessionTodosQueryOptions(ref, readTodos))),
+    );
+    expect(reads.map((todos) => todos[0]?.content)).toEqual(["unscoped", "repository", "workflow"]);
 
+    const otherSession = { ...sessionRefFixture, externalSessionId: "session-2" };
+    await queryClient.fetchQuery(sessionTodosQueryOptions(otherSession, readTodos));
     updateSessionTodosQueryData(queryClient, sessionRefFixture, (current) =>
       current.map((todo) => ({ ...todo, status: "completed" })),
     );
 
-    for (const ref of refs) {
-      expect(
-        queryClient.getQueryData<AgentSessionTodoItem[]>(agentSessionTodosQueryKeys.todos(ref)),
-      ).toEqual([{ ...todoFixture, status: "completed" }]);
-    }
+    const cachedTodos = (ref: PolicyBoundSessionRef) =>
+      queryClient.getQueryData<AgentSessionTodoItem[]>(agentSessionTodosQueryKeys.todos(ref));
+    expect(refs.map((ref) => cachedTodos(ref)?.[0]?.status)).toEqual([
+      "completed",
+      "completed",
+      "completed",
+    ]);
+    expect(cachedTodos(otherSession)?.[0]?.status).toBe("pending");
   });
 });

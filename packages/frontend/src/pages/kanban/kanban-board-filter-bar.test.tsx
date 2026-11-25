@@ -8,15 +8,12 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { type ReactElement, useState } from "react";
 import { trackOpenDialog } from "@/components/ui/open-dialogs";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import {
   EMPTY_KANBAN_BOARD_FILTER,
   isKanbanBoardFilterActive,
   type KanbanBoardFilter,
 } from "@openducktor/frontend-core/tasks/board/kanban-board-filter";
 import { KanbanBoardFilterBar } from "./kanban-board-filter-bar";
-
-enableReactActEnvironment();
 
 afterEach(() => {
   cleanup();
@@ -163,14 +160,14 @@ describe("KanbanBoardFilterBar search", () => {
     expect(document.activeElement).not.toBe(search);
   });
 
-  test("leaves Mod+F alone while a dialog or sheet is open", () => {
+  test("leaves Mod+F alone while a dialog or sheet is open", async () => {
     const { search } = renderBar({ platform: "linux" });
-    const untrackDialog = trackOpenDialog(Symbol("dialog"));
+    const untrackDialog = await act(async () => trackOpenDialog(Symbol("dialog")));
     try {
       expect(fireEvent.keyDown(window, { key: "f", ctrlKey: true })).toBe(true);
       expect(document.activeElement).not.toBe(search);
     } finally {
-      untrackDialog();
+      act(untrackDialog);
     }
   });
 

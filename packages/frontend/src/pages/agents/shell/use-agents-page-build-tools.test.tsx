@@ -1,11 +1,9 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { createHookHarness, enableReactActEnvironment } from "../agent-studio-test-utils";
+import { createHookHarness } from "../agent-studio-test-utils";
 import {
   createBuildToolsSnapshotFixture,
   createGitActionsFixture,
 } from "./agents-page-build-tools.test-support";
-
-enableReactActEnvironment();
 
 type BuildToolsSnapshotModule =
   typeof import("@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot");

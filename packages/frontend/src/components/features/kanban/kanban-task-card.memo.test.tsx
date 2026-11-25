@@ -7,13 +7,9 @@ import {
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import {
-  createTaskCardFixture,
-  enableReactActEnvironment,
-} from "@/pages/agents/agent-studio-test-utils";
+import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
 import { KanbanTaskCard as ProductionKanbanTaskCard } from "./kanban-task-card";
 
-enableReactActEnvironment();
 const workflowActions = createTaskWorkflowActionsFixture();
 const KanbanTaskCard = ({
   actions = workflowActions,

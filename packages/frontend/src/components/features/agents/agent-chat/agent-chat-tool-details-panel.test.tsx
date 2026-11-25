@@ -11,7 +11,6 @@ import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions
 import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
 import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import { resolveAgentChatRuntimePresentation } from "@openducktor/frontend-core/sessions/send/agent-chat-runtime-presentation";
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@openducktor/frontend-core/types/session-slices";
@@ -34,8 +33,6 @@ import {
   ToolDetailsStoreContext,
 } from "./agent-chat-tool-details-store";
 import { readToolRunClassifier } from "@openducktor/frontend-core/sessions/transcript/tool-runs";
-
-enableReactActEnvironment();
 
 const toolMessage = (id: string, meta: Partial<ToolMeta>): AgentChatMessage => ({
   id,

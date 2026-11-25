@@ -15,7 +15,6 @@ import {
 import type { AgentRuntimeCatalog, RuntimeWorkingDirectoryRef } from "@openducktor/core";
 import type { HostClient } from "@openducktor/host-client";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { ChecksStateContext, WorkspaceStateContext } from "@/state/app-state-contexts";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
@@ -26,14 +25,11 @@ import { runtimeExecutableQueryOptions } from "@openducktor/frontend-core/querie
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createChecksStateFixture,
-  createDeferred,
   createHostRuntimeStatusContextValue,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalController } from "./use-settings-modal-controller";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
-
-enableReactActEnvironment();
 
 const createSettingsSnapshot = (): SettingsSnapshot =>
   createSettingsSnapshotFixture({
@@ -388,7 +384,7 @@ describe("useSettingsModalController", () => {
         },
       };
     };
-    const codexValidation = createDeferred<RuntimeExecutableCheck>();
+    const codexValidation = Promise.withResolvers<RuntimeExecutableCheck>();
     const runtimeExecutablesCheck: HostClient["runtimeExecutablesCheck"] = mock(async (input) => {
       if (input.mode !== "validate") throw new Error("Expected runtime validation");
       const kind = knownRuntimeKindValues.find((candidate) =>
@@ -488,8 +484,8 @@ describe("useSettingsModalController", () => {
   test("does not retry a cached runtime path while another path probe is running", async () => {
     const initialPath = "/tools/opencode-a";
     const pendingPath = "/tools/opencode-b";
-    const pendingValidation = createDeferred<RuntimeExecutableCheck>();
-    const repeatedInitialValidation = createDeferred<RuntimeExecutableCheck>();
+    const pendingValidation = Promise.withResolvers<RuntimeExecutableCheck>();
+    const repeatedInitialValidation = Promise.withResolvers<RuntimeExecutableCheck>();
     const opencodeRequests: string[] = [];
     settingsSnapshotFactory = () => {
       const snapshot = createSettingsSnapshot();
@@ -679,17 +675,17 @@ describe("useSettingsModalController", () => {
       antigravity: 0,
     } satisfies Record<RuntimeKind, number>;
     const initialValidationByKind = {
-      opencode: createDeferred<RuntimeExecutableCheck>(),
-      codex: createDeferred<RuntimeExecutableCheck>(),
-      claude: createDeferred<RuntimeExecutableCheck>(),
-      antigravity: createDeferred<RuntimeExecutableCheck>(),
-    } satisfies Record<RuntimeKind, ReturnType<typeof createDeferred<RuntimeExecutableCheck>>>;
+      opencode: Promise.withResolvers<RuntimeExecutableCheck>(),
+      codex: Promise.withResolvers<RuntimeExecutableCheck>(),
+      claude: Promise.withResolvers<RuntimeExecutableCheck>(),
+      antigravity: Promise.withResolvers<RuntimeExecutableCheck>(),
+    } satisfies Record<RuntimeKind, PromiseWithResolvers<RuntimeExecutableCheck>>;
     const repeatedValidationByKind = {
-      opencode: createDeferred<RuntimeExecutableCheck>(),
-      codex: createDeferred<RuntimeExecutableCheck>(),
-      claude: createDeferred<RuntimeExecutableCheck>(),
-      antigravity: createDeferred<RuntimeExecutableCheck>(),
-    } satisfies Record<RuntimeKind, ReturnType<typeof createDeferred<RuntimeExecutableCheck>>>;
+      opencode: Promise.withResolvers<RuntimeExecutableCheck>(),
+      codex: Promise.withResolvers<RuntimeExecutableCheck>(),
+      claude: Promise.withResolvers<RuntimeExecutableCheck>(),
+      antigravity: Promise.withResolvers<RuntimeExecutableCheck>(),
+    } satisfies Record<RuntimeKind, PromiseWithResolvers<RuntimeExecutableCheck>>;
     const runtimeExecutablesCheck: HostClient["runtimeExecutablesCheck"] = mock(async (input) => {
       if (input.mode !== "validate") throw new Error("Expected runtime validation");
       const kind = knownRuntimeKindValues.find((candidate) =>
@@ -830,7 +826,7 @@ describe("useSettingsModalController", () => {
   });
 
   test("does not block settings while a disabled runtime validation is pending", async () => {
-    const claudeValidation = createDeferred<RuntimeExecutableCheck>();
+    const claudeValidation = Promise.withResolvers<RuntimeExecutableCheck>();
     const requestedKinds: RuntimeKind[] = [];
     const runtimeExecutablesCheck: HostClient["runtimeExecutablesCheck"] = mock(async (input) => {
       const kind = knownRuntimeKindValues.find((candidate) =>

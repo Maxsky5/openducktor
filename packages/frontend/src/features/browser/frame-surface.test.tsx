@@ -1,17 +1,13 @@
-import { describe, expect, mock, spyOn, test } from "bun:test";
-import type {
-  BrowserFrameMessage,
-  BrowserFrameSource,
-  BrowserTabFrameStateRequest,
-} from "@openducktor/contracts";
-import { act, render, screen, waitFor } from "@testing-library/react";
-import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { afterEach, describe, expect, mock, test } from "bun:test";
+import type { BrowserFrameMessage, BrowserFrameSource } from "@openducktor/contracts";
+import { renderToStaticMarkup } from "react-dom/server";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { browserTabIdFixture } from "@/test-utils/session-panel-fixtures";
 import { createBrowserFocusRegistry } from "./browser-focus-registry";
 import type { BrowserFrameControls } from "./browser-frame-display";
 import { createBrowserSurfaceRegistry } from "./browser-surface-registry";
 import { FrameBrowserSurface } from "./frame-surface";
+import { type BrowserFrameState, startFrameTabController } from "./frame-tab-controller";
 import { embeddedShortcutSources } from "../shortcuts/embedded-sources";
 
 const TAB_ID = browserTabIdFixture(1);
@@ -21,55 +17,63 @@ type FrameMessageData = BrowserFrameMessage | Record<string, string | number | b
 const PREVIEW = "http://localhost:61000";
 const PREVIEW_SOURCE: BrowserFrameSource = { kind: "preview", origin: PREVIEW };
 
-const renderFrame = async (
+let stopFrame: (() => void) | undefined;
+afterEach(() => {
+  stopFrame?.();
+  stopFrame = undefined;
+});
+
+const startFrame = (
   url = "http://localhost:3000/app?x=1",
   sourceOf: (url: string) => BrowserFrameSource | Promise<BrowserFrameSource> = () =>
     PREVIEW_SOURCE,
 ) => {
-  const reports: BrowserTabFrameStateRequest[] = [];
-  const connection = createTestClientConnection({
-    client: {
-      browserTabFrameState: async (request) => {
-        reports.push(request);
-      },
-    },
-  });
+  const reports: BrowserFrameState[] = [];
   const focus = createBrowserFocusRegistry();
   const toAddressBar = mock(() => {});
   focus.registerAddressBar(TAB_ID, toAddressBar);
   const controls = createBrowserSurfaceRegistry<BrowserFrameControls>();
   const source = mock(async (target: string) => sourceOf(target));
-  render(
-    <QueryProvider connection={connection}>
-      <FrameBrowserSurface
-        frames={{ source }}
-        focus={focus}
-        controls={controls}
-        tabId={TAB_ID}
-        initialUrl={url}
-      />
-    </QueryProvider>,
-  );
-  const frame = screen.getByTestId("browser-frame");
-  if (!(frame instanceof HTMLIFrameElement)) throw new Error("The page is not an iframe.");
-  // Test iframes load no page, so the frame gets a window that only takes messages.
+  const setChecking = mock((_checking: boolean) => {});
+  // Drive frame events ourselves so the browser cannot start a network request.
+  const frame = document.createElement("iframe");
+  const posted = mock(() => {});
   Object.defineProperty(frame, "contentWindow", {
-    configurable: true,
-    value: { postMessage: () => {} },
+    value: { postMessage: posted },
   });
-  await waitFor(() => expect(source).toHaveBeenCalled());
+  stopFrame = startFrameTabController({
+    element: frame,
+    frames: { source },
+    focus,
+    controls,
+    tabId: TAB_ID,
+    startUrl: url,
+    setChecking,
+    reportState: (state) => reports.push(state),
+  });
   const fromFrame = (data: FrameMessageData, origin = PREVIEW) =>
-    act(() => {
-      window.dispatchEvent(
-        new MessageEvent("message", { data, origin, source: frame.contentWindow }),
-      );
-    });
+    window.dispatchEvent(
+      new MessageEvent("message", { data, origin, source: frame.contentWindow }),
+    );
   const control = (): BrowserFrameControls => {
     const found = controls.get(TAB_ID);
     if (!found) throw new Error("The frame has no controls.");
     return found;
   };
-  return { frame, reports, source, control, toAddressBar, fromFrame };
+  const finishLoad = async () => {
+    await source.mock.results.at(-1)?.value;
+  };
+  return {
+    frame,
+    reports,
+    source,
+    control,
+    toAddressBar,
+    fromFrame,
+    finishLoad,
+    posted,
+    setChecking,
+  };
 };
 
 const state = {
@@ -83,20 +87,36 @@ const state = {
   error: null,
 };
 
-describe("FrameBrowserSurface", () => {
+test("lets a page run scripts without letting it navigate the app", () => {
+  const markup = renderToStaticMarkup(
+    <QueryProvider>
+      <FrameBrowserSurface
+        frames={{ source: async () => PREVIEW_SOURCE }}
+        focus={createBrowserFocusRegistry()}
+        controls={createBrowserSurfaceRegistry<BrowserFrameControls>()}
+        tabId={TAB_ID}
+        initialUrl="about:blank"
+      />
+    </QueryProvider>,
+  );
+  const sandbox = markup.match(/sandbox="([^"]*)"/)?.[1];
+  expect(sandbox).toContain("allow-scripts");
+  expect(sandbox).not.toContain("allow-top-navigation");
+});
+
+describe("frame tab controller", () => {
   test("installs routes into a replacement document without a loading message", async () => {
-    const { frame, fromFrame } = await renderFrame();
-    await waitFor(() => expect(frame.src).toContain(PREVIEW));
+    const { frame, fromFrame, finishLoad, posted } = startFrame();
+    await finishLoad();
     fromFrame(state);
     const first = embeddedShortcutSources.all().find((source) => source.tabId === TAB_ID)!;
-    const posted = spyOn(frame.contentWindow!, "postMessage").mockImplementation(() => {});
     const rules = { revision: 1, routes: [] };
     const installed = first.apply(rules);
     fromFrame({ openducktorFrame: 1, type: "shortcut", event: { type: "ready", revision: 1 } });
     await installed;
 
     fromFrame({ ...state, url: "http://localhost:3000/replacement" });
-    act(() => frame.dispatchEvent(new Event("load")));
+    frame.dispatchEvent(new Event("load"));
     const replacement = embeddedShortcutSources.all().find((source) => source.tabId === TAB_ID)!;
     expect(replacement).not.toBe(first);
     expect(embeddedShortcutSources.has(first)).toBe(false);
@@ -109,16 +129,16 @@ describe("FrameBrowserSurface", () => {
     );
   });
   test("loads a page of the host from the preview origin of its dev server", async () => {
-    const { frame, source } = await renderFrame();
+    const { frame, source, finishLoad } = startFrame();
+    await finishLoad();
 
     expect(source).toHaveBeenCalledWith("http://localhost:3000/app?x=1");
-    await waitFor(() => expect(frame.src).toBe(`${PREVIEW}/app?x=1`));
-    expect(frame.getAttribute("sandbox")).not.toContain("allow-top-navigation");
+    expect(frame.src).toBe(`${PREVIEW}/app?x=1`);
   });
 
   test("reports the state that the frame script sends, and ignores other origins", async () => {
-    const { frame, reports, fromFrame } = await renderFrame();
-    await waitFor(() => expect(frame.src).toContain(PREVIEW));
+    const { reports, fromFrame, finishLoad } = startFrame();
+    await finishLoad();
     const before = reports.length;
 
     fromFrame(state, "http://localhost:3000");
@@ -126,7 +146,6 @@ describe("FrameBrowserSurface", () => {
     fromFrame(state);
 
     expect(reports.at(-1)).toMatchObject({
-      tabId: TAB_ID,
       url: "http://localhost:3000/settings",
       title: "Settings",
       canGoBack: true,
@@ -135,8 +154,8 @@ describe("FrameBrowserSurface", () => {
   });
 
   test("shows a load error of the dev server and gives F6 to the address bar", async () => {
-    const { frame, reports, fromFrame, toAddressBar } = await renderFrame();
-    await waitFor(() => expect(frame.src).toContain(PREVIEW));
+    const { reports, fromFrame, toAddressBar, finishLoad } = startFrame();
+    await finishLoad();
 
     fromFrame({ ...state, error: "http://localhost:3000/settings did not answer." });
     fromFrame({ openducktorFrame: 1, type: "focus_address_bar" });
@@ -150,11 +169,9 @@ describe("FrameBrowserSurface", () => {
   });
 
   test("sends toolbar commands to the frame script of the preview origin", async () => {
-    const { frame, control, fromFrame } = await renderFrame();
-    await waitFor(() => expect(frame.src).toContain(PREVIEW));
+    const { control, fromFrame, finishLoad, posted } = startFrame();
+    await finishLoad();
     fromFrame(state);
-    if (!frame.contentWindow) throw new Error("The frame has no window.");
-    const posted = spyOn(frame.contentWindow, "postMessage").mockImplementation(() => {});
 
     control().run("back");
 
@@ -162,16 +179,12 @@ describe("FrameBrowserSurface", () => {
   });
 
   test("follows a page without the frame script, such as JSON, and Back returns to the page before", async () => {
-    const { frame, reports, control, fromFrame } = await renderFrame();
-    await waitFor(() => expect(frame.src).toContain(PREVIEW));
+    const { frame, reports, control, fromFrame, finishLoad, posted } = startFrame();
+    await finishLoad();
     fromFrame({ ...state, canGoBack: false });
-    if (!frame.contentWindow) throw new Error("The frame has no window.");
-    const posted = spyOn(frame.contentWindow, "postMessage").mockImplementation(() => {});
 
     fromFrame({ openducktorFrame: 1, type: "loading", url: "http://localhost:3000/api/data" });
-    act(() => {
-      frame.dispatchEvent(new Event("load"));
-    });
+    frame.dispatchEvent(new Event("load"));
 
     expect(reports.at(-1)).toMatchObject({
       url: "http://localhost:3000/api/data",
@@ -182,15 +195,14 @@ describe("FrameBrowserSurface", () => {
     control().run("back");
 
     expect(posted).not.toHaveBeenCalled();
-    await waitFor(() => expect(frame.src).toBe(`${PREVIEW}/settings`));
+    await finishLoad();
+    expect(frame.src).toBe(`${PREVIEW}/settings`);
   });
 
   test("sends Stop to the page while a link loads, before the next document replaces it", async () => {
-    const { frame, control, fromFrame } = await renderFrame();
-    await waitFor(() => expect(frame.src).toContain(PREVIEW));
+    const { control, fromFrame, finishLoad, posted } = startFrame();
+    await finishLoad();
     fromFrame(state);
-    if (!frame.contentWindow) throw new Error("The frame has no window.");
-    const posted = spyOn(frame.contentWindow, "postMessage").mockImplementation(() => {});
 
     fromFrame({ openducktorFrame: 1, type: "loading", url: "http://localhost:3000/slow" });
     control().run("stop");
@@ -200,7 +212,7 @@ describe("FrameBrowserSurface", () => {
 
   test("loads a site at its own URL, and shows it after the host allows frames", async () => {
     let allow: () => void = () => {};
-    const { frame } = await renderFrame(
+    const { frame, finishLoad, setChecking } = startFrame(
       "https://openducktor.dev/docs",
       () =>
         new Promise<BrowserFrameSource>((resolve) => {
@@ -209,22 +221,23 @@ describe("FrameBrowserSurface", () => {
     );
 
     expect(frame.src).toBe("https://openducktor.dev/docs");
-    expect(frame.className).toContain("invisible");
-    await act(async () => allow());
+    expect(setChecking).toHaveBeenLastCalledWith(true);
+    allow();
+    await finishLoad();
 
-    await waitFor(() => expect(frame.className).not.toContain("invisible"));
+    expect(setChecking).toHaveBeenLastCalledWith(false);
   });
 
   test("never loads a script URL, from a page message or from a load", async () => {
-    const { frame, reports, control, fromFrame } = await renderFrame();
-    await waitFor(() => expect(frame.src).toContain(PREVIEW));
+    const { frame, reports, control, fromFrame, finishLoad } = startFrame();
+    await finishLoad();
     const reported = reports.length;
 
     // The page posts a script URL as its state, so a later mount or reload would run it.
     fromFrame({ ...state, url: "javascript:parent.document.title='owned'" });
     expect(reports).toHaveLength(reported);
 
-    await act(() => control().load("javascript:parent.document.title='owned'"));
+    await control().load("javascript:parent.document.title='owned'");
     expect(frame.src).toBe("about:blank");
     expect(reports.at(-1)).toMatchObject({
       url: "about:blank",
@@ -237,9 +250,9 @@ describe("FrameBrowserSurface", () => {
       kind: "refused",
       message: "github.com does not let other sites show its pages in a frame.",
     };
-    const { frame, reports } = await renderFrame("https://github.com/", () => refused);
+    const { frame, reports, finishLoad } = startFrame("https://github.com/", () => refused);
+    await finishLoad();
 
-    await waitFor(() => expect(reports.at(-1)?.error?.kind).toBe("frame_refused"));
     expect(reports.at(-1)).toMatchObject({
       url: "https://github.com/",
       loading: false,
@@ -249,18 +262,20 @@ describe("FrameBrowserSurface", () => {
   });
 
   test("opens a site that a preview page links to, and Back returns to the preview page", async () => {
-    const { frame, reports, control, fromFrame } = await renderFrame(undefined, (url) =>
+    const { frame, reports, control, fromFrame, finishLoad } = startFrame(undefined, (url) =>
       url.startsWith("http://localhost") ? PREVIEW_SOURCE : { kind: "direct" },
     );
-    await waitFor(() => expect(frame.src).toContain(PREVIEW));
+    await finishLoad();
     fromFrame({ ...state, canGoBack: false });
 
     fromFrame({ openducktorFrame: 1, type: "leave", url: "https://openducktor.dev/" });
-    await waitFor(() => expect(frame.src).toBe("https://openducktor.dev/"));
+    await finishLoad();
+    expect(frame.src).toBe("https://openducktor.dev/");
     expect(reports.at(-1)).toMatchObject({ url: "https://openducktor.dev/", canGoBack: true });
     control().run("back");
 
-    await waitFor(() => expect(frame.src).toBe(`${PREVIEW}/settings`));
+    await finishLoad();
+    expect(frame.src).toBe(`${PREVIEW}/settings`);
     expect(reports.at(-1)).toMatchObject({
       url: "http://localhost:3000/settings",
       canGoForward: true,

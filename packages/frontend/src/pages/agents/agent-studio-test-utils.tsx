@@ -22,12 +22,10 @@ import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createRuntimeDefinitionsContextValue } from "@openducktor/frontend-core/test-support/runtime-hook-harness";
 export { createRuntimeDefinitionsContextValue } from "@openducktor/frontend-core/test-support/runtime-hook-harness";
-export { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import {
   type AgentSessionFixtureOverrides,
   createSettingsSnapshotFixture,
   createAgentSessionFixture as createSharedAgentSessionFixture,
-  createDeferred as createSharedDeferred,
   createChecksStateFixture,
   createHostRuntimeStatusContextValue,
   createTaskCardFixture as createSharedTaskCardFixture,
@@ -114,8 +112,6 @@ const TEST_CHECKS_OPERATIONS_CONTEXT = {
       { taskStorePath: "/repo/task-stores/workspace/database.sqlite" },
     ),
 } satisfies ComponentProps<typeof ChecksOperationsContext.Provider>["value"];
-
-export const createDeferred = createSharedDeferred;
 
 export const createTaskStoreCheckFixture = createSharedTaskStoreCheckFixture;
 

@@ -1,8 +1,18 @@
 import { withShellPlatform } from "@/test-utils/focused-fixture";
 import { IsolatedMarkdownWrapper } from "@/test-utils/isolated-markdown-wrapper";
-import { afterEach, beforeAll, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  jest,
+  mock,
+  spyOn,
+  test,
+} from "bun:test";
 import { useQueryClient } from "@tanstack/react-query";
-import { fireEvent, render as renderView, waitFor } from "@testing-library/react";
+import { act, fireEvent, render as renderView, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode, useLayoutEffect, useState } from "react";
 import { toast } from "sonner";
 import { ThemeProvider } from "@/components/layout/theme-provider";
@@ -16,6 +26,8 @@ import { MarkdownMermaid } from "./markdown-mermaid";
 import { MERMAID_RENDER_CONFIG } from "./markdown-mermaid-render";
 import { MarkdownPreviewModal } from "./markdown-preview-modal";
 import { MarkdownRenderer } from "./markdown-renderer";
+
+await import("./markdown-renderer-mermaid-candidate");
 
 const render = (element: ReactNode) => renderView(element, { wrapper: IsolatedMarkdownWrapper });
 
@@ -104,11 +116,9 @@ test("shows an actionable error without falling back when the shell rejects a li
     const view = renderMarkdownLink("https://example.com/rejected", "Open link", openExternalUrl);
     const link = view.getByRole("link", { name: "Open link" });
 
-    expect(fireEvent.click(link)).toBe(false);
-    await waitFor(() => {
-      expect(toastErrorSpy).toHaveBeenCalledWith("Failed to open link", {
-        description: "Shell rejected the URL",
-      });
+    expect(await act(async () => fireEvent.click(link))).toBe(false);
+    expect(toastErrorSpy).toHaveBeenCalledWith("Failed to open link", {
+      description: "Shell rejected the URL",
     });
     expect(openExternalUrl).toHaveBeenCalledTimes(1);
   } finally {
@@ -161,23 +171,26 @@ describe("rich task description rendering", () => {
   });
 
   test("omits preserved front matter and renders math through KaTeX", async () => {
-    const view = render(
-      <MarkdownRenderer
-        markdown={"---\ntitle: Hidden\n---\nVisible $x^2$"}
-        taskAssetContext={{
-          workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
-          taskId: "task-1",
-          scope: "description",
-        }}
-        stripTaskDescriptionFrontMatter
-      />,
+    const view = await act(async () =>
+      render(
+        <MarkdownRenderer
+          markdown={"---\ntitle: Hidden\n---\nVisible $x^2$"}
+          taskAssetContext={{
+            workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+            taskId: "task-1",
+            scope: "description",
+          }}
+          stripTaskDescriptionFrontMatter
+        />,
+      ),
     );
-
-    await waitFor(() => expect(view.container.querySelector(".katex")).not.toBeNull(), {
-      timeout: 3000,
-    });
-    expect(view.queryByText("title: Hidden", { exact: false })).toBeNull();
-  }, 4000);
+    await waitFor(() =>
+      expect(view.container.querySelector(".katex")?.closest("p")?.textContent).toContain(
+        "Visible",
+      ),
+    );
+    expect(view.container.textContent).not.toContain("title: Hidden");
+  });
 
   test.each([
     ["spaces before LF and a following paragraph", "$$\nx\n$$   \n\nAfter"],
@@ -278,12 +291,21 @@ describe("rich task description rendering", () => {
     expect(plain.container.querySelectorAll("hr")).toHaveLength(2);
   });
 
-  test.each(["ordinary mermaid text", "Price is $5"])(
+  test.each([
+    ["ordinary mermaid text", () => import("./markdown-renderer-mermaid-candidate")],
+    ["Price is $5", () => import("./markdown-renderer-math-candidate")],
+  ] as const)(
     "keeps generic Markdown visible while detector chunks load for %s",
-    (markdown) => {
+    async (markdown, loadDetector) => {
       const view = render(<MarkdownRenderer markdown={markdown} />);
 
-      expect(view.getByText(markdown)).toBeTruthy();
+      try {
+        expect(view.getByText(markdown)).toBeTruthy();
+        await act(loadDetector);
+        expect(view.getByText(markdown)).toBeTruthy();
+      } finally {
+        view.unmount();
+      }
     },
   );
 
@@ -304,25 +326,25 @@ describe("rich task description rendering", () => {
   });
 
   test("keeps highlighted code beside math in premium task documents", async () => {
-    const view = render(
-      <QueryProvider>
-        <StaticThemeProvider>
-          <MarkdownRenderer
-            markdown={"Formula $x$\n\n```javascript\nconst value = 1;\n```"}
-            premiumCodeBlocks
-          />
-        </StaticThemeProvider>
-      </QueryProvider>,
+    const view = await act(async () =>
+      render(
+        <QueryProvider>
+          <StaticThemeProvider>
+            <MarkdownRenderer
+              markdown={"Formula $x$\n\n```javascript\nconst value = 1;\n```"}
+              premiumCodeBlocks
+            />
+          </StaticThemeProvider>
+        </QueryProvider>,
+      ),
     );
-
-    await waitFor(
-      () => {
-        expect(view.container.querySelector(".katex")).not.toBeNull();
-        expect(view.container.querySelector(".token")).not.toBeNull();
-      },
-      { timeout: 10_000 },
-    );
-  }, 12_000);
+    await waitFor(() => {
+      expect(view.container.querySelector(".katex")).not.toBeNull();
+      expect(view.container.querySelector(".token")?.closest("code")?.textContent).toContain(
+        "const value = 1;",
+      );
+    });
+  });
 
   test("resolves logical task assets through the shell without persisting runtime URLs", async () => {
     const resolveTaskAssetSource = mock(async () => ({
@@ -367,11 +389,12 @@ describe("rich task description rendering", () => {
   }, 4000);
 
   test("shows an actionable error when a resolved task asset response cannot load", async () => {
+    const missingUrl = "openducktor-task-asset://asset/missing";
     const shellPlatform = {
       ...createUnavailableShellBridge(),
       resolveTaskAssetSource: async () => ({
         kind: "url" as const,
-        src: "openducktor-task-asset://asset/missing",
+        src: missingUrl,
       }),
     };
     const assetId = "550e8400-e29b-41d4-a716-446655440000";
@@ -388,11 +411,18 @@ describe("rich task description rendering", () => {
         shellPlatform,
       ),
     );
-    const image = await view.findByRole("img", { name: "Architecture" });
+    const image = await waitFor(
+      () => {
+        const resolved = view.getByRole("img", { name: "Architecture" });
+        expect(resolved.getAttribute("src")).toBe(missingUrl);
+        return resolved;
+      },
+      { timeout: 750 },
+    );
 
     fireEvent.error(image);
 
-    expect((await view.findByRole("alert")).textContent).toBe(
+    expect(view.getByRole("alert").textContent).toBe(
       "Image could not be loaded: The task asset response failed to load.",
     );
   });
@@ -600,20 +630,20 @@ describe("rich task description rendering", () => {
   });
 
   test("renders a Mermaid diagram without exposing its source and suppresses raw HTML", async () => {
-    const view = render(
-      <MarkdownRenderer
-        markdown={"```mermaid\ngraph TD\n A --> B\n```\n<script>alert(1)</script>"}
-        taskAssetContext={{
-          workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
-          taskId: "task-1",
-          scope: "description",
-        }}
-      />,
+    const view = await act(async () =>
+      render(
+        <MarkdownRenderer
+          markdown={"```mermaid\ngraph TD\n A --> B\n```\n<script>alert(1)</script>"}
+          taskAssetContext={{
+            workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+            taskId: "task-1",
+            scope: "description",
+          }}
+        />,
+      ),
     );
-
-    await waitFor(() => expect(view.container.querySelector("svg")).toBeTruthy(), {
-      timeout: 3000,
-    });
+    const diagram = view.getByRole("group", { name: "Mermaid diagram" });
+    await waitFor(() => expect(diagram.querySelector("svg")).toBeTruthy(), { timeout: 3_000 });
     expect(view.queryByText("Mermaid source")).toBeNull();
     expect(view.queryByText(/graph TD/)).toBeNull();
     expect(view.container.querySelector("script")).toBeNull();
@@ -732,17 +762,24 @@ describe("rich task description rendering", () => {
     );
 
     try {
-      const view = render(
-        <MarkdownRenderer markdown={"```mermaid\ngraph TD\n  A --> B\n```"} lightweight />,
-      );
-
-      await waitFor(() => expect(view.container.textContent).toContain("graph TD"), {
-        timeout: 1000,
+      await withAnimationFrameTestDriver(async (frames) => {
+        const view = await act(async () =>
+          render(
+            <MarkdownRenderer markdown={"```mermaid\ngraph TD\n  A --> B\n```"} lightweight />,
+          ),
+        );
+        try {
+          await frames.flushFrame();
+          await frames.flushFrame();
+          expect(view.container.querySelector("pre code")?.textContent?.trimEnd()).toBe(
+            "graph TD\n  A --> B",
+          );
+          expect(view.queryByRole("group", { name: "Mermaid diagram" })).toBeNull();
+          expect(renderSpy).not.toHaveBeenCalled();
+        } finally {
+          view.unmount();
+        }
       });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(renderSpy).not.toHaveBeenCalled();
-      expect(view.queryByRole("group", { name: "Mermaid diagram" })).toBeNull();
-      expect(view.container.querySelector(".language-mermaid")).not.toBeNull();
     } finally {
       renderSpy.mockRestore();
     }
@@ -885,34 +922,40 @@ describe("rich task description rendering", () => {
 
   test("keeps surrounding Markdown mounted while its Mermaid preview renders", async () => {
     const renderModule = await import("./markdown-mermaid-render");
-    let resolveRender: ((svg: string) => void) | undefined;
-    const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveRender = resolve;
-        }),
-    );
+    const diagram = Promise.withResolvers<string>();
+    const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockReturnValue(diagram.promise);
 
     try {
-      const view = render(
-        <MarkdownRenderer markdown={"Before\n\n```mermaid\ngraph TD\n  A --> B\n```\n\nAfter"} />,
-      );
+      await withAnimationFrameTestDriver(async (frames) => {
+        const view = await act(async () =>
+          render(
+            <MarkdownRenderer
+              markdown={"Before\n\n```mermaid\ngraph TD\n  A --> B\n```\n\nAfter"}
+            />,
+          ),
+        );
+        try {
+          const before = view.getByText("Before");
+          const after = view.getByText("After");
+          const viewport = view.getByRole("group", { name: "Mermaid diagram" });
+          await frames.flushFrames();
+          expect(renderSpy).toHaveBeenCalledTimes(1);
+          expect(viewport.querySelector("svg")).toBeNull();
 
-      await waitFor(() => expect(renderSpy).toHaveBeenCalledTimes(1), {
-        timeout: 3000,
+          await act(async () => {
+            diagram.resolve(
+              '<svg xmlns="http://www.w3.org/2000/svg"><text>Rendered diagram</text></svg>',
+            );
+            await diagram.promise;
+          });
+          expect(view.getByText("Rendered diagram").closest("svg")).not.toBeNull();
+          expect(view.getByText("Before")).toBe(before);
+          expect(view.getByText("After")).toBe(after);
+          expect(view.getByRole("group", { name: "Mermaid diagram" })).toBe(viewport);
+        } finally {
+          view.unmount();
+        }
       });
-      expect(view.getByText("Before")).toBeTruthy();
-      expect(view.getByText("After")).toBeTruthy();
-      const viewport = view.getByRole("group", { name: "Mermaid diagram" });
-      expect(view.container.querySelector("svg")).toBeNull();
-
-      resolveRender?.(
-        '<svg xmlns="http://www.w3.org/2000/svg"><text>Rendered diagram</text></svg>',
-      );
-      await waitFor(() => expect(view.getByText("Rendered diagram")).toBeTruthy(), {
-        timeout: 3000,
-      });
-      expect(view.getByRole("group", { name: "Mermaid diagram" })).toBe(viewport);
     } finally {
       renderSpy.mockRestore();
     }
@@ -970,19 +1013,27 @@ describe("rich task description rendering", () => {
     );
 
     try {
-      const view = render(<MarkdownMermaid source={"graph TD\n  A --> B"} />);
+      await withAnimationFrameTestDriver(async (frames) => {
+        const view = render(<MarkdownMermaid source={"graph TD\n  A --> B"} />);
+        try {
+          await frames.flushFrames();
+          const currentLabel = view.getByText("B");
+          jest.useFakeTimers();
+          view.rerender(<MarkdownMermaid source={"graph TD\n  A --> C"} renderDelayMs={100} />);
+          await act(async () => jest.advanceTimersByTime(99));
 
-      await waitFor(() => expect(view.getByText("B")).toBeTruthy(), {
-        timeout: 3000,
-      });
-      const currentPreview = view.container.innerHTML;
+          expect(view.getByText("B")).toBe(currentLabel);
+          expect(view.queryByText("C")).toBeNull();
+          expect(view.queryByText("Rendering diagram…")).toBeNull();
 
-      view.rerender(<MarkdownMermaid source={"graph TD\n  A --> C"} renderDelayMs={100} />);
+          await act(async () => jest.advanceTimersByTime(1));
 
-      expect(view.queryByText("Rendering diagram…")).toBeNull();
-      expect(view.container.innerHTML).toBe(currentPreview);
-      await waitFor(() => expect(view.getByText("C")).toBeTruthy(), {
-        timeout: 3000,
+          expect(view.getByText("C")).toBeTruthy();
+          expect(view.queryByText("B")).toBeNull();
+        } finally {
+          view.unmount();
+          jest.useRealTimers();
+        }
       });
     } finally {
       renderSpy.mockRestore();

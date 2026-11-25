@@ -1,14 +1,13 @@
-import { expect, test } from "bun:test";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
+import { expect, jest, test } from "bun:test";
 import type { WorkspaceSession, WorkspaceSessionArchivePreview } from "@openducktor/contracts";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { workspaceSessionArchivePreviewQueryOptions } from "@openducktor/frontend-core/queries/workspace-session-archive";
-import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import { WorkspaceSessionArchiveDialog } from "./workspace-session-archive-dialog";
 
-// The dialog keeps its loader for at least 500 ms, then shows the final state.
-const SETTLED = { timeout: 1_500 };
+setupTestingLibraryFakeTimers();
 
 const record = (): WorkspaceSession => ({
   id: "chat",
@@ -33,7 +32,7 @@ const record = (): WorkspaceSession => ({
 test.each([false, true])(
   "archive keeps its choice and focus during refresh, shared=%s",
   async (shared) => {
-    const refresh = createDeferred<WorkspaceSessionArchivePreview>();
+    const refresh = Promise.withResolvers<WorkspaceSessionArchivePreview>();
     const preview: WorkspaceSessionArchivePreview = {
       branchName: "feature/chat",
       worktreeExists: true,
@@ -122,17 +121,12 @@ test.each([false, true])(
   "removal stays enabled by default after the worktree check, dirty=%s",
   async (dirty) => {
     const requests: boolean[] = [];
-    let finish!: (preview: WorkspaceSessionArchivePreview) => void;
+    const preview = Promise.withResolvers<WorkspaceSessionArchivePreview>();
     const connection = createTestClientConnection({
       client: {
-        workspaceSessionArchivePreview: () =>
-          new Promise((resolve) => {
-            finish = resolve;
-          }),
+        workspaceSessionArchivePreview: () => preview.promise,
       },
     });
-    // The loader starts while the dialog renders.
-    const startedAt = performance.now();
     const view = render(
       <QueryProvider connection={connection}>
         <WorkspaceSessionArchiveDialog
@@ -150,21 +144,25 @@ test.each([false, true])(
       expect(view.getByRole("status")).toBeTruthy();
       expect(view.queryByRole("switch")).toBeNull();
       expect(view.queryByRole("button", { name: "Archive session" })).toBeNull();
-      await waitFor(() => expect(finish).toBeDefined(), SETTLED);
-      finish({
-        branchName: "feature/chat",
-        worktreeExists: true,
-        hasUncommittedChanges: dirty,
-        sharedWith: [],
-        taskOwners: [],
+      await act(async () => {
+        preview.resolve({
+          branchName: "feature/chat",
+          worktreeExists: true,
+          hasUncommittedChanges: dirty,
+          sharedWith: [],
+          taskOwners: [],
+        });
       });
-      const toggle = await view.findByRole(
-        "switch",
-        { name: "Remove worktree and branch" },
-        SETTLED,
-      );
-      // The final content and buttons appear together, after the minimum loader time.
-      expect(performance.now() - startedAt).toBeGreaterThanOrEqual(500);
+      await act(async () => {
+        jest.advanceTimersByTime(499);
+      });
+      expect(view.getByRole("status")).toBeTruthy();
+      expect(view.queryByRole("button", { name: "Archive session" })).toBeNull();
+
+      await act(async () => {
+        jest.advanceTimersByTime(1);
+      });
+      const toggle = view.getByRole("switch", { name: "Remove worktree and branch" });
       expect(view.queryByRole("status")).toBeNull();
       const submit = view.getByRole("button", { name: "Archive session" });
       expect(submit.hasAttribute("disabled")).toBe(false);
@@ -220,8 +218,6 @@ test("saved chat history disables worktree removal and still allows archive", as
     );
     await view.findByText(
       "This worktree stays because these saved sessions need it for files or history: Archived child chat.",
-      {},
-      SETTLED,
     );
     const toggle = view.getByRole("switch", { name: "Remove worktree and branch" });
     expect(toggle.hasAttribute("disabled")).toBe(true);
@@ -265,11 +261,7 @@ test("a task that needs the worktree disables its removal, names the task, and s
     await waitFor(() =>
       expect(view.getByRole("dialog").getAttribute("aria-busy")).not.toBe("true"),
     );
-    await view.findByText(
-      "This worktree stays because these tasks need it: Fix login (task-7).",
-      {},
-      SETTLED,
-    );
+    await view.findByText("This worktree stays because these tasks need it: Fix login (task-7).");
     const toggle = view.getByRole("switch", { name: "Remove worktree and branch" });
     expect(toggle.hasAttribute("disabled")).toBe(true);
     expect(toggle.getAttribute("aria-checked")).toBe("false");
@@ -313,7 +305,7 @@ test("turning removal off keeps Git resources and Cancel sends no archive reques
     await waitFor(() =>
       expect(view.getByRole("dialog").getAttribute("aria-busy")).not.toBe("true"),
     );
-    await view.findByText(/This worktree has local changes/, {}, SETTLED);
+    await view.findByText(/This worktree has local changes/);
     expect(
       view.getByText(
         /Archiving stops the terminals, development servers, and running agent of this session/,
@@ -366,7 +358,7 @@ test("a missing detached worktree can be archived without removal", async () => 
     await waitFor(() =>
       expect(view.getByRole("dialog").getAttribute("aria-busy")).not.toBe("true"),
     );
-    await view.findByText(/No branch is attached/, {}, SETTLED);
+    await view.findByText(/No branch is attached/);
     const submit = view.getByRole("button", { name: "Archive session" });
     expect(submit.hasAttribute("disabled")).toBe(true);
     fireEvent.click(view.getByRole("switch", { name: "Remove worktree and branch" }));
@@ -407,7 +399,7 @@ test("a failed saved history check blocks removal but allows keeping the worktre
     await waitFor(() =>
       expect(view.getByRole("dialog").getAttribute("aria-busy")).not.toBe("true"),
     );
-    await view.findByText("Cannot check saved chat history.", {}, SETTLED);
+    await view.findByText("Cannot check saved chat history.");
     const toggle = view.getByRole("switch", { name: "Remove worktree and branch" });
     expect(toggle.getAttribute("aria-checked")).toBe("true");
     expect(toggle.hasAttribute("disabled")).toBe(false);
@@ -455,7 +447,7 @@ test("archive locks the full form and keeps its error and removal choice visible
     await waitFor(() =>
       expect(view.getByRole("dialog").getAttribute("aria-busy")).not.toBe("true"),
     );
-    await view.findByText(/worktree is already missing/, {}, SETTLED);
+    await view.findByText(/worktree is already missing/);
     const toggle = view.getByRole("switch");
     expect(toggle.hasAttribute("disabled")).toBe(true);
     expect(view.getByRole("button", { name: "Cancel" }).closest("fieldset")?.disabled).toBe(true);

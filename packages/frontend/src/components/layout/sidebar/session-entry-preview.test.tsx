@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, jest, mock, test } from "bun:test";
 import {
   RUNTIME_DESCRIPTORS_BY_KIND,
   type AgentSessionLiveEnvelope,
@@ -516,13 +516,16 @@ describe("Sidebar session previews", () => {
     if (!(answer instanceof HTMLTextAreaElement)) throw new Error("Expected a text answer field.");
     fireEvent.focus(answer);
     fireEvent.change(answer, { target: { value: "Personal and business accounts" } });
-    fireEvent.pointerLeave(preview, { pointerType: "mouse" });
-    fireEvent.pointerEnter(screen.getByRole("button", { name: /Chat other/ }), {
-      pointerType: "mouse",
-    });
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 270));
-    });
+    jest.useFakeTimers();
+    try {
+      fireEvent.pointerLeave(preview, { pointerType: "mouse" });
+      fireEvent.pointerEnter(screen.getByRole("button", { name: /Chat other/ }), {
+        pointerType: "mouse",
+      });
+      act(() => jest.advanceTimersByTime(270));
+    } finally {
+      jest.useRealTimers();
+    }
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
     expect(screen.getByRole("dialog", { name: "Ship sign in" })).toBe(preview);
     fireEvent.click(within(preview).getByRole("button", { name: "Confirm Answers" }));

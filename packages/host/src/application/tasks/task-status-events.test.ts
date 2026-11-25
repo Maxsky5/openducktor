@@ -109,14 +109,6 @@ const createServices = (
   };
 };
 
-const deferred = () => {
-  let resolve = () => {};
-  const promise = new Promise<void>((complete) => {
-    resolve = complete;
-  });
-  return { promise, resolve };
-};
-
 test.each([
   ["build-completed", "in_progress", "build"],
   ["build-completed", "blocked", "build"],
@@ -198,8 +190,8 @@ test.each([false, true])(
   async (viaSync) => {
     const harness = await createSqliteTaskStoreHarness();
     const { repoPath, store, workspaceId } = harness;
-    const committed = deferred();
-    const release = deferred();
+    const committed = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
     try {
       const task = await Effect.runPromise(
         store.createTask({
@@ -233,7 +225,7 @@ test.each([false, true])(
         service.applyTaskEvent({ workspaceId, repoPath, taskId: task.id, eventId: "spec_ready" }),
       );
       await committed.promise;
-      const secondStarted = deferred();
+      const secondStarted = Promise.withResolvers<void>();
       const secondMutation = viaSync
         ? sync.syncRepoPullRequests(repoPath, workspaceId).pipe(Effect.asVoid)
         : service

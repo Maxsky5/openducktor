@@ -1,5 +1,6 @@
 import { renderWithWorkflow as render } from "@/test-utils/render-with-workflow";
 import { expect, spyOn, test } from "bun:test";
+import { once } from "node:events";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -9,12 +10,9 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import { fireEvent, screen, within } from "@testing-library/react";
 import { act, useReducer } from "react";
 import { toast } from "sonner";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import type { WorkspaceModelDefaultsDraft } from "@/types/state-slices";
 import { REPOSITORY_SPEED_RESET_NOTICE } from "./repository-agent-selection";
 import { RepositoryModelDefaultsFields } from "./repository-model-defaults-fields";
-
-enableReactActEnvironment();
 
 const codexCatalog: AgentModelCatalog = {
   runtime: CODEX_RUNTIME_DESCRIPTOR,
@@ -132,15 +130,19 @@ test("the naming model picker saves a runtime and model without a profile", asyn
       draft = updater(draft);
     },
   });
+  const trigger = within(namingCard()).getByRole("button", {
+    name: "Select model, Select a model",
+  });
+  await act(async () => fireEvent.click(trigger));
+  const focusReturned = once(trigger, "focus", { signal: AbortSignal.timeout(800) });
   await act(async () => {
-    fireEvent.click(
-      within(namingCard()).getByRole("button", { name: "Select model, Select a model" }),
-    );
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Select Codex model model" }));
   });
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Select Codex model model" }));
+    await focusReturned;
   });
 
+  expect(document.activeElement).toBe(trigger);
   expect(draft.namingModel).toEqual({
     runtimeKind: "codex",
     providerId: "openai",

@@ -39,16 +39,6 @@ const observeDocument = (queryClient: QueryClient, queryKey: readonly unknown[])
     staleTime: Infinity,
   }).subscribe(() => {});
 
-const deferred = <Value>() => {
-  let resolve!: (value: Value) => void;
-  let reject!: (error: Error) => void;
-  const promise = new Promise<Value>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
-};
-
 const recordQueryOperations = (queryClient: QueryClient): string[] => {
   const calls: string[] = [];
   const cancelQueries = queryClient.cancelQueries.bind(queryClient);
@@ -316,7 +306,7 @@ describe("TaskViewSync", () => {
   });
 
   test("does not restore a removed document from a pending first read", async () => {
-    const result = deferred<{ markdown: string; updatedAt: string | null }>();
+    const result = Promise.withResolvers<{ markdown: string; updatedAt: string | null }>();
     const loadFreshDocument = mock(async () => ({ markdown: "", updatedAt: null }));
     const { queryClient, sync } = createSync(createPorts({ loadFreshDocument }));
     const key = documentQueryKeys.document(workspaceRefFixture("/repo"), "task-1", "spec");
@@ -343,7 +333,7 @@ describe("TaskViewSync", () => {
   });
 
   test("a restored document supersedes a pending reset without clearing the fresh result", async () => {
-    const oldRead = deferred<{ markdown: string; updatedAt: string | null }>();
+    const oldRead = Promise.withResolvers<{ markdown: string; updatedAt: string | null }>();
     const restored = { markdown: "# Restored", updatedAt: "2026-04-10T13:11:00.000Z" };
     const loadFreshDocument = mock(async () => restored);
     const { queryClient, sync } = createSync(createPorts({ loadFreshDocument }));
@@ -387,7 +377,7 @@ describe("TaskViewSync", () => {
   });
 
   test("a save after a pending reset reaches the cache and the imperative reader", async () => {
-    const oldRead = deferred<{ markdown: string; updatedAt: string | null }>();
+    const oldRead = Promise.withResolvers<{ markdown: string; updatedAt: string | null }>();
     const { queryClient, sync } = createSync(createPorts());
     const key = documentQueryKeys.document(workspaceRefFixture("/repo"), "task-1", "spec");
     const read = queryClient.fetchQuery(
@@ -415,8 +405,8 @@ describe("TaskViewSync", () => {
     test.each(["spec", "plan", "qaReport"] as const)(
       `an ordinary task edit keeps an unchanged first %s read with a ${baseline} board`,
       async (section) => {
-        const result = deferred<{ markdown: string; updatedAt: string | null }>();
-        const boardResult = deferred<TaskCard[]>();
+        const result = Promise.withResolvers<{ markdown: string; updatedAt: string | null }>();
+        const boardResult = Promise.withResolvers<TaskCard[]>();
         const updatedAt = "2026-04-10T13:09:00.000Z";
         const card = createTaskCardFixture({
           updatedAt,
@@ -502,7 +492,7 @@ describe("TaskViewSync", () => {
             failRead = reject;
           },
         );
-        const boardResult = deferred<TaskCard[]>();
+        const boardResult = Promise.withResolvers<TaskCard[]>();
         const committedAt = "2026-04-10T13:10:00.000Z";
         const committed = { markdown: "# Committed", updatedAt: committedAt };
         const later = { markdown: "# Later", updatedAt: "2026-04-10T13:11:00.000Z" };
@@ -699,8 +689,8 @@ describe("TaskViewSync", () => {
   });
 
   test("waits for fresh spec, plan, and QA documents while leaving inactive documents invalidated", async () => {
-    const freshDocument = deferred<{ markdown: string; updatedAt: string | null }>();
-    const freshDocumentStarted = deferred<void>();
+    const freshDocument = Promise.withResolvers<{ markdown: string; updatedAt: string | null }>();
+    const freshDocumentStarted = Promise.withResolvers<void>();
     const loadFreshDocument = mock(async (_repoPath, taskId, section) => {
       freshDocumentStarted.resolve();
       return freshDocument.promise.then(() => ({
@@ -771,8 +761,8 @@ describe("TaskViewSync", () => {
   });
 
   test("reads every observed document of a snapshot and reports the one that fails", async () => {
-    const pendingPlan = deferred<{ markdown: string; updatedAt: string | null }>();
-    const planStarted = deferred<void>();
+    const pendingPlan = Promise.withResolvers<{ markdown: string; updatedAt: string | null }>();
+    const planStarted = Promise.withResolvers<void>();
     const readFailure = new Error("spec unavailable");
     const loadFreshDocument = mock(
       async (_repoPath: WorkspaceRef, _taskId: string, section: string) => {
@@ -1060,8 +1050,8 @@ describe("TaskViewSync", () => {
   });
 
   test("releases a workspace at once while its task read is pending", async () => {
-    const pendingRead = deferred<TaskCard[]>();
-    const readStarted = deferred<void>();
+    const pendingRead = Promise.withResolvers<TaskCard[]>();
+    const readStarted = Promise.withResolvers<void>();
     const listTasks = mock(async () => {
       readStarted.resolve();
       return pendingRead.promise;

@@ -199,17 +199,9 @@ const startInput = {
   systemPrompt: "Build",
 };
 
-const deferred = <Value>() => {
-  let resolve!: (value: Value) => void;
-  const promise = new Promise<Value>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-  return { promise, resolve };
-};
-
 type MutationBarrier = {
-  entered: ReturnType<typeof deferred<void>>;
-  release: ReturnType<typeof deferred<void>>;
+  entered: ReturnType<typeof Promise.withResolvers<void>>;
+  release: ReturnType<typeof Promise.withResolvers<void>>;
 };
 
 const createHarness = async (
@@ -377,7 +369,10 @@ const createHarness = async (
       loadSessionContextUsageImpl = implementation;
     },
     pauseNextMutation: () => {
-      const barrier = { entered: deferred<void>(), release: deferred<void>() };
+      const barrier = {
+        entered: Promise.withResolvers<void>(),
+        release: Promise.withResolvers<void>(),
+      };
       mutationBarrier = barrier;
       return barrier;
     },
@@ -441,7 +436,7 @@ describe("Claude host live-session adapter", () => {
     const harness = await createHarness(workingDirectoryDependencies, store);
     harness.setStartSession(() => Effect.succeed(current.summary));
     harness.setLoadSessionContextUsage(() => Effect.succeed(null));
-    const sent = deferred<void>();
+    const sent = Promise.withResolvers<void>();
     harness.setSendUserMessage((messageInput, _runtimeId, options) =>
       Effect.tryPromise({
         try: () =>
@@ -540,8 +535,8 @@ describe("Claude host live-session adapter", () => {
       harness.setLoadSessionContextUsage(() => Effect.succeed(null));
       await Effect.runPromise(harness.adapter.startSession(startInput));
       harness.changes.splice(0);
-      const entered = deferred<void>();
-      const release = deferred<void>();
+      const entered = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
       harness.setUpdateSessionModel(() =>
         Effect.promise(async () => {
           entered.resolve();
@@ -612,8 +607,8 @@ describe("Claude host live-session adapter", () => {
     harness.setStartSession(() => Effect.succeed(current.summary));
     await Effect.runPromise(harness.adapter.startSession(startInput));
     harness.changes.splice(0);
-    const entered = deferred<void>();
-    const release = deferred<void>();
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
     harness.setUpdateSessionModel(() =>
       Effect.promise(async () => {
         entered.resolve();
@@ -1905,8 +1900,8 @@ describe("Claude host live-session adapter", () => {
   test("keeps a context event that arrives during a direct read", async () => {
     const harness = await createHarness();
     await Effect.runPromise(harness.adapter.startSession(startInput));
-    const readStarted = deferred<void>();
-    const directRead = deferred<{ totalTokens: number; contextWindow: number }>();
+    const readStarted = Promise.withResolvers<void>();
+    const directRead = Promise.withResolvers<{ totalTokens: number; contextWindow: number }>();
     harness.setLoadSessionContextUsage(() =>
       Effect.promise(async () => {
         readStarted.resolve();
@@ -1950,8 +1945,8 @@ describe("Claude host live-session adapter", () => {
       }),
     );
 
-    const readStarted = deferred<void>();
-    const directRead = deferred<{ totalTokens: number; contextWindow: number }>();
+    const readStarted = Promise.withResolvers<void>();
+    const directRead = Promise.withResolvers<{ totalTokens: number; contextWindow: number }>();
     harness.setLoadSessionContextUsage(() =>
       Effect.promise(async () => {
         readStarted.resolve();

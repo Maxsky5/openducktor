@@ -1,4 +1,3 @@
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
@@ -16,8 +15,6 @@ import type {
   ActiveTextSelection,
   TextSelectionTarget,
 } from "./use-agent-chat-composer-editor-selection";
-
-enableReactActEnvironment();
 
 type EventsHookArgs = Parameters<typeof useAgentChatComposerEditorEvents>[0];
 

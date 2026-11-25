@@ -3,18 +3,12 @@ import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:
 import type { GitConflict } from "@openducktor/frontend-core/git/contracts";
 import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import {
-  createDeferred,
-  createHookHarness as createSharedHookHarness,
-  enableReactActEnvironment,
-} from "./agent-studio-test-utils";
+import { createHookHarness as createSharedHookHarness } from "./agent-studio-test-utils";
 
 const actualSonnerModule = await import("sonner");
 
 type RestorableSpy = { mockRestore(): void };
 let testSpies: RestorableSpy[] = [];
-
-enableReactActEnvironment();
 
 const gitAbortConflictMock = mock(async () => ({ output: "aborted" }));
 const toastSuccessMock = mock(() => "toast-success");
@@ -116,7 +110,7 @@ describe("useAgentStudioGitConflictController", () => {
   test.each(["assistanceContextKey", "contextKey"] as const)(
     "reserves assistance synchronously and cancels a request after switching %s away and back",
     async (contextKey) => {
-      const prepared = createDeferred<void>();
+      const prepared = Promise.withResolvers<void>();
       let submissions = 0;
       const onResolveGitConflict: NonNullable<HookArgs["onResolveGitConflict"]> = async (
         _conflict,
@@ -351,7 +345,7 @@ describe("useAgentStudioGitConflictController", () => {
 
   test("aborts a local conflict only from the worktree where it happened", async () => {
     const refreshDiffData = mock(async () => {});
-    const abortDeferred = createDeferred<{ output: string }>();
+    const abortDeferred = Promise.withResolvers<{ output: string }>();
     gitAbortConflictMock.mockImplementationOnce(async () => abortDeferred.promise);
     const firstTaskArgs = createBaseArgs({
       refreshDiffData,

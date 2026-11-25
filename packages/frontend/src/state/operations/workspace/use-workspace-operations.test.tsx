@@ -1,5 +1,5 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
-import type { SettingsSnapshot, WorkspaceRecord } from "@openducktor/contracts";
+import type { GitCurrentBranch, SettingsSnapshot, WorkspaceRecord } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { render, waitFor } from "@testing-library/react";
 import { act, createElement, type PropsWithChildren, useEffect, useRef, useState } from "react";
@@ -8,13 +8,10 @@ import type { HostClient } from "@openducktor/host-client";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { useWorkspaceOperations } from "./use-workspace-operations";
-
-enableReactActEnvironment();
 
 // The host commands that workspace operations call.
 type WorkspaceIntegrationHostClient = Pick<
@@ -202,23 +199,6 @@ const createBrowserListenerHarness = (
       await flush();
     },
     restoreBrowserGlobals,
-  };
-};
-
-const createDeferred = <T,>() => {
-  let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
-  let reject: ((cause?: unknown) => void) | null = null;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-
-  return {
-    promise,
-    resolve: (value: T) => resolve?.(value),
-    reject: (cause?: unknown): void => {
-      reject?.(cause);
-    },
   };
 };
 
@@ -608,7 +588,7 @@ describe("use-workspace-operations", () => {
   });
 
   test("hydrates branches after switching between real repositories", async () => {
-    const workspaceSelectDeferred = createDeferred<WorkspaceRecord>();
+    const workspaceSelectDeferred = Promise.withResolvers<WorkspaceRecord>();
     let hasSelectedRepoA = false;
     const workspaceSelect = mock(async (): Promise<WorkspaceRecord> => {
       const selectedWorkspace = await workspaceSelectDeferred.promise;
@@ -988,7 +968,7 @@ describe("use-workspace-operations", () => {
 
   test("ignores stale refresh branch updates after active repo changes", async () => {
     const setActiveRepo = mock(() => {});
-    const currentBranchDeferred = createDeferred<{ name: string | undefined; detached: boolean }>();
+    const currentBranchDeferred = Promise.withResolvers<GitCurrentBranch>();
     const gitGetCurrentBranch = mock(async () => currentBranchDeferred.promise);
     const gitGetBranches = mock(async () => [
       {
@@ -1179,7 +1159,7 @@ describe("use-workspace-operations", () => {
 
   test("ignores stale branch probe failures after active repository changes", async () => {
     const setActiveRepo = mock(() => {});
-    const branchProbeDeferred = createDeferred<{ name: string | undefined; detached: boolean }>();
+    const branchProbeDeferred = Promise.withResolvers<GitCurrentBranch>();
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
 
     const gitGetCurrentBranch = mock(async () => branchProbeDeferred.promise);

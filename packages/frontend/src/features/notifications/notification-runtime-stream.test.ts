@@ -1,5 +1,4 @@
 import { expect, mock, test } from "bun:test";
-import { waitFor } from "@testing-library/react";
 import {
   type NotificationHealth,
   type NotificationStreamFrame,
@@ -14,6 +13,7 @@ import {
 import { createSpecPlanBuildNotificationSettings } from "@openducktor/workflows/test-support";
 
 const epoch = "11111111-1111-4111-8111-111111111111";
+type OccurrenceFrame = Extract<NotificationStreamFrame, { type: "occurrence" }>;
 
 test("delivers host selections once and drops frames at or before the current cursor", async () => {
   const h = harness();
@@ -26,8 +26,7 @@ test("delivers host selections once and drops frames at or before the current cu
     h.emit(h.occurrence("first", 5));
     h.emit(h.occurrence("duplicate-cursor", 5));
     h.emit(h.occurrence("older", 3));
-    h.emit(h.occurrence("next", 6));
-    await waitFor(() => expect(h.delivery.playSound).toHaveBeenCalledTimes(2), { timeout: 500 });
+    await h.emitAndWaitForExternalDelivery(h.occurrence("next", 6));
 
     expect(h.delivery.deliverInApp).toHaveBeenCalledTimes(2);
     expect(h.delivery.deliverInApp).toHaveBeenNthCalledWith(
@@ -42,6 +41,7 @@ test("delivers host selections once and drops frames at or before the current cu
     );
     expect(h.publishOccurrence).toHaveBeenCalledTimes(2);
     expect(h.publishOccurrence).toHaveBeenCalledWith(workflowClosedOccurrence("first"), h.settings);
+    expect(h.delivery.playSound).toHaveBeenCalledTimes(2);
     expect(h.delivery.playSound).toHaveBeenNthCalledWith(1, "chime", 17);
     expect(h.showOsNotification).toHaveBeenCalledTimes(2);
     expect(h.publishAction).not.toHaveBeenCalled();
@@ -70,8 +70,7 @@ test.each(["gap", "epoch_changed"] as const)(
         cursor: { epoch, sequence: 11 },
         health: { ...health, message: null },
       });
-      h.emit(h.occurrence("after-reconnect", 12));
-      await waitFor(() => expect(h.delivery.playSound).toHaveBeenCalledTimes(1), { timeout: 500 });
+      await h.emitAndWaitForExternalDelivery(h.occurrence("after-reconnect", 12));
 
       expect(h.onFailure).toHaveBeenCalledTimes(1);
       expect(h.onFailure).toHaveBeenCalledWith(
@@ -83,6 +82,7 @@ test.each(["gap", "epoch_changed"] as const)(
       );
       expect(h.onObservationHealth.mock.calls).toEqual([[health], [{ ...health, message: null }]]);
       expect(h.delivery.deliverInApp).toHaveBeenCalledTimes(1);
+      expect(h.delivery.playSound).toHaveBeenCalledTimes(1);
       expect(h.publishAction).not.toHaveBeenCalled();
       expect(h.onCoordinationRecovered).not.toHaveBeenCalled();
     } finally {
@@ -117,7 +117,7 @@ test("a session error that another view shows skips or closes its in-app toast",
   const stop = h.runtime.subscribe();
   h.finishAttachment();
   await h.attachment;
-  const sessionError = (errorId: string, sequence: number): NotificationStreamFrame => ({
+  const sessionError = (errorId: string, sequence: number): OccurrenceFrame => ({
     type: "occurrence",
     cursor: { epoch, sequence },
     selected: {
@@ -146,21 +146,17 @@ test("a session error that another view shows skips or closes its in-app toast",
     h.emit({ type: "attached", reason: "new", cursor: { epoch, sequence: 1 }, health: [] });
     // The other view shows the error first, so the host notification has no in-app toast.
     h.runtime.markInAppFeedbackHandled("early");
-    h.emit(sessionError("early", 2));
-    await waitFor(() => expect(h.showOsNotification).toHaveBeenCalledTimes(1), { timeout: 500 });
+    await h.emitAndWaitForExternalDelivery(sessionError("early", 2));
+    expect(h.showOsNotification).toHaveBeenCalledTimes(1);
     expect(h.delivery.deliverInApp).not.toHaveBeenCalled();
 
     // The host toast shows first, so the mark closes it.
-    h.emit(sessionError("late", 3));
-    await waitFor(() => expect(h.delivery.deliverInApp).toHaveBeenCalledTimes(1), {
-      timeout: 500,
-    });
+    await h.emitAndWaitForExternalDelivery(sessionError("late", 3));
+    // Let the stream record the toast after delivery returns.
+    await Bun.sleep(0);
+    expect(h.delivery.deliverInApp).toHaveBeenCalledTimes(1);
     h.runtime.markInAppFeedbackHandled("late");
-    await waitFor(
-      () =>
-        expect(h.delivery.dismissInApp).toHaveBeenCalledWith("agent.session_error:session-1:late"),
-      { timeout: 500 },
-    );
+    expect(h.delivery.dismissInApp).toHaveBeenCalledWith("agent.session_error:session-1:late");
   } finally {
     stop();
   }
@@ -171,7 +167,7 @@ test("an error without a session notice skips or closes its in-app toast by occu
   const stop = h.runtime.subscribe();
   h.finishAttachment();
   await h.attachment;
-  const taskError = (occurrenceId: string, sequence: number): NotificationStreamFrame => ({
+  const taskError = (occurrenceId: string, sequence: number): OccurrenceFrame => ({
     type: "occurrence",
     cursor: { epoch, sequence },
     selected: {
@@ -195,18 +191,16 @@ test("an error without a session notice skips or closes its in-app toast by occu
   try {
     h.emit({ type: "attached", reason: "new", cursor: { epoch, sequence: 1 }, health: [] });
     h.runtime.markInAppFeedbackHandled("autopilot-early");
-    h.emit(taskError("autopilot-early", 2));
-    await waitFor(() => expect(h.showOsNotification).toHaveBeenCalledTimes(1), { timeout: 500 });
+    await h.emitAndWaitForExternalDelivery(taskError("autopilot-early", 2));
+    expect(h.showOsNotification).toHaveBeenCalledTimes(1);
     expect(h.delivery.deliverInApp).not.toHaveBeenCalled();
 
-    h.emit(taskError("autopilot-late", 3));
-    await waitFor(() => expect(h.delivery.deliverInApp).toHaveBeenCalledTimes(1), {
-      timeout: 500,
-    });
+    await h.emitAndWaitForExternalDelivery(taskError("autopilot-late", 3));
+    // Let the stream record the toast after delivery returns.
+    await Bun.sleep(0);
+    expect(h.delivery.deliverInApp).toHaveBeenCalledTimes(1);
     h.runtime.markInAppFeedbackHandled("autopilot-late");
-    await waitFor(() => expect(h.delivery.dismissInApp).toHaveBeenCalledWith("autopilot-late"), {
-      timeout: 500,
-    });
+    expect(h.delivery.dismissInApp).toHaveBeenCalledWith("autopilot-late");
   } finally {
     stop();
   }
@@ -306,6 +300,8 @@ test.each(["before", "after"] as const)(
   "stops a stream whose attachment finishes %s disposal and ignores later frames",
   async (when) => {
     const h = harness();
+    const stopped = Promise.withResolvers<void>();
+    h.stopStream.mockImplementationOnce(stopped.resolve);
     const stop = h.runtime.subscribe();
     if (when === "before") {
       h.finishAttachment();
@@ -316,7 +312,8 @@ test.each(["before", "after"] as const)(
       h.finishAttachment();
       await h.attachment;
     }
-    await waitFor(() => expect(h.stopStream).toHaveBeenCalledTimes(1), { timeout: 500 });
+    await stopped.promise;
+    expect(h.stopStream).toHaveBeenCalledTimes(1);
     h.emit(h.occurrence("after-disposal", 1));
     h.emit({
       type: "health",
@@ -337,6 +334,8 @@ test.each(["attachment", "live"] as const)(
   "reports a failed %s stream to the user",
   async (phase) => {
     const h = harness();
+    const reported = Promise.withResolvers<void>();
+    h.onFailure.mockImplementationOnce(() => reported.resolve());
     const stop = h.runtime.subscribe();
     const failure = new Error("Notification stream disconnected. Reload to reconnect.");
     try {
@@ -346,7 +345,8 @@ test.each(["attachment", "live"] as const)(
         await h.attachment;
         h.fail(failure);
       }
-      await waitFor(() => expect(h.onFailure).toHaveBeenCalledTimes(1), { timeout: 500 });
+      await reported.promise;
+      expect(h.onFailure).toHaveBeenCalledTimes(1);
       expect(h.onFailure).toHaveBeenCalledWith(
         expect.objectContaining({
           channel: "coordination",
@@ -387,16 +387,20 @@ const harness = () => {
   const showOsNotification = mock(async () => ({ status: "shown" as const }));
   let receive: ((frame: NotificationStreamFrame) => void) | null = null;
   let failure: ((cause: unknown) => void) | null = null;
-  let resolveAttachment = (_stop: () => void) => {};
-  let rejectAttachment = (_cause: Error) => {};
-  const attachment = new Promise<() => void>((resolve, reject) => {
-    resolveAttachment = resolve;
-    rejectAttachment = reject;
-  });
+  const attachment = Promise.withResolvers<() => void>();
+  const pendingDeliveries = new Map<string, () => void>();
+  const emit = (frame: NotificationStreamFrame): void => {
+    if (!receive) throw new Error("Subscribe before sending a notification frame.");
+    receive(frame);
+  };
   const runtime = createNotificationRuntime({
     bridge: createBridge({
       publishOccurrence,
       showOsNotification,
+      withExternalDeliveryOwnership: async (id, dispatch) => {
+        await dispatch(true);
+        pendingDeliveries.get(id)?.();
+      },
       subscribeOccurrences: () => stopOccurrences,
       subscribeClicks: () => stopClicks,
     }),
@@ -404,7 +408,7 @@ const harness = () => {
     subscribeStream: (_input, onFrame, onFailure) => {
       receive = onFrame;
       failure = onFailure;
-      return attachment;
+      return attachment.promise;
     },
     navigate: async () => {},
     onFailure,
@@ -426,18 +430,26 @@ const harness = () => {
     onFailure,
     onCoordinationRecovered,
     onObservationHealth,
-    attachment,
-    finishAttachment: () => resolveAttachment(stopStream),
-    rejectAttachment,
-    emit(frame: NotificationStreamFrame) {
-      if (!receive) throw new Error("Subscribe before sending a notification frame.");
-      receive(frame);
+    attachment: attachment.promise,
+    finishAttachment: () => attachment.resolve(stopStream),
+    rejectAttachment: attachment.reject,
+    emit,
+    async emitAndWaitForExternalDelivery(frame: OccurrenceFrame): Promise<void> {
+      const id = frame.selected.occurrence.occurrenceId;
+      const delivered = Promise.withResolvers<void>();
+      pendingDeliveries.set(id, delivered.resolve);
+      try {
+        emit(frame);
+        await delivered.promise;
+      } finally {
+        pendingDeliveries.delete(id);
+      }
     },
     fail(cause: unknown) {
       if (!failure) throw new Error("Subscribe before reporting a notification failure.");
       failure(cause);
     },
-    occurrence(id: string, sequence: number): NotificationStreamFrame {
+    occurrence(id: string, sequence: number): OccurrenceFrame {
       return {
         type: "occurrence",
         cursor: { epoch, sequence },

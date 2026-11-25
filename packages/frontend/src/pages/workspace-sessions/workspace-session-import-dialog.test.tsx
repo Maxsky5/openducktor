@@ -1,3 +1,4 @@
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { expect, test } from "bun:test";
 import {
   DEFAULT_AGENT_RUNTIMES,
@@ -16,6 +17,8 @@ import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { WorkspaceSessionImportDialog } from "./workspace-session-import-dialog";
+
+setupTestingLibraryFakeTimers();
 
 const definitions = [
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -58,13 +61,6 @@ const row = {
   title: "Native title",
   workingDirectory: "/repo",
   updatedAt: 1,
-};
-const deferred = <T,>() => {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
 };
 const renderImport = (
   overrides: Partial<HostClient> = {},
@@ -155,7 +151,7 @@ test("waits for runtime choice and debounces metadata search", async () => {
 });
 
 test("drops a late runtime response after changing runtime", async () => {
-  const pending = deferred<WorkspaceSessionExternalListResult>();
+  const pending = Promise.withResolvers<WorkspaceSessionExternalListResult>();
   const view = renderImport({
     workspaceSessionExternalList: async (input) =>
       input.runtimeKind === "opencode"
@@ -180,7 +176,7 @@ test("drops a late runtime response after changing runtime", async () => {
 });
 
 test("does not navigate when an import completes after unmount", async () => {
-  const pending = deferred<WorkspaceSessionImportResult>();
+  const pending = Promise.withResolvers<WorkspaceSessionImportResult>();
   const view = renderImport({ workspaceSessionImport: () => pending.promise });
   await choose(view, "OpenCode");
   fireEvent.click(await view.findByRole("button", { name: "Import Native title" }));
@@ -254,7 +250,7 @@ test("clears a search and returns focus without opening a new catalog", async ()
 });
 
 test("shows import progress and prevents dismissal until import settles", async () => {
-  const pending = deferred<WorkspaceSessionImportResult>();
+  const pending = Promise.withResolvers<WorkspaceSessionImportResult>();
   const view = renderImport({ workspaceSessionImport: () => pending.promise });
   try {
     await choose(view, "OpenCode");

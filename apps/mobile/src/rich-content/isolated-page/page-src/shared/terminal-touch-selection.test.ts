@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, jest, spyOn, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
 if (globalThis.document === undefined) GlobalRegistrator.register();
@@ -43,14 +43,24 @@ const touch = (element: Element, type: string, column: number, row = 0) => {
   element.dispatchEvent(event);
   return event;
 };
-const longPress = async (element: Element, column: number) => {
-  touch(element, "touchstart", column);
-  await new Promise((resolve) => setTimeout(resolve, 470));
+const withTouchClock = (run: () => void) => {
+  jest.useFakeTimers();
+  try {
+    run();
+  } finally {
+    jest.useRealTimers();
+  }
 };
+
+const longPress = (element: Element, column: number, row = 0) =>
+  withTouchClock(() => {
+    touch(element, "touchstart", column, row);
+    jest.advanceTimersByTime(500);
+  });
 
 test("extending a long press keeps the whole selected word", async () => {
   const { terminal, element } = await openTerminal("hello world");
-  await longPress(element, 2);
+  longPress(element, 2);
   expect(terminal.getSelection()).toBe("hello");
   touch(element, "touchmove", 4);
   touch(element, "touchend", 4);
@@ -62,18 +72,20 @@ test.each([
   ["e\u0301 hello world", 3],
 ] as const)("selects buffer cells in %s", async (text, column) => {
   const { terminal, element } = await openTerminal(text);
-  await longPress(element, column);
+  longPress(element, column);
   touch(element, "touchend", column);
   expect(terminal.getSelection()).toBe("hello");
 });
 
 test("a short drag leaves native scrolling available and cancels a long press", async () => {
   const { terminal, element } = await openTerminal("hello world");
-  touch(element, "touchstart", 2, 2);
-  expect(touch(element, "touchmove", 2, 0).defaultPrevented).toBe(false);
-  await new Promise((resolve) => setTimeout(resolve, 470));
-  expect(touch(element, "touchend", 2, 0).defaultPrevented).toBe(false);
-  expect(terminal.hasSelection()).toBe(false);
+  withTouchClock(() => {
+    touch(element, "touchstart", 2, 2);
+    expect(touch(element, "touchmove", 2, 0).defaultPrevented).toBe(false);
+    jest.advanceTimersByTime(500);
+    expect(terminal.hasSelection()).toBe(false);
+    expect(touch(element, "touchend", 2, 0).defaultPrevented).toBe(false);
+  });
 
   touch(element, "touchstart", 2);
   expect(touch(element, "touchend", 2).defaultPrevented).toBe(false);
@@ -162,22 +174,28 @@ test("scrolls while dragging past the viewport and stops on touch cancel", async
   const { terminal, parent } = await openTerminal(
     Array.from({ length: 20 }, (_, index) => `line ${index}`).join("\r\n"),
   );
-  terminal.scrollToTop();
-  terminal.select(0, 3, 4);
+  terminal.select(0, terminal.buffer.active.viewportY + 1, 4);
   const handle = parent.querySelector<HTMLElement>('[data-edge="end"]');
   if (!handle) throw new Error("The end handle is missing.");
-  handle.getBoundingClientRect = () => new DOMRect(18, 46, 44, 44);
-  touch(handle, "touchstart", 4, 3);
-  touch(handle, "touchmove", 4, 5);
-  expect(terminal.buffer.active.viewportY).toBeGreaterThan(0);
-  const beforeCancel = terminal.buffer.active.viewportY;
-  const selection = terminal.getSelection();
-  touch(handle, "touchcancel", 4, 5);
-  expect(terminal.buffer.active.viewportY).toBe(beforeCancel);
-  expect(terminal.getSelection()).toBe(selection);
-  const stoppedAt = terminal.buffer.active.viewportY;
-  await new Promise((resolve) => setTimeout(resolve, 80));
-  expect(terminal.buffer.active.viewportY).toBe(stoppedAt);
+  handle.getBoundingClientRect = () => new DOMRect(18, 26, 44, 44);
+  // Happy DOM has no layout. Observe the scroll requests at the xterm boundary.
+  const scroll = spyOn(terminal, "scrollLines");
+  try {
+    withTouchClock(() => {
+      touch(handle, "touchstart", 4, 1);
+      touch(handle, "touchmove", 4, -1);
+      expect(scroll.mock.calls).toEqual([[-1]]);
+      jest.advanceTimersByTime(100);
+      expect(scroll.mock.calls).toEqual([[-1], [-1]]);
+      const selection = terminal.getSelection();
+      touch(handle, "touchcancel", 4, -1);
+      jest.advanceTimersByTime(100);
+      expect(scroll).toHaveBeenCalledTimes(2);
+      expect(terminal.getSelection()).toBe(selection);
+    });
+  } finally {
+    scroll.mockRestore();
+  }
 });
 
 test("a handle does not split a wide character", async () => {
@@ -257,8 +275,7 @@ test("stops a handle drag when its selected output leaves scrollback", async () 
 
 test("keeps the original word while a long-press drag trims scrollback", async () => {
   const { terminal, element } = await openTerminal(fullScrollback());
-  touch(element, "touchstart", 2, 1);
-  await new Promise((resolve) => setTimeout(resolve, 470));
+  longPress(element, 2, 1);
   expect(terminal.getSelection()).toBe("line");
   await write(terminal, "\r\nline 2004");
   touch(element, "touchmove", 6);

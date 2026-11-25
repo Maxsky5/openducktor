@@ -81,33 +81,9 @@ describe("named chat worktree inputs", () => {
       { ...existing, existingWorktree: { workingDirectory: "relative/review" } },
       { ...existing, existingWorktree: undefined },
       { ...fields, location: "local_repo_root", existingWorktree: existing.existingWorktree },
-      { ...fields, location: "local_worktree" },
     ]) {
       expect(workspaceSessionCreateInputSchema.safeParse(input).success).toBe(false);
     }
-  });
-  test("allows Tracked upstream only for the current checkout", () => {
-    const upstream = { branch: "@{upstream}" };
-    const fields = {
-      workspaceId: "repo",
-      runtimeKind: "codex",
-      selectedModel: null,
-      customAgentRoleId: null,
-      manualTitle: null,
-      targetBranch: upstream,
-    };
-    expect(
-      workspaceSessionCreateInputSchema.safeParse({ ...fields, location: "local_repo_root" })
-        .success,
-    ).toBe(true);
-    expect(
-      workspaceSessionCreateInputSchema.safeParse({
-        ...fields,
-        location: "existing_worktree",
-        existingWorktree: { workingDirectory: "/worktrees/review" },
-      }).success,
-    ).toBe(false);
-    expect(effectiveWorkspaceSessionTargetBranch("existing_worktree", null, upstream)).toBeNull();
   });
   test("requires explicit removal consent while omitted archive options keep Git resources", () => {
     const ref = { workspaceId: "repo", sessionId: "chat" };
@@ -197,6 +173,7 @@ describe("named chat worktree inputs", () => {
     expect(effectiveWorkspaceSessionTargetBranch("local_worktree", saved, upstream)).toBe(saved);
     expect(effectiveWorkspaceSessionTargetBranch("local_repo_root", null, upstream)).toBe(upstream);
     expect(effectiveWorkspaceSessionTargetBranch("local_worktree", null, upstream)).toBeNull();
+    expect(effectiveWorkspaceSessionTargetBranch("existing_worktree", null, upstream)).toBeNull();
     expect(effectiveWorkspaceSessionTargetBranch("local_worktree", null, null)).toBeNull();
   });
   test("allows Tracked upstream only for the current checkout", () => {
@@ -212,23 +189,26 @@ describe("named chat worktree inputs", () => {
       workspaceSessionCreateInputSchema.safeParse({ ...input, location: "local_repo_root" })
         .success,
     ).toBe(true);
-    const worktree = workspaceSessionCreateInputSchema.safeParse({
-      ...input,
-      location: "local_worktree",
-      worktree: { mode: "from_name", name: "review", branchName: null },
-    });
-    expect(worktree.error?.issues.map((issue) => issue.message)).toEqual([
-      "Tracked upstream is available only for the current checkout.",
-    ]);
-    expect(
-      workspaceSessionCreateInputSchema.safeParse({
-        ...input,
-        location: "local_repo_root",
-        targetBranch: undefined,
-      }).success,
-    ).toBe(false);
+    for (const location of [
+      {
+        location: "local_worktree",
+        worktree: { mode: "from_name", name: "review", branchName: null },
+      },
+      {
+        location: "existing_worktree",
+        existingWorktree: { workingDirectory: "/worktrees/review" },
+      },
+    ]) {
+      const worktree = workspaceSessionCreateInputSchema.safeParse({ ...input, ...location });
+      expect(worktree.error?.issues).toMatchObject([
+        {
+          path: ["targetBranch"],
+          message: "Tracked upstream is available only for the current checkout.",
+        },
+      ]);
+    }
   });
-  test("requires worktree options exactly when a worktree is selected", () => {
+  test("requires a target branch and the worktree options of the selected location", () => {
     const input = {
       workspaceId: "repo",
       runtimeKind: "codex",
@@ -252,6 +232,13 @@ describe("named chat worktree inputs", () => {
       workspaceSessionCreateInputSchema.safeParse({ ...input, location: "local_repo_root" })
         .success,
     ).toBe(true);
+    expect(
+      workspaceSessionCreateInputSchema.safeParse({
+        ...input,
+        location: "local_repo_root",
+        targetBranch: undefined,
+      }).success,
+    ).toBe(false);
     expect(
       workspaceSessionCreateInputSchema.safeParse({
         ...input,

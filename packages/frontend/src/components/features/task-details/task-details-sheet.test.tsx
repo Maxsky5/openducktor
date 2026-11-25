@@ -22,10 +22,7 @@ import type { TaskWorkflowActions } from "@openducktor/frontend-core/tasks/workf
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
-import {
-  createTaskCardFixture,
-  enableReactActEnvironment,
-} from "@/pages/agents/agent-studio-test-utils";
+import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
 import { ActiveWorkspaceContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import { agentSessionQueryKeys } from "@openducktor/frontend-core/queries/agent-sessions";
@@ -42,8 +39,6 @@ import {
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { WorkspaceActivityContext } from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
 import { createWorkspaceActivityObserverStub as createActivityStub } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
-
-enableReactActEnvironment();
 
 const createWorkspaceStateValue = (): WorkspaceStateContextValue => ({
   isSwitchingWorkspace: false,

@@ -2,7 +2,6 @@ import "../../test-support/dom-environment";
 import { enableReactActEnvironment } from "../../test-support/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness as createSharedHookHarness } from "../../test-support/react-hook-harness";
-import { createDeferred } from "../../test-support/shared-test-fixtures";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
@@ -136,7 +135,7 @@ describe("useRuntimeTranscriptInteractions", () => {
   });
 
   test("tracks question submission until the runtime answer resolves", async () => {
-    const deferredAnswer = createDeferred<void>();
+    const deferredAnswer = Promise.withResolvers<void>();
     const answerAgentQuestion = mock(async () => deferredAnswer.promise);
     const pendingQuestion = createQuestionRequest("question-1");
     const harness = createHookHarness(
@@ -242,7 +241,7 @@ describe("useRuntimeTranscriptInteractions", () => {
   });
 
   test("resets question submission state when the transcript session changes", async () => {
-    const deferredAnswer = createDeferred<void>();
+    const deferredAnswer = Promise.withResolvers<void>();
     const answerAgentQuestion = mock(async () => deferredAnswer.promise);
     const pendingQuestion = createQuestionRequest("question-1");
     const baseArgs = createBaseArgs({
@@ -274,7 +273,7 @@ describe("useRuntimeTranscriptInteractions", () => {
   });
 
   test("resets question submission state when the same session id points to another runtime session", async () => {
-    const deferredAnswer = createDeferred<void>();
+    const deferredAnswer = Promise.withResolvers<void>();
     const answerAgentQuestion = mock(async () => deferredAnswer.promise);
     const pendingQuestion = createQuestionRequest("question-1");
     const baseArgs = createBaseArgs({

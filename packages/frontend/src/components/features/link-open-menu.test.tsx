@@ -22,8 +22,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  for (const cleanup of cleanups.splice(0)) cleanup();
-  act(() => closeLinkMenu());
+  act(() => {
+    closeLinkMenu();
+    for (const removeTarget of cleanups.splice(0)) removeTarget();
+  });
   // The test platform is an own property over the getter of the navigator prototype.
   if (originalPlatform) Object.defineProperty(globalThis.navigator, "platform", originalPlatform);
   else Reflect.deleteProperty(globalThis.navigator, "platform");

@@ -165,7 +165,6 @@ export type HostSessionOwner = {
    * Connects to a new host and makes it active, or selects the saved host with that address. The
    * address of the active host fails with an `AddHostError`.
    * `label` names a new host; without it, the host takes the name of its address.
-   * `discardUnsavedDrafts` continues when the drafts of the current host cannot be saved.
    * `confirmDraftLoss` keeps this approval while the user decides whether to discard drafts.
    * An abort of `signal` before the switch starts keeps the current host and saves nothing.
    */
@@ -173,7 +172,6 @@ export type HostSessionOwner = {
     address: string,
     options?: {
       signal?: AbortSignal;
-      discardUnsavedDrafts?: boolean;
       label?: string;
       pairingCode?: string;
       confirmDraftLoss?: DraftLossConfirmation;
@@ -395,11 +393,11 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
    * `signal` before the draft save ends keeps the current host.
    */
   const closeSession = async ({
-    discardUnsavedDrafts,
+    discardUnsavedDrafts = false,
     signal,
     confirmDraftLoss,
   }: {
-    discardUnsavedDrafts: boolean;
+    discardUnsavedDrafts?: boolean;
     signal?: AbortSignal | undefined;
     confirmDraftLoss?: DraftLossConfirmation | undefined;
   }) => {
@@ -497,7 +495,6 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
     reached: Pick<SavedHost, "endpoint" | "shell">,
     candidate: OpenedHostSession,
     options: {
-      discardUnsavedDrafts: boolean;
       signal?: AbortSignal | undefined;
       confirmDraftLoss?: DraftLossConfirmation | undefined;
     },
@@ -566,7 +563,6 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
   const addHost: HostSessionOwner["addHost"] = async (address, options) => {
     assertNoDemo();
     const switchOptions = {
-      discardUnsavedDrafts: options?.discardUnsavedDrafts ?? false,
       signal: options?.signal,
       confirmDraftLoss: options?.confirmDraftLoss,
     };

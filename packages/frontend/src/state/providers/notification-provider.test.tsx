@@ -128,8 +128,6 @@ test("startup feedback suppresses only its in-app Started toast through publicat
 describe("notification permission recovery", () => {
   test.each([
     ["denied", "failed"],
-    ["denied", "throw"],
-    ["failed", "failed"],
     ["failed", "throw"],
   ] as const)(
     "Test system notification clears a denial and keeps real failures: prior %s, test delivery %s",

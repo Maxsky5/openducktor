@@ -9,13 +9,8 @@ import {
 } from "react-router";
 import { useLayoutEffect } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
-import {
-  createHookHarness as createSharedHookHarness,
-  enableReactActEnvironment,
-} from "../agent-studio-test-utils";
+import { createHookHarness as createSharedHookHarness } from "../agent-studio-test-utils";
 import { useNavigationUrlSync } from "./use-navigation-url-sync";
-
-enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useNavigationUrlSync>[0];
 type SearchParamsCall = Parameters<SetURLSearchParams>;

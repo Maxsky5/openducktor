@@ -318,37 +318,39 @@ test("captures fast background completions across sidebar scopes and layouts, an
   const row = () => screen.getByRole("button", { name: /Chat saved-alpha/ });
   expect(within(row()).getByRole("img", { name: "Session read" })).toBeTruthy();
   // These changes share one React commit. The stream subscription must retain both.
-  act(() => {
+  await act(async () => {
     emit({ type: "session_upsert", session: { ...session, activity: "running" } });
     emit({ type: "session_upsert", session });
   });
   expect(within(row()).getByRole("img", { name: "Unread session" })).toBeTruthy();
-  view.rerender(<View scope="beta" allowNavigation={false} />);
+  await act(async () => view.rerender(<View scope="beta" allowNavigation={false} />));
   expect(screen.queryByRole("button", { name: /Chat saved-alpha/ })).toBeNull();
-  act(() => {
+  await act(async () => {
     emit({ type: "session_upsert", session: { ...session, activity: "running" } });
     emit({
       type: "session_upsert",
       session: { ...session, pendingQuestions: [{ requestId: "q", questions: [] }] },
     });
   });
-  view.rerender(<View rail allowNavigation={false} />);
+  await act(async () => view.rerender(<View rail allowNavigation={false} />));
   expect(within(row()).getByRole("img", { name: "Unread session" })).toBeTruthy();
   expect(within(row()).queryByRole("img", { name: "Session running" })).toBeNull();
   fireEvent.click(row());
   expect(within(row()).getByRole("img", { name: "Unread session" })).toBeTruthy();
-  act(() => emit({ type: "session_upsert", session }));
+  await act(async () => emit({ type: "session_upsert", session }));
   fireEvent.focus(row());
   expect(await screen.findByRole("dialog", { name: "Chat saved-alpha" })).toBeTruthy();
   expect(within(row()).getByRole("img", { name: "Unread session" })).toBeTruthy();
-  fireEvent.keyDown(row(), { key: "Escape" });
-  view.rerender(<View allowNavigation />);
+  await act(async () => fireEvent.keyDown(row(), { key: "Escape" }));
+  await act(async () => view.rerender(<View allowNavigation />));
   fireEvent.click(row());
   expect(row().getAttribute("aria-current")).toBe("true");
   expect(within(row()).getByRole("img", { name: "Session read" })).toBeTruthy();
-  act(() => emit({ type: "session_upsert", session: { ...session, activity: "running" } }));
+  await act(async () =>
+    emit({ type: "session_upsert", session: { ...session, activity: "running" } }),
+  );
   expect(within(row()).getByRole("img", { name: "Session running" })).toBeTruthy();
-  act(() => emit({ type: "session_upsert", session }));
+  await act(async () => emit({ type: "session_upsert", session }));
   expect(within(row()).getByRole("img", { name: "Session read" })).toBeTruthy();
 });
 

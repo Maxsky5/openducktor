@@ -4,42 +4,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // Git setup and SDK transcript reads take several seconds on Windows.
-test.each([
-  ["fork", "forks the exact Claude reply with an idle child and leaves the active source intact"],
-  ["history", "loads forked Claude history in its exact worktree after restart"],
-] as const)(
-  "%s: %s",
-  async (scenario) => {
-    const config = await mkdtemp(join(tmpdir(), "claude-reply-fork-"));
-    try {
-      const child = Bun.spawn(
-        [process.execPath, join(import.meta.dir, "test-support", "claude-reply-fork.ts"), scenario],
-        {
-          env: { ...process.env, CLAUDE_CONFIG_DIR: config },
-          stdout: "pipe",
-          stderr: "pipe",
-          timeout: 8_000,
-          killSignal: "SIGKILL",
-        },
-      );
-      try {
-        const [code, output, error] = await Promise.all([
-          child.exited,
-          new Response(child.stdout).text(),
-          new Response(child.stderr).text(),
-        ]);
-        expect({ code, error, output: output.trim() }).toEqual({
-          code: 0,
-          error: "",
-          output: `Claude reply ${scenario} contracts verified.`,
-        });
-      } finally {
-        child.kill();
-        await child.exited;
-      }
-    } finally {
-      await rm(config, { recursive: true, force: true });
-    }
-  },
-  10_000,
-);
+test("forks the exact Claude reply and reloads its history in the fork worktree after restart", async () => {
+  const config = await mkdtemp(join(tmpdir(), "claude-reply-fork-"));
+  try {
+    const child = Bun.spawn(
+      [process.execPath, join(import.meta.dir, "test-support", "claude-reply-fork.ts")],
+      {
+        env: { ...process.env, CLAUDE_CONFIG_DIR: config },
+        stdout: "inherit",
+        stderr: "inherit",
+        timeout: 8_000,
+        killSignal: "SIGKILL",
+      },
+    );
+    expect(await child.exited).toBe(0);
+  } finally {
+    await rm(config, { recursive: true, force: true });
+  }
+}, 10_000);

@@ -10,12 +10,9 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import { fireEvent, screen, within } from "@testing-library/react";
 import { act, useReducer } from "react";
 import { toast } from "sonner";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import type { WorkspaceModelDefaultsDraft } from "@/types/state-slices";
 import { REPOSITORY_SPEED_RESET_NOTICE } from "./repository-agent-selection";
 import { RepositoryDefaultModelBlock } from "./repository-default-model";
-
-enableReactActEnvironment();
 
 const repoConfig: SettingsRepoConfig = {
   workspaceId: "repo",

@@ -1,10 +1,7 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
 import { act, useState } from "react";
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { TagSelector } from "./tag-selector";
-
-beforeEach(enableReactActEnvironment);
 
 describe("TagSelector", () => {
   test("creates a new normalized label from the input", async () => {

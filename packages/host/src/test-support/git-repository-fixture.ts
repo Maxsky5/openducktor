@@ -1,10 +1,20 @@
 import { execFileSync } from "node:child_process";
 
+// Resolve Apple's shim once so each fixture command starts Git directly.
+export const gitFixtureCommand =
+  process.platform === "darwin" && Bun.which("git") === "/usr/bin/git"
+    ? execFileSync("/usr/bin/xcrun", ["--find", "git"], { encoding: "utf8" }).trimEnd()
+    : "git";
+
 // Git hooks and `git rebase --exec` set variables such as GIT_DIR. They would send fixture
 // commands, and the Git adapter under test, to the outer repository.
-const repositoryLocalVariables = execFileSync("git", ["rev-parse", "--local-env-vars"], {
-  encoding: "utf8",
-})
+const repositoryLocalVariables = execFileSync(
+  gitFixtureCommand,
+  ["rev-parse", "--local-env-vars"],
+  {
+    encoding: "utf8",
+  },
+)
   .split("\n")
   .filter((name) => name.length > 0);
 
@@ -13,7 +23,11 @@ export const gitFixtureEnv: NodeJS.ProcessEnv = Object.fromEntries(
 );
 
 const runGit = (cwd: string, args: string[]): void => {
-  execFileSync("git", args, { cwd, env: gitFixtureEnv, stdio: ["ignore", "pipe", "pipe"] });
+  execFileSync(gitFixtureCommand, args, {
+    cwd,
+    env: gitFixtureEnv,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
 };
 
 export const initGitRepository = (path: string, initialBranch?: string): void => {

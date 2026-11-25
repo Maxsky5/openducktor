@@ -3,7 +3,7 @@ import * as diffWorkers from "@/contexts/DiffWorkerProvider";
 import { taskWorktreeQueryOptions } from "@openducktor/frontend-core/queries/build-runtime";
 import type { ComponentProps } from "react";
 import { useTaskExecutionFilePreviewController } from "../file-preview/use-task-execution-file-preview-controller";
-import { describe, expect, test, spyOn } from "bun:test";
+import { describe, expect, jest, test, spyOn } from "bun:test";
 import {
   CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
@@ -14,6 +14,7 @@ import { createRef, type PropsWithChildren, type ReactElement } from "react";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { QueryProvider } from "@/test-utils/query-provider";
 import {
   createHostRuntimeStatusContextValue,
@@ -47,6 +48,8 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { AgentChatThreadModel } from "./agent-chat.types";
+import { AgentChatMessageCard } from "./agent-chat-message-card";
+import { AgentChatThread } from "./agent-chat-thread";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import { presentRegularToolCall } from "./agent-chat-test-fixtures";
 import {
@@ -61,6 +64,8 @@ import {
 } from "./agent-session-transcript-dialog-context";
 import type { AgentSessionTranscriptTarget } from "@openducktor/frontend-core/sessions/transcript/agent-session-transcript-target";
 import { AgentSessionTranscriptDialogHost } from "./use-agent-session-transcript-dialog";
+
+setupTestingLibraryFakeTimers();
 
 function AgentSessionTranscriptDialog(
   props: Omit<ComponentProps<typeof TranscriptDialog>, "preview">,
@@ -276,12 +281,16 @@ describe("AgentSessionTranscriptDialogHost", () => {
           expect(screen.getByText("New child message while open")).toBeTruthy();
         });
         const link = screen.getByRole("link", { name: "Preview child file" });
-        link.focus();
-        fireEvent.click(link);
+        await act(async () => {
+          link.focus();
+          fireEvent.click(link);
+        });
         await screen.findByText("Binary child file");
         expect(screen.getByLabelText("Selected file preview")).toBeTruthy();
         expect(screen.queryByRole("link", { name: "Preview child file" })).toBeNull();
-        fireEvent.click(screen.getByRole("button", { name: "Close file preview" }));
+        await act(async () => {
+          fireEvent.click(screen.getByRole("button", { name: "Close file preview" }));
+        });
         expect(screen.getByRole("link", { name: "Preview child file" })).toBe(link);
         expect(document.activeElement).toBe(link);
       } finally {
@@ -292,7 +301,6 @@ describe("AgentSessionTranscriptDialogHost", () => {
     });
   }
 
-  // The first history read and its retry each show a 500 ms loader.
   test("retries failed runtime transcript history from the error notice", async () => {
     const sessionStore = createAgentSessionsStore("/repo-a");
     const connection = createTestClientConnection();
@@ -405,7 +413,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
     } finally {
       rendered.unmount();
     }
-  }, 2000);
+  });
 
   test("retries a failed skill catalog from the transcript notice", async () => {
     const sessionStore = createAgentSessionsStore("/repo-a");
@@ -507,7 +515,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
       catalogAvailable = true;
       fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
       await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        jest.advanceTimersByTime(0);
       });
 
       expect(screen.queryByText("Skills may be incomplete")).toBeNull();
@@ -515,7 +523,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
     } finally {
       rendered.unmount();
     }
-  }, 10000);
+  });
 
   const ActiveWorkspaceTestProvider = ({ children }: PropsWithChildren): ReactElement => (
     <ActiveWorkspaceContext.Provider
@@ -636,7 +644,6 @@ describe("AgentSessionTranscriptDialogHost", () => {
   });
 
   test("opens a linked subagent transcript from the visible subagent card", async () => {
-    const { AgentChatMessageCard } = await import("./agent-chat-message-card");
     let request: OpenAgentSessionTranscriptRequest | null = null;
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
       <QueryProvider>
@@ -699,7 +706,6 @@ describe("AgentSessionTranscriptDialogHost", () => {
   });
 
   test("opens a linked subagent transcript from a Planner thread with its runtime kind", async () => {
-    const { AgentChatThread } = await import("./agent-chat-thread");
     let request: OpenAgentSessionTranscriptRequest | null = null;
     const plannerSession = buildSession({
       sessionAssociation: {

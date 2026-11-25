@@ -7,14 +7,10 @@ import {
 } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { runtimeExecutableQueryOptions } from "@openducktor/frontend-core/queries/runtime";
 import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
-import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import { useSettingsRuntimeExecutableSetup } from "./use-settings-runtime-executable-setup";
-
-enableReactActEnvironment();
 
 const runtimes: AgentRuntimes = {
   ...DEFAULT_AGENT_RUNTIMES,
@@ -72,8 +68,8 @@ const discoveredRuntimes = (prefix: string): RuntimeExecutableCheck => ({
 
 describe("useSettingsRuntimeExecutableSetup", () => {
   test("keeps a rediscovery error until a successful retry replaces the paths", async () => {
-    const failed = createDeferred<RuntimeExecutableCheck>();
-    const succeeded = createDeferred<RuntimeExecutableCheck>();
+    const failed = Promise.withResolvers<RuntimeExecutableCheck>();
+    const succeeded = Promise.withResolvers<RuntimeExecutableCheck>();
     let attempts = 0;
     const harness = createHarness(
       mock(async (input) => {
@@ -109,7 +105,7 @@ describe("useSettingsRuntimeExecutableSetup", () => {
   });
 
   test("preserves executable paths edited while rediscovery is pending", async () => {
-    const discovery = createDeferred<RuntimeExecutableCheck>();
+    const discovery = Promise.withResolvers<RuntimeExecutableCheck>();
     const harness = createHarness(mock(async () => discovery.promise));
 
     try {
@@ -176,7 +172,7 @@ describe("useSettingsRuntimeExecutableSetup", () => {
   });
 
   test("ignores a rediscovery success from a closed Settings visit", async () => {
-    const stale = createDeferred<RuntimeExecutableCheck>();
+    const stale = Promise.withResolvers<RuntimeExecutableCheck>();
     const harness = createHarness(mock(async () => stale.promise));
 
     try {
@@ -200,7 +196,7 @@ describe("useSettingsRuntimeExecutableSetup", () => {
   });
 
   test("joins the active discovery when Settings closes and reopens", async () => {
-    const discovery = createDeferred<RuntimeExecutableCheck>();
+    const discovery = Promise.withResolvers<RuntimeExecutableCheck>();
     const runtimeCheck = mock(async () => discovery.promise);
     const harness = createHarness(runtimeCheck);
 
@@ -230,7 +226,7 @@ describe("useSettingsRuntimeExecutableSetup", () => {
   });
 
   test("ignores a rediscovery failure from a closed Settings visit", async () => {
-    const stale = createDeferred<RuntimeExecutableCheck>();
+    const stale = Promise.withResolvers<RuntimeExecutableCheck>();
     const harness = createHarness(mock(async () => stale.promise));
 
     try {

@@ -21,7 +21,6 @@ import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-su
 import { createFeedbackFake } from "@openducktor/frontend-core/test-support/feedback-fake";
 import { createRuntimeDefinitionsContextValue } from "@openducktor/frontend-core/test-support/runtime-hook-harness";
 import {
-  createDeferred,
   createHostRuntimeStatusContextValue,
   createTaskCardFixture,
   createWorkspaceRecordFixture,
@@ -180,7 +179,7 @@ describe("Git conflict abort", () => {
   });
 
   test("a lost result shows Result unknown, and a second press waits for the first", async () => {
-    const pending = createDeferred<{ output: string }>();
+    const pending = Promise.withResolvers<{ output: string }>();
     let calls = 0;
     const refreshes: string[] = [];
     const connection = createTestClientConnection({

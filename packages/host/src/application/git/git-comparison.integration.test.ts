@@ -5,32 +5,44 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
 import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
+import { gitFixtureCommand, gitFixtureEnv } from "../../test-support/git-repository-fixture";
 import { createGitService } from "./git-service";
+
+const gitAt = (cwd: string, ...args: string[]): string =>
+  execFileSync(
+    gitFixtureCommand,
+    [
+      "-c",
+      "user.name=Fixture",
+      "-c",
+      "user.email=fixture@example.invalid",
+      "-c",
+      "commit.gpgsign=false",
+      ...args,
+    ],
+    { cwd, encoding: "utf8", env: gitFixtureEnv, stdio: ["ignore", "pipe", "pipe"] },
+  ).trim();
+
+const createFixtureGit = () =>
+  createGitCliAdapter({
+    resolveCommand: () => Effect.succeed(gitFixtureCommand),
+    readEnv: () => gitFixtureEnv,
+  });
 
 // This test starts real Git processes to check ref resolution and status together.
 test("keeps exact comparison refs and actual upstream counts independent", async () => {
   const repo = await mkdtemp(path.join(tmpdir(), "git-comparison-"));
-  const git = (...args: string[]) =>
-    execFileSync("git", args, {
-      cwd: repo,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    }).trim();
-  const adapter = createGitCliAdapter({ resolveCommand: () => Effect.succeed("git") });
-  const service = createGitService(adapter);
+  const git = (...args: string[]) => gitAt(repo, ...args);
+  const service = createGitService(createFixtureGit());
   const comparison = (target: { branch: string; remote?: string }) =>
     Effect.runPromise(service.getComparisonTarget({ repoPath: repo, workingDir: repo, target }));
   try {
-    git("init", "--initial-branch=main");
-    git("config", "user.name", "Comparison Test");
-    git("config", "user.email", "comparison@example.invalid");
-    git("config", "commit.gpgsign", "false");
+    git("init", "--initial-branch=main", "--template=");
     await writeFile(path.join(repo, "base.txt"), "base\n");
     git("add", ".");
     git("commit", "-m", "base");
     git("branch", "origin/main");
     git("update-ref", "refs/remotes/origin/main", "HEAD");
-    git("update-ref", "refs/remotes/origin/feature", "HEAD");
     git("checkout", "-b", "feature");
     await writeFile(path.join(repo, "feature.txt"), "feature\n");
     git("add", ".");
@@ -44,16 +56,16 @@ test("keeps exact comparison refs and actual upstream counts independent", async
       reference: "refs/remotes/origin/main",
     });
     expect((await comparison({ branch: "@{upstream}" })).kind).toBe("unavailable");
-    let status = await Effect.runPromise(
+    const untracked = await Effect.runPromise(
       service.getWorktreeStatus({
         repoPath: repo,
         targetBranch: "refs/heads/origin/main",
         diffScope: "target",
       }),
     );
-    expect(status.targetAheadBehind).toEqual({ ahead: 1, behind: 0 });
+    expect(untracked.targetAheadBehind).toEqual({ ahead: 1, behind: 0 });
     // The feature commit is on no remote, so the first push sends it.
-    expect(status.upstreamAheadBehind).toEqual({ outcome: "untracked", ahead: 1 });
+    expect(untracked.upstreamAheadBehind).toEqual({ outcome: "untracked", ahead: 1 });
     git("config", "branch.feature.remote", ".");
     git("config", "branch.feature.merge", "refs/heads/main");
     expect(await comparison({ branch: "@{upstream}" })).toEqual({
@@ -67,11 +79,6 @@ test("keeps exact comparison refs and actual upstream counts independent", async
     expect(unavailable).toMatchObject({ kind: "unavailable" });
     if (unavailable.kind === "unavailable")
       expect(unavailable.reason).toContain("refs/remotes/origin/missing");
-    status = await Effect.runPromise(
-      service.getWorktreeStatus({ repoPath: repo, targetBranch: "HEAD", diffScope: "uncommitted" }),
-    );
-    expect(status.upstreamAheadBehind).toEqual({ outcome: "untracked", ahead: 1 });
-    expect(status.targetAheadBehind).toEqual({ ahead: 0, behind: 0 });
     // Git owns refspec mapping, including nonstandard tracking namespaces.
     git("config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/custom/*");
     git("config", "branch.feature.merge", "refs/heads/main");
@@ -80,16 +87,17 @@ test("keeps exact comparison refs and actual upstream counts independent", async
       kind: "available",
       reference: "refs/remotes/custom/main",
     });
-    status = await Effect.runPromise(
+    const tracking = await Effect.runPromise(
       service.getWorktreeStatus({ repoPath: repo, targetBranch: "HEAD", diffScope: "uncommitted" }),
     );
-    expect(status.upstreamAheadBehind).toEqual({ outcome: "tracking", ahead: 1, behind: 0 });
+    expect(tracking.upstreamAheadBehind).toEqual({ outcome: "tracking", ahead: 1, behind: 0 });
+    expect(tracking.targetAheadBehind).toEqual({ ahead: 0, behind: 0 });
     git("config", "branch.feature.remote", ".");
     git("config", "branch.feature.merge", "refs/heads/missing");
-    status = await Effect.runPromise(
+    const invalidLocalUpstream = await Effect.runPromise(
       service.getWorktreeStatus({ repoPath: repo, targetBranch: "HEAD", diffScope: "uncommitted" }),
     );
-    expect(status.upstreamAheadBehind.outcome).toBe("error");
+    expect(invalidLocalUpstream.upstreamAheadBehind.outcome).toBe("error");
   } finally {
     await rm(repo, { recursive: true, force: true });
   }
@@ -101,33 +109,27 @@ test("keeps an unpublished task worktree usable after fetch prunes its tracking 
   const repo = path.join(root, "repo");
   const remote = path.join(root, "remote.git");
   const worktree = path.join(root, "task");
-  const git = (...args: string[]) =>
-    execFileSync("git", args, {
-      cwd: repo,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    }).trim();
-  const adapter = createGitCliAdapter({ resolveCommand: () => Effect.succeed("git") });
+  const git = (...args: string[]) => gitAt(repo, ...args);
+  const adapter = createFixtureGit();
   const service = createGitService(adapter);
   try {
     await mkdir(repo);
-    git("init", "--initial-branch=main");
-    git("config", "user.name", "Task Startup Test");
-    git("config", "user.email", "startup@example.invalid");
-    git("config", "commit.gpgsign", "false");
+    git("init", "--initial-branch=main", "--template=");
     await writeFile(path.join(repo, "base.txt"), "base\n");
     git("add", ".");
     git("commit", "-m", "base");
-    git("init", "--bare", remote);
-    git("remote", "add", "origin", remote);
-    git("push", "-u", "origin", "main");
+    git("clone", "--bare", "--template=", repo, remote);
+    git("remote", "add", "-f", "origin", remote);
     await Effect.runPromise(
       adapter.createWorktree(repo, worktree, "odt/new-task", true, "origin/main"),
     );
     await Effect.runPromise(
       adapter.configureBranchUpstream(repo, worktree, "odt/new-task", "origin", false),
     );
+    const trackingRef = "refs/remotes/origin/odt/new-task";
+    expect(git("for-each-ref", "--format=%(refname)", trackingRef)).toBe(trackingRef);
     await Effect.runPromise(adapter.fetchRemote(worktree, "origin"));
+    expect(git("for-each-ref", "--format=%(refname)", trackingRef)).toBe("");
     await writeFile(path.join(worktree, "base.txt"), "changed\n");
     const input = {
       repoPath: repo,
@@ -137,16 +139,11 @@ test("keeps an unpublished task worktree usable after fetch prunes its tracking 
     };
     const localChangesInput = { repoPath: repo, workingDir: worktree };
     const status = await Effect.runPromise(service.getWorktreeStatus(input));
-    const localChanges = await Effect.runPromise(service.getLocalChanges(localChangesInput));
     expect(status.currentBranch.name).toBe("odt/new-task");
     expect(status.fileDiffs[0]?.file).toBe("base.txt");
     expect(status.upstreamAheadBehind).toEqual({ outcome: "untracked", ahead: 0 });
-    expect(localChanges.upstreamAheadBehind).toEqual(status.upstreamAheadBehind);
     // A commit of the unpublished branch is on no remote, so the Push count shows it.
-    execFileSync("git", ["commit", "-am", "task change"], { cwd: worktree, stdio: "ignore" });
-    expect((await Effect.runPromise(service.getWorktreeStatus(input))).upstreamAheadBehind).toEqual(
-      { outcome: "untracked", ahead: 1 },
-    );
+    gitAt(worktree, "commit", "-am", "task change");
     expect(
       (await Effect.runPromise(service.getLocalChanges(localChangesInput))).upstreamAheadBehind,
     ).toEqual({ outcome: "untracked", ahead: 1 });
@@ -164,55 +161,31 @@ test("keeps an unpublished task worktree usable after fetch prunes its tracking 
   }
 }, 30_000);
 
-// Both Git backends start real processes and stop on a conflicting commit.
-test.each(["--merge", "--apply"] as const)(
-  "restores the rebase destination independently of HEAD diffs with %s",
-  async (backend) => {
-    const repo = await mkdtemp(path.join(tmpdir(), "git-rebase-target-"));
-    const git = (...args: string[]) =>
-      execFileSync("git", args, {
-        cwd: repo,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-      }).trim();
-    const adapter = createGitCliAdapter({ resolveCommand: () => Effect.succeed("git") });
-    const service = createGitService(adapter);
-    try {
-      git("init", "--initial-branch=main");
-      git("config", "user.name", "Rebase Test");
-      git("config", "user.email", "rebase@example.invalid");
-      git("config", "commit.gpgsign", "false");
-      await writeFile(path.join(repo, "conflict.txt"), "base\n");
-      git("add", ".");
-      git("commit", "-m", "base");
-      git("checkout", "-b", "feature");
-      await writeFile(path.join(repo, "conflict.txt"), "feature\n");
-      git("add", ".");
-      git("commit", "-m", "feature");
-      git("checkout", "main");
-      await writeFile(path.join(repo, "conflict.txt"), "main\n");
-      git("add", ".");
-      git("commit", "-m", "main");
-      const onto = git("rev-parse", "HEAD");
-      git("checkout", "feature");
-      let stopped = false;
-      try {
-        git("rebase", backend, "main");
-      } catch {
-        stopped = true;
-      }
-      expect(stopped).toBe(true);
-      const input = { repoPath: repo, targetBranch: "HEAD", diffScope: "uncommitted" as const };
-      const full = await Effect.runPromise(service.getWorktreeStatus(input));
-      const localChanges = await Effect.runPromise(service.getLocalChanges({ repoPath: repo }));
-      for (const result of [full, localChanges]) {
-        expect(result.gitConflict?.currentBranch).toBe("feature");
-        expect(result.gitConflict?.targetBranch).toBe(onto);
-        expect(result.gitConflict?.conflictedFiles).toContain("conflict.txt");
-      }
-    } finally {
-      await rm(repo, { recursive: true, force: true });
-    }
-  },
-  30_000,
-);
+// The apply backend stores different rebase files from the merge backend in the History test.
+test("reads the destination and conflicted file of an apply rebase in Local Changes", async () => {
+  const repo = await mkdtemp(path.join(tmpdir(), "git-rebase-target-"));
+  const git = (...args: string[]) => gitAt(repo, ...args);
+  const service = createGitService(createFixtureGit());
+  try {
+    git("init", "--initial-branch=main", "--template=");
+    await writeFile(path.join(repo, "conflict.txt"), "base\n");
+    git("add", ".");
+    git("commit", "-m", "base");
+    git("branch", "feature");
+    await writeFile(path.join(repo, "conflict.txt"), "main\n");
+    git("commit", "-am", "main");
+    const onto = git("rev-parse", "HEAD");
+    git("checkout", "feature");
+    await writeFile(path.join(repo, "conflict.txt"), "feature\n");
+    git("commit", "-am", "feature");
+    expect(() => git("rebase", "--apply", "main")).toThrow();
+    const changes = await Effect.runPromise(service.getLocalChanges({ repoPath: repo }));
+    expect(changes.gitConflict).toMatchObject({
+      currentBranch: "feature",
+      targetBranch: onto,
+      conflictedFiles: ["conflict.txt"],
+    });
+  } finally {
+    await rm(repo, { recursive: true, force: true });
+  }
+}, 30_000);

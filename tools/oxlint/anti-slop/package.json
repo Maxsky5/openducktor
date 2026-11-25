@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "bun run typecheck",
-    "test": "node --experimental-strip-types --test \"src/**/*.test.ts\"",
+    "test": "node --experimental-strip-types --test --test-reporter=spec --test-timeout=5000",
     "typecheck": "bun check -p tsconfig.json"
   },
   "devDependencies": {

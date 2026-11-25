@@ -25,22 +25,9 @@ const imageFile = (name: string): TestImage => ({ name });
 const createPreviewUrl = (file: TestImage): string => `preview:${file.name}`;
 const revokePreviewUrl = (_url: string): void => {};
 
-const createDeferred = <T,>() => {
-  let resolve: ((value: T) => void) | undefined;
-  const promise = new Promise<T>((next) => {
-    resolve = next;
-  });
-  return {
-    promise,
-    resolve(value: T) {
-      resolve?.(value);
-    },
-  };
-};
-
 describe("useTaskDescriptionAssetDraft", () => {
   test("tracks upload progress and keeps per-file errors", async () => {
-    const deferred = createDeferred<TaskAssetStageResult>();
+    const deferred = Promise.withResolvers<TaskAssetStageResult>();
     const stageImage = mock(async () => deferred.promise);
     const discardStaged = mock(async () => {});
     const harness = createHookHarness(
@@ -81,7 +68,7 @@ describe("useTaskDescriptionAssetDraft", () => {
   });
 
   test("discards an upload that completes after a task switch", async () => {
-    const deferred = createDeferred<TaskAssetStageResult>();
+    const deferred = Promise.withResolvers<TaskAssetStageResult>();
     const stageImage = mock(async () => deferred.promise);
     const discardStaged = mock(async () => {});
     const harness = createHookHarness(
@@ -221,7 +208,7 @@ describe("useTaskDescriptionAssetDraft", () => {
   });
 
   test("reserves the last asset slot across concurrent uploads", async () => {
-    const deferred = createDeferred<TaskAssetStageResult>();
+    const deferred = Promise.withResolvers<TaskAssetStageResult>();
     const discardStaged = mock(async () => {});
     const stageImage = mock(() => {
       if (stageImage.mock.calls.length > 1) {

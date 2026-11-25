@@ -12,10 +12,8 @@ import { createFeedbackFake } from "@openducktor/frontend-core/test-support/feed
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import {
   createAgentSessionFixture,
-  createDeferred,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
-  enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import {
   type AgentSessionSummary,
@@ -33,7 +31,6 @@ import type {
 import { useAgentStudioBuildToolsWorktreeSnapshot } from "./use-agent-studio-build-tools-worktree-snapshot";
 import { repoConfigFixture } from "@openducktor/frontend-core/test-support/repo-config-fixture";
 
-enableReactActEnvironment();
 if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
@@ -237,7 +234,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   test.each([false, true])(
     "drops an old scheduled branch refresh after a session switch, return=%s",
     async (returnToSession) => {
-      const branchRead = createDeferred<{ name: string; detached: boolean }>();
+      const branchRead = Promise.withResolvers<{ name: string; detached: boolean }>();
       let reading = false;
       const fetch = mock(async () => ({ outcome: "fetched" as const, output: "Fetched." }));
       gitClient = createGitClient({
@@ -410,7 +407,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   });
 
   test("uses the saved task comparison while settings load and clears it during a target change", async () => {
-    const nextComparison = createDeferred<{ kind: "available"; reference: string }>();
+    const nextComparison = Promise.withResolvers<{ kind: "available"; reference: string }>();
     const readStatus = mock(
       async (_repo: string, target: string, scope: "target" | "uncommitted" = "uncommitted") =>
         taskStatus(target, scope),
@@ -529,10 +526,10 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   });
 
   test("keeps task comparison and counts while its branch and status reads refresh", async () => {
-    const nextBranch = createDeferred<{ name: string; detached: boolean }>();
+    const nextBranch = Promise.withResolvers<{ name: string; detached: boolean }>();
     let holdBranch = false;
     let holdStatus = false;
-    const nextStatus = createDeferred<void>();
+    const nextStatus = Promise.withResolvers<void>();
     const readBranch = mock(async () =>
       holdBranch ? nextBranch.promise : { name: "feature/task-24", detached: false },
     );
@@ -1042,7 +1039,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
 
   test("uses cached task worktree context while refetching canonical worktree", async () => {
     const queryClient = createClientQueryClient();
-    const taskWorktreeFetch = createDeferred<{ workingDirectory: string } | null>();
+    const taskWorktreeFetch = Promise.withResolvers<{ workingDirectory: string } | null>();
     let didResolveTaskWorktreeFetch = false;
     queryClient.setQueryData(
       taskWorktreeQueryKeys.taskWorktree({
@@ -1343,7 +1340,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
 
   test("a hard refresh reads local changes during the fetch and again with the comparison after it", async () => {
     const reads: string[] = [];
-    const fetchGate = createDeferred<void>();
+    const fetchGate = Promise.withResolvers<void>();
     let holdFetch = false;
     gitClient = createGitClient({
       client: {
@@ -1407,7 +1404,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   });
 
   test("a hard refresh reports a local read failure after the fetch ends", async () => {
-    const fetchGate = createDeferred<void>();
+    const fetchGate = Promise.withResolvers<void>();
     let holdFetch = false;
     let localFails = false;
     let localReads = 0;

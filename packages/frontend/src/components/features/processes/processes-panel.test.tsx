@@ -6,24 +6,17 @@ import type {
   WorkspaceProcessStopResult,
 } from "@openducktor/contracts";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import { fireEvent, render, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import * as hostConnection from "@/components/layout/host-connection";
 import { AppToaster } from "@/components/layout/app-toaster";
+import { HostConnectionProvider } from "@/components/layout/host-connection";
+import { FloatingWindowLayer } from "@/components/ui/floating-window";
 import { WorkspaceScopeContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { createWorkspaceRecordFixture } from "@/test-utils/shared-test-fixtures";
-
-// The view reads and stops the processes of a local host only.
-mock.module("@/components/layout/host-connection", () => ({
-  ...hostConnection,
-  useLocalHost: () => "web",
-}));
-
-const { ProcessesProvider } = await import("./processes-context");
-const { ProcessesFloatingWindow, ProcessesRailButton } = await import("./processes-surfaces");
-const { FloatingWindowLayer } = await import("@/components/ui/floating-window");
-const { TaskServerPortsMenu } = await import("./task-server-links");
+import { ProcessesProvider } from "./processes-context";
+import { ProcessesFloatingWindow, ProcessesRailButton } from "./processes-surfaces";
+import { TaskServerPortsMenu } from "./task-server-links";
 
 const workspace = createWorkspaceRecordFixture({
   workspaceId: "repo",
@@ -125,23 +118,34 @@ const mount = (
   const view = render(
     <MemoryRouter initialEntries={[input.route ?? "/kanban"]}>
       <QueryProvider connection={connection}>
-        <WorkspaceScopeContext.Provider
-          value={{ workspaces: [workspace, otherWorkspace], activeWorkspace: workspace }}
+        <HostConnectionProvider
+          selection={{
+            target: { kind: "local" },
+            localHost: "web",
+            confirm: async (endpoint) => endpoint,
+            select: async () => {},
+            disconnect: async () => {},
+          }}
+          connection={undefined}
         >
-          <FloatingWindowLayer>
-            <ProcessesProvider>
-              <AppToaster />
-              <ProcessesRailButton />
-              <header aria-label="Session of a task with a port">
-                <TaskServerPortsMenu taskId="task-1" />
-              </header>
-              <header aria-label="Session of a task without a port">
-                <TaskServerPortsMenu taskId="task-2" />
-              </header>
-              <ProcessesFloatingWindow />
-            </ProcessesProvider>
-          </FloatingWindowLayer>
-        </WorkspaceScopeContext.Provider>
+          <WorkspaceScopeContext.Provider
+            value={{ workspaces: [workspace, otherWorkspace], activeWorkspace: workspace }}
+          >
+            <FloatingWindowLayer>
+              <ProcessesProvider>
+                <AppToaster />
+                <ProcessesRailButton />
+                <header aria-label="Session of a task with a port">
+                  <TaskServerPortsMenu taskId="task-1" />
+                </header>
+                <header aria-label="Session of a task without a port">
+                  <TaskServerPortsMenu taskId="task-2" />
+                </header>
+                <ProcessesFloatingWindow />
+              </ProcessesProvider>
+            </FloatingWindowLayer>
+          </WorkspaceScopeContext.Provider>
+        </HostConnectionProvider>
       </QueryProvider>
     </MemoryRouter>,
   );
@@ -256,19 +260,19 @@ test("opens a command to show each process below the process that started it", a
 test("stops a command with every process that it started", async () => {
   const { view, openFlyout, workspaceProcessStop } = mount();
   const flyout = await openFlyout();
-  fireEvent.click(within(flyout).getByRole("button", { name: STOP_COMMAND }));
+  await act(async () =>
+    fireEvent.click(within(flyout).getByRole("button", { name: STOP_COMMAND })),
+  );
   const confirm = await view.findByRole("dialog", { name: /^Stop\s+pnpm dev\s*\?$/ });
   expect(confirm.textContent).toContain("apps/web · 2 processes · :5173");
   expect(within(confirm).getByText(/the system reuses its ID/)).toBeTruthy();
-  fireEvent.click(within(confirm).getByRole("button", { name: "Stop" }));
-  await waitFor(() =>
-    expect(workspaceProcessStop).toHaveBeenCalledWith({
-      workspaceId: "repo",
-      checkoutPath: "/worktrees/task-1",
-      processRefs: ["40:400", "41:410"],
-      acknowledgedPidReuseRisk: true,
-    }),
-  );
+  await act(async () => fireEvent.click(within(confirm).getByRole("button", { name: "Stop" })));
+  expect(workspaceProcessStop).toHaveBeenCalledWith({
+    workspaceId: "repo",
+    checkoutPath: "/worktrees/task-1",
+    processRefs: ["40:400", "41:410"],
+    acknowledgedPidReuseRisk: true,
+  });
 });
 
 test("reads the list again after a stop, also with readers of the cache open", async () => {
@@ -376,7 +380,7 @@ test("filters with the keyboard: Enter opens a port, ArrowDown moves into the li
   const { openFlyout, openExternalUrl } = mount();
   const flyout = await openFlyout();
   const filter = within(flyout).getByLabelText("Filter processes");
-  await waitFor(() => expect(document.activeElement).toBe(filter));
+  await waitFor(() => expect(document.activeElement === filter).toBe(true));
   fireEvent.change(filter, { target: { value: "vite" } });
   fireEvent.keyDown(filter, { key: "Enter" });
   await waitFor(() => expect(openExternalUrl).toHaveBeenCalledWith("http://127.0.0.1:5173/"));

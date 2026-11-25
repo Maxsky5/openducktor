@@ -6,9 +6,12 @@ import {
   useSessionComparison,
 } from "@openducktor/frontend-core/git/use-session-comparison";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { useSessionComparisonControl } from "./use-session-comparison-control";
+
+setupTestingLibraryFakeTimers();
 
 const initial: SessionComparisonInput = {
   enabled: true,

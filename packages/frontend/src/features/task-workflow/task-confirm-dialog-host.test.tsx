@@ -4,17 +4,17 @@ import {
   worktreeOwnersRead,
 } from "@openducktor/frontend-core/test-support/worktree-owners-read";
 import * as worktreeOwnersModule from "@openducktor/frontend-core/queries/use-task-worktree-owners";
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, jest, mock, spyOn, test } from "bun:test";
 import type { TaskMergeStatus } from "@openducktor/contracts";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { ActiveWorkspaceContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import * as taskStopImpactModule from "@openducktor/frontend-core/queries/use-task-stop-impact";
 import { withMockedToast } from "@/test-utils/mock-toast";
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import {
   createSettingsSnapshotFixture,
   createTaskCardFixture,
@@ -23,7 +23,7 @@ import {
 import type { TaskConfirmRequestAction } from "@openducktor/frontend-core/tasks/workflow/task-confirm-actions";
 import { TaskConfirmDialogHost, useTaskConfirmDialogHost } from "./task-confirm-dialog-host";
 
-enableReactActEnvironment();
+setupTestingLibraryFakeTimers();
 
 const task = createTaskCardFixture({ id: "odt-1", availableActions: ["reset_task"] });
 const workspaceA = { workspaceId: "workspace-a", repoPath: "/repo-a" };
@@ -110,7 +110,10 @@ function Host({
   );
 }
 
-const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+const settle = () =>
+  act(async () => {
+    jest.advanceTimersByTime(0);
+  });
 
 const request = async (action: TaskConfirmRequestAction): Promise<void> => {
   await act(async () => confirmTaskAction(task.id, action));
@@ -125,17 +128,6 @@ afterEach(() => {
 });
 
 describe("TaskConfirmDialogHost", () => {
-  test.each(["reset_task", "delete"] as const)(
-    "opens only the %s confirmation of the request",
-    async (action) => {
-      view = render(<Host workspaceIdentity={workspaceA} {...createHandlers()} />);
-      await request(action);
-
-      expect(screen.getByRole("dialog", { name: TITLES[action] })).toBeTruthy();
-      expect(screen.getAllByRole("dialog")).toHaveLength(1);
-    },
-  );
-
   test("returns focus after a cancel and opens the same confirmation again", async () => {
     view = render(<Host workspaceIdentity={workspaceA} {...createHandlers()} />);
     const before = screen.getByRole("button", { name: "Before the palette" });
@@ -173,7 +165,9 @@ describe("TaskConfirmDialogHost", () => {
         view = render(<Host workspaceIdentity={workspaceA} {...handlers} />);
         await request(action);
 
-        const confirm = await screen.findByRole("button", { name: CONFIRM_LABELS[action] });
+        const dialog = screen.getByRole("dialog", { name: TITLES[action] });
+        expect(screen.getAllByRole("dialog")).toHaveLength(1);
+        const confirm = await within(dialog).findByRole("button", { name: CONFIRM_LABELS[action] });
         await act(async () => {
           fireEvent.click(confirm);
         });

@@ -2,7 +2,6 @@ import { describe, expect, mock, test } from "bun:test";
 import type { GitBranch, SettingsRepoConfig } from "@openducktor/contracts";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { RepositoryConfigurationSection } from "./settings-repository-configuration-section";
 
 type RepoConfigUpdater = (current: SettingsRepoConfig) => SettingsRepoConfig;
@@ -43,8 +42,6 @@ const sectionElement = (overrides: Partial<SettingsRepoConfig>) =>
     onRetrySelectedRepoBranchesLoad: () => {},
     onUpdateSelectedRepoConfig: () => {},
   });
-
-enableReactActEnvironment();
 
 const repoConfig: SettingsRepoConfig = {
   workspaceId: "repo",

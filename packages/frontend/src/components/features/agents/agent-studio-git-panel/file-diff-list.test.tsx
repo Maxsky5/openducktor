@@ -353,9 +353,11 @@ describe("FileDiffList", () => {
   test.each(["Remove expanded file", "Move expanded file to end"])(
     "keeps the visible file and scroll direction after %s offscreen",
     (action) => {
-      const measurements = installMeasuredRows();
+      const closedRowHeight = 40;
+      const measurements = installMeasuredRows({ closedRowHeight });
       try {
-        render(<ResizingFileDiffListHarness fileCount={100} />);
+        const fileCount = 48;
+        render(<ResizingFileDiffListHarness fileCount={fileCount} />);
         measurements.resize(600, 800);
         const list = screen.getByRole("list");
         const fileTop = (file: string): number =>
@@ -377,7 +379,7 @@ describe("FileDiffList", () => {
         expect(fileTop("file-028")).toBe(0);
 
         if (action === "Move expanded file to end") {
-          fireEvent.scroll(list, { target: { scrollTop: 3_960 } });
+          fireEvent.scroll(list, { target: { scrollTop: (fileCount - 1) * closedRowHeight } });
           expect(fileTop("file-005")).toBe(0);
         }
       } finally {
@@ -396,37 +398,27 @@ describe("FileDiffList", () => {
     expect(screen.getAllByTestId("agent-studio-git-file-toggle-button").length).toBeLessThan(30);
   });
 
-  test("keeps unfinished comment text after a virtual row leaves the viewport", () => {
+  test("keeps new and edited comment drafts after their row leaves the viewport", () => {
     render(<LargeFileDiffListHarness />);
     const list = screen.getByRole("list");
+    const leaveAndReturn = () => {
+      fireEvent.scroll(list, { target: { scrollTop: 39_600 } });
+      expect(screen.queryByRole("button", { name: "Toggle diff for src/file-000.ts" })).toBeNull();
+      fireEvent.scroll(list, { target: { scrollTop: 0 } });
+    };
     fireEvent.click(screen.getByTestId("pierre-diff-select-lines"));
     fireEvent.change(screen.getByPlaceholderText("Add a comment for the Builder"), {
       target: { value: "Keep this draft" },
     });
-
-    fireEvent.scroll(list, { target: { scrollTop: 39_600 } });
-    expect(screen.queryByRole("button", { name: "Toggle diff for src/file-000.ts" })).toBeNull();
-    fireEvent.scroll(list, { target: { scrollTop: 0 } });
-
+    leaveAndReturn();
     expect(screen.getByDisplayValue("Keep this draft")).toBeDefined();
-  });
 
-  test("keeps an unfinished comment edit after a virtual row leaves the viewport", () => {
-    render(<LargeFileDiffListHarness />);
-    const list = screen.getByRole("list");
-    fireEvent.click(screen.getByTestId("pierre-diff-select-lines"));
-    fireEvent.change(screen.getByPlaceholderText("Add a comment for the Builder"), {
-      target: { value: "Saved comment" },
-    });
     fireEvent.click(screen.getByRole("button", { name: "Comment" }));
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(screen.getByDisplayValue("Saved comment"), {
+    fireEvent.change(screen.getByDisplayValue("Keep this draft"), {
       target: { value: "Unfinished edit" },
     });
-
-    fireEvent.scroll(list, { target: { scrollTop: 39_600 } });
-    fireEvent.scroll(list, { target: { scrollTop: 0 } });
-
+    leaveAndReturn();
     expect(screen.getByDisplayValue("Unfinished edit")).toBeDefined();
   });
 

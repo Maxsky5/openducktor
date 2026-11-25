@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, jest, test } from "bun:test";
+import { setImmediate as nextTurn } from "node:timers/promises";
 import {
   decodeTerminalProtocolFrame,
   encodeTerminalProtocolFrame,
@@ -25,6 +26,7 @@ describe("createTerminalTransportController", () => {
     const receivers: Array<(frame: Uint8Array) => void> = [];
     const states: Array<(state: TerminalTransportState) => void> = [];
     const sent: Uint8Array[] = [];
+    const replacementObservation = Promise.withResolvers<void>();
     const controller = createTerminalTransportController(
       {
         subscribeRecovery: (listener) => {
@@ -37,6 +39,7 @@ describe("createTerminalTransportController", () => {
           return {
             send: async (frame) => {
               sent.push(frame);
+              if (receivers.length === 2) replacementObservation.resolve();
             },
             close: () => undefined,
           };
@@ -55,7 +58,7 @@ describe("createTerminalTransportController", () => {
       restoration = recover(abort.signal).then(() => {
         completed = true;
       });
-      await Bun.sleep(10);
+      await replacementObservation.promise;
       expect(receivers).toHaveLength(2);
       expect(completed).toBe(false);
       const observations = sent
@@ -86,7 +89,7 @@ describe("createTerminalTransportController", () => {
           }),
         );
       emit("list_snapshot_start");
-      await Promise.resolve();
+      await nextTurn();
       expect(completed).toBe(false);
       emit("list_snapshot_end");
       await restoration;
@@ -321,21 +324,23 @@ describe("createTerminalTransportController", () => {
     expect(decodeTerminalProtocolFrame(detachFrame).message.type).toBe("detach");
   });
 
-  test("automatically reconnects and reattaches after transport loss", async () => {
-    const sentByConnection: Uint8Array[][] = [];
-    const stateListeners: Array<(state: "connected" | "disconnected") => void> = [];
-    const observedStates: Array<"connected" | "disconnected"> = [];
-    const { promise: reattachSent, resolve: markReattachSent } = Promise.withResolvers<void>();
+  test("automatically reconnects with the last ACK and the latest grid", async () => {
+    type Message = ReturnType<typeof decodeTerminalProtocolFrame>["message"];
+    const sentByConnection: Message[][] = [];
+    const stateListeners: Array<(state: TerminalTransportState) => void> = [];
+    const observedStates: TerminalTransportState[] = [];
+    const restored = Promise.withResolvers<void>();
     const bridge: TerminalBridge = {
       connect: async (_onFrame, onStateChange) => {
-        const sent: Uint8Array[] = [];
+        const sent: Message[] = [];
         sentByConnection.push(sent);
         stateListeners.push(onStateChange);
         onStateChange("connected");
         return {
           send: async (frame) => {
-            sent.push(frame);
-            if (sentByConnection.length === 2) markReattachSent();
+            const { message } = decodeTerminalProtocolFrame(frame);
+            sent.push(message);
+            if (sent === sentByConnection[1] && message.type === "resize") restored.resolve();
           },
           close: () => undefined,
         };
@@ -344,65 +349,31 @@ describe("createTerminalTransportController", () => {
     const controller = createTerminalTransportController(bridge, (state) => {
       observedStates.push(state);
     });
-    await controller.connect();
-    controller.subscribe(terminalId, () => undefined);
-    await Promise.resolve();
-    await controller.acknowledge(terminalId, 41);
+    try {
+      await controller.connect();
+      controller.subscribe(terminalId, () => undefined);
+      await controller.resize(terminalId, 80, 24);
+      await controller.acknowledge(terminalId, 41);
 
-    stateListeners[0]?.("disconnected");
-    // The reconnect runs on a timer and awaits the bridge, so wait for its first frame.
-    await reattachSent;
+      stateListeners[0]?.("disconnected");
+      // The viewport changes size while the socket is down.
+      await controller.resize(terminalId, 45, 30);
+      await restored.promise;
 
-    expect(sentByConnection).toHaveLength(2);
-    const reattachFrame = sentByConnection[1]?.[0];
-    if (!reattachFrame) throw new Error("Expected an automatic reattach frame.");
-    expect(decodeTerminalProtocolFrame(reattachFrame).message).toEqual({
-      version: TERMINAL_PROTOCOL_VERSION,
-      type: "attach",
-      terminalId,
-      lastConsumedSequence: 41,
-    });
-    expect(observedStates).toEqual(["connected", "disconnected", "connected"]);
-    controller.dispose();
-  });
-
-  test("sends the last grid again after the reconnect attaches the terminal", async () => {
-    const sentByConnection: string[][] = [];
-    const stateListeners: Array<(state: "connected" | "disconnected") => void> = [];
-    const bridge: TerminalBridge = {
-      connect: async (_onFrame, onStateChange) => {
-        const sent: string[] = [];
-        sentByConnection.push(sent);
-        stateListeners.push(onStateChange);
-        onStateChange("connected");
-        return {
-          send: async (frame) => {
-            const message = decodeTerminalProtocolFrame(frame).message;
-            sent.push(
-              message.type === "resize"
-                ? `resize:${message.columns}x${message.rows}`
-                : message.type,
-            );
-          },
-          close: () => undefined,
-        };
-      },
-    };
-    const controller = createTerminalTransportController(bridge, () => undefined);
-    await controller.connect();
-    controller.subscribe(terminalId, () => undefined);
-    await controller.resize(terminalId, 80, 24);
-
-    stateListeners[0]?.("disconnected");
-    // The phone rotates while the socket is down. The resize waits for the reconnect.
-    await controller.resize(terminalId, 45, 30);
-    await Bun.sleep(10);
-
-    expect(sentByConnection).toEqual([
-      ["attach", "resize:80x24"],
-      ["attach", "resize:45x30"],
-    ]);
-    await controller.dispose();
+      expect(sentByConnection[0]?.map(({ type }) => type)).toEqual(["attach", "resize", "ack"]);
+      expect(sentByConnection[1]).toEqual([
+        {
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "attach",
+          terminalId,
+          lastConsumedSequence: 41,
+        },
+        { version: TERMINAL_PROTOCOL_VERSION, type: "resize", terminalId, columns: 45, rows: 30 },
+      ]);
+      expect(observedStates).toEqual(["connected", "disconnected", "connected"]);
+    } finally {
+      await controller.dispose();
+    }
   });
 
   test("sends the last grid again when a detached terminal attaches again", async () => {
@@ -424,9 +395,9 @@ describe("createTerminalTransportController", () => {
     await controller.resize(terminalId, 80, 24);
     unsubscribe();
     controller.subscribe(terminalId, () => undefined);
-    await Bun.sleep(10);
+    await controller.write(terminalId, new Uint8Array([1]));
 
-    expect(sent).toEqual(["attach", "resize", "detach", "attach", "resize"]);
+    expect(sent).toEqual(["attach", "resize", "detach", "attach", "resize", "input"]);
     await controller.dispose();
   });
 
@@ -486,79 +457,15 @@ describe("createTerminalTransportController", () => {
     await controller.dispose();
   });
 
-  test("forgets the grid of a terminal when its emulator is released", async () => {
-    const sentByConnection: string[][] = [];
-    const stateListeners: Array<(state: "connected" | "disconnected") => void> = [];
-    const { promise: reattachSent, resolve: markReattachSent } = Promise.withResolvers<void>();
-    const bridge: TerminalBridge = {
-      connect: async (_onFrame, onStateChange) => {
-        const sent: string[] = [];
-        sentByConnection.push(sent);
-        stateListeners.push(onStateChange);
-        onStateChange("connected");
-        return {
-          send: async (frame) => {
-            sent.push(decodeTerminalProtocolFrame(frame).message.type);
-            if (sentByConnection.length === 2) markReattachSent();
-          },
-          close: () => undefined,
-        };
-      },
-    };
-    const controller = createTerminalTransportController(bridge, () => undefined);
-    await controller.connect();
-    const unsubscribe = controller.subscribe(terminalId, () => undefined);
-    await controller.resize(terminalId, 80, 24);
-    controller.releaseEmulator(terminalId);
-    unsubscribe();
-    controller.subscribe(terminalId, () => undefined);
-
-    stateListeners[0]?.("disconnected");
-    // The reconnect runs on a timer and awaits the bridge. Wait for its attach, then give a
-    // remembered grid time to follow it.
-    await reattachSent;
-    await Bun.sleep(10);
-
-    expect(sentByConnection[1]).toEqual(["attach"]);
-    await controller.dispose();
-  });
-
-  test("reconnects when the initial attachment send fails", async () => {
-    const sentByConnection: string[][] = [];
-    let connectionCount = 0;
-    const bridge: TerminalBridge = {
-      connect: async () => {
-        connectionCount += 1;
-        const sent: string[] = [];
-        sentByConnection.push(sent);
-        return {
-          send: async (frame) => {
-            const type = decodeTerminalProtocolFrame(frame).message.type;
-            if (connectionCount === 1 && type === "attach") throw new Error("socket closed");
-            sent.push(type);
-          },
-          close: () => undefined,
-        };
-      },
-    };
-    const controller = createTerminalTransportController(bridge, () => undefined);
-    controller.subscribe(terminalId, () => undefined);
-
-    await expect(controller.connect()).rejects.toThrow("socket closed");
-    await Bun.sleep(10);
-
-    expect(connectionCount).toBe(2);
-    expect(sentByConnection[1]).toEqual(["attach"]);
-    await controller.dispose();
-  });
-
   test("reports an initial connection failure while reconnecting", async () => {
     const failures: string[] = [];
     let connectionCount = 0;
+    const reconnected = Promise.withResolvers<void>();
     const bridge: TerminalBridge = {
       connect: async () => {
         connectionCount += 1;
         if (connectionCount === 1) throw new Error("terminal authentication failed");
+        reconnected.resolve();
         return {
           send: async () => undefined,
           close: () => undefined,
@@ -572,7 +479,7 @@ describe("createTerminalTransportController", () => {
     );
 
     await expect(controller.connect()).rejects.toThrow("terminal authentication failed");
-    await Bun.sleep(10);
+    await reconnected.promise;
 
     expect(connectionCount).toBe(2);
     expect(failures).toEqual(["terminal authentication failed"]);
@@ -583,10 +490,12 @@ describe("createTerminalTransportController", () => {
     const states: string[] = [];
     const failures: string[] = [];
     let connectionCount = 0;
+    const reconnected = Promise.withResolvers<void>();
     const bridge: TerminalBridge = {
       connect: async () => {
         connectionCount += 1;
         const attempt = connectionCount;
+        if (attempt === 2) reconnected.resolve();
         return {
           send: async () => {
             if (attempt === 1) throw new Error("socket send failed");
@@ -605,7 +514,7 @@ describe("createTerminalTransportController", () => {
     await expect(controller.write(terminalId, new Uint8Array([1]))).rejects.toThrow(
       "socket send failed",
     );
-    await Bun.sleep(10);
+    await reconnected.promise;
 
     expect(connectionCount).toBe(2);
     expect(states).toContain("disconnected");
@@ -616,6 +525,7 @@ describe("createTerminalTransportController", () => {
 
   test("backs off when attachment sends fail repeatedly", async () => {
     let connectionCount = 0;
+    const attached: number[] = [];
     const bridge: TerminalBridge = {
       connect: async () => {
         connectionCount += 1;
@@ -623,7 +533,9 @@ describe("createTerminalTransportController", () => {
         return {
           send: async (frame) => {
             const type = decodeTerminalProtocolFrame(frame).message.type;
-            if (attempt < 3 && type === "attach") throw new Error("socket closed");
+            if (type !== "attach") return;
+            if (attempt < 3) throw new Error("socket closed");
+            attached.push(attempt);
           },
           close: () => undefined,
         };
@@ -632,22 +544,38 @@ describe("createTerminalTransportController", () => {
     const controller = createTerminalTransportController(bridge, () => undefined);
     controller.subscribe(terminalId, () => undefined);
 
-    await expect(controller.connect()).rejects.toThrow("socket closed");
-    await Bun.sleep(20);
-    expect(connectionCount).toBe(2);
+    jest.useFakeTimers();
+    try {
+      await expect(controller.connect()).rejects.toThrow("socket closed");
+      // Let the failed socket close and schedule its retry before moving the clock.
+      await nextTurn();
+      jest.advanceTimersByTime(0);
+      await nextTurn();
+      expect(connectionCount).toBe(2);
 
-    await Bun.sleep(260);
-    expect(connectionCount).toBe(3);
-    await controller.dispose();
+      jest.advanceTimersByTime(249);
+      await nextTurn();
+      expect(connectionCount).toBe(2);
+
+      jest.advanceTimersByTime(1);
+      await nextTurn();
+      expect(connectionCount).toBe(3);
+      expect(attached).toEqual([3]);
+    } finally {
+      await controller.dispose();
+      jest.useRealTimers();
+    }
   });
 
   test("reconnects when closing the failed connection also fails", async () => {
     const failures: string[] = [];
     let connectionCount = 0;
+    const reconnected = Promise.withResolvers<void>();
     const bridge: TerminalBridge = {
       connect: async () => {
         connectionCount += 1;
         const attempt = connectionCount;
+        if (attempt === 2) reconnected.resolve();
         return {
           send: async (frame) => {
             const type = decodeTerminalProtocolFrame(frame).message.type;
@@ -667,7 +595,7 @@ describe("createTerminalTransportController", () => {
     controller.subscribe(terminalId, () => undefined);
 
     await expect(controller.connect()).rejects.toThrow("socket closed");
-    await Bun.sleep(10);
+    await reconnected.promise;
 
     expect(connectionCount).toBe(2);
     expect(failures).toEqual(["socket closed", "close failed"]);
@@ -680,6 +608,7 @@ describe("createTerminalTransportController", () => {
     const staleClosed: number[] = [];
     const activeSent: string[] = [];
     let connectionCount = 0;
+    const reconnected = Promise.withResolvers<void>();
     const bridge: TerminalBridge = {
       connect: (_onFrame, onStateChange) => {
         connectionCount += 1;
@@ -689,6 +618,7 @@ describe("createTerminalTransportController", () => {
             resolveFirst = resolve;
           });
         }
+        reconnected.resolve();
         return Promise.resolve({
           send: async (frame) => {
             activeSent.push(decodeTerminalProtocolFrame(frame).message.type);
@@ -709,7 +639,7 @@ describe("createTerminalTransportController", () => {
       },
     });
     await connecting;
-    await Bun.sleep(10);
+    await reconnected.promise;
     await controller.write(terminalId, new Uint8Array([1]));
 
     expect(staleClosed).toHaveLength(1);
@@ -722,6 +652,7 @@ describe("createTerminalTransportController", () => {
     const staleClosed: number[] = [];
     const activeSent: string[] = [];
     let connectionCount = 0;
+    const reconnected = Promise.withResolvers<void>();
     const bridge: TerminalBridge = {
       connect: async (_onFrame, onStateChange) => {
         connectionCount += 1;
@@ -734,6 +665,7 @@ describe("createTerminalTransportController", () => {
             },
           };
         }
+        reconnected.resolve();
         return {
           send: async (frame) => {
             activeSent.push(decodeTerminalProtocolFrame(frame).message.type);
@@ -745,7 +677,7 @@ describe("createTerminalTransportController", () => {
     const controller = createTerminalTransportController(bridge, () => undefined);
 
     await controller.connect();
-    await Bun.sleep(10);
+    await reconnected.promise;
     await controller.write(terminalId, new Uint8Array([1]));
 
     expect(staleClosed).toHaveLength(1);
@@ -1179,7 +1111,7 @@ describe("createTerminalTransportController", () => {
     expect(failures).toEqual(["terminal_forgotten"]);
   });
 
-  test("reattaches from the beginning when the terminal emulator is replaced", async () => {
+  test("reattaches from the beginning without the old grid when the terminal emulator is replaced", async () => {
     const sent: Uint8Array[] = [];
     const bridge: TerminalBridge = {
       connect: async () => ({
@@ -1192,22 +1124,29 @@ describe("createTerminalTransportController", () => {
     const controller = createTerminalTransportController(bridge, () => {});
     await controller.connect();
     const unsubscribe = controller.subscribe(terminalId, () => {});
-    await Promise.resolve();
+    await controller.resize(terminalId, 80, 24);
     await controller.acknowledge(terminalId, 41);
 
     controller.releaseEmulator(terminalId);
     unsubscribe();
     controller.subscribe(terminalId, () => {});
-    await Promise.resolve();
+    await controller.write(terminalId, new Uint8Array([1]));
 
-    const attachFrames = sent
-      .map((frame) => decodeTerminalProtocolFrame(frame).message)
-      .filter((message) => message.type === "attach");
-    expect(attachFrames.at(-1)).toEqual({
+    const messages = sent.map((frame) => decodeTerminalProtocolFrame(frame).message);
+    expect(messages.map(({ type }) => type)).toEqual([
+      "attach",
+      "resize",
+      "ack",
+      "detach",
+      "attach",
+      "input",
+    ]);
+    expect(messages[4]).toEqual({
       version: TERMINAL_PROTOCOL_VERSION,
       type: "attach",
       terminalId,
       lastConsumedSequence: null,
     });
+    await controller.dispose();
   });
 });

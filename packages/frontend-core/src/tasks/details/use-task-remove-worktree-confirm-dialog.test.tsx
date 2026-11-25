@@ -7,9 +7,11 @@ import { enableReactActEnvironment } from "../../test-support/react-act-environm
 import { createHookHarness } from "../../test-support/react-hook-harness";
 import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
+import { setupTestingLibraryFakeTimers } from "../../test-support/testing-library-fake-timers";
 import { useTaskRemoveWorktreeConfirmDialog } from "./use-task-remove-worktree-confirm-dialog";
 
 enableReactActEnvironment();
+setupTestingLibraryFakeTimers();
 
 const task = createTaskCardFixture({
   id: "TASK-1",
@@ -64,9 +66,7 @@ describe("useTaskRemoveWorktreeConfirmDialog", () => {
 
       await waitFor(() => expect(harness.getLatest().dialog.impact.uncommittedFileCount).toBe(4));
       // The loader also waits for the owner read, and it shows at least 500 ms.
-      await waitFor(() => expect(harness.getLatest().dialog.confirmDisabled).toBe(false), {
-        timeout: 1500,
-      });
+      await waitFor(() => expect(harness.getLatest().dialog.confirmDisabled).toBe(false));
       expect(harness.getLatest().isAvailable).toBe(true);
       expect(impactGet).toHaveBeenCalledTimes(2);
     } finally {

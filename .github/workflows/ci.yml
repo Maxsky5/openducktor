@@ -134,7 +134,7 @@ jobs:
     timeout-minutes: 20
     steps: *build-steps
 
-  # Each shard runs every workspace suite in sequence on a part of its test files.
+  # Every shard splits the large suites. The first shard runs the remaining workspaces.
   tests-linux:
     name: Tests (Linux, ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
@@ -148,9 +148,24 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: ./.github/actions/setup
+        id: setup
 
-      - name: Test workspaces
-        run: bun run scripts/test-shard.ts ${{ matrix.shard }}/${{ strategy.job-total }}
+      - name: Test frontend shard
+        working-directory: packages/frontend
+        run: bun run test --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+
+      - name: Test host shard
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        working-directory: packages/host
+        run: bun run test --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+
+      - name: Test script shard
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: bun run test:scripts --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+
+      - name: Test remaining workspaces
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.shard == 1 }}
+        run: bun run --sequential --no-exit-on-error --filter '*' --filter '!@openducktor/frontend' --filter '!@openducktor/host' test
 
   tests-macos:
     name: Tests (macOS, ${{ matrix.shard }}/${{ strategy.job-total }})

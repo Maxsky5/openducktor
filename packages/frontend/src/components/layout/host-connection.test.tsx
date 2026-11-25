@@ -330,28 +330,30 @@ test("starts host work only after connection and keeps host selection in navigat
       </nav>
     );
   }
-  const view = render(
-    <HostConnectionProvider
-      selection={{
-        target: { kind: "remote", endpoint: "https://host.test" },
-        localHost: null,
-        confirm: async (endpoint: string) => endpoint,
-        select: async () => {},
-        disconnect: async () => {},
-      }}
-      connection={{
-        readState: () => state,
-        subscribeState: (listener) => {
-          notify = listener;
-          return () => {};
-        },
-        connect: async () => {},
-        disconnect: async () => {},
-        retry: async () => {},
-      }}
-    >
-      <Work />
-    </HostConnectionProvider>,
+  const view = await act(async () =>
+    render(
+      <HostConnectionProvider
+        selection={{
+          target: { kind: "remote", endpoint: "https://host.test" },
+          localHost: null,
+          confirm: async (endpoint: string) => endpoint,
+          select: async () => {},
+          disconnect: async () => {},
+        }}
+        connection={{
+          readState: () => state,
+          subscribeState: (listener) => {
+            notify = listener;
+            return () => {};
+          },
+          connect: async () => {},
+          disconnect: async () => {},
+          retry: async () => {},
+        }}
+      >
+        <Work />
+      </HostConnectionProvider>,
+    ),
   );
   expect(view.getByRole("heading", { name: "Connecting to host" })).toBeDefined();
   expect(mount).not.toHaveBeenCalled();

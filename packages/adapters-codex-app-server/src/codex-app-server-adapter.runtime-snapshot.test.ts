@@ -1,8 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type {
-  CodexAppServerProtocolMessage,
-  CodexAppServerThreadStatus,
-} from "@openducktor/contracts";
+import type { CodexAppServerThreadStatus } from "@openducktor/contracts";
 import { type AgentEvent } from "@openducktor/core";
 import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import {
@@ -13,6 +10,7 @@ import {
   codexTurnFixture,
   codexUserMessageInput,
   createHarness,
+  createRuntimeStreamSubscription,
   defaultCodexEffectivePolicy,
   flushCodexAdapterWork,
   RecordingTransport,
@@ -203,28 +201,6 @@ class StoredIdleHistoryTransport extends RecordingTransport {
   }
 }
 
-class RestoredUsageStreamTransport extends StoredIdleHistoryTransport {
-  emitRestoredUsage: ((message: CodexAppServerProtocolMessage | undefined) => void) | null = null;
-
-  async request(request: CodexJsonRpcRequest) {
-    if (request.method === "thread/resume") {
-      const response = await super.request(request);
-      setTimeout(() => {
-        this.emitRestoredUsage?.({
-          method: "thread/tokenUsage/updated",
-          params: {
-            threadId: "thread-idle",
-            turnId: "turn-1",
-            tokenUsage: codexTokenUsageFixture(42_000),
-          },
-        });
-      }, 0);
-      return response;
-    }
-    return super.request(request);
-  }
-}
-
 const observeSessionState = async (
   adapter: CodexAppServerAdapter,
   externalSessionId: string,
@@ -406,14 +382,10 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
   });
 
   test("applies delayed live context usage to the retained session", async () => {
-    const transport = new RestoredUsageStreamTransport("runtime-live", false);
-    const subscribeEvents = mock((runtimeId: string, listener) => {
-      transport.emitRestoredUsage = (message) =>
-        listener(withRuntimeReceivedAt({ runtimeId, kind: "notification", message }));
-      return () => undefined;
-    });
+    const transport = new StoredIdleHistoryTransport("runtime-live", false);
+    const stream = createRuntimeStreamSubscription();
     const { adapter } = createHarness({
-      subscribeEvents,
+      subscribeEvents: stream.subscribeEvents,
       transportFactory: mock(() => transport),
     });
 
@@ -429,6 +401,14 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       }),
     ).resolves.toBeNull();
 
+    stream.emitNotification({
+      method: "thread/tokenUsage/updated",
+      params: {
+        threadId: "thread-idle",
+        turnId: "turn-1",
+        tokenUsage: codexTokenUsageFixture(42_000),
+      },
+    });
     await flushCodexAdapterWork();
     expect(adapter.listLiveSessionSnapshots("runtime-live")).toContainEqual(
       expect.objectContaining({

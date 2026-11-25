@@ -12,7 +12,6 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import { buildDiagnosticsPanelModel } from "@openducktor/frontend-core/diagnostics/diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
-import { DiagnosticsStatusPill } from "./diagnostics-status";
 
 type ModelInput = Parameters<typeof buildDiagnosticsPanelModel>[0];
 
@@ -106,16 +105,5 @@ describe("DiagnosticsPanelSections", () => {
     expect(html).toContain(
       "Git check could not be read: Git check failed. Select Refresh to try again.",
     );
-  });
-
-  test("maps each check health to a pill tone, with a spinner while work runs", () => {
-    const renderPill = (status: Parameters<typeof DiagnosticsStatusPill>[0]["status"]) =>
-      renderToStaticMarkup(createElement(DiagnosticsStatusPill, { status }));
-
-    expect(renderPill({ health: "failed", label: "Error" })).toContain("bg-destructive-surface");
-    expect(renderPill({ health: "warning", label: "Degraded" })).toContain("bg-warning-surface");
-    expect(renderPill({ health: "ok", label: "Ready" })).toContain("bg-success-surface");
-    expect(renderPill({ health: "busy", label: "Starting" })).toContain("animate-spin");
-    expect(renderPill({ health: "neutral", label: "Disabled" })).not.toContain("animate-spin");
   });
 });

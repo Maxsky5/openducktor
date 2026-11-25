@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionInfo, SessionInboxInfo, SessionMessageInfo, V2Event } from "@opencode/client";
+import { setImmediate } from "node:timers/promises";
 import { z } from "zod";
 import {
   AgentSessionMessageRefusedError,
@@ -2360,6 +2361,7 @@ describe("OpenCode V2 live observation", () => {
     const directory = "/repo/worktree";
     const installing = Promise.withResolvers<void>();
     const finishInstall = Promise.withResolvers<Response>();
+    const secondRead = Promise.withResolvers<void>();
     let nativeOverrideExists = false;
     let mcpAdds = 0;
     const fixture = prepareFixture(({ url, method }) => {
@@ -2374,13 +2376,17 @@ describe("OpenCode V2 live observation", () => {
         url.pathname === "/api/experimental/mcp/openducktor" &&
         url.searchParams.get("location[directory]") === directory
       ) {
-        nativeOverrideExists = true;
         mcpAdds++;
         installing.resolve();
-        return finishInstall.promise;
+        return finishInstall.promise.then((result) => {
+          nativeOverrideExists = true;
+          return result;
+        });
       }
-      if (method === "GET" && /^\/api\/session\/ses_worktree_[12]$/.test(url.pathname))
+      if (method === "GET" && /^\/api\/session\/ses_worktree_[12]$/.test(url.pathname)) {
+        if (url.pathname.endsWith("/ses_worktree_2")) secondRead.resolve();
         return response(session({ id: url.pathname.split("/").at(-1)!, location: { directory } }));
+      }
       if (
         url.pathname === "/api/location" &&
         url.searchParams.get("location[directory]") === directory
@@ -2399,10 +2405,17 @@ describe("OpenCode V2 live observation", () => {
       });
     try {
       const first = resume("ses_worktree_1");
+      void first.catch(() => undefined);
       await installing.promise;
-      const second = resume("ses_worktree_2");
-      // Let the second attach reach the already published native override.
-      await Bun.sleep(0);
+      let secondAdmitted = false;
+      const second = resume("ses_worktree_2").then((result) => {
+        secondAdmitted = true;
+        return result;
+      });
+      void second.catch(() => undefined);
+      await secondRead.promise;
+      await setImmediate();
+      expect(secondAdmitted).toBe(false);
       finishInstall.resolve(noContent());
       const results = await Promise.all([first, second]);
       expect(results.map((result) => result.externalSessionId)).toEqual([

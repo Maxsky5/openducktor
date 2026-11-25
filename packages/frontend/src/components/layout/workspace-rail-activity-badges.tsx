@@ -50,7 +50,7 @@ export function WorkspaceRailActivityBadges({
           )}
           title={badge.label}
         >
-          {badge.key === "active" ? <RunningStatusDot size="sm" /> : null}
+          {badge.key === "active" ? <RunningStatusDot /> : null}
           <span className="sr-only">{badge.label}</span>
         </span>
       ))}

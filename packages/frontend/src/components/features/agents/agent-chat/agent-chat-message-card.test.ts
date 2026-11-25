@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { render, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { historyToChatMessages } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-history-chat-messages";
 import {
   createCodexMessageCardTestProps,
   createMessageCardElement,
   LONG_TRANSCRIPT_SAMPLE,
-  renderMessageCardToHtml,
 } from "./agent-chat-message-card-test-harness";
 
 const parseUserMessageArticle = (html: string) => {
@@ -226,29 +226,8 @@ describe("AgentChatMessageCard messages", () => {
     expect(html).toContain("group-hover/message:opacity-100");
   });
 
-  test("does not render a copy button for streaming assistant rows", () => {
-    const html = renderToStaticMarkup(
-      createMessageCardElement({
-        message: {
-          id: "assistant-streaming",
-          role: "assistant",
-          content: "Still writing the answer",
-          timestamp: "2026-02-22T10:24:50.000Z",
-          meta: {
-            kind: "assistant",
-            agentRole: "planner",
-            isFinal: false,
-          },
-        },
-        isStreamingAssistantMessage: true,
-      }),
-    );
-
-    expect(html).not.toContain("copy-assistant-message-content");
-  });
-
-  test("renders streaming assistant open code fences through the chat markdown path", async () => {
-    const html = await renderMessageCardToHtml(
+  test("shows an open code block while an assistant reply streams and keeps message copy hidden", async () => {
+    const view = render(
       createMessageCardElement({
         message: {
           id: "assistant-streaming-open-fence",
@@ -265,9 +244,10 @@ describe("AgentChatMessageCard messages", () => {
       }),
     );
 
-    expect(html).toContain("markdown-body");
-    expect(html).toContain("const value = 1;");
-    expect(html).not.toContain("copy-assistant-message-content");
+    await waitFor(() =>
+      expect(view.container.querySelector("pre code")?.textContent).toContain("const value = 1;"),
+    );
+    expect(view.queryByTestId("copy-assistant-message-content")).toBeNull();
   });
 
   test("does not render a copy button for whitespace-only assistant rows", () => {
@@ -282,26 +262,6 @@ describe("AgentChatMessageCard messages", () => {
             kind: "assistant",
             agentRole: "planner",
             isFinal: true,
-          },
-        },
-      }),
-    );
-
-    expect(html).not.toContain("copy-assistant-message-content");
-  });
-
-  test("does not render a copy button for reasoning rows", async () => {
-    const html = await renderMessageCardToHtml(
-      createMessageCardElement({
-        message: {
-          id: "thinking-no-copy",
-          role: "thinking",
-          content: "Inspect the **diff** before applying.",
-          timestamp: "2026-02-22T10:25:00.000Z",
-          meta: {
-            kind: "reasoning",
-            partId: "part-thinking-no-copy",
-            completed: true,
           },
         },
       }),

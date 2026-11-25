@@ -41,7 +41,6 @@ import {
   createSelectedSessionTranscriptStateFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
-  enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 import { TEST_ROLE_OPTIONS as ROLE_OPTIONS } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { buildRoleLabelByRole } from "./agents-page-view-model";
@@ -49,8 +48,6 @@ import {
   type AgentStudioSelectedSessionContextInput,
   buildAgentStudioSelectedSessionContext,
 } from "./selected-session/selected-session-context";
-
-enableReactActEnvironment();
 
 // A load in a test hook counts against the 1000 ms limit of the hook.
 const { useAgentStudioPageModels } = await import("./use-agent-studio-page-models");
@@ -1083,7 +1080,7 @@ describe("useAgentStudioPageModels", () => {
     const notice = harness.getLatest().agentChatModel.thread.transcript.notice;
     expect(notice?.title).toBe("History may be incomplete");
     expect(notice?.action?.label).toBe("Retry");
-    notice?.action?.onAction();
+    await act(async () => notice?.action?.onAction());
     expect(loadAgentSessionHistory).toHaveBeenCalledWith(toAgentSessionIdentity(loadedSession));
 
     await harness.unmount();

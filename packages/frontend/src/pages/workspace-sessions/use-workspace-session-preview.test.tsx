@@ -1,5 +1,6 @@
 import { expect, mock, test } from "bun:test";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { useState } from "react";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
 import {
@@ -8,6 +9,8 @@ import {
 } from "@/components/layout/workspace-preview-transition-guard";
 import { useWorkspaceSessionPreview } from "./use-workspace-session-preview";
 import { useVisibleSessionId } from "./use-visible-session-id";
+
+setupTestingLibraryFakeTimers();
 
 const firstFile = { rootPath: "/repo", relativePath: "first.ts" };
 const secondFile = { rootPath: "/repo", relativePath: "second.ts" };

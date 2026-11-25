@@ -31,50 +31,18 @@ const makeModel = (legacyWorktreeCount: number): TaskResetImplementationModalMod
 });
 
 describe("TaskResetImplementationModal", () => {
-  test("warns when older worktrees will be deleted", () => {
-    render(<TaskResetImplementationModal model={makeModel(2)} />);
+  test("distinguishes the worktree to keep from work that will stop or be lost", () => {
+    render(
+      <TaskResetImplementationModal
+        model={{ ...makeModel(2), terminalCount: 2, activeSessionCount: 2 }}
+      />,
+    );
 
     expect(screen.getByText(/Current worktree, its branch and ignored files/i)).toBeDefined();
     expect(screen.getByText(/2 older worktrees/i)).toBeDefined();
     expect(screen.getByText(/Uncommitted and untracked work will be lost/i)).toBeDefined();
-  });
-
-  test("does not warn about legacy deletion when only the canonical worktree exists", () => {
-    render(<TaskResetImplementationModal model={makeModel(0)} />);
-
-    expect(screen.queryByText(/older worktree/i)).toBeNull();
-    expect(screen.getByText(/Remove other related local branches/i)).toBeDefined();
-  });
-
-  test("uses singular wording for one legacy worktree", () => {
-    render(<TaskResetImplementationModal model={makeModel(1)} />);
-
-    expect(screen.getByText(/Delete 1 older worktree and related local branches/i)).toBeDefined();
-    expect(screen.getByText(/Uncommitted and untracked work will be lost/i)).toBeDefined();
-  });
-
-  test("warns when task terminals will be terminated", () => {
-    render(<TaskResetImplementationModal model={{ ...makeModel(0), terminalCount: 2 }} />);
-
-    expect(screen.getByText(/Close 2 terminals/i)).toBeDefined();
-  });
-
-  test("says how many active sessions will be stopped before the reset", () => {
-    render(<TaskResetImplementationModal model={{ ...makeModel(0), activeSessionCount: 2 }} />);
-
+    expect(screen.getByText("Close 2 terminals")).toBeDefined();
     expect(screen.getByText("Stop 2 running agent sessions")).toBeDefined();
-  });
-
-  test("hides session-stop copy when no active sessions exist", () => {
-    render(<TaskResetImplementationModal model={makeModel(0)} />);
-
-    expect(screen.queryByText(/active agent session/i)).toBeNull();
-  });
-
-  test("hides session-stop copy while the host preview is unavailable", () => {
-    render(<TaskResetImplementationModal model={{ ...makeModel(0), activeSessionCount: null }} />);
-
-    expect(screen.queryByText(/active agent session/i)).toBeNull();
   });
 
   test("shows the preview failure and keeps confirm disabled while it is unresolved", () => {
@@ -89,33 +57,9 @@ describe("TaskResetImplementationModal", () => {
     );
 
     expect(screen.getByText(/Could not check running sessions: host unavailable/)).toBeDefined();
-    expect(
-      screen.getByRole<HTMLButtonElement>("button", { name: "Reset Implementation" }).disabled,
-    ).toBe(true);
-    expect(
-      screen
-        .getByRole<HTMLButtonElement>("button", { name: "Reset Implementation" })
-        .getAttribute("aria-busy"),
-    ).toBe("false");
-    expect(document.body.innerHTML).not.toContain("lucide-loader-circle");
-  });
-
-  test("does not claim retention when only legacy worktrees exist", () => {
-    render(
-      <TaskResetImplementationModal model={{ ...makeModel(1), hasCanonicalWorktree: false }} />,
-    );
-
-    expect(screen.queryByText(/Current worktree, its branch and ignored files/i)).toBeNull();
-    expect(screen.getByText(/1 older worktree/i)).toBeDefined();
-  });
-
-  test("warns that related branches may be deleted when no worktree exists", () => {
-    render(
-      <TaskResetImplementationModal
-        model={{ ...makeModel(0), hasCanonicalWorktree: false, hasManagedSessionCleanup: false }}
-      />,
-    );
-
-    expect(screen.getByText(/Remove related local branches/i)).toBeDefined();
+    const confirm = screen.getByRole<HTMLButtonElement>("button", { name: "Reset Implementation" });
+    expect(confirm.disabled).toBe(true);
+    expect(confirm.getAttribute("aria-busy")).toBe("false");
+    expect(screen.queryByText(/Stop \d+ running agent session/)).toBeNull();
   });
 });

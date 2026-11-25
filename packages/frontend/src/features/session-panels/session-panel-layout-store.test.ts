@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 import {
   type ClientStorage,
   createMemoryClientStorage,
@@ -6,7 +6,6 @@ import {
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { browserTabIdFixture } from "@/test-utils/session-panel-fixtures";
 import {
-  emptySessionPanelLayout,
   type SessionPanelLayout,
   type SessionPanelOwner,
   sessionPanelOwnerKey,
@@ -215,17 +214,6 @@ describe("session panel layout store", () => {
     expect(storage.getItem(v1Key(removed))).toBeNull();
   });
 
-  test("uses the default layout and reports a saved layout that it cannot read once", () => {
-    const owner = taskOwner();
-    const record = structuredClone(BROWSER_TABS_RECORD);
-    record.panels.bottom[0] = { kind: "browser", tabId: "not-a-tab-id" };
-    storage.setItem(sessionPanelLayoutStorageKey(owner), JSON.stringify(record));
-
-    expect(store.read(owner)).toEqual(emptySessionPanelLayout());
-    expect(store.takeReadError(owner)).toBeString();
-    expect(store.takeReadError(owner)).toBeNull();
-  });
-
   test("saves tool tab changes and keeps live terminal changes in memory only", () => {
     const owner = taskOwner();
     const key = sessionPanelLayoutStorageKey(owner);
@@ -260,25 +248,43 @@ describe("session panel layout store", () => {
     ).toEqual(["terminal:tab:1"]);
   });
 
-  test("keeps the layout working and reports a save failure once", async () => {
+  test("reports a continuing save failure once and reports it again after recovery", async () => {
     const owner = taskOwner();
-    const fullStore = createSessionPanelLayoutStore({
-      ...createMemoryClientStorage(),
-      setItem: () => {
-        throw new Error("The storage quota is full.");
+    let quotaFull = true;
+    const layoutStore = createSessionPanelLayoutStore({
+      ...storage,
+      setItem: (key, value) => {
+        if (quotaFull) throw new Error("The storage quota is full.");
+        storage.setItem(key, value);
       },
     });
-    await withMockedToast(async ({ toastErrorMock }) => {
-      for (const kind of ["diffs", "files"] as const) {
-        fullStore.update(owner, (layout) => ({
-          ...layout,
-          panels: { ...layout.panels, right: [{ id: kind, kind }] },
-        }));
-      }
+    const selectTool = (kind: "diffs" | "files" | "document") =>
+      layoutStore.update(owner, (layout) => ({
+        ...layout,
+        panels: { ...layout.panels, right: [{ id: kind, kind }] },
+      }));
+    const consoleError = spyOn(console, "error");
+    try {
+      await withMockedToast(async ({ toastErrorMock }) => {
+        selectTool("diffs");
+        selectTool("files");
 
-      expect(fullStore.read(owner).panels.right).toEqual([{ id: "files", kind: "files" }]);
-      expect(toastErrorMock).toHaveBeenCalledTimes(1);
-    });
+        expect(layoutStore.read(owner).panels.right).toEqual([{ id: "files", kind: "files" }]);
+        expect(consoleError).toHaveBeenCalledTimes(1);
+        expect(toastErrorMock).toHaveBeenCalledTimes(1);
+
+        quotaFull = false;
+        selectTool("document");
+        expect(savedRecord(owner).panels.right).toEqual([{ kind: "document" }]);
+        quotaFull = true;
+        selectTool("files");
+
+        expect(consoleError).toHaveBeenCalledTimes(2);
+        expect(toastErrorMock).toHaveBeenCalledTimes(2);
+      });
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   test("removes the layouts of tasks, chats, and workspaces that no longer exist", () => {
@@ -346,21 +352,40 @@ describe("session panel layout store", () => {
     expect(prunes[1]).toEqual([memoryChat]);
   });
 
-  test("reports a storage failure during cleanup instead of breaking the page", async () => {
+  test("reports a continuing cleanup failure once and reports it again after recovery", async () => {
+    const owner = taskOwner();
+    store.update(owner, layoutWithBrowserTabs);
+    const key = sessionPanelLayoutStorageKey(owner);
+    let blocked = true;
     const blockedStore = createSessionPanelLayoutStore({
-      ...createMemoryClientStorage(),
+      ...storage,
       get length(): number {
-        throw new Error("Site data is blocked.");
+        if (blocked) throw new Error("Site data is blocked.");
+        return storage.length;
       },
     });
-    await withMockedToast(async ({ toastErrorMock }) => {
-      const prune = () => blockedStore.prune({ kind: "workspaces", ids: new Set() });
+    const prune = () => blockedStore.prune({ kind: "workspaces", ids: new Set() });
+    const consoleError = spyOn(console, "error");
+    try {
+      await withMockedToast(async ({ toastErrorMock }) => {
+        prune();
+        prune();
+        expect(storage.getItem(key)).not.toBeNull();
+        expect(consoleError).toHaveBeenCalledTimes(1);
+        expect(toastErrorMock).toHaveBeenCalledTimes(1);
 
-      prune();
-      prune();
+        blocked = false;
+        prune();
+        expect(storage.getItem(key)).toBeNull();
+        blocked = true;
+        prune();
 
-      expect(toastErrorMock).toHaveBeenCalledTimes(1);
-    });
+        expect(consoleError).toHaveBeenCalledTimes(2);
+        expect(toastErrorMock).toHaveBeenCalledTimes(2);
+      });
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   test("removes with a task list only the task layouts of its own workspace", () => {

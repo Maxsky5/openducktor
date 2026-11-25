@@ -19,7 +19,7 @@ export function readBuildTarget(variable: string, value: string | undefined): Bu
  * and the other files keep the Cloudflare default, which checks them again at each visit, so one
  * publication never mixes old pages with new assets.
  */
-export const ASSET_CACHE = "public, max-age=31556952, immutable";
+const ASSET_CACHE = "public, max-age=31556952, immutable";
 
 /**
  * The Content-Security-Policy of the pages. The pages load each file from their own origin only,
@@ -27,7 +27,7 @@ export const ASSET_CACHE = "public, max-age=31556952, immutable";
  * `'unsafe-inline'`: a static export cannot give a nonce, and the inline scripts change on each
  * page. The style sheets use `data:` SVG images.
  */
-export const CONTENT_SECURITY_POLICY = [
+const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",

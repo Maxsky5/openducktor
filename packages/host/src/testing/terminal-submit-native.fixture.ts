@@ -5,7 +5,12 @@ import { createTerminalSessionEngine } from "../application/terminals/terminal-s
 import { createTerminalLaunchEnvironment } from "../infrastructure/terminals/terminal-launch-environment";
 import type { TerminalNativeFixture } from "./terminal-action-native.fixture";
 
-export async function checkSubmit({ root, shell, wait }: TerminalNativeFixture) {
+export async function checkSubmit({
+  root,
+  shell,
+  wait,
+  notifyTerminalChange,
+}: TerminalNativeFixture) {
   const environment = createTerminalLaunchEnvironment({
     readEnv: () => ({
       HOME: root,
@@ -16,7 +21,12 @@ export async function checkSubmit({ root, shell, wait }: TerminalNativeFixture) 
     }),
     readUserShell: () => shell,
   });
-  for (const [id, lines, prompt, rejected] of [
+  const engine = createTerminalSessionEngine({
+    hostInstanceId: "native-test-host",
+    now: () => new Date(),
+    ptyPort: createNodePtyPort(),
+  });
+  const submissions = [
     ["initial", ["print ACTION_SUBMITTED"], 1, true],
     ["next", ["print FIRST_LINE", "print ACTION_SUBMITTED"], 2, true],
     ["last", ["print FIRST_LINE", "print ACTION_SUBMITTED"], 3, false],
@@ -26,17 +36,14 @@ export async function checkSubmit({ root, shell, wait }: TerminalNativeFixture) 
       null,
       false,
     ],
-  ] as const) {
-    const engine = createTerminalSessionEngine({
-      hostInstanceId: "native-test-host",
-      now: () => new Date(),
-      ptyPort: createNodePtyPort(),
-    });
-    let output = "";
-    let input: "accepted" | "rejected" | null = null;
-    let message = "";
-    let typed = false;
-    try {
+  ] as const;
+  try {
+    for (const [id, lines, prompt, rejected] of submissions) {
+      let output = "";
+      let input: "accepted" | "rejected" | null = null;
+      let message = "";
+      let typed = false;
+      const exited = Promise.withResolvers<void>();
       const plans = await Effect.runPromise(environment.command(lines));
       const grid = { columns: 120, rows: 24 };
       const action = await Effect.runPromise(
@@ -64,8 +71,10 @@ export async function checkSubmit({ root, shell, wait }: TerminalNativeFixture) 
           attachmentId: id,
           lastConsumedSequence: 0,
           sink: (event, data) => {
+            if (event.type === "lifecycle" && event.lifecycle === "exited") exited.resolve();
             if (event.type !== "output") return;
             output += new TextDecoder().decode(data);
+            notifyTerminalChange();
             const ready =
               prompt === null
                 ? output.includes("INPUT_READY\r\n")
@@ -82,6 +91,7 @@ export async function checkSubmit({ root, shell, wait }: TerminalNativeFixture) 
               ).then((result) => {
                 input = result._tag === "Failure" ? "rejected" : "accepted";
                 if (result._tag === "Failure") message = result.failure.message;
+                notifyTerminalChange();
               });
             }
           },
@@ -97,8 +107,12 @@ export async function checkSubmit({ root, shell, wait }: TerminalNativeFixture) 
       await wait(() => output.includes("AFTER_SUBMIT\r\n"));
       assert.equal(output.includes("INPUT_RACED\r\n"), !rejected && prompt !== null, output);
       if (prompt === null) assert.ok(output.includes("REPLY=answer\r\n"), output);
-    } finally {
-      await Effect.runPromise(engine.dispose());
+      await Effect.runPromise(engine.write(id, new TextEncoder().encode("exit\r")));
+      await Effect.runPromise(
+        Effect.promise(() => exited.promise).pipe(Effect.timeout("2 seconds")),
+      );
     }
+  } finally {
+    await Effect.runPromise(engine.dispose());
   }
 }

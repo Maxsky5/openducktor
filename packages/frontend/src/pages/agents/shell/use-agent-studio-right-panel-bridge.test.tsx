@@ -5,13 +5,10 @@ import {
   createAgentSessionFixture,
   createSelectedSessionTranscriptStateFixture,
   createTaskCardFixture,
-  enableReactActEnvironment,
 } from "../agent-studio-test-utils";
 import { createSessionPanelFixture } from "@/test-utils/session-panel-fixtures";
 import { createBuildToolsFixture } from "./agents-page-build-tools.test-support";
 import { useAgentStudioRightPanelBridge } from "./use-agent-studio-right-panel-bridge";
-
-enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioRightPanelBridge>[0];
 

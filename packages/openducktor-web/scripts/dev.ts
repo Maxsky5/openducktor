@@ -9,14 +9,6 @@ import {
 } from "@openducktor/remote-host/effect/web-errors";
 
 type ManagedWebProcess = Bun.Subprocess<"ignore", "inherit", "inherit">;
-type ProcessKeepAliveDependencies = {
-  scheduleInterval: (callback: () => void, durationMs: number) => () => void;
-};
-
-const scheduleInterval = (callback: () => void, durationMs: number): (() => void) => {
-  const intervalId = setInterval(callback, durationMs);
-  return () => clearInterval(intervalId);
-};
 
 const scriptPath = fileURLToPath(import.meta.url);
 const packageRoot = path.resolve(path.dirname(scriptPath), "..");
@@ -52,60 +44,13 @@ const waitForProcessExitEffect = (
     return exited;
   });
 
-export const shouldDetachWebProcessGroup = (
-  platform: NodeJS.Platform = process.platform,
-): boolean => platform !== "win32";
-
-export const resolveWebCliStopSignal = (
-  platform: NodeJS.Platform = process.platform,
-): NodeJS.Signals => (platform === "win32" ? "SIGTERM" : "SIGINT");
-
-export const buildWebDevCommand = (args: readonly string[], nodeExecutable = "node"): string[] => [
-  nodeExecutable,
-  "dist/cli.js",
-  "--workspace",
-  ...args,
-];
-
-export const buildWebDevProcessEnvironment = (
-  env: NodeJS.ProcessEnv = process.env,
-): NodeJS.ProcessEnv => ({
-  ...env,
-  FORCE_COLOR: env.FORCE_COLOR ?? "1",
-});
-
 const keepWebDevProcessAliveDuringEffect = <T, E>(
   operation: Effect.Effect<T, E>,
-  dependencies: ProcessKeepAliveDependencies = {
-    scheduleInterval,
-  },
 ): Effect.Effect<T, E> =>
   Effect.acquireUseRelease(
-    Effect.sync(() => dependencies.scheduleInterval(() => {}, WEB_SHUTDOWN_KEEP_ALIVE_INTERVAL_MS)),
+    Effect.sync(() => setInterval(() => {}, WEB_SHUTDOWN_KEEP_ALIVE_INTERVAL_MS)),
     () => operation,
-    (cancelInterval) => Effect.sync(cancelInterval),
-  );
-
-export const keepWebDevProcessAliveDuring = <T>(
-  operation: Promise<T>,
-  dependencies: ProcessKeepAliveDependencies = {
-    scheduleInterval,
-  },
-): Promise<T> =>
-  runWebBoundary(
-    keepWebDevProcessAliveDuringEffect(
-      Effect.tryPromise({
-        try: () => operation,
-        catch: (cause) =>
-          new WebDependencyError({
-            dependency: "web-dev-operation",
-            operation: "keep-process-alive",
-            message: errorMessage(cause),
-            cause,
-          }),
-      }),
-      dependencies,
-    ),
+    (interval) => Effect.sync(() => clearInterval(interval)),
   );
 
 const startWebCliEffect = (
@@ -113,12 +58,12 @@ const startWebCliEffect = (
 ): Effect.Effect<ManagedWebProcess, WebDependencyError> =>
   Effect.try({
     try: () =>
-      Bun.spawn(buildWebDevCommand(args), {
+      Bun.spawn(["node", "dist/cli.js", "--workspace", ...args], {
         cwd: packageRoot,
-        detached: shouldDetachWebProcessGroup(),
+        detached: process.platform !== "win32",
         stdout: "inherit",
         stderr: "inherit",
-        env: buildWebDevProcessEnvironment(),
+        env: { ...process.env, FORCE_COLOR: process.env.FORCE_COLOR ?? "1" },
       }),
     catch: (cause) =>
       new WebDependencyError({
@@ -138,7 +83,7 @@ const stopWebCliEffect = (
       return;
     }
 
-    const signal = resolveWebCliStopSignal();
+    const signal = process.platform === "win32" ? "SIGTERM" : "SIGINT";
     yield* Effect.try({
       try: () => webCli.kill(signal),
       catch: (cause) =>

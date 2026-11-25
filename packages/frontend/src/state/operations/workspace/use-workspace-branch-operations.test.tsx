@@ -4,7 +4,6 @@ import type { HostClient } from "@openducktor/host-client";
 import { QueryObserver } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
 import { toast } from "sonner";
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createTestClientConnection,
@@ -17,9 +16,7 @@ import {
 import { gitQueryKeys } from "@openducktor/frontend-core/queries/git";
 import { useWorkspaceBranchOperations } from "./use-workspace-branch-operations";
 import { QueryProvider } from "@/test-utils/query-provider";
-import { createDeferred, createWorkspaceHostClient, flush } from "./workspace-hook-test-fixtures";
-
-enableReactActEnvironment();
+import { createWorkspaceHostClient, flush } from "./workspace-hook-test-fixtures";
 
 let workspaceHost = createWorkspaceHostClient();
 
@@ -94,7 +91,7 @@ const createBranchHarness = (initialArgs: BranchHarnessArgs, client: Partial<Hos
 describe("use-workspace-branch-operations", () => {
   test("shows the cached branch on return and reads an external change within the stale time", async () => {
     let branch = "main";
-    const pending = createDeferred<GitCurrentBranch>();
+    const pending = Promise.withResolvers<GitCurrentBranch>();
     const read = mock(async (): Promise<GitCurrentBranch> => ({ name: branch, detached: false }));
     workspaceHost.gitGetCurrentBranch = read;
     workspaceHost.gitGetBranches = mock(async () => [
@@ -225,8 +222,8 @@ describe("use-workspace-branch-operations", () => {
   });
 
   test("shows loading only while an uncached first load is pending", async () => {
-    const currentBranchDeferred = createDeferred<{ name: string; detached: boolean }>();
-    const branchesDeferred = createDeferred<GitBranch[]>();
+    const currentBranchDeferred = Promise.withResolvers<{ name: string; detached: boolean }>();
+    const branchesDeferred = Promise.withResolvers<GitBranch[]>();
     workspaceHost.gitGetCurrentBranch = mock(async () => currentBranchDeferred.promise);
     workspaceHost.gitGetBranches = mock(async () => branchesDeferred.promise);
     const harness = createBranchHarness({ activeRepo: "/repo-a" });
@@ -540,9 +537,8 @@ describe("use-workspace-branch-operations", () => {
   });
 
   test("keeps cached branch data visible during a forced refresh", async () => {
-    const currentBranchDeferred = createDeferred<{ name: string; detached: boolean }>();
-    const branchesDeferred =
-      createDeferred<Array<{ name: string; isCurrent: boolean; isRemote: boolean }>>();
+    const currentBranchDeferred = Promise.withResolvers<{ name: string; detached: boolean }>();
+    const branchesDeferred = Promise.withResolvers<GitBranch[]>();
     const gitGetCurrentBranch = mock(async () => ({ name: "main", detached: false }));
     gitGetCurrentBranch.mockImplementationOnce(async () => ({ name: "main", detached: false }));
     gitGetCurrentBranch.mockImplementationOnce(async () => currentBranchDeferred.promise);
@@ -609,9 +605,8 @@ describe("use-workspace-branch-operations", () => {
   });
 
   test("keeps a successful branch switch authoritative over an older forced refresh", async () => {
-    const currentBranchDeferred = createDeferred<{ name: string; detached: boolean }>();
-    const branchesDeferred =
-      createDeferred<Array<{ name: string; isCurrent: boolean; isRemote: boolean }>>();
+    const currentBranchDeferred = Promise.withResolvers<{ name: string; detached: boolean }>();
+    const branchesDeferred = Promise.withResolvers<GitBranch[]>();
     const mainBranches = [
       {
         name: "main",
@@ -705,7 +700,7 @@ describe("use-workspace-branch-operations", () => {
   });
 
   test("clears switching state when a cached refresh overlaps a branch switch", async () => {
-    const switchDeferred = createDeferred<GitCurrentBranch>();
+    const switchDeferred = Promise.withResolvers<GitCurrentBranch>();
     const mainBranches: GitBranch[] = [
       { name: "main", isCurrent: true, isRemote: false },
       { name: "feature", isCurrent: false, isRemote: false },
@@ -762,7 +757,7 @@ describe("use-workspace-branch-operations", () => {
   });
 
   test("updates an inactive repository cache after its branch switch succeeds", async () => {
-    const switchDeferred = createDeferred<GitCurrentBranch>();
+    const switchDeferred = Promise.withResolvers<GitCurrentBranch>();
     const mainBranches: GitBranch[] = [
       { name: "main", isCurrent: true, isRemote: false },
       { name: "feature", isCurrent: false, isRemote: false },
@@ -817,8 +812,8 @@ describe("use-workspace-branch-operations", () => {
   });
 
   test("keeps each repository locked while its branch switch is pending", async () => {
-    const repoASwitch = createDeferred<GitCurrentBranch>();
-    const repoBSwitch = createDeferred<GitCurrentBranch>();
+    const repoASwitch = Promise.withResolvers<GitCurrentBranch>();
+    const repoBSwitch = Promise.withResolvers<GitCurrentBranch>();
     const gitSwitchBranch = mock(async (repoPath: string, branchName: string) => {
       if (repoPath === "/repo-a") {
         return repoASwitch.promise;
@@ -877,7 +872,7 @@ describe("use-workspace-branch-operations", () => {
   });
 
   test("ignores stale refresh results after the active repository changes", async () => {
-    const currentBranchDeferred = createDeferred<{ name: string | undefined; detached: boolean }>();
+    const currentBranchDeferred = Promise.withResolvers<GitCurrentBranch>();
     workspaceHost.gitGetCurrentBranch = mock(async (repoPath: string) => {
       if (repoPath === "/repo-a") {
         return currentBranchDeferred.promise;
@@ -935,7 +930,7 @@ describe("use-workspace-branch-operations", () => {
   });
 
   test("propagates refresh failures after the active repository changes", async () => {
-    const currentBranchDeferred = createDeferred<GitCurrentBranch>();
+    const currentBranchDeferred = Promise.withResolvers<GitCurrentBranch>();
     const refreshError = new Error("branch read failed");
     workspaceHost.gitGetCurrentBranch = mock(async () => currentBranchDeferred.promise);
     workspaceHost.gitGetBranches = mock(async () => []);

@@ -4,10 +4,7 @@ import {
   listAgentSessions,
   replaceAgentSession,
 } from "../agent-session-collection";
-import {
-  createDeferred as createSharedDeferred,
-  createTaskCardFixture as createSharedTaskCardFixture,
-} from "../../test-support/shared-test-fixtures";
+import { createTaskCardFixture as createSharedTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import type { AgentSessionState } from "../../types/agent-orchestrator";
 import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
@@ -16,8 +13,6 @@ const ORCHESTRATOR_TASK_CARD_DEFAULTS: Partial<TaskCard> = {
   updatedAt: "2026-02-22T08:00:00.000Z",
   createdAt: "2026-02-22T08:00:00.000Z",
 };
-
-export const createDeferred = createSharedDeferred;
 
 export const createTaskCardFixture = (overrides: Partial<TaskCard> = {}): TaskCard =>
   createSharedTaskCardFixture(ORCHESTRATOR_TASK_CARD_DEFAULTS, overrides);

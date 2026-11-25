@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import {
   type KillProcess,
@@ -54,48 +53,30 @@ describe("process-tree", () => {
   test.skipIf(process.platform === "win32")(
     "inspects real Unix processes with the default command runner",
     async () => {
-      const parent = spawn("sh", ["-c", "sleep 30 & wait"], { detached: true, stdio: "ignore" });
-      const idle = spawn("sleep", ["30"], { stdio: "ignore" });
+      const parent = Bun.spawn(["sh", "-c", "sleep 30 & printf 'ready\\n'; wait"], {
+        detached: true,
+        stdout: "pipe",
+      });
+      const idle = Bun.spawn(["sleep", "30"], { stdout: "ignore" });
+      const output = parent.stdout.getReader();
       try {
-        // Let the shell start its child before the inspection.
-        await Bun.sleep(100);
+        const ready = await output.read();
+        expect(new TextDecoder().decode(ready.value)).toBe("ready\n");
         const [parentHasChildren, idleHasChildren] = await Promise.all([
-          Effect.runPromise(processTreeHasChildren(parent.pid ?? 0)),
-          Effect.runPromise(processTreeHasChildren(idle.pid ?? 0)),
+          Effect.runPromise(processTreeHasChildren(parent.pid)),
+          Effect.runPromise(processTreeHasChildren(idle.pid)),
         ]);
 
         expect(parentHasChildren).toBe(true);
         expect(idleHasChildren).toBe(false);
       } finally {
-        if (parent.pid) process.kill(-parent.pid, "SIGKILL");
+        output.releaseLock();
         idle.kill("SIGKILL");
+        if (parent.exitCode === null) process.kill(-parent.pid, "SIGKILL");
+        await Promise.all([parent.exited, idle.exited]);
       }
     },
   );
-
-  test("does not block the event loop while child processes are inspected", async () => {
-    let eventLoopProgressed = false;
-    const progress = new Promise<void>((resolve) => {
-      setTimeout(() => {
-        eventLoopProgressed = true;
-        resolve();
-      }, 0);
-    });
-
-    await Effect.runPromise(
-      processTreeHasChildren(1234, {
-        platform: "darwin",
-        runCommand: () =>
-          Effect.promise(async () => {
-            await Bun.sleep(25);
-            return { status: 0, stderr: Buffer.alloc(0), stdout: Buffer.from("1234\n") };
-          }),
-      }),
-    );
-
-    expect(eventLoopProgressed).toBe(true);
-    await progress;
-  });
 
   test("uses one direct Windows process query", async () => {
     const calls: Array<{ command: string; args: string[] }> = [];

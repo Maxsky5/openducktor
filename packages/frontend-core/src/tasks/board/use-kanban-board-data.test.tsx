@@ -16,7 +16,6 @@ import { agentSessionQueryKeys } from "../../queries/agent-sessions";
 import { workspaceQueryKeys } from "../../queries/workspace";
 import { createHookHarness } from "../../test-support/react-hook-harness";
 import {
-  createDeferred,
   createSettingsSnapshotFixture,
   createTaskCardFixture,
 } from "../../test-support/shared-test-fixtures";
@@ -142,7 +141,7 @@ describe("useKanbanBoardData", () => {
   });
 
   test("loads in the foreground until the first settings read ends", async () => {
-    const settings = createDeferred<SettingsSnapshot>();
+    const settings = Promise.withResolvers<SettingsSnapshot>();
     const { harness } = renderBoardData([createTaskCardFixture()], () => settings.promise);
     try {
       await harness.mount();

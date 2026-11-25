@@ -109,7 +109,7 @@ test("detaches a hidden terminal and catches it up when it shows again", async (
     </QueryProvider>
   );
   await controller.connect();
-  const view = render(content(true));
+  const view = await act(async () => render(content(true)));
   try {
     await waitFor(() => {
       expect(view.getByRole("application").classList.contains("invisible")).toBe(false);
@@ -117,7 +117,7 @@ test("detaches a hidden terminal and catches it up when it shows again", async (
     const screen = view.container.querySelector(".xterm-screen");
     expect(view.container.querySelectorAll(".xterm-screen")).toHaveLength(1);
 
-    view.rerender(content(false));
+    await act(async () => view.rerender(content(false)));
     expect(view.container.querySelector(".xterm-screen") === screen).toBe(true);
     await waitFor(() => expect(sentTypes).toContain("detach"));
 
@@ -140,7 +140,7 @@ test("detaches a hidden terminal and catches it up when it shows again", async (
     await act(async () => sendOutput());
     expect(sentTypes).not.toContain("ack");
 
-    view.rerender(content(true));
+    await act(async () => view.rerender(content(true)));
     await waitFor(() => expect(sentTypes).toEqual(["attach", "detach", "attach"]));
     await act(async () => sendOutput());
     await waitFor(() => expect(sentTypes).toContain("ack"));

@@ -4,7 +4,7 @@ import webKnipConfig from "./packages/openducktor-web/knip.config";
 export default {
   workspaces: {
     ".": {
-      entry: [".agents/skills/pr-spotlight/scripts/render.ts", "scripts/test-support/*.test.ts"],
+      entry: [".agents/skills/pr-spotlight/scripts/render.ts"],
     },
     "apps/docs-website": {
       entry: ["app/**/*.{ts,tsx}", "scripts/*.ts", "tests/*.test.ts", "browser-tests/*.ts"],
@@ -53,7 +53,11 @@ export default {
     },
     "packages/frontend": {
       // The startup splash plugin reads the font faces as text.
-      entry: ["src/**/*.test.{ts,tsx}", "src/fonts/faces.css"],
+      entry: [
+        "src/**/*.test.{ts,tsx}",
+        "src/features/browser/browser-tab-content.fixture.tsx",
+        "src/fonts/faces.css",
+      ],
       project: ["src/**/*.{ts,tsx,css}"],
     },
     "packages/product-scenes": {

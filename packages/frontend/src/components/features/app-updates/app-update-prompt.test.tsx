@@ -1,3 +1,4 @@
+import type { ShellBridge } from "@/lib/shell-bridge";
 import { withShellPlatform } from "@/test-utils/focused-fixture";
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -7,6 +8,12 @@ import { createFakeAppUpdateBridge, createTestShellBridge } from "./app-update-t
 
 const longUpdateError =
   "OpenDucktor could not read latest-mac.yml for release v0.4.3. Make sure the GitHub release is published and includes the Electron updater metadata asset, then try again. https://github.com/Maxsky5/openducktor/releases/download/v0.4.3/latest-mac.yml x-github-request-id-4BDD-2F6204-154326FB-1101F3BB-6A501D61";
+
+const renderPrompt = async (shellPlatform: ShellBridge): Promise<void> => {
+  await act(async () => {
+    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
+  });
+};
 
 describe("AppUpdatePrompt", () => {
   test("stays hidden for background up-to-date checks", async () => {
@@ -18,8 +25,7 @@ describe("AppUpdatePrompt", () => {
     });
     const shellPlatform = createTestShellBridge(appUpdates);
 
-    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
-    await waitFor(() => expect(appUpdates.getState).toHaveBeenCalled());
+    await renderPrompt(shellPlatform);
 
     expect(screen.queryByText("OpenDucktor is up to date")).toBeNull();
   });
@@ -74,8 +80,7 @@ describe("AppUpdatePrompt", () => {
     });
     const shellPlatform = createTestShellBridge(appUpdates);
 
-    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
-    await waitFor(() => expect(appUpdates.getState).toHaveBeenCalled());
+    await renderPrompt(shellPlatform);
 
     expect(screen.queryByText("Development build")).toBeNull();
     expect(screen.queryByText("Updates unavailable")).toBeNull();
@@ -88,8 +93,7 @@ describe("AppUpdatePrompt", () => {
     });
     const shellPlatform = createTestShellBridge(appUpdates);
 
-    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
-    await waitFor(() => expect(appUpdates.getState).toHaveBeenCalled());
+    await renderPrompt(shellPlatform);
 
     act(() => {
       appUpdates.emit({
@@ -100,7 +104,7 @@ describe("AppUpdatePrompt", () => {
       });
     });
 
-    expect(await screen.findByText("OpenDucktor is up to date")).toBeTruthy();
+    expect(screen.getByText("OpenDucktor is up to date")).toBeTruthy();
   });
 
   test("keeps long manual check errors in a single bounded panel", async () => {
@@ -181,29 +185,21 @@ describe("AppUpdatePrompt", () => {
       checkedAt: "2026-07-08T22:00:00.000Z",
     };
     const appUpdates = createFakeAppUpdateBridge(staleInitialState);
-    let resolveInitialSnapshot: ((state: typeof staleInitialState) => void) | null = null;
-    appUpdates.getState.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          resolveInitialSnapshot = resolve;
-        }),
-    );
+    const initialSnapshot = Promise.withResolvers<typeof staleInitialState>();
+    appUpdates.getState.mockReturnValueOnce(initialSnapshot.promise);
     const shellPlatform = createTestShellBridge(appUpdates);
 
-    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
-    await waitFor(() => expect(appUpdates.getState).toHaveBeenCalled());
+    await renderPrompt(shellPlatform);
+    expect(appUpdates.getState).toHaveBeenCalledTimes(1);
 
     act(() => {
       appUpdates.emit(liveState);
     });
-    expect(await screen.findByText("Update available")).toBeTruthy();
+    expect(screen.getByText("Update available")).toBeTruthy();
 
     await act(async () => {
-      if (!resolveInitialSnapshot) {
-        throw new Error("Initial app update snapshot was not requested.");
-      }
-      resolveInitialSnapshot(staleInitialState);
-      await Promise.resolve();
+      initialSnapshot.resolve(staleInitialState);
+      await initialSnapshot.promise;
     });
 
     expect(screen.getByText("Update available")).toBeTruthy();
@@ -282,12 +278,14 @@ describe("AppUpdatePrompt", () => {
       },
     });
     const shellPlatform = createTestShellBridge(appUpdates);
-    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
+    await renderPrompt(shellPlatform);
+    expect(appUpdates.download).not.toHaveBeenCalled();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Download Update" }));
+    });
 
-    fireEvent.click(await screen.findByRole("button", { name: "Download Update" }));
-
-    await waitFor(() => expect(appUpdates.download).toHaveBeenCalled());
-    expect(await screen.findByText("40% downloaded")).toBeTruthy();
+    expect(appUpdates.download).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("40% downloaded")).toBeTruthy();
     const progressbar = screen.getByRole("progressbar", { name: "Update download progress" });
     expect(progressbar.getAttribute("aria-valuetext")).toBe("40% downloaded");
     expect(progressbar.firstElementChild?.className).toContain("bg-sidebar-accent");
@@ -329,14 +327,17 @@ describe("AppUpdatePrompt", () => {
       checkedAt: "2026-07-08T22:00:00.000Z",
     });
     const shellPlatform = createTestShellBridge(appUpdates);
-    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
+    await renderPrompt(shellPlatform);
 
-    expect((await screen.findByRole("link", { name: "Release note" })).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "Release note" }).getAttribute("href")).toBe(
       "https://github.com/Maxsky5/openducktor/releases/tag/v0.4.3",
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Restart to Install" }));
+    expect(appUpdates.install).not.toHaveBeenCalled();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Restart to Install" }));
+    });
 
-    await waitFor(() => expect(appUpdates.install).toHaveBeenCalled());
+    expect(appUpdates.install).toHaveBeenCalledTimes(1);
   });
 
   test("keeps a downloaded update visible when install command transport fails", async () => {

@@ -1,16 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import {
-  createTaskCardFixture,
-  enableReactActEnvironment,
-} from "@/pages/agents/agent-studio-test-utils";
+import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
 import {
   CLOSE_TASK_ACTION,
   type CoreTaskAction,
 } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 import { TaskDetailsSheetFooter } from "./task-details-sheet-footer";
-
-enableReactActEnvironment();
 
 describe("TaskDetailsSheetFooter", () => {
   test("omits workflow actions when no workflow actions are available", () => {
@@ -83,7 +78,7 @@ describe("TaskDetailsSheetFooter", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText("More"));
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
     const menu = screen.getByRole("dialog");
     const buttons = within(menu)
       .getAllByRole("button")

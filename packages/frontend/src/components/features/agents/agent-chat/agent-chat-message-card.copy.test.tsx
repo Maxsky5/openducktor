@@ -1,15 +1,11 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { createElement as createReactElement } from "react";
-import { buildCopyPreview } from "@/lib/copy-preview";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { withCapturedConsole } from "@/test-utils/console-capture";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 import { presentRegularToolCall } from "./agent-chat-test-fixtures";
-
-enableReactActEnvironment();
 
 const createElement = (
   type: typeof AgentChatMessageCard,
@@ -70,7 +66,7 @@ describe("AgentChatMessageCard assistant copy", () => {
         await waitFor(() => {
           expect(writeClipboardMock).toHaveBeenCalledWith(markdown);
           expect(toastSuccessMock).toHaveBeenCalledWith("Copied!", {
-            description: buildCopyPreview(markdown),
+            description: "12345678901234567890123456789012345678901234567890...",
           });
         });
       } finally {
@@ -81,7 +77,7 @@ describe("AgentChatMessageCard assistant copy", () => {
 
   test("copies completed intermediate assistant messages when they are not actively streaming", async () => {
     await withMockedToast(async ({ toastSuccessMock }) => {
-      const markdown = "# Intermediate update\n\nStill working through the task.";
+      const markdown = "# Intermediate update\n\nStill checking the task.";
       const rendered = render(
         createElement(AgentChatMessageCard, {
           message: {
@@ -105,7 +101,7 @@ describe("AgentChatMessageCard assistant copy", () => {
         await waitFor(() => {
           expect(writeClipboardMock).toHaveBeenCalledWith(markdown);
           expect(toastSuccessMock).toHaveBeenCalledWith("Copied!", {
-            description: buildCopyPreview(markdown),
+            description: markdown,
           });
         });
       } finally {

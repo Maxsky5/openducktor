@@ -9,16 +9,6 @@ import {
   SCHEDULED_FETCH_COOLDOWN_MS,
 } from "./git-refresh-coordinator";
 
-const deferred = <T = void>() => {
-  let resolve!: (value: T) => void;
-  let reject!: (cause: Error) => void;
-  const promise = new Promise<T>((yes, no) => {
-    resolve = yes;
-    reject = no;
-  });
-  return { promise, resolve, reject };
-};
-
 const flush = async (): Promise<void> => {
   for (let index = 0; index < 5; index += 1) await Promise.resolve();
 };
@@ -86,10 +76,19 @@ const createCoordinator = (now = () => 0) => {
   return { coordinator, failedChecks };
 };
 
+const waitForManualRefresh = (coordinator: GitRefreshCoordinator, key: string): Promise<void> =>
+  new Promise((resolve) => {
+    const stop = coordinator.subscribe(() => {
+      if (!coordinator.manualState(key).isRefreshing) return;
+      stop();
+      resolve();
+    });
+  });
+
 describe("GitRefreshCoordinator", () => {
   test("a manual Refresh shows pending at once and joins repeated clicks", async () => {
     const log: Log = [];
-    const fetch = deferred();
+    const fetch = Promise.withResolvers<void>();
     const view = createView(log, {
       steps: {
         comparison: {
@@ -121,7 +120,7 @@ describe("GitRefreshCoordinator", () => {
 
   test("a manual Refresh reads local changes during the fetch and again after it", async () => {
     const log: Log = [];
-    const fetch = deferred();
+    const fetch = Promise.withResolvers<void>();
     const view = createView(log, {
       steps: {
         comparison: {
@@ -169,7 +168,7 @@ describe("GitRefreshCoordinator", () => {
 
   test("each context keeps its own Refresh, and a return to a context joins it", async () => {
     const log: Log = [];
-    const fetchA = deferred();
+    const fetchA = Promise.withResolvers<void>();
     const viewA = createView(log, {
       steps: {
         comparison: {
@@ -203,11 +202,11 @@ describe("GitRefreshCoordinator", () => {
     const { coordinator } = createCoordinator();
     coordinator.publish(oldBranch);
 
-    const refresh = coordinator.refresh("hard");
-    await flush();
     const newKey = manualRefreshKey(newBranch);
+    const followed = waitForManualRefresh(coordinator, newKey);
+    const refresh = coordinator.refresh("hard");
+    await followed;
     expect(coordinator.manualState(manualRefreshKey(oldBranch)).isRefreshing).toBe(false);
-    expect(coordinator.manualState(newKey).isRefreshing).toBe(true);
     expect(oldBranch.steps.readLocal).not.toHaveBeenCalled();
 
     coordinator.publish(newBranch);
@@ -220,28 +219,39 @@ describe("GitRefreshCoordinator", () => {
     });
   });
 
-  test("a followed branch ends without reads when another session opens", async () => {
-    const log: Log = [];
-    const oldBranch = createView(log, {
-      steps: { readBranch: async () => "feature" },
-    });
-    const otherSession = createView(log, {
-      scopeKey: "session-b",
-      branchKey: "feature",
-    });
-    const { coordinator } = createCoordinator();
-    coordinator.publish(oldBranch);
+  test.each(["before", "after"])(
+    "a refresh stops without reading another session that opens %s the branch reply",
+    async (order) => {
+      const log: Log = [];
+      const reply = Promise.withResolvers<string>();
+      const readBranch = mock(() => reply.promise);
+      const oldBranch = createView(log, { steps: { readBranch } });
+      const otherSession = createView(log, {
+        scopeKey: "session-b",
+        branchKey: "feature",
+      });
+      const { coordinator } = createCoordinator();
+      coordinator.publish(oldBranch);
 
-    const refresh = coordinator.refresh("hard");
-    await flush();
-    coordinator.publish(otherSession);
-    await refresh;
+      const refresh = coordinator.refresh("hard");
+      expect(readBranch).toHaveBeenCalledTimes(1);
+      if (order === "after") {
+        const followedKey = manualRefreshKey({ ...oldBranch, branchKey: "feature" });
+        const followed = waitForManualRefresh(coordinator, followedKey);
+        reply.resolve("feature");
+        await followed;
+      }
+      coordinator.publish(otherSession);
+      if (order === "before") reply.resolve("feature");
+      await refresh;
 
-    expect(otherSession.steps.comparison?.fetch).not.toHaveBeenCalled();
-    expect(otherSession.steps.readLocal).not.toHaveBeenCalled();
-    // The ended Refresh leaves its own context stale, so a return to it reads again.
-    expect(oldBranch.steps.markStale).toHaveBeenCalledTimes(1);
-  });
+      expect(otherSession.steps.comparison?.fetch).not.toHaveBeenCalled();
+      expect(otherSession.steps.readLocal).not.toHaveBeenCalled();
+      expect(coordinator.manualState(manualRefreshKey(otherSession)).isRefreshing).toBe(false);
+      // The ended Refresh leaves its own context stale, so a return to it reads again.
+      expect(oldBranch.steps.markStale).toHaveBeenCalledTimes(1);
+    },
+  );
 
   test("a checkout that cancels the branch read ends the Refresh without a report", async () => {
     const log: Log = [];
@@ -262,7 +272,7 @@ describe("GitRefreshCoordinator", () => {
 
   test("a failed branch read stays with its own session", async () => {
     const log: Log = [];
-    const branchRead = deferred<string>();
+    const branchRead = Promise.withResolvers<string>();
     const view = createView(log, {
       steps: { readBranch: () => branchRead.promise },
     });
@@ -365,7 +375,10 @@ describe("GitRefreshCoordinator", () => {
 
   test("a scheduled refresh ends when its view leaves, and a manual Refresh continues on return", async () => {
     const log: Log = [];
-    const fetches = { scheduled: deferred(), manual: deferred() };
+    const fetches = {
+      scheduled: Promise.withResolvers<void>(),
+      manual: Promise.withResolvers<void>(),
+    };
     const viewFor = (fetch: Promise<void>) =>
       createView(log, {
         steps: {
@@ -505,7 +518,7 @@ describe("GitRefreshCoordinator", () => {
 
   test("refreshes share a running fetch, and a fetch that outlives its view does not check", async () => {
     const log: Log = [];
-    const fetch = deferred();
+    const fetch = Promise.withResolvers<void>();
     const fetchStep = mock(() => fetch.promise);
     const check = mock(async () => false);
     const view = createView(log, {
@@ -531,7 +544,7 @@ describe("GitRefreshCoordinator", () => {
 
   test("a manual Refresh forces its fetch and does not join a scheduled fetch", async () => {
     const log: Log = [];
-    const scheduledFetch = deferred();
+    const scheduledFetch = Promise.withResolvers<void>();
     const fetchStep = mock((force: boolean) =>
       force ? Promise.resolve() : scheduledFetch.promise,
     );

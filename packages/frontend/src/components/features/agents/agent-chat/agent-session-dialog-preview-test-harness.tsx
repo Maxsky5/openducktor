@@ -16,7 +16,6 @@ import * as workers from "@/contexts/DiffWorkerProvider";
 import {
   createHostRuntimeStatusContextValue,
   createRuntimeDefinitionsContextValue,
-  enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
@@ -50,8 +49,6 @@ import { buildMessage } from "@openducktor/frontend-core/test-support/agent-chat
 import { useAgentSessionTranscriptDialog } from "./agent-session-transcript-dialog-context";
 import type { AgentSessionTranscriptTarget } from "@openducktor/frontend-core/sessions/transcript/agent-session-transcript-target";
 import { AgentSessionTranscriptDialogHost } from "./use-agent-session-transcript-dialog";
-
-enableReactActEnvironment();
 
 /** Use the real dialog, transcript, controller, Query reader, and editor state. Mock shell I/O and Pierre's DOM renderer. */
 export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: ReactNode) {
@@ -279,15 +276,15 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
       view.rerender(content(repoPath));
     },
     async selectFile() {
-      const link = await screen.findByRole("link", { name: "Open file" });
+      const link = screen.getByRole("link", { name: "Open file" });
       link.focus();
       fireEvent.click(link);
       await screen.findByLabelText("Code editor");
       return link;
     },
-    async edit(contents = "Local draft") {
+    edit(contents = "Local draft") {
       fireEvent.change(screen.getByLabelText("Code editor"), { target: { value: contents } });
-      await screen.findByRole("status", { name: "Unsaved changes" });
+      screen.getByRole("status", { name: "Unsaved changes" });
     },
     /** Ends the test body. Call it at the end of the finally block of the test. */
     dispose() {

@@ -4,7 +4,6 @@ import {
   codexSessionRuntimeRef,
   codexStartSessionInput,
   codexTurnFixture,
-  createDeferred,
   createHarness,
   createRuntimeStreamSubscription,
   flushCodexAdapterWork,
@@ -63,8 +62,8 @@ test("child history pending at parent release cannot revive an unseen image", as
   const { adapter, transports, ref } = await createRoutedImages();
   const transport = transports.get("runtime-live")!;
   const request = transport.request.bind(transport);
-  const entered = createDeferred<void>();
-  const resume = createDeferred<void>();
+  const entered = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
   transport.request = async (input) => {
     if (input.method !== "thread/turns/list" || input.params.threadId !== "nested")
       return request(input);

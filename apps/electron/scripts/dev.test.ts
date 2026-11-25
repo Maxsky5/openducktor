@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, jest, onTestFinished, spyOn, test } from "bun:test";
 import path from "node:path";
 import { Cause, Effect, Exit, Fiber } from "effect";
 import type {
@@ -8,9 +8,7 @@ import type {
 import { runElectronEffect } from "../src/effect/electron-boundary";
 import { ElectronOperationError } from "../src/effect/electron-errors";
 import {
-  ELECTRON_RESTART_WATCH_ROOTS,
   type ElectronDevProcessHandlers,
-  electronDebugEndpointLogLine,
   electronDevServerLogLines,
   electronGracefulShutdownSignal,
   electronLaunchArgs,
@@ -71,6 +69,45 @@ const createFakeRenderer = ({
   watcher,
 });
 
+const shutdownRequest = `[electron:dev] Requesting Electron shutdown with ${electronGracefulShutdownSignal(process.platform)}...`;
+const restartNotice = "[electron:dev] Restarting Electron after main-process dependency change...";
+const shutdownNotice = (signal: string): string =>
+  `[electron:dev] Received ${signal}, shutting down...`;
+const cdpEndpoint = "[electron:dev] CDP endpoint: http://127.0.0.1:45678";
+
+const createRestartWatcher = () => {
+  const changeListeners: Array<(filePath: string) => void> = [];
+  const watcher: ElectronDevRendererWatcher = {
+    add() {
+      return watcher;
+    },
+    on(event, listener) {
+      if (event === "change") changeListeners.push(listener);
+      return watcher;
+    },
+  };
+  const changeMainFile = () => {
+    const listener = changeListeners[0];
+    if (!listener) throw new Error("Expected the lifecycle to watch for changes.");
+    jest.useFakeTimers();
+    try {
+      listener(path.resolve(import.meta.dir, "../src/main/main.ts"));
+      jest.advanceTimersToNextTimer();
+    } finally {
+      jest.useRealTimers();
+    }
+  };
+  return { watcher, changeMainFile };
+};
+
+const captureExpectedLogs = (...expected: string[]) => {
+  const log = console.log;
+  const captured = spyOn(console, "log").mockImplementation((message, ...args) => {
+    if (!expected.includes(message) || args.length > 0) log(message, ...args);
+  });
+  onTestFinished(() => captured.mockRestore());
+};
+
 describe("electron dev script", () => {
   test("uses the default renderer dev server port", () => {
     expect(resolveRendererDevPort(undefined)).toBe(0);
@@ -101,12 +138,6 @@ describe("electron dev script", () => {
       "[electron:dev] Development instance: electron-0123456789ab",
       "[electron:dev] Renderer URL: http://127.0.0.1:49152",
     ]);
-  });
-
-  test("reports the CDP endpoint when remote debugging is enabled", () => {
-    expect(electronDebugEndpointLogLine(53_421)).toBe(
-      "[electron:dev] CDP endpoint: http://127.0.0.1:53421",
-    );
   });
 
   test("enables remote debugging only for the explicit CDP flag", () => {
@@ -328,6 +359,7 @@ describe("electron dev script", () => {
   ] as const)(
     "closes Electron and the renderer when the lifecycle receives %s",
     async (signal, exitCode) => {
+      captureExpectedLogs(shutdownNotice(signal), shutdownRequest);
       const fakeProcessHandlers = createFakeProcessHandlers();
       const killSignals: Array<NodeJS.Signals | number | undefined> = [];
       let closeCalls = 0;
@@ -380,6 +412,9 @@ describe("electron dev script", () => {
   );
 
   test("fails when Electron does not exit after forced shutdown", async () => {
+    captureExpectedLogs(shutdownRequest);
+    const report = spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => report.mockRestore());
     const signals: Array<NodeJS.Signals | number | undefined> = [];
     const electron = {
       devToolsPort: null,
@@ -396,6 +431,7 @@ describe("electron dev script", () => {
     );
 
     expect(signals).toEqual([electronGracefulShutdownSignal(process.platform), 9]);
+    expect(report.mock.calls).toEqual([[expect.stringContaining("forcing shutdown")]]);
     expect(error).toMatchObject({
       _tag: "ElectronOperationError",
       operation: "electron.dev.stop-electron",
@@ -490,7 +526,6 @@ describe("electron dev script", () => {
   });
 
   test("logs the CDP endpoint after Electron prints its DevTools port", async () => {
-    const endpointLine = electronDebugEndpointLogLine(45_678);
     const loggedLines: string[] = [];
     let resolveElectronExit: (exitCode: number) => void = () => {};
     const electronExited = new Promise<number>((resolve) => {
@@ -500,7 +535,7 @@ describe("electron dev script", () => {
     console.log = (...arguments_: unknown[]) => {
       const line = arguments_.map(String).join(" ");
       loggedLines.push(line);
-      if (line === endpointLine) {
+      if (line === cdpEndpoint) {
         resolveElectronExit(0);
       }
     };
@@ -529,7 +564,7 @@ describe("electron dev script", () => {
 
       expect(await lifecycle).toBe(0);
       expect(remoteDebuggingValues).toEqual([true]);
-      expect(loggedLines).toContain(endpointLine);
+      expect(loggedLines).toContain(cdpEndpoint);
     } finally {
       console.log = originalConsoleLog;
     }
@@ -577,19 +612,11 @@ describe("electron dev script", () => {
   });
 
   test("fails the restart when the replacement Electron exits before it publishes the CDP port", async () => {
+    captureExpectedLogs(cdpEndpoint, restartNotice, shutdownRequest);
+    const report = spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => report.mockRestore());
     const fakeProcessHandlers = createFakeProcessHandlers();
-    const changeListeners: Array<(filePath: string) => void> = [];
-    const watcher: ElectronDevRendererWatcher = {
-      add() {
-        return watcher;
-      },
-      on(event, listener) {
-        if (event === "change") {
-          changeListeners.push(listener);
-        }
-        return watcher;
-      },
-    };
+    const { watcher, changeMainFile } = createRestartWatcher();
     const remoteDebuggingValues: boolean[] = [];
     let killCalls = 0;
     let resolveInitialExit: (exitCode: number) => void = () => {};
@@ -626,31 +653,24 @@ describe("electron dev script", () => {
       }),
     );
 
-    const changeListener = changeListeners[0];
-    if (!changeListener) {
-      throw new Error("Expected the lifecycle to register a watcher change listener.");
-    }
-    changeListener(path.join(ELECTRON_RESTART_WATCH_ROOTS[0], "main.ts"));
+    changeMainFile();
 
     expect(await lifecycle).toBe(1);
     expect(remoteDebuggingValues).toEqual([true, true]);
     expect(killCalls).toBe(1);
+    expect(report.mock.calls).toEqual([
+      [
+        expect.objectContaining({
+          message: expect.stringContaining("before it published the CDP port"),
+        }),
+      ],
+    ]);
   });
 
   test("restarts Electron when a change interrupts the initial CDP port wait", async () => {
+    captureExpectedLogs(cdpEndpoint, restartNotice, shutdownRequest, shutdownNotice("SIGTERM"));
     const fakeProcessHandlers = createFakeProcessHandlers();
-    const changeListeners: Array<(filePath: string) => void> = [];
-    const watcher: ElectronDevRendererWatcher = {
-      add() {
-        return watcher;
-      },
-      on(event, listener) {
-        if (event === "change") {
-          changeListeners.push(listener);
-        }
-        return watcher;
-      },
-    };
+    const { watcher, changeMainFile } = createRestartWatcher();
     const remoteDebuggingValues: boolean[] = [];
     let resolveInitialExit: (exitCode: number) => void = () => {};
     const initialExited = new Promise<number>((resolve) => {
@@ -696,11 +716,7 @@ describe("electron dev script", () => {
       }),
     );
 
-    const changeListener = changeListeners[0];
-    if (!changeListener) {
-      throw new Error("Expected the lifecycle to register a watcher change listener.");
-    }
-    changeListener(path.join(ELECTRON_RESTART_WATCH_ROOTS[0], "main.ts"));
+    changeMainFile();
 
     await replacementLaunched;
     const shutdownHandler = fakeProcessHandlers.registered.find(({ event }) => event === "SIGTERM");
@@ -714,7 +730,6 @@ describe("electron dev script", () => {
   });
 
   test("settles when a replacement Electron exits right after publishing the CDP port", async () => {
-    const endpointLine = electronDebugEndpointLogLine(45_678);
     const loggedLines: string[] = [];
     const originalConsoleLog = console.log;
     let resolveReplacementExit: (exitCode: number) => void = () => {};
@@ -728,10 +743,10 @@ describe("electron dev script", () => {
     console.log = (...arguments_: unknown[]) => {
       const line = arguments_.map(String).join(" ");
       loggedLines.push(line);
-      if (line !== endpointLine) {
+      if (line !== cdpEndpoint) {
         return;
       }
-      const endpointLineCount = loggedLines.filter((entry) => entry === endpointLine).length;
+      const endpointLineCount = loggedLines.filter((entry) => entry === cdpEndpoint).length;
       if (endpointLineCount === 1) {
         resolveFirstEndpointLogged();
       }
@@ -742,18 +757,7 @@ describe("electron dev script", () => {
 
     try {
       const fakeProcessHandlers = createFakeProcessHandlers();
-      const changeListeners: Array<(filePath: string) => void> = [];
-      const watcher: ElectronDevRendererWatcher = {
-        add() {
-          return watcher;
-        },
-        on(event, listener) {
-          if (event === "change") {
-            changeListeners.push(listener);
-          }
-          return watcher;
-        },
-      };
+      const { watcher, changeMainFile } = createRestartWatcher();
       const remoteDebuggingValues: boolean[] = [];
       let resolveInitialExit: (exitCode: number) => void = () => {};
       const initialExited = new Promise<number>((resolve) => {
@@ -791,23 +795,20 @@ describe("electron dev script", () => {
       );
 
       await firstEndpointLogged;
-      expect(loggedLines.filter((line) => line === endpointLine).length).toBe(1);
+      expect(loggedLines.filter((line) => line === cdpEndpoint).length).toBe(1);
 
-      const changeListener = changeListeners[0];
-      if (!changeListener) {
-        throw new Error("Expected the lifecycle to register a watcher change listener.");
-      }
-      changeListener(path.join(ELECTRON_RESTART_WATCH_ROOTS[0], "main.ts"));
+      changeMainFile();
 
       expect(await lifecycle).toBe(0);
       expect(remoteDebuggingValues).toEqual([true, true]);
-      expect(loggedLines.filter((line) => line === endpointLine).length).toBe(2);
+      expect(loggedLines.filter((line) => line === cdpEndpoint).length).toBe(2);
     } finally {
       console.log = originalConsoleLog;
     }
   });
 
   test("stops Electron when its DevTools output cannot be read", async () => {
+    captureExpectedLogs(shutdownRequest);
     const fakeProcessHandlers = createFakeProcessHandlers();
     const killSignals: Array<NodeJS.Signals | number | undefined> = [];
     let resolveExit: (exitCode: number) => void = () => {};
@@ -843,6 +844,7 @@ describe("electron dev script", () => {
   });
 
   test("cleans up Electron dev lifecycle resources when the Effect is interrupted", async () => {
+    captureExpectedLogs(shutdownRequest);
     const fakeProcessHandlers = createFakeProcessHandlers();
     const killSignals: Array<NodeJS.Signals | number | undefined> = [];
     let closeCalls = 0;
@@ -937,6 +939,7 @@ describe("electron dev script", () => {
   });
 
   test("does not launch Electron when shutdown starts during bundle build", async () => {
+    captureExpectedLogs(shutdownNotice("SIGTERM"));
     const fakeProcessHandlers = createFakeProcessHandlers();
     const renderer = createFakeRenderer();
     let startCalls = 0;

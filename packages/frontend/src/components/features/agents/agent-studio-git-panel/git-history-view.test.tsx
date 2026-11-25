@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, jest, mock, test } from "bun:test";
+import { createHash } from "node:crypto";
 import type {
   GitHistoryCommit,
   GitHistoryPage,
@@ -6,7 +7,6 @@ import type {
 } from "@openducktor/contracts";
 import {
   act,
-  cleanup,
   fireEvent,
   render,
   screen,
@@ -17,13 +17,14 @@ import {
 import { SessionViewShownContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { refreshGitHistoryQueries } from "@openducktor/frontend-core/queries/git";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { HISTORY_COLUMNS_STORAGE_KEY, useHistoryColumnsStore } from "./git-history-columns";
 import { GitHistoryView, type GitHistoryViewProps } from "./git-history-view";
 
-const oid = (name: string) => name.padEnd(40, "0");
+const oid = (name: string) => createHash("sha1").update(name).digest("hex");
 const CURRENT = oid("c2");
 const TARGET = oid("t1");
 const BASE = oid("b0");
@@ -63,7 +64,7 @@ const firstPage: GitHistoryPage = {
       refs: [{ name: "origin/main", kind: "remote", isHead: false }],
     },
   ],
-  nextOffset: 2,
+  nextOffset: null,
 };
 
 const historyPage = mock(
@@ -72,12 +73,6 @@ const historyPage = mock(
 
 const createHistoryConnection = () =>
   createTestClientConnection({ client: { gitGetHistoryPage: historyPage } });
-
-/** A removed commit fades out for 200 ms before the list closes the gap. */
-const waitForFadeOut = () =>
-  act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 300));
-  });
 
 const props = (overrides: Partial<GitHistoryViewProps> = {}): GitHistoryViewProps => ({
   contextKey: "task-1",
@@ -103,6 +98,8 @@ const renderHistory = (overrides: Partial<GitHistoryViewProps> = {}) =>
     </QueryProvider>,
   );
 
+setupTestingLibraryFakeTimers();
+
 beforeEach(() => {
   globalThis.localStorage.removeItem(HISTORY_COLUMNS_STORAGE_KEY);
   useHistoryColumnsStore.getState().reset();
@@ -110,13 +107,8 @@ beforeEach(() => {
   historyPage.mockImplementation(async () => firstPage);
 });
 
-afterEach(() => {
-  cleanup();
-});
-
 describe("GitHistoryView", () => {
   test("shows each commit with its branches, body preview, author photo, and age", async () => {
-    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
     renderHistory();
 
     expect(await screen.findByText("Subject c2")).toBeTruthy();
@@ -182,7 +174,6 @@ describe("GitHistoryView", () => {
   });
 
   test("shows the initials when the author photo does not load", async () => {
-    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
     renderHistory();
 
     await screen.findByText("Subject c2");
@@ -202,7 +193,6 @@ describe("GitHistoryView", () => {
   });
 
   test("hides, shows, and reorders columns from the header and keeps the choice", async () => {
-    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
     renderHistory();
     await screen.findByText("Subject c2");
     const titles = () =>
@@ -227,9 +217,7 @@ describe("GitHistoryView", () => {
       expect(screen.queryByTestId("agent-studio-git-history-columns-menu")).toBeNull(),
     );
     expect(titles()).toEqual(["Graph", "Commit message", "Author", "Date"]);
-    expect(
-      screen.getAllByTestId("agent-studio-git-history-author").map((author) => author.textContent),
-    ).toEqual(["ALAda Lovelace", "ALAda Lovelace"]);
+    expect(screen.getAllByText("Ada Lovelace")).toHaveLength(2);
 
     fireEvent.keyDown(screen.getByTestId("agent-studio-git-history-column-date"), {
       key: "ArrowLeft",
@@ -269,7 +257,7 @@ describe("GitHistoryView", () => {
   test("loads the next page with the pinned tips and keeps rows when it fails", async () => {
     historyPage.mockImplementation(async (request) => {
       if (request.page) throw new Error("History changed");
-      return firstPage;
+      return { ...firstPage, nextOffset: 2 };
     });
     renderHistory();
 
@@ -285,7 +273,6 @@ describe("GitHistoryView", () => {
   });
 
   test("ends the list with the last commit when no page is left", async () => {
-    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
     renderHistory();
 
     await screen.findByText("Subject c2");
@@ -296,7 +283,6 @@ describe("GitHistoryView", () => {
   });
 
   test("keeps the rows of the branch while a new commit loads, then adds it in place", async () => {
-    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
     const connection = createHistoryConnection();
     const { queryClient } = connection;
     const tree = (revision: string) => (
@@ -344,7 +330,6 @@ describe("GitHistoryView", () => {
   });
 
   test("keeps the graph while the panel checks the same target again after a commit", async () => {
-    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
     const connection = createHistoryConnection();
     const { queryClient } = connection;
     const tree = (overrides: Partial<GitHistoryViewProps>) => (
@@ -391,7 +376,6 @@ describe("GitHistoryView", () => {
   });
 
   test("fades out a commit that a reset removed, then closes the gap", async () => {
-    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
     const connection = createHistoryConnection();
     const { queryClient } = connection;
     const tree = (revision: string) => (
@@ -421,7 +405,7 @@ describe("GitHistoryView", () => {
     }));
     view.rerender(tree(reset));
     await waitFor(() => expect(rowOf("Subject c2")?.className).toContain("history-row-leave"));
-    await waitForFadeOut();
+    await act(async () => jest.advanceTimersByTime(200));
     expect(rowOf("Subject c2")).toBeUndefined();
     // The other row keeps its element and slides into the gap.
     expect(rowOf("Subject t1")).toBe(targetRow);
@@ -430,7 +414,6 @@ describe("GitHistoryView", () => {
   });
 
   test("clears the selection of a commit that leaves, so its card does not open again", async () => {
-    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
     const connection = createHistoryConnection();
     const { queryClient } = connection;
     const tree = (revision: string) => (
@@ -458,7 +441,13 @@ describe("GitHistoryView", () => {
     }));
     view.rerender(tree(reset));
     // The new graph arrives, the card closes, and the commit fades out.
-    await waitForFadeOut();
+    await waitFor(() =>
+      expect(
+        screen.getByText("Subject c2").closest('[data-testid="agent-studio-git-history-row"]')
+          ?.className,
+      ).toContain("history-row-leave"),
+    );
+    await act(async () => jest.advanceTimersByTime(200));
     expect(details()).toBeNull();
     expect(screen.queryByText("Subject c2")).toBeNull();
 
@@ -485,7 +474,6 @@ describe("GitHistoryView", () => {
   });
 
   test("shows the loader for a pending check of another target", async () => {
-    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
     const connection = createHistoryConnection();
     const { queryClient } = connection;
     const tree = (overrides: Partial<GitHistoryViewProps>) => (
@@ -516,7 +504,6 @@ describe("GitHistoryView", () => {
   });
 
   test("keeps the rows while a rebase detaches HEAD from the branch", async () => {
-    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
     const connection = createHistoryConnection();
     const { queryClient } = connection;
     const tree = (checkout: GitHistoryViewProps["checkout"]) => (
@@ -541,7 +528,6 @@ describe("GitHistoryView", () => {
   });
 
   test("starts without rows for another branch", async () => {
-    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
     const connection = createHistoryConnection();
     const { queryClient } = connection;
     const tree = (name: string) => (
@@ -567,31 +553,20 @@ describe("GitHistoryView", () => {
     queryClient.clear();
   });
 
-  test("reveals the full message, commit ID, and exact date", async () => {
-    renderHistory();
-
-    const [row] = await screen.findAllByTestId("agent-studio-git-history-row");
-    if (!row) throw new Error("History has no rows.");
-    fireEvent.click(row);
-
-    const details = await screen.findByTestId("agent-studio-git-history-details");
-    expect(details.textContent).toContain("Body of c2.");
-    expect(details.textContent).toContain(CURRENT);
-    expect(details.textContent).toContain("2026-10-13 14:05:22 +02:00");
-  });
-
-  test("keeps one details card for the list and closes it on a second click or a scroll", async () => {
-    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
+  test("shows commit details in one card and closes it on a second click or a scroll", async () => {
     renderHistory();
 
     const [first, second] = await screen.findAllByTestId("agent-studio-git-history-row");
     if (!first || !second) throw new Error("History has fewer than two rows.");
     const details = () => screen.queryByTestId("agent-studio-git-history-details");
 
-    fireEvent.click(first);
-    expect((await screen.findByTestId("agent-studio-git-history-details")).textContent).toContain(
-      "Body of c2.",
-    );
+    await act(async () => {
+      fireEvent.click(first);
+    });
+    const body = (await screen.findByTestId("agent-studio-git-history-details")).textContent;
+    expect(body).toContain("Body of c2.");
+    expect(body).toContain(CURRENT);
+    expect(body).toContain("2026-10-13 14:05:22 +02:00");
     expect(first.getAttribute("aria-expanded")).toBe("true");
 
     fireEvent.click(second);
@@ -610,7 +585,6 @@ describe("GitHistoryView", () => {
   });
 
   test("closes the details card when the session view hides and keeps it closed on return", async () => {
-    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
     const connection = createHistoryConnection();
     const tree = (isShown: boolean) => (
       <QueryProvider connection={connection}>
@@ -641,7 +615,6 @@ describe("GitHistoryView", () => {
   });
 
   test("closes the columns menu when the session view hides and keeps it closed on return", async () => {
-    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
     const connection = createHistoryConnection();
     const tree = (isShown: boolean) => (
       <QueryProvider connection={connection}>
@@ -686,7 +659,7 @@ describe("GitHistoryView", () => {
   test("marks retained rows as old when a refresh fails and reports the failure", async () => {
     historyPage.mockImplementation(async (request) => {
       if (request.page) throw new Error("History changed");
-      return firstPage;
+      return { ...firstPage, nextOffset: 2 };
     });
     const connection = createHistoryConnection();
     const { queryClient } = connection;

@@ -20,11 +20,8 @@ import {
   createAgentSessionSummaryFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
-  enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 import { useAgentStudioRebaseConflictResolution } from "./use-agent-studio-rebase-conflict-resolution";
-
-enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioRebaseConflictResolution>[0];
 

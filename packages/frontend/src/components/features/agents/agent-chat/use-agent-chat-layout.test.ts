@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { withAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   COMPOSER_EDITOR_MAX_HEIGHT_PX,
@@ -18,8 +17,6 @@ type ResizeStyleState = {
   height: string;
   overflowY: "auto" | "hidden";
 };
-
-enableReactActEnvironment();
 
 const createTextareaElement = ({
   height,

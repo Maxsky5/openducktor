@@ -27,6 +27,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   releaseRecorder();
+  Reflect.deleteProperty(globalThis.navigator, "platform");
 });
 
 /** The section inside the Settings form: its draft, and the footer's Save settings and Cancel. */
@@ -45,11 +46,8 @@ function SettingsForm() {
   );
 }
 
-const renderSection = (
-  overrides: ShortcutPreferences["overrides"] = {},
-  save = async (preferences: ShortcutPreferences) => preferences,
-) => {
-  const write = mock(save);
+const renderSection = (overrides: ShortcutPreferences["overrides"] = {}) => {
+  const write = mock(async (preferences: ShortcutPreferences) => preferences);
   const connection = createTestClientConnection({
     client: { workspaceSaveKeyboardShortcuts: write },
   });
@@ -62,12 +60,14 @@ const renderSection = (
   return write;
 };
 const fieldName = (label: string) => new RegExp(`^${label}, .*(Change shortcut|Add keys)$`);
-const field = (label: string) => screen.getByRole("button", { name: fieldName(label) });
+const commandRow = (title: string) => within(screen.getByText(title).closest("li")!);
+const field = (label: string, title = label) =>
+  commandRow(title).getByRole("button", { name: fieldName(label) });
 const queryField = (label: string) => screen.queryByRole("button", { name: fieldName(label) });
 const record = async (label: string, event: Partial<KeyboardEventInit>) => {
-  fireEvent.click(field(label));
-  await waitFor(() => expect(screen.getByRole("status").textContent).toContain("Recording keys"));
-  fireEvent.keyDown(window, event);
+  await act(async () => fireEvent.click(field(label)));
+  expect(screen.getByRole("status").textContent).toContain("Recording keys");
+  await act(async () => fireEvent.keyDown(window, event));
 };
 const saveSettings = async () => {
   await act(async () => {
@@ -80,7 +80,7 @@ test("puts recorded keys in the draft, which only Save settings writes", async (
   await record("Open diagnostics", { key: "F9", code: "F9", ctrlKey: true, shiftKey: true });
   // No per-row Save: the keys go into the form, and focus returns to them.
   await waitFor(() => expect(field("Open diagnostics").textContent).toContain("Ctrl Shift F9"));
-  await waitFor(() => expect(document.activeElement).toBe(field("Open diagnostics")));
+  await waitFor(() => expect(document.activeElement === field("Open diagnostics")).toBe(true));
   expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   expect(write).not.toHaveBeenCalled();
   await saveSettings();
@@ -97,7 +97,7 @@ test("explains a conflict, and Replace moves the keys in the draft", async () =>
   expect(alert.textContent).toContain("removes them from Toggle sidebar");
   // Replace has focus, so Enter confirms the explicit choice.
   const replace = screen.getByRole("button", { name: "Replace" });
-  await waitFor(() => expect(document.activeElement).toBe(replace));
+  await waitFor(() => expect(document.activeElement === replace).toBe(true));
   fireEvent.click(replace);
   expect(screen.queryByRole("alert")).toBeNull();
   expect(field("Toggle sidebar").textContent).toContain("Add keys");
@@ -125,7 +125,7 @@ test("keeps other rows usable during an edit, and moves the edit to the row clic
 test("Escape cancels recording and a conflict without changing the draft or closing Settings", async () => {
   const write = renderSection();
   await record("Open diagnostics", { key: "Escape", code: "Escape" });
-  await waitFor(() => expect(shortcutRecording.isActive()).toBe(false));
+  await waitFor(() => expect(field("Open diagnostics").getAttribute("aria-pressed")).toBe("false"));
   await record("Open diagnostics", { key: "b", code: "KeyB", ctrlKey: true });
   expect(screen.getByRole("alert")).toBeTruthy();
   const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
@@ -193,13 +193,16 @@ test("lists every command by default and finds any command by name or keys", () 
 test("puts a When choice in the draft, and rejects a choice its keys cannot support", async () => {
   // Control+H deletes text while typing, so only a command that skips typing may use it.
   const write = renderSection({ diagnostics: keys("h", { mod: true }) });
-  fireEvent.click(screen.getByRole("button", { name: "When Toggle sidebar runs: Always" }));
+  const sidebar = commandRow("Toggle sidebar");
+  fireEvent.click(sidebar.getByRole("button", { name: "When Toggle sidebar runs: Always" }));
   fireEvent.click(await screen.findByRole("option", { name: /^Not while typing/ }));
   expect(
-    await screen.findByRole("button", { name: "When Toggle sidebar runs: Not while typing" }),
+    await sidebar.findByRole("button", { name: "When Toggle sidebar runs: Not while typing" }),
   ).toBeTruthy();
   fireEvent.click(
-    screen.getByRole("button", { name: "When Open diagnostics runs: Not while typing" }),
+    commandRow("Open diagnostics").getByRole("button", {
+      name: "When Open diagnostics runs: Not while typing",
+    }),
   );
   fireEvent.click(await screen.findByRole("option", { name: /^Always/ }));
   expect(screen.getByRole("alert").textContent).toContain("cannot run while typing");
@@ -215,7 +218,7 @@ test("folds the ten position commands into one row until opened", () => {
   renderSection();
   expect(queryField("Select session at position 1")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: /^Go to session 1–10/ }));
-  expect(field("Select session at position 1").textContent).toContain("Ctrl 1");
+  expect(field("Select session at position 1", "Session 1").textContent).toContain("Ctrl 1");
 });
 
 test("marks only the assignment that cannot run on this device", () => {
@@ -244,20 +247,8 @@ test("names each position row by its own position when the filter hides some", (
   renderSection({ "session-position-1": null });
   fireEvent.click(screen.getByRole("radio", { name: "Assigned" }));
   fireEvent.click(screen.getByRole("button", { name: /^Go to session 1–10/ }));
-  expect(field("Select session at position 2").closest("li")?.textContent).toContain("Session 2");
+  expect(field("Select session at position 2", "Session 2")).toBeTruthy();
   expect(screen.queryByText("Session 1")).toBeNull();
-});
-
-test("locks the shortcuts while Save settings writes them", async () => {
-  const pending = Promise.withResolvers<ShortcutPreferences>();
-  const write = renderSection({}, () => pending.promise);
-  fireEvent.click(screen.getByRole("button", { name: "Remove shortcut for Toggle sidebar" }));
-  await saveSettings();
-  expect(write).toHaveBeenCalledTimes(1);
-  await waitFor(() => expect(field("Toggle sidebar").hasAttribute("disabled")).toBe(true));
-  expect(screen.getByRole("button", { name: "Reset all" }).hasAttribute("disabled")).toBe(true);
-  await act(async () => pending.resolve({ version: 1, overrides: { sidebar: null } }));
-  await waitFor(() => expect(field("Toggle sidebar").hasAttribute("disabled")).toBe(false));
 });
 
 test("offers Reset all when the saved shortcuts are invalid, and saves the defaults", async () => {

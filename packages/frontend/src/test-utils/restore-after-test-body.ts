@@ -1,19 +1,20 @@
 import { onTestFinished } from "bun:test";
 
-// A timed-out body can wait 1000 ms in a Testing Library query, and longer on a loaded CPU, before it
-// gets to its finally block.
+// A timed-out body can wait for a Testing Library query before its finally block. The cleanup
+// deadline uses real timers so it can expire even when the test stopped advancing its clock.
 const TEST_BODY_END_TIMEOUT_MS = 3_000;
 
 /** Resolves true when the test body ends, or false after the time limit. */
 const waitForTestBodyEnd = async (bodyEnd: Promise<void>): Promise<boolean> => {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeLimit = new Promise<false>((resolve) => {
-    timer = setTimeout(() => resolve(false), TEST_BODY_END_TIMEOUT_MS);
-  });
+  const deadline = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
+  const wait = Atomics.waitAsync(deadline, 0, 0, TEST_BODY_END_TIMEOUT_MS);
   try {
-    return await Promise.race([bodyEnd.then(() => true as const), timeLimit]);
+    return await Promise.race([
+      bodyEnd.then(() => true),
+      Promise.resolve(wait.value).then(() => false),
+    ]);
   } finally {
-    clearTimeout(timer);
+    Atomics.notify(deadline, 0);
   }
 };
 
@@ -34,6 +35,7 @@ export const restoreAfterTestBody = (restore: () => void): (() => void) => {
   const bodyEnd = Promise.withResolvers<void>();
   onTestFinished(
     async () => {
+      if (isRestored) return;
       const didBodyEnd = await waitForTestBodyEnd(bodyEnd.promise);
       restoreOnce();
       if (!didBodyEnd) {

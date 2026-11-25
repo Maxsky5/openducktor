@@ -649,34 +649,16 @@ describe("OpenCode live session controls", () => {
   });
 
   test("serializes sends within one session while other sessions stay concurrent", async () => {
-    let releaseSends: () => void = () => undefined;
-    let resolveFirstSend: () => void = () => undefined;
-    let resolveSecondSend: () => void = () => undefined;
-    let resolveThirdSend: () => void = () => undefined;
-    const sendBarrier = new Promise<void>((resolve) => {
-      releaseSends = resolve;
-    });
-    const firstSendStarted = new Promise<void>((resolve) => {
-      resolveFirstSend = resolve;
-    });
-    const secondSendStarted = new Promise<void>((resolve) => {
-      resolveSecondSend = resolve;
-    });
-    const thirdSendStarted = new Promise<void>((resolve) => {
-      resolveThirdSend = resolve;
-    });
+    const sendBarrier = Promise.withResolvers<void>();
+    const firstSendStarted = Promise.withResolvers<void>();
+    const secondSendStarted = Promise.withResolvers<void>();
     let startedSendCount = 0;
     const harness = createRuntimeHarness({
-      sendUserMessageBarrier: sendBarrier,
+      sendUserMessageBarrier: sendBarrier.promise,
       onSendUserMessage: () => {
         startedSendCount += 1;
-        if (startedSendCount === 1) {
-          resolveFirstSend();
-        } else if (startedSendCount === 2) {
-          resolveSecondSend();
-        } else if (startedSendCount === 3) {
-          resolveThirdSend();
-        }
+        if (startedSendCount === 1) firstSendStarted.resolve();
+        if (startedSendCount === 2) secondSendStarted.resolve();
       },
     });
     const prepared = await Effect.runPromise(
@@ -717,35 +699,28 @@ describe("OpenCode live session controls", () => {
     const first = send("session-1");
     let queued: ReturnType<typeof send> | undefined;
     let other: ReturnType<typeof send> | undefined;
+    const sendOrder = () =>
+      harness.controlCalls
+        .filter((call) => call.operation === "send")
+        .map((call) => call.input.externalSessionId);
 
     try {
-      await firstSendStarted;
+      await firstSendStarted.promise;
       queued = send("session-1");
-      expect(
-        await Promise.race([
-          secondSendStarted.then(() => "started" as const),
-          new Promise<"queued">((resolve) => setTimeout(() => resolve("queued"), 100)),
-        ]),
-      ).toBe("queued");
-
       other = send("session-2");
       expect(
         await Promise.race([
-          secondSendStarted.then(() => "started" as const),
+          secondSendStarted.promise.then(() => "started" as const),
           new Promise<"blocked">((resolve) => setTimeout(() => resolve("blocked"), 500)),
         ]),
       ).toBe("started");
+      expect(sendOrder()).toEqual(["session-1", "session-2"]);
 
-      releaseSends();
+      sendBarrier.resolve();
       await Promise.all([first, queued, other]);
-      await thirdSendStarted;
-      expect(
-        harness.controlCalls
-          .filter((call) => call.operation === "send")
-          .map((call) => call.input.externalSessionId),
-      ).toEqual(["session-1", "session-2", "session-1"]);
+      expect(sendOrder()).toEqual(["session-1", "session-2", "session-1"]);
     } finally {
-      releaseSends();
+      sendBarrier.resolve();
       await Promise.allSettled([first, ...(queued ? [queued] : []), ...(other ? [other] : [])]);
       await Effect.runPromise(adapter.releaseRuntime());
     }
@@ -808,39 +783,36 @@ describe("OpenCode live session controls", () => {
     const continuation = Effect.runPromise(
       adapter.continueInterruptedTurn({ ...ref, sessionScope }),
     );
+    let queued: ReturnType<typeof send> | undefined;
+    let other: ReturnType<typeof send> | undefined;
+    const controlOrder = () =>
+      harness.controlCalls
+        .filter((call) => call.operation === "continue" || call.operation === "send")
+        .map((call) => `${call.operation}:${call.input.externalSessionId}`);
 
     try {
       await continuationStarted;
 
-      const queued = send("session-1");
-      expect(
-        await Promise.race([
-          sendStarted.then(() => "started" as const),
-          new Promise<"queued">((resolve) => setTimeout(() => resolve("queued"), 100)),
-        ]),
-      ).toBe("queued");
-
-      const other = send("session-2");
+      queued = send("session-1");
+      other = send("session-2");
       expect(
         await Promise.race([
           sendStarted.then(() => "started" as const),
           new Promise<"blocked">((resolve) => setTimeout(() => resolve("blocked"), 500)),
         ]),
       ).toBe("started");
+      expect(controlOrder()).toEqual(["continue:session-1", "send:session-2"]);
 
       releaseContinuation();
-      await continuation;
-      await queued;
-      await other;
-
-      expect(
-        harness.controlCalls
-          .filter((call) => call.operation === "continue" || call.operation === "send")
-          .map((call) => `${call.operation}:${call.input.externalSessionId}`),
-      ).toEqual(["continue:session-1", "send:session-2", "send:session-1"]);
+      await Promise.all([continuation, queued, other]);
+      expect(controlOrder()).toEqual(["continue:session-1", "send:session-2", "send:session-1"]);
     } finally {
       releaseContinuation();
-      await continuation.catch(() => undefined);
+      await Promise.allSettled([
+        continuation,
+        ...(queued ? [queued] : []),
+        ...(other ? [other] : []),
+      ]);
       await Effect.runPromise(adapter.releaseRuntime());
     }
   });

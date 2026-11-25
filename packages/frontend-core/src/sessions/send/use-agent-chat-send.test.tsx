@@ -29,7 +29,6 @@ import { useAgentChatSendForTarget } from "../../test-support/agent-chat-send-fi
 import { AgentChatSendProviders } from "../../test-support/agent-chat-send-providers";
 import { createAgentMessageQueueSnapshot } from "../../test-support/agent-message-send-fixture";
 import { createAgentOperationsFixture } from "../../test-support/agent-operations-fixture";
-import { createDeferred } from "../../test-support/shared-test-fixtures";
 import type { AgentChatResolvedTarget, AgentChatSendTarget } from "./use-agent-chat-send";
 
 const SESSION: AgentSessionIdentity = {
@@ -296,7 +295,7 @@ describe("useAgentChatSend", () => {
     });
 
     test("lets an existing queueing session take a second send with its mode while the first waits", async () => {
-      const firstSettles = createDeferred<void>();
+      const firstSettles = Promise.withResolvers<void>();
       const { view, sendAgentMessage } = renderChatSend();
       sendAgentMessage.mockImplementationOnce(async () => {
         await firstSettles.promise;

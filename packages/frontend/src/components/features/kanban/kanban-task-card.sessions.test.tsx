@@ -1,15 +1,12 @@
 import { createTaskWorkflowActionsFixture } from "@/test-utils/shared-test-fixtures";
 import { TaskWorkflowActionsContext } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { describe, expect, mock, test } from "bun:test";
-import { fireEvent, render } from "@testing-library/react";
+import { act, fireEvent, render } from "@testing-library/react";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { ComponentProps } from "react";
 import { MemoryRouter } from "react-router";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import {
-  createTaskCardFixture,
-  enableReactActEnvironment,
-} from "@/pages/agents/agent-studio-test-utils";
+import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
 import { KanbanTaskCard } from "./kanban-task-card";
 import {
   BUILTIN_ROLES,
@@ -23,8 +20,6 @@ import {
   reviewTaskPromptTemplates,
   reviewTaskRoles,
 } from "@openducktor/workflows/test-support";
-
-enableReactActEnvironment();
 
 const noop = (): void => {};
 const session = (role: WorkflowRoleId): AgentSessionRecord & { role: WorkflowRoleId } => ({
@@ -301,10 +296,10 @@ describe("Kanban card session shortcuts", () => {
     const view = render(<Card {...props} />);
     try {
       const planner = view.getByRole("button", { name: "Open Planner session" });
-      planner.focus();
+      act(() => planner.focus());
       view.rerender(<Card {...props} taskCardView="compact" />);
       expect(document.activeElement).toBe(planner);
-      view.getByRole("button", { name: "Open Builder session" }).focus();
+      act(() => view.getByRole("button", { name: "Open Builder session" }).focus());
       view.rerender(
         <Card
           {...props}
@@ -333,7 +328,7 @@ describe("Kanban card session shortcuts", () => {
     const props = cardProps();
     const view = render(<Card {...props} />);
     try {
-      view.getByRole("button", { name: "Copy task ID" }).focus();
+      act(() => view.getByRole("button", { name: "Copy task ID" }).focus());
       view.rerender(<Card {...props} taskCardView="compact" />);
       expect(document.activeElement).toBe(view.getByRole("button", { name: "Copy task ID" }));
       view.rerender(<Card {...props} taskCardView="normal" />);
@@ -421,9 +416,9 @@ describe("Kanban card session shortcuts", () => {
     const view = render(<Card {...props} />);
     try {
       const trigger = view.getByRole("button", { name: "Open workflow actions menu" });
-      trigger.focus();
+      act(() => trigger.focus());
       fireEvent.click(trigger);
-      view.getByRole("button", { name: "Reset Implementation" }).focus();
+      act(() => view.getByRole("button", { name: "Reset Implementation" }).focus());
       view.rerender(
         <Card {...props} task={{ ...props.task, availableActions: ["build_start"] }} />,
       );

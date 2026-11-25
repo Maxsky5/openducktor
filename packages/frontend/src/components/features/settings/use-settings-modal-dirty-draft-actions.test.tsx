@@ -2,15 +2,10 @@ import { specPlanBuildPromptKey } from "@openducktor/workflows/test-support";
 import { describe, expect, mock, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
 import { useState } from "react";
-import {
-  createHookHarness as createSharedHookHarness,
-  enableReactActEnvironment,
-} from "@/pages/agents/agent-studio-test-utils";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalDirtyDraftActions } from "./use-settings-modal-dirty-draft-actions";
 import { useSettingsModalDraftActions } from "./use-settings-modal-draft-actions";
-
-enableReactActEnvironment();
 
 type HookArgs = {
   selectedWorkspaceId: string | null;

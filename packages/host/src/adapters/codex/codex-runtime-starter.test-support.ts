@@ -104,6 +104,7 @@ export const writeCodex = async (
     emitStreamEvents = false,
     exitBeforeInitialize,
     fatalMessagePath,
+    initializeError,
     hangRequestMethods = [],
     runtimePidPath,
   }: {
@@ -111,6 +112,7 @@ export const writeCodex = async (
     emitStreamEvents?: boolean;
     exitBeforeInitialize?: { code: number; stderr: string };
     fatalMessagePath?: string;
+    initializeError?: string;
     hangRequestMethods?: string[];
     runtimePidPath?: string;
   } = {},
@@ -126,6 +128,7 @@ const capturePath = process.env.CODEX_CAPTURE_PATH;
 const childPidPath = ${JSON.stringify(childPidPath ?? null)};
 const emitStreamEvents = ${JSON.stringify(emitStreamEvents)};
 const exitBeforeInitialize = ${JSON.stringify(exitBeforeInitialize ?? null)};
+const initializeError = ${JSON.stringify(initializeError ?? null)};
 const hangRequestMethods = new Set(${JSON.stringify(hangRequestMethods)});
 const runtimePidPath = ${JSON.stringify(runtimePidPath ?? null)};
 const fatalMessagePath = ${JSON.stringify(fatalMessagePath ?? null)};
@@ -178,8 +181,23 @@ if (fatalMessagePath) {
 const lines = createInterface({ input: process.stdin });
 lines.on("line", (line) => {
   const message = JSON.parse(line);
-  if (message.id !== undefined && hangRequestMethods.has(message.method)) return;
+  if (message.id !== undefined && hangRequestMethods.has(message.method)) {
+    process.stdout.write(JSON.stringify({
+      jsonrpc: "2.0",
+      method: "thread/status/changed",
+      params: { threadId: "pending-request", status: { type: "idle" } },
+    }) + "\\n");
+    return;
+  }
   if (message.method === "initialize") {
+    if (initializeError !== null) {
+      process.stdout.write(JSON.stringify({
+        jsonrpc: "2.0",
+        id: message.id,
+        error: { code: -32603, message: initializeError },
+      }) + "\\n");
+      return;
+    }
     capture.initializeVersion = message.params.clientInfo.version;
     if (capturePath) {
       writeFileSync(capturePath, JSON.stringify(capture));
@@ -284,17 +302,6 @@ export const stubCommands = (): SystemCommandPort => ({
     return Effect.succeed({ ok: true, stdout: "", stderr: "" });
   },
 });
-
-export const waitForEvents = async (events: unknown[], count: number): Promise<void> => {
-  const deadline = Date.now() + 1000;
-  while (Date.now() < deadline) {
-    if (events.length >= count) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error(`Timed out waiting for ${count} Codex app-server event(s).`);
-};
 
 export const waitFor = async (
   predicate: () => boolean | Promise<boolean>,

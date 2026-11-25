@@ -20,7 +20,6 @@ import {
   createHostRuntimeStatusContextValue,
   createRuntimeCatalogFixture,
 } from "@/test-utils/shared-test-fixtures";
-import { createDeferred } from "../operations/workspace/workspace-hook-test-fixtures";
 import { useRuntimeCatalogBootstrap } from "./use-runtime-catalog-bootstrap";
 
 test.each(["catalog", "config"] as const)(
@@ -62,8 +61,8 @@ test("loads only visited workspaces and shows cached data during a stale return 
     slashCommands: { commands: [] },
     skills: { skills: [] },
   });
-  const catalogRead = createDeferred<AgentRuntimeCatalog>();
-  const configRead = createDeferred<RepoConfig>();
+  const catalogRead = Promise.withResolvers<AgentRuntimeCatalog>();
+  const configRead = Promise.withResolvers<RepoConfig>();
   const loadRepoRuntimeCatalog = mock(async (_ref: RuntimeWorkingDirectoryRef) => catalog);
   const workspaceGetRepoConfig = mock(async (workspaceId: string) => makeRepoConfig(workspaceId));
   const connection = createTestClientConnection({

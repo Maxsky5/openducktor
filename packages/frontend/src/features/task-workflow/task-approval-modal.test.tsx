@@ -1,3 +1,4 @@
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { createShellBridgeFixture, withShellPlatform } from "@/test-utils/focused-fixture";
 import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import { taskWorktreeOwnersQueryOptions } from "@openducktor/frontend-core/queries/task-worktree-owners";
@@ -23,6 +24,8 @@ import type {
 } from "@openducktor/frontend-core/tasks/approval/task-approval-types";
 import { TaskApprovalModal } from "./task-approval-modal";
 import { TaskApprovalModalPanel } from "./task-approval-modal-panel";
+
+setupTestingLibraryFakeTimers();
 
 const noop = () => {};
 
@@ -410,7 +413,6 @@ describe("TaskApprovalModal", () => {
         // The read settles inside act, so React applies its result before the next check.
         await act(async () => {
           fireEvent.click(button("Retry"));
-          await new Promise((resolve) => setTimeout(resolve, 0));
         });
         await waitFor(() => expect(button(confirmLabel).disabled).toBe(false));
         expect(screen.queryByText("The worktree is not readable.")).toBeNull();
@@ -527,7 +529,6 @@ describe("TaskApprovalModal", () => {
 
       await act(async () => {
         finishCheck();
-        await new Promise((resolve) => setTimeout(resolve, 0));
       });
       await waitFor(() =>
         expect(

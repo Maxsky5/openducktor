@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { createDeferred } from "../../test-support/shared-test-fixtures";
 import { createSessionStartGate } from "./session-start-gate";
 
 describe("createSessionStartGate", () => {
   test("serializes queued and coalesced starts without merging their results", async () => {
     const gate = createSessionStartGate<string>();
-    const queuedStartEntered = createDeferred<void>();
-    const releaseQueuedStart = createDeferred<void>();
+    const queuedStartEntered = Promise.withResolvers<void>();
+    const releaseQueuedStart = Promise.withResolvers<void>();
     let coalescedStartCount = 0;
 
     const queuedStart = gate.run(
@@ -41,8 +40,8 @@ describe("createSessionStartGate", () => {
 
   test("does not execute queued starts after clear", async () => {
     const gate = createSessionStartGate<string>();
-    const firstStartEntered = createDeferred<void>();
-    const releaseFirstStart = createDeferred<void>();
+    const firstStartEntered = Promise.withResolvers<void>();
+    const releaseFirstStart = Promise.withResolvers<void>();
     const started: string[] = [];
 
     const firstStart = gate.run(

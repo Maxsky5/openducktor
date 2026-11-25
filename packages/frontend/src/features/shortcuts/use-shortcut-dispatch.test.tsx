@@ -317,6 +317,7 @@ test("a preview page reaches only commands that run while typing by default", as
       rects.mockRestore();
     }
   } finally {
+    cleanup();
     release();
   }
 });
@@ -332,8 +333,8 @@ test("keeps preview failures per source and hides labels in a frame without rout
       commands: [{ id: "sidebar", run: () => {}, appWide: true, localOnly: true }],
       children: (
         <>
-          <iframe title="Failed page" data-browser-frame-tab-id="failing" />
-          <iframe title="Healthy page" data-browser-frame-tab-id="healthy" />
+          <iframe srcDoc="" title="Failed page" data-browser-frame-tab-id="failing" />
+          <iframe srcDoc="" title="Healthy page" data-browser-frame-tab-id="healthy" />
         </>
       ),
     });
@@ -358,11 +359,14 @@ test("keeps preview failures per source and hides labels in a frame without rout
     act(() => screen.getByTitle("Healthy page").focus());
     await waitFor(() => expect(screen.getByTestId("sidebar-label").textContent).toBe("Ctrl+B"));
     first.apply.mockImplementation(async () => {});
-    fireEvent.click(screen.getByRole("button", { name: "Retry routes" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Retry routes" }));
+    });
     await waitFor(() => expect(screen.getByTestId("routing-error").textContent).toBe("Ready"));
     act(() => screen.getByTitle("Failed page").focus());
     expect(screen.getByTestId("sidebar-label").textContent).toBe("Ctrl+B");
   } finally {
+    cleanup();
     releaseFirst();
     releaseSecond();
   }

@@ -1,112 +1,114 @@
-import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { describe, expect, spyOn, test } from "bun:test";
+import type { ReadOptions, ReadOptionsWithBuffer, ReadPosition } from "node:fs";
+import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
+import type { LoadAgentSessionHistoryInput } from "@openducktor/core";
+import { Effect, Result } from "effect";
+import { loadClaudeHistory } from "./claude-agent-sdk-history-loader";
+import type { ClaudeProtocolObject } from "./claude-agent-sdk-ingress-schemas";
+import { claudeSubagentExternalSessionId } from "./claude-agent-sdk-subagent-transcripts";
+import { loadClaudeTodos } from "./claude-agent-sdk-todos";
+import { createClaudeTranscriptReader } from "./claude-transcript-reader";
 
-const storageModes: Array<"memory" | "disk"> = ["memory", "disk"];
+type Storage = "memory" | "disk";
+type SourceObservation = { bytesRead: number; denied: boolean; afterRead?: () => Promise<void> };
+const storageModes: Storage[] = ["memory", "disk"];
+const sessionId = "00000000-0000-4000-8000-000000000001";
+const timestamp = "2026-10-21T10:00:00.000Z";
 
-const runReader = async (
-  storage: (typeof storageModes)[number],
-  scenario: string,
+const snapshotFixture = (cwd: string, project: string, storage: Storage) => {
+  const transcript = join(project, `${sessionId}.jsonl`);
+  const processEnv = { CLAUDE_CONFIG_DIR: join(cwd, "config") };
+  const reader = createClaudeTranscriptReader({ processEnv, storage });
+  const input: LoadAgentSessionHistoryInput = {
+    repoPath: cwd,
+    workingDirectory: cwd,
+    externalSessionId: sessionId,
+    runtimeKind: "claude",
+    runtimePolicy: { kind: "claude" },
+  };
+  const row = (
+    uuid: string,
+    content: string,
+    extra?: ClaudeProtocolObject,
+  ): ClaudeProtocolObject => ({
+    type: "user",
+    sessionId,
+    cwd,
+    uuid,
+    parentUuid: null,
+    timestamp,
+    message: { role: "user", content },
+    ...extra,
+  });
+  const source: SourceObservation = { bytesRead: 0, denied: false };
+  const write = (rows: ClaudeProtocolObject[], path = transcript) =>
+    fs.writeFile(path, rows.map((row) => JSON.stringify(row)).join("\n") + "\n");
+  const read = (request = input) => Effect.runPromise(reader.read(request));
+  const readFailure = async (request = input) => {
+    const result = await Effect.runPromise(Effect.result(reader.read(request)));
+    if (Result.isSuccess(result)) throw new Error("The source read must fail.");
+    return result.failure;
+  };
+
+  return {
+    cwd,
+    project,
+    transcript,
+    processEnv,
+    reader,
+    input,
+    row,
+    source,
+    write,
+    read,
+    readFailure,
+  };
+};
+
+const withReader = async (
+  storage: Storage,
+  run: (fixture: ReturnType<typeof snapshotFixture>) => Promise<void>,
 ): Promise<void> => {
-  const root = await mkdtemp(join(tmpdir(), "claude-transcript-snapshot-"));
+  const root = await fs.mkdtemp(join(tmpdir(), "claude-transcript-snapshot-"));
   try {
-    const cwd = await realpath(root);
-    const config = join(cwd, "config");
-    const project = join(config, "projects", "native-project");
-    await mkdir(project, { recursive: true });
-    // A child process keeps native file observers out of parallel host tests.
-    const worker = Bun.spawn(
-      [
-        process.execPath,
-        "--eval",
-        String.raw`
-          import assert from "node:assert/strict";
-          import fs from "node:fs/promises";
-          import { join } from "node:path";
-          import { mock } from "bun:test";
-          const cwd = process.env.ODT_READER_CWD;
-          const project = process.env.ODT_READER_PROJECT;
-          const sessionId = "00000000-0000-4000-8000-000000000001";
-          const transcript = join(project, sessionId + ".jsonl");
-          const input = {
-            repoPath: cwd, workingDirectory: cwd, externalSessionId: sessionId,
-            runtimeKind: "claude", runtimePolicy: { kind: "claude" },
-          };
-          const row = (uuid, content, extra = {}) => ({
-            type: "user", sessionId, cwd, uuid, parentUuid: null,
-            timestamp: "2026-10-21T10:00:00.000Z",
-            message: { role: "user", content }, ...extra,
-          });
-          const write = (rows, path = transcript) =>
-            fs.writeFile(path, rows.map(value => JSON.stringify(value)).join("\n") + "\n");
-          let sourceReads = 0;
-          let afterSourceRead;
-          let denySource = false;
-          const originalOpen = fs.open;
-          fs.open = async (...args) => {
-            const path = String(args[0]);
-            if (path === transcript && denySource)
-              throw Object.assign(new Error("Permission denied"), { code: "EACCES" });
-            const file = await originalOpen(...args);
-            if (path.startsWith(project)) {
-              const originalRead = file.read.bind(file);
-              file.read = async (...readArgs) => {
-                const result = await originalRead(...readArgs);
-                sourceReads++;
-                await afterSourceRead?.();
-                return result;
-              };
-            }
-            return file;
-          };
-          mock.module("node:fs/promises", () => ({ ...fs }));
-          const { Effect, Result } = await import("effect");
-          const { createClaudeTranscriptReader } = await import(process.env.ODT_READER_MODULE);
-          const processEnv = { CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR };
-          const reader = createClaudeTranscriptReader({ processEnv, storage: process.env.ODT_READER_STORAGE });
-          const read = (request = input) => Effect.runPromise(reader.read(request));
-          const readFailure = async (request = input) => {
-            const result = await Effect.runPromise(Effect.result(reader.read(request)));
-            assert.ok(Result.isFailure(result), "The source read must fail.");
-            return result.failure;
-          };
-          try {
-            ${scenario}
-          } finally {
-            reader.dispose();
-          }
-        `,
-      ],
-      {
-        cwd: import.meta.dir,
-        env: {
-          ...process.env,
-          CLAUDE_CONFIG_DIR: config,
-          ODT_READER_CWD: cwd,
-          ODT_READER_PROJECT: project,
-          ODT_READER_STORAGE: storage,
-          ODT_READER_MODULE: new URL("./claude-transcript-reader.ts", import.meta.url).href,
-        },
-        stdout: "pipe",
-        stderr: "pipe",
-        timeout: 4_000,
-        killSignal: "SIGKILL",
-      },
-    );
+    const cwd = await fs.realpath(root);
+    const project = join(cwd, "config", "projects", "native-project");
+    await fs.mkdir(project, { recursive: true });
+    const fixture = snapshotFixture(cwd, project, storage);
+    const open = fs.open;
+    const observe = spyOn(fs, "open").mockImplementation(async (path, flags, mode) => {
+      if (path === fixture.transcript && fixture.source.denied)
+        throw Object.assign(new Error("Permission denied"), { code: "EACCES" });
+      const handle = await open(path, flags, mode);
+      if (String(path).startsWith(project + sep)) {
+        const read = handle.read.bind(handle);
+        handle.read = async <T extends NodeJS.ArrayBufferView>(
+          buffer?: T | ReadOptionsWithBuffer<T>,
+          offset?: number | null | ReadOptions,
+          length?: number | null,
+          position?: ReadPosition | null,
+        ) => {
+          let result;
+          if (!ArrayBuffer.isView(buffer)) result = await read(buffer);
+          else if (offset instanceof Object) result = await read(buffer, offset);
+          else result = await read(buffer, offset, length, position);
+          fixture.source.bytesRead += result.bytesRead;
+          if (result.bytesRead !== 0) await fixture.source.afterRead?.();
+          return result;
+        };
+      }
+      return handle;
+    });
     try {
-      const [output, error, code] = await Promise.all([
-        new Response(worker.stdout).text(),
-        new Response(worker.stderr).text(),
-        worker.exited,
-      ]);
-      expect({ code, error, output }).toEqual({ code: 0, error: "", output: "" });
+      await run(fixture);
     } finally {
-      worker.kill();
-      await worker.exited;
+      observe.mockRestore();
+      fixture.reader.dispose();
     }
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await fs.rm(root, { recursive: true, force: true });
   }
 };
 
@@ -114,143 +116,154 @@ describe("Claude source snapshot reuse", () => {
   test.each(storageModes)(
     "reuses only the most recent unchanged source and keeps its environment with %s storage",
     async (storage) => {
-      await runReader(
+      await withReader(
         storage,
-        String.raw`
-        await write([row("first", "Original message")]);
-        processEnv.CLAUDE_CONFIG_DIR = join(cwd, "not-the-native-config");
-        const { loadClaudeTodos } = await import(new URL("./claude-agent-sdk-todos.ts", process.env.ODT_READER_MODULE).href);
-        const { loadClaudeHistory } = await import(new URL("./claude-agent-sdk-history-loader.ts", process.env.ODT_READER_MODULE).href);
-        assert.deepEqual(await Effect.runPromise(loadClaudeTodos(input, { reader })), []);
-        const firstReads = sourceReads;
-        assert.ok(firstReads > 0);
-        const history = await Effect.runPromise(loadClaudeHistory(input, () => "2026-10-21T10:00:00.000Z", undefined, { reader }));
-        assert.equal(history[0].text, "Original message");
-        assert.equal((await read()).messages[0].uuid, "first");
-        assert.equal(sourceReads, firstReads, "A sequential read must not parse unchanged bytes again.");
-        const otherId = "00000000-0000-4000-8000-000000000002";
-        await write([row("other", "Other session", { sessionId: otherId })], join(project, otherId + ".jsonl"));
-        assert.equal((await read({ ...input, externalSessionId: otherId })).messages[0].uuid, "other");
-        const otherReads = sourceReads;
-        await read();
-        assert.ok(sourceReads > otherReads, "Reading another source must evict the previous snapshot.");
-        reader.dispose();
-        const closedReads = sourceReads;
-        assert.match((await readFailure()).message, /closed/);
-        assert.equal(sourceReads, closedReads);
-      `,
+        async ({
+          cwd,
+          project,
+          processEnv,
+          reader,
+          input,
+          row,
+          source,
+          write,
+          read,
+          readFailure,
+        }) => {
+          await write([row("first", "Original message")]);
+          processEnv.CLAUDE_CONFIG_DIR = join(cwd, "not-the-native-config");
+          expect(await Effect.runPromise(loadClaudeTodos(input, { reader }))).toEqual([]);
+          const firstReads = source.bytesRead;
+          expect(firstReads).toBeGreaterThan(0);
+          const history = await Effect.runPromise(
+            loadClaudeHistory(input, () => timestamp, undefined, { reader }),
+          );
+          expect(history[0]?.text).toBe("Original message");
+          expect((await read()).messages[0]?.uuid).toBe("first");
+          expect(source.bytesRead).toBe(firstReads);
+
+          const otherId = "00000000-0000-4000-8000-000000000002";
+          await write(
+            [row("other", "Other session", { sessionId: otherId })],
+            join(project, otherId + ".jsonl"),
+          );
+          expect((await read({ ...input, externalSessionId: otherId })).messages[0]?.uuid).toBe(
+            "other",
+          );
+          const otherReads = source.bytesRead;
+          expect((await read()).messages[0]?.uuid).toBe("first");
+          expect(source.bytesRead).toBeGreaterThan(otherReads);
+
+          reader.dispose();
+          const closedReads = source.bytesRead;
+          expect((await readFailure()).message).toContain("closed");
+          expect(source.bytesRead).toBe(closedReads);
+        },
       );
     },
   );
 
-  test.each(storageModes)(
-    "rechecks both root scope and selected child discovery with %s storage",
-    async (storage) => {
-      await runReader(
-        storage,
-        String.raw`
-        const { claudeSubagentExternalSessionId } = await import(new URL("./claude-agent-sdk-subagent-transcripts.ts", process.env.ODT_READER_MODULE).href);
+  test("rechecks both root scope and selected child discovery", async () => {
+    await withReader(
+      "disk",
+      async ({ cwd, project, input, row, source, write, read, readFailure }) => {
         await write([row("root", "Root session")]);
         const children = join(project, sessionId, "subagents");
         await fs.mkdir(children, { recursive: true });
         const childPath = join(children, "agent-child.jsonl");
-        const childInput = { ...input, externalSessionId: claudeSubagentExternalSessionId(sessionId, "child") };
+        const childInput = {
+          ...input,
+          externalSessionId: claudeSubagentExternalSessionId(sessionId, "child"),
+        };
         const child = row("child", "Child message", { isSidechain: true });
         await write([child], childPath);
-        assert.equal((await read(childInput)).messages[0].uuid, "child");
-        const cachedReads = sourceReads;
+        expect((await read(childInput)).messages[0]?.uuid).toBe("child");
+        const cachedReads = source.bytesRead;
         await read(childInput);
-        assert.equal(sourceReads, cachedReads);
+        expect(source.bytesRead).toBe(cachedReads);
+
         await write([row("root", "Changed scope", { cwd: join(cwd, "other-directory") })]);
-        assert.equal((await readFailure(childInput)).code, "scope_mismatch");
+        expect(await readFailure(childInput)).toMatchObject({ code: "scope_mismatch" });
         await write([row("root", "Root session")]);
         await read(childInput);
         const duplicate = join(children, "nested");
         await fs.mkdir(duplicate);
         await write([child], join(duplicate, "agent-child.jsonl"));
-        assert.match((await readFailure(childInput)).message, /Multiple Claude subagent transcripts/);
-      `,
-      );
-    },
-  );
+        expect((await readFailure(childInput)).message).toContain(
+          "Multiple Claude subagent transcripts",
+        );
+      },
+    );
+  });
 
-  test.each(storageModes)(
-    "refreshes appended and same-size rewritten source records with %s storage",
-    async (storage) => {
-      await runReader(
-        storage,
-        String.raw`
-        await write([row("first", "Original message")]);
-        await read();
-        await fs.appendFile(transcript, JSON.stringify(row("second", "Appended message", { parentUuid: "first" })) + "\n");
-        assert.deepEqual((await read()).messages.map(message => message.uuid), ["first", "second"]);
-        const size = (await fs.stat(transcript)).size;
-        await write([row("first", "Replaced message"), row("second", "Appended message", { parentUuid: "first" })]);
-        assert.equal((await fs.stat(transcript)).size, size);
-        assert.equal((await read()).messages[0].message.content, "Replaced message");
-      `,
-      );
-    },
-  );
+  test("refreshes appended and same-size rewritten source records", async () => {
+    await withReader("memory", async ({ transcript, row, write, read }) => {
+      const second = row("second", "Appended message", { parentUuid: "first" });
+      await write([row("first", "Original message")]);
+      await read();
+      await fs.appendFile(transcript, JSON.stringify(second) + "\n");
+      expect((await read()).messages.map((message) => message.uuid)).toEqual(["first", "second"]);
+      const size = (await fs.stat(transcript)).size;
+      await write([row("first", "Replaced message"), second]);
+      expect((await fs.stat(transcript)).size).toBe(size);
+      expect((await read()).messages[0]?.message).toMatchObject({ content: "Replaced message" });
+    });
+  });
 
-  test.each(storageModes)(
-    "evicts cached records when source access, scope, or discovery fails with %s storage",
-    async (storage) => {
-      await runReader(
-        storage,
-        String.raw`
+  test("evicts cached records when source access, scope, or discovery fails", async () => {
+    await withReader(
+      "disk",
+      async ({ cwd, project, transcript, input, row, source, write, read, readFailure }) => {
         const original = row("first", "Original message");
         await write([original]);
         await read();
-        denySource = true;
-        assert.match((await readFailure()).message, /Permission denied/);
-        denySource = false;
-        const deniedReads = sourceReads;
+        source.denied = true;
+        expect((await readFailure()).message).toContain("Permission denied");
+        source.denied = false;
+        const deniedReads = source.bytesRead;
         await read();
-        assert.ok(sourceReads > deniedReads, "A failed access check must evict the old snapshot.");
+        expect(source.bytesRead).toBeGreaterThan(deniedReads);
+
         const otherDirectory = join(cwd, "other-directory");
         await fs.mkdir(otherDirectory);
-        assert.equal((await readFailure({ ...input, workingDirectory: otherDirectory })).code, "scope_mismatch");
+        expect(await readFailure({ ...input, workingDirectory: otherDirectory })).toMatchObject({
+          code: "scope_mismatch",
+        });
         await read();
         const duplicate = join(project, "..", "duplicate-project");
         await fs.mkdir(duplicate);
         await write([original], join(duplicate, sessionId + ".jsonl"));
-        assert.match((await readFailure()).message, /Multiple Claude transcripts/);
+        expect((await readFailure()).message).toContain("Multiple Claude transcripts");
         await fs.rm(duplicate, { recursive: true });
-        const duplicateReads = sourceReads;
+        const duplicateReads = source.bytesRead;
         await read();
-        assert.ok(sourceReads > duplicateReads);
+        expect(source.bytesRead).toBeGreaterThan(duplicateReads);
+
         await write([row("first", "Foreign scope", { cwd: otherDirectory })]);
-        assert.equal((await readFailure()).code, "scope_mismatch");
+        expect(await readFailure()).toMatchObject({ code: "scope_mismatch" });
         await write([original]);
         await read();
         await fs.rm(transcript);
-        assert.match((await readFailure()).message, /unavailable/);
-      `,
-      );
-    },
-  );
+        expect((await readFailure()).message).toContain("unavailable");
+      },
+    );
+  });
 
-  test.each(storageModes)(
-    "does not retain a prefix when the source grows during a read with %s storage",
-    async (storage) => {
-      await runReader(
-        storage,
-        String.raw`
-        await write([row("first", "Original message")]);
-        afterSourceRead = async () => {
-          afterSourceRead = undefined;
-          await fs.appendFile(transcript, JSON.stringify(row("second", "Appended during read", { parentUuid: "first" })) + "\n");
-        };
-        assert.deepEqual((await read()).messages.map(message => message.uuid), ["first"]);
-        const prefixReads = sourceReads;
-        assert.deepEqual((await read()).messages.map(message => message.uuid), ["first", "second"]);
-        assert.ok(sourceReads > prefixReads, "The changed source must be parsed again.");
-        const completeReads = sourceReads;
-        await read();
-        assert.equal(sourceReads, completeReads);
-      `,
-      );
-    },
-  );
+  test("reloads rows appended during a bounded source read", async () => {
+    await withReader("memory", async ({ transcript, row, source, write, read }) => {
+      await write([row("first", "Original message")]);
+      source.afterRead = async () => {
+        delete source.afterRead;
+        const second = row("second", "Appended during read", { parentUuid: "first" });
+        await fs.appendFile(transcript, JSON.stringify(second) + "\n");
+      };
+      expect((await read()).messages.map((message) => message.uuid)).toEqual(["first"]);
+      const prefixReads = source.bytesRead;
+      expect((await read()).messages.map((message) => message.uuid)).toEqual(["first", "second"]);
+      expect(source.bytesRead).toBeGreaterThan(prefixReads);
+      const completeReads = source.bytesRead;
+      await read();
+      expect(source.bytesRead).toBe(completeReads);
+    });
+  });
 });

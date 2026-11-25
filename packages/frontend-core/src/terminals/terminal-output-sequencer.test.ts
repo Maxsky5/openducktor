@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import {
   TERMINAL_PROTOCOL_VERSION,
   decodeTerminalProtocolFrame,
@@ -27,25 +27,6 @@ const outputFrame = (sequenceStart: number, sequenceEnd: number) =>
   ({ sequenceStart, sequenceEnd }) as const;
 
 describe("createTerminalOutputSequencer", () => {
-  test("sends the ACK of parsed output when the terminal detaches as it hydrates", async () => {
-    const parser = createParser();
-    const acks: number[] = [];
-    let sequencer: ReturnType<typeof createTerminalOutputSequencer> | null = null;
-    sequencer = createTerminalOutputSequencer({
-      write: parser.write,
-      onConsumed: (sequence) => acks.push(sequence),
-      // A hidden viewport detaches when its first screen is parsed.
-      onHydrated: () => sequencer?.detach(),
-    });
-    sequencer.setSnapshotBoundary(5);
-    const written = sequencer.enqueue(outputFrame(0, 5), new Uint8Array(5));
-    parser.parse();
-    await written;
-    await Bun.sleep(0);
-
-    expect(acks).toEqual([5]);
-  });
-
   test("acknowledges replayed bytes that xterm parsed during an earlier attachment", async () => {
     const parser = createParser();
     const acks: number[] = [];
@@ -53,47 +34,24 @@ describe("createTerminalOutputSequencer", () => {
       write: parser.write,
       onConsumed: (sequence) => acks.push(sequence),
     });
-    void sequencer.enqueue(outputFrame(0, 10), new Uint8Array(10));
+    const written = sequencer.enqueue(outputFrame(0, 10), new Uint8Array(10));
     // The terminal hides before xterm parses the bytes, so they send no ACK.
     sequencer.detach();
     parser.parse();
-    await Bun.sleep(0);
+    await written;
     expect(acks).toEqual([]);
 
     // The next attachment replays from the last ACK. xterm has these bytes already.
     await sequencer.enqueue(outputFrame(0, 10), new Uint8Array(10));
-    await Bun.sleep(0);
 
     expect(acks).toEqual([10]);
   });
 
-  test("finishes a waiting restore that a detach replaces", async () => {
-    const parser = createParser();
-    const finished: boolean[] = [];
-    const prepared: string[] = [];
-    const sequencer = createTerminalOutputSequencer({
-      write: parser.write,
-      onConsumed: () => undefined,
-    });
-    void sequencer.enqueue(outputFrame(0, 10), new Uint8Array(10));
-    // The restore waits until xterm parses the earlier output.
-    const restored = sequencer.restore(
-      40,
-      new Uint8Array(4),
-      () => prepared.push("reset"),
-      (completed) => finished.push(completed),
-    );
-    sequencer.detach();
-    parser.parse();
-    await restored;
-
-    expect(prepared).toEqual([]);
-    expect(finished).toEqual([false]);
-  });
-
-  test("keeps the parsed position when a detach cancels a waiting restore", async () => {
+  test("reports a canceled restore and keeps the parsed position for replay", async () => {
     const parser = createParser();
     const written: number[] = [];
+    const completed: boolean[] = [];
+    const resetScreen = mock(() => undefined);
     const sequencer = createTerminalOutputSequencer({
       write: (payload, parsed) => {
         written.push(payload.byteLength);
@@ -102,11 +60,8 @@ describe("createTerminalOutputSequencer", () => {
       onConsumed: () => undefined,
     });
     void sequencer.enqueue(outputFrame(0, 10), new Uint8Array(10));
-    const restored = sequencer.restore(
-      40,
-      new Uint8Array(4),
-      () => undefined,
-      () => undefined,
+    const restored = sequencer.restore(40, new Uint8Array(4), resetScreen, (value) =>
+      completed.push(value),
     );
     sequencer.detach();
     parser.parse();
@@ -117,12 +72,15 @@ describe("createTerminalOutputSequencer", () => {
     parser.parse();
     await replayed;
 
+    expect(resetScreen).not.toHaveBeenCalled();
+    expect(completed).toEqual([false]);
     expect(written).toEqual([10, 10]);
   });
 
   test("sends the ACK of a hidden first screen before the detach frame", async () => {
     const terminalId = "terminal-1";
     const sent: string[] = [];
+    const detached = Promise.withResolvers<void>();
     let receive: (frame: Uint8Array) => void = () => undefined;
     const controller = createTerminalTransportController(
       {
@@ -133,6 +91,7 @@ describe("createTerminalOutputSequencer", () => {
             send: async (frame) => {
               const { message } = decodeTerminalProtocolFrame(frame);
               sent.push(message.type === "ack" ? `ack:${message.sequenceEnd}` : message.type);
+              if (message.type === "detach") detached.resolve();
             },
             close: () => undefined,
           };
@@ -178,9 +137,8 @@ describe("createTerminalOutputSequencer", () => {
       },
       new TextEncoder().encode("ok\r\n"),
     );
-    await Bun.sleep(0);
     parser.parse();
-    await Bun.sleep(10);
+    await detached.promise;
 
     expect(sent).toEqual(["attach", "ack:4", "detach"]);
     await controller.dispose();

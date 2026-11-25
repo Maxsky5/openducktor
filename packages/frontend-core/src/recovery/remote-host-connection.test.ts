@@ -1,6 +1,9 @@
 import { savedTestAuthorizationStore } from "../../../host-client/src/remote/test-support/authorization";
-import { createFakeHostChannel } from "../../../host-client/src/remote/test-support/host-channel";
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import {
+  createFakeHostChannel,
+  type FakeHostChannel,
+} from "../../../host-client/src/remote/test-support/host-channel";
+import { afterEach, describe, expect, jest, spyOn, test } from "bun:test";
 import { REMOTE_MAX_REPLY_BYTES, type AgentSessionLiveEnvelope } from "@openducktor/contracts";
 import { liveSessionStreamEventName } from "@openducktor/host-client";
 import type { RemoteTransport } from "@openducktor/host-client/remote";
@@ -73,6 +76,30 @@ const connectTo = (transport: RemoteTransport) =>
     transport,
     queryClient: createClientQueryClient(),
   });
+
+const reconnectAfterChannelClose = async (
+  channel: FakeHostChannel,
+  connection: ReturnType<typeof createRemoteHostConnection>,
+) => {
+  await waitForExpectation(() => expect(connection.remote.readState().status).toBe("connected"));
+  jest.useFakeTimers();
+  try {
+    channel.closeAll();
+    // Deliver the fake socket's close event before advancing its reconnect deadline.
+    jest.advanceTimersToNextTimer();
+    jest.advanceTimersByTime(499);
+    expect(connection.remote.readState().status).toBe("disconnected");
+    expect(channel.sockets).toHaveLength(1);
+    jest.advanceTimersByTime(1);
+    expect(connection.remote.readState().status).toBe("connecting");
+  } finally {
+    jest.useRealTimers();
+  }
+  await waitForExpectation(() => {
+    expect(channel.sockets).toHaveLength(2);
+    expect(connection.remote.readState().status).toBe("connected");
+  });
+};
 
 describe("live sessions across a reconnect", () => {
   const transcriptEvent = (messageId: string, sequence: number): AgentSessionLiveEnvelope => ({
@@ -177,12 +204,7 @@ describe("live sessions across a reconnect", () => {
         liveSessionStreamEventName("/repo"),
       );
       await waitForExpectation(() => expect(received).toHaveLength(2));
-      host.channel.closeAll();
-      // The client reconnects after its first backoff of 500 ms.
-      await waitForExpectation(() => {
-        expect(host.channel.sockets).toHaveLength(2);
-        expect(connection.remote.readState().status).toBe("connected");
-      }, 3_000);
+      await reconnectAfterChannelClose(host.channel, connection);
       host.channel.emit(
         liveEnvelope(transcriptEvent("after", 4)),
         liveSessionStreamEventName("/repo"),
@@ -316,11 +338,7 @@ describe("Usage results across a reconnect", () => {
       // SAFETY: The test only checks whether the entry stays; no reader uses its fields.
       queryClient.setQueryData(key, { resultAt: "earlier" } as never);
       instance = nextInstance;
-      channel.closeAll();
-      await waitForExpectation(() => {
-        expect(channel.sockets).toHaveLength(2);
-        expect(connection.remote.readState().status).toBe("connected");
-      }, 3_000);
+      await reconnectAfterChannelClose(channel, connection);
       expect(queryClient.getQueryData(key) !== undefined).toBe(kept);
     } finally {
       await connection.remote.disconnect();
@@ -351,11 +369,7 @@ describe("a slow Usage read during a reconnect", () => {
     const stop = observer.subscribe(() => {});
     try {
       await connection.waitForAdmission();
-      channel.closeAll();
-      await waitForExpectation(() => {
-        expect(channel.sockets).toHaveLength(2);
-        expect(connection.remote.readState().status).toBe("connected");
-      }, 3_000);
+      await reconnectAfterChannelClose(channel, connection);
     } finally {
       stop();
       await connection.remote.disconnect();

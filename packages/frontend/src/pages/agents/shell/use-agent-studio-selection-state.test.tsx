@@ -9,7 +9,6 @@ import { render, waitFor } from "@testing-library/react";
 import { createElement, type ReactElement, useLayoutEffect } from "react";
 import {
   createHookHarness as createSharedHookHarness,
-  enableReactActEnvironment,
   taskSelectionFixture,
 } from "../agent-studio-test-utils";
 import {
@@ -20,8 +19,6 @@ import { useAgentStudioSelectionState } from "./use-agent-studio-selection-state
 import { useAgentStudioQuerySync } from "../query-sync/use-agent-studio-query-sync";
 import { SessionViewContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { QueryProvider } from "@/test-utils/query-provider";
-
-enableReactActEnvironment();
 
 type HookProps = Parameters<typeof useAgentStudioSelectionState>[0];
 

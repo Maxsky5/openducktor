@@ -1,3 +1,4 @@
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { expect, mock, test } from "bun:test";
 import type { GitWorktreeStatus } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -14,6 +15,8 @@ import {
   workspaceSessionGitSource,
 } from "@/test-utils/workspace-session-git-source";
 import { useWorkspaceSessionTools } from "./use-workspace-session-tools";
+
+setupTestingLibraryFakeTimers();
 
 type ToolsOwnerProps = Omit<Parameters<typeof useWorkspaceSessionTools>[0], "git"> &
   FlatWorkspaceSessionGit;
@@ -64,7 +67,15 @@ test("returning to a session checks fresh comparison data while its previous rea
     fileStatuses: [],
     fileDiffs:
       scope === "target"
-        ? [{ file: currentFile, type: "modified", additions: 1, deletions: 0, diff: "@@ -1 +1 @@" }]
+        ? [
+            {
+              file: currentFile,
+              type: "modified",
+              additions: 1,
+              deletions: 0,
+              diff: "@@ -1 +1 @@\n-before\n+after\n",
+            },
+          ]
         : [],
     targetAheadBehind: { ahead: currentFile === "original-a.txt" ? 9 : 1, behind: 0 },
     upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
@@ -122,29 +133,33 @@ test("returning to a session checks fresh comparison data while its previous rea
       </ThemeProvider>
     </ClientConnectionProvider>
   );
-  const view = render(panel(args));
+  const view = await act(async () => render(panel(args)));
   try {
     await waitFor(() => expect(targetCalls).toBe(1));
     currentBranch = "branch-b";
     currentFile = "session-b.txt";
-    view.rerender(
-      panel({
-        ...args,
-        workspaceSession: { workspaceId: "workspace", sessionId: "session-b" },
-        branchKey: currentBranch,
-      }),
-    );
+    await act(async () => {
+      view.rerender(
+        panel({
+          ...args,
+          workspaceSession: { workspaceId: "workspace", sessionId: "session-b" },
+          branchKey: currentBranch,
+        }),
+      );
+    });
     await waitFor(() => expect(targetCalls).toBe(2));
     currentBranch = "branch-a";
     currentFile = "fresh-a.txt";
-    view.rerender(panel(args));
+    await act(async () => view.rerender(panel(args)));
     await waitFor(() => expect(targetCalls).toBe(3));
     await waitFor(() =>
       expect(
         screen.getByTestId("agent-studio-git-diff-scope-target").hasAttribute("disabled"),
       ).toBe(false),
     );
-    fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-target"), { button: 0 });
+    await act(async () => {
+      fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-target"), { button: 0 });
+    });
     await waitFor(() => expect(screen.getByText("fresh-a.txt")).toBeDefined());
     await act(async () => {
       pending.resolve(oldStatus);
@@ -222,7 +237,7 @@ test("keeps a rebase lock and captured target while the panel closes and reopens
       </ThemeProvider>
     </ClientConnectionProvider>
   );
-  const rendered = render(panel(true));
+  const rendered = await act(async () => render(panel(true)));
   try {
     await waitFor(() =>
       expect(screen.getByTestId("agent-studio-git-rebase-button").hasAttribute("disabled")).toBe(
@@ -231,9 +246,9 @@ test("keeps a rebase lock and captured target while the panel closes and reopens
     );
     await act(async () => fireEvent.click(screen.getByTestId("agent-studio-git-rebase-button")));
     expect(rebase).toHaveBeenCalledWith("/repo", "refs/heads/release", "/repo/a");
-    rendered.rerender(panel(false, "next"));
+    await act(async () => rendered.rerender(panel(false, "next")));
     expect(screen.queryByTestId("agent-studio-git-rebase-button")).toBeNull();
-    rendered.rerender(panel(true, "next"));
+    await act(async () => rendered.rerender(panel(true, "next")));
     await waitFor(() =>
       expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toContain("next"),
     );
@@ -257,7 +272,7 @@ test("keeps a rebase lock and captured target while the panel closes and reopens
   }
 });
 
-test.each(["directory", "branch"] as const)(
+test.each(["session", "directory", "branch"] as const)(
   "scopes a pending Git confirmation when its %s changes",
   async (change) => {
     const status = (workingDir = "/repo/a"): GitWorktreeStatus => ({
@@ -327,7 +342,7 @@ test.each(["directory", "branch"] as const)(
         </ThemeProvider>
       </ClientConnectionProvider>
     );
-    const rendered = render(panel("session-a", "/repo/a", "branch:feature"));
+    const rendered = await act(async () => render(panel("session-a", "/repo/a", "branch:feature")));
     try {
       await waitFor(() =>
         expect(screen.getByTestId("agent-studio-git-pull-button").hasAttribute("disabled")).toBe(
@@ -338,23 +353,24 @@ test.each(["directory", "branch"] as const)(
         fireEvent.click(screen.getByTestId("agent-studio-git-pull-button"));
       });
       expect(screen.getByRole("dialog", { name: "Confirm pull with rebase" })).toBeTruthy();
-      rendered.rerender(panel("session-a", "/repo/a", "branch:feature", "files"));
-      rendered.rerender(panel("session-a", "/repo/a", "branch:feature"));
+      await act(async () =>
+        rendered.rerender(panel("session-a", "/repo/a", "branch:feature", "files")),
+      );
+      await act(async () => rendered.rerender(panel("session-a", "/repo/a", "branch:feature")));
       expect(Boolean(screen.queryByRole("dialog", { name: "Confirm pull with rebase" }))).toBe(
         true,
       );
-      rendered.rerender(panel("session-a", "/repo/a", "branch:feature", "diffs", false));
+      await act(async () =>
+        rendered.rerender(panel("session-a", "/repo/a", "branch:feature", "diffs", false)),
+      );
       expect(screen.queryByRole("dialog", { name: "Confirm pull with rebase" })).toBeNull();
-      rendered.rerender(panel("session-a", "/repo/a", "branch:feature"));
+      await act(async () => rendered.rerender(panel("session-a", "/repo/a", "branch:feature")));
       expect(screen.getByRole("dialog", { name: "Confirm pull with rebase" })).toBeTruthy();
-      rendered.rerender(panel("session-b", "/repo/a", "branch:feature"));
-      expect(screen.queryByRole("dialog", { name: "Confirm pull with rebase" })).toBeNull();
+      const nextSession = change === "session" ? "session-b" : "session-a";
       const nextDirectory = change === "directory" ? "/repo/b" : "/repo/a";
       const nextBranchKey = change === "branch" ? "branch:other" : "branch:feature";
-      rendered.rerender(panel("session-c", nextDirectory, nextBranchKey));
-      expect(Boolean(screen.queryByRole("dialog", { name: "Confirm pull with rebase" }))).toBe(
-        false,
-      );
+      await act(async () => rendered.rerender(panel(nextSession, nextDirectory, nextBranchKey)));
+      expect(screen.queryByRole("dialog", { name: "Confirm pull with rebase" })).toBeNull();
       expect(pull).not.toHaveBeenCalled();
       await waitFor(() =>
         expect(screen.getByTestId("agent-studio-git-pull-button").hasAttribute("disabled")).toBe(

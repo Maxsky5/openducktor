@@ -4,7 +4,6 @@ import {
   codexSessionRuntimeRef,
   codexThreadFixture,
   codexTurnFixture,
-  createDeferred,
   createHarness,
   createRuntimeStreamSubscription,
   flushCodexAdapterWork,
@@ -14,8 +13,8 @@ import {
 for (const order of ["history-first", "terminal-first", "during-history"] as const) {
   test(`public history participates in interrupted-turn settlement: ${order}`, async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
-    const historyRead = createDeferred<void>();
-    const releaseHistory = createDeferred<void>();
+    const historyRead = Promise.withResolvers<void>();
+    const releaseHistory = Promise.withResolvers<void>();
     const projected: AgentImageGenerationPart[] = [];
     const settledTurns: string[] = [];
     const ref = codexSessionRuntimeRef("thread-existing");

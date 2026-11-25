@@ -36,18 +36,14 @@ import type {
 import {
   createAgentSessionFixture,
   createChecksStateContextValue,
-  createDeferred,
   createRuntimeDefinitionsContextValue,
   createTaskCardFixture,
   createTaskStoreCheckFixture,
-  enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 import { useAgentStudioSelectionActions } from "./session-actions/use-agent-studio-selection-actions";
 import { deriveSelectedSessionViewProjection } from "@openducktor/frontend-core/sessions/session-view/selected-session-view-projection";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
 import { repoConfigFixture } from "@openducktor/frontend-core/test-support/repo-config-fixture";
-
-enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioSessionActions>[0];
 
@@ -1071,7 +1067,7 @@ describe("useAgentStudioSessionActions", () => {
   test.each(["Send", "quick action"] as const)(
     "first Send shares its starting state and gate when %s starts first",
     async (first) => {
-      const started = createDeferred<ReturnType<typeof sessionIdentity>>();
+      const started = Promise.withResolvers<ReturnType<typeof sessionIdentity>>();
       const startAgentSession = mock(() => started.promise);
       const harness = createHookHarness({
         ...createBaseArgs(),
@@ -1137,7 +1133,7 @@ describe("useAgentStudioSessionActions", () => {
   );
 
   test("onSend marks the context as sending until the send settles", async () => {
-    const sendDeferred = createDeferred<void>();
+    const sendDeferred = Promise.withResolvers<void>();
     const sendAgentMessage = mock(() => sendDeferred.promise.then(() => null));
     const draft = createComposerDraft("  hello world  ");
 
@@ -1213,7 +1209,7 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("blocks fresh session creation while a loaded session send is in flight", async () => {
-    const sendDeferred = createDeferred<void>();
+    const sendDeferred = Promise.withResolvers<void>();
     const sendAgentMessage = mock(() => sendDeferred.promise.then(() => null));
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const loadedSession = createSession({
@@ -1455,7 +1451,7 @@ describe("useAgentStudioSessionActions", () => {
   );
 
   test("handleCreateSession does not switch query before creating another session for the same role", async () => {
-    const deferredStart = createDeferred<ReturnType<typeof sessionIdentity>>();
+    const deferredStart = Promise.withResolvers<ReturnType<typeof sessionIdentity>>();
     const startAgentSession = mock(async () => deferredStart.promise);
     const sendAgentMessage = mock(async () => null);
     const updateCalls: AgentStudioQueryUpdate[] = [];

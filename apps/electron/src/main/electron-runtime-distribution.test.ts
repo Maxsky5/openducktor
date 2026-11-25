@@ -1,18 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import {
-  resolveElectronMcpSidecarBinDir,
-  resolveElectronMcpSidecarPath,
-  resolveElectronRuntimeDistribution,
-} from "./electron-runtime-distribution";
+import { resolveElectronRuntimeDistribution } from "./electron-runtime-distribution";
 
 describe("resolveElectronRuntimeDistribution", () => {
-  test("resolves the packaged Electron MCP sidecar directory", () => {
-    const resourcesPath = "/Applications/OpenDucktor.app/Contents/Resources";
-
-    expect(resolveElectronMcpSidecarBinDir(resourcesPath)).toBe(join(resourcesPath, "bin"));
-  });
-
   test("uses the workspace source distribution in Electron dev mode", () => {
     expect(
       resolveElectronRuntimeDistribution({
@@ -27,33 +17,14 @@ describe("resolveElectronRuntimeDistribution", () => {
     });
   });
 
-  test("uses the packaged Electron resources sidecar in artifact mode", () => {
-    const resourcesPath = "/Applications/OpenDucktor.app/Contents/Resources";
-    const distribution = resolveElectronRuntimeDistribution({
-      platform: "darwin",
-      isPackaged: true,
-      resourcesPath,
-      workspaceRoot: "/repo",
-    });
-
-    expect(distribution).toMatchObject({
-      mode: "artifact",
-      mcpLauncher: {
-        kind: "executable",
-        executablePath: join(resourcesPath, "bin", "openducktor-mcp"),
-      },
-    });
-    expect(resolveElectronMcpSidecarPath({ platform: "darwin", resourcesPath })).toBe(
-      join(resourcesPath, "bin", "openducktor-mcp"),
-    );
-  });
-
-  test("uses the Linux MCP executable name for packaged Electron artifacts", () => {
-    const resourcesPath = "/opt/OpenDucktor/resources";
-
+  test.each([
+    ["darwin", "/Applications/OpenDucktor.app/Contents/Resources", "openducktor-mcp"],
+    ["linux", "/opt/OpenDucktor/resources", "openducktor-mcp"],
+    ["win32", "C:\\Program Files\\OpenDucktor\\resources", "openducktor-mcp.exe"],
+  ] as const)("uses the packaged MCP sidecar on %s", (platform, resourcesPath, executable) => {
     expect(
       resolveElectronRuntimeDistribution({
-        platform: "linux",
+        platform,
         isPackaged: true,
         resourcesPath,
         workspaceRoot: "/repo",
@@ -62,16 +33,8 @@ describe("resolveElectronRuntimeDistribution", () => {
       mode: "artifact",
       mcpLauncher: {
         kind: "executable",
-        executablePath: join(resourcesPath, "bin", "openducktor-mcp"),
+        executablePath: join(resourcesPath, "bin", executable),
       },
     });
-  });
-
-  test("uses the Windows MCP executable name for packaged Electron artifacts", () => {
-    const resourcesPath = "C:\\Program Files\\OpenDucktor\\resources";
-
-    expect(resolveElectronMcpSidecarPath({ platform: "win32", resourcesPath })).toBe(
-      join(resourcesPath, "bin", "openducktor-mcp.exe"),
-    );
   });
 });

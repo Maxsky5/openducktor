@@ -1,3 +1,4 @@
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { expect, mock, test } from "bun:test";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import type { GitWorktreeStatus } from "@openducktor/contracts";
@@ -9,10 +10,12 @@ import { readInlineCommentDraftsFromStorage } from "@openducktor/frontend-core/d
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { toInlineCommentDraftOwnerKey } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
 import { createMemoryClientStorage } from "@openducktor/frontend-core/platform/client-storage";
-import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { toLocalChanges } from "@openducktor/frontend-core/test-support/local-changes-fixture";
 import { workspaceSessionGitSource } from "@/test-utils/workspace-session-git-source";
 import { useWorkspaceSessionTools } from "./use-workspace-session-tools";
+
+setupTestingLibraryFakeTimers();
 
 const commentOwner = {
   kind: "workspace_session",
@@ -100,7 +103,7 @@ for (const contextMode of ["repository", "worktree"] as const) {
           diffHash: "fedcba9876543210",
         },
       });
-      const completed = createDeferred<GitWorktreeStatus>();
+      const completed = Promise.withResolvers<GitWorktreeStatus>();
       const read = mock(async (_repo: string, _target: string, scope: "uncommitted" | "target") =>
         scope === diffScope ? completed.promise : status(scope),
       );
@@ -131,7 +134,7 @@ for (const contextMode of ["repository", "worktree"] as const) {
           </ThemeProvider>
         </ClientConnectionProvider>
       );
-      const view = render(panel(true));
+      const view = await act(async () => render(panel(true)));
       try {
         await waitFor(() => expect(read.mock.calls.length).toBeGreaterThan(0));
         await waitFor(() =>
@@ -140,7 +143,7 @@ for (const contextMode of ["repository", "worktree"] as const) {
         expect(comments.getState().getDraftCount(ownerKey)).toBe(2);
         expect(screen.queryByTestId("agent-studio-git-pull-button")).toBeNull();
         if (tools === "closed") {
-          view.rerender(panel(false));
+          await act(async () => view.rerender(panel(false)));
           expect(screen.queryByRole("tablist", { name: "Workspace session tools" })).toBeNull();
         }
         const reads = read.mock.calls.length;

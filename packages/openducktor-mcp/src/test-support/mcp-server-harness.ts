@@ -18,7 +18,7 @@ import {
 } from "@openducktor/contracts";
 import { mcpToolPayloadSchema, type McpToolPayload } from "../tool-results";
 
-export const TEST_ACTIVE_STATUSES = ["open", "in_progress", "blocked"];
+const TEST_ACTIVE_STATUSES = ["open", "in_progress", "blocked"];
 
 type McpToolObject = Record<string, McpToolPayload>;
 const mcpToolObjectSchema = z.record(z.string(), mcpToolPayloadSchema);
@@ -128,7 +128,7 @@ export const BROWSER_CLOSE_FAILURE =
   "The user shares this tab. You can close only your agent tabs.";
 
 export const startMockBridge = async (
-  options: { artifactReadResult?: ReadTaskArtifactsResult } = {},
+  options: { artifactReadResult?: ReadTaskArtifactsResult; activeStatuses?: string[] } = {},
 ): Promise<{ url: string; requests: RecordedRequest[] }> => {
   const requests: RecordedRequest[] = [];
   const server = createServer(async (request, response) => {
@@ -155,7 +155,7 @@ export const startMockBridge = async (
       writeJson(response, {
         bridgeVersion: ODT_MCP_BRIDGE_VERSION,
         toolNames: [...ODT_MCP_TOOL_NAMES],
-        activeStatuses: TEST_ACTIVE_STATUSES,
+        activeStatuses: options.activeStatuses ?? TEST_ACTIVE_STATUSES,
       });
       return;
     }

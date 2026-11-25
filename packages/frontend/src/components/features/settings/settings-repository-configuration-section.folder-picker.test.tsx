@@ -4,12 +4,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement, type ReactNode, useEffect, useState } from "react";
 import { QueryProvider } from "@/test-utils/query-provider";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { filesystemQueryKeys } from "@openducktor/frontend-core/queries/filesystem";
 import { RepositoryConfigurationSection } from "./settings-repository-configuration-section";
 import { resolveFolderPickerInitialPath } from "./settings-repository-configuration-section-model";
-
-enableReactActEnvironment();
 
 const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): SettingsRepoConfig => ({
   workspaceId: "repo",
@@ -110,6 +107,7 @@ test("RepositoryConfigurationSection applies the confirmed repository rebind pat
     return (
       <QueryProvider>
         <SeedFilesystemDirectory path="/tmp/rebound-repo" currentPathIsGitRepo />
+        <SeedFilesystemDirectory path="/repo" currentPathIsGitRepo />
         <RepositoryConfigurationSection
           selectedRepoConfig={selectedRepoConfig}
           selectedRepoEffectiveWorktreeBasePath={null}

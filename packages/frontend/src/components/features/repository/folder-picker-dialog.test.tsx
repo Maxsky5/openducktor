@@ -6,12 +6,9 @@ import { z } from "zod";
 import { directoryListingQueryOptions } from "@openducktor/frontend-core/queries/filesystem";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 
 const actualScrollAreaModule = await import("@/components/ui/scroll-area");
 let scrollAreaSpy: { mockRestore(): void };
-
-enableReactActEnvironment();
 
 const createListing = (overrides: Partial<DirectoryListing> = {}): DirectoryListing => ({
   currentPath: "/Users/dev",

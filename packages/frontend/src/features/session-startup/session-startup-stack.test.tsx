@@ -1,9 +1,10 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { StartupOperationSnapshot } from "@openducktor/contracts";
 import { act, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { toast } from "sonner";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import { QueryProvider } from "@/test-utils/query-provider";
@@ -11,55 +12,61 @@ import { createWorkspaceStateFixture } from "@/test-utils/shared-test-fixtures";
 import { AppToaster } from "@/components/layout/app-toaster";
 import { StartupNotifications } from "./session-startup-stack";
 
-test("keeps background starts and ordinary notices in one stack until they settle or disconnect", async () => {
-  const connection = createTestClientConnection();
-  const attemptIds = Array.from({ length: 6 }, (_, index) =>
-    connection.startupAttempts.begin({
-      origin: {
-        workspaceId: "workspace",
-        repoPath: "/repo",
-        scope: { kind: "task", taskId: `task-${index}`, role: "build" },
-      },
-      label: `Background start ${index}`,
-      presentation: "notification",
-    }),
-  );
-  const firstId = attemptIds[0];
-  if (!firstId) throw new Error("A startup attempt is missing.");
-  const view = renderNotifications(connection);
-  let ordinaryToastId: string | number | undefined;
-  try {
-    act(() => {
-      ordinaryToastId = toast("Ordinary notification", { duration: Infinity });
-    });
-    const notifications = within(await view.findByRole("region", { name: /^Notifications/ }));
-    expect(view.getAllByRole("region", { name: /^Notifications/ })).toHaveLength(1);
-    await waitFor(() => expect(notifications.getAllByText(/^repo · task-\d$/)).toHaveLength(6));
-    expect(notifications.queryByRole("list", { name: "Session startup steps" })).toBeNull();
-    const firstNotice = notifications.getByText("repo · task-0").closest("[data-sonner-toast]");
-    if (!(firstNotice instanceof HTMLElement)) throw new Error("The startup notice is missing.");
-    const first = within(firstNotice);
-    expect(first.queryByRole("button", { name: "Close toast" })).toBeNull();
-    act(() => {
-      connection.startupAttempts.fail(firstId, "Runtime refused the start. Check its settings.");
-    });
-    fireEvent.click(await first.findByRole("button", { name: "Close toast" }));
-    expect(connection.startupAttempts.getAttempt(firstId)).toBeNull();
-    expect(connection.startupAttempts.getSnapshot()).toHaveLength(5);
-    await waitFor(() => expect(notifications.getAllByText(/^repo · task-[1-5]$/)).toHaveLength(5));
-    expect(notifications.getByText("Ordinary notification")).toBeDefined();
-    await act(async () => {
+describe("startup notification exit", () => {
+  setupTestingLibraryFakeTimers();
+
+  test("keeps background starts and ordinary notices in one stack until they settle or disconnect", async () => {
+    const connection = createTestClientConnection();
+    const attemptIds = Array.from({ length: 6 }, (_, index) =>
+      connection.startupAttempts.begin({
+        origin: {
+          workspaceId: "workspace",
+          repoPath: "/repo",
+          scope: { kind: "task", taskId: `task-${index}`, role: "build" },
+        },
+        label: `Background start ${index}`,
+        presentation: "notification",
+      }),
+    );
+    const firstId = attemptIds[0];
+    if (!firstId) throw new Error("A startup attempt is missing.");
+    const view = renderNotifications(connection);
+    let ordinaryToastId: string | number | undefined;
+    try {
+      act(() => {
+        ordinaryToastId = toast("Ordinary notification", { duration: Infinity });
+      });
+      const notifications = within(await view.findByRole("region", { name: /^Notifications/ }));
+      expect(view.getAllByRole("region", { name: /^Notifications/ })).toHaveLength(1);
+      await waitFor(() => expect(notifications.getAllByText(/^repo · task-\d$/)).toHaveLength(6));
+      expect(notifications.queryByRole("list", { name: "Session startup steps" })).toBeNull();
+      const firstNotice = notifications.getByText("repo · task-0").closest("[data-sonner-toast]");
+      if (!(firstNotice instanceof HTMLElement)) throw new Error("The startup notice is missing.");
+      const first = within(firstNotice);
+      expect(first.queryByRole("button", { name: "Close toast" })).toBeNull();
+      act(() => {
+        connection.startupAttempts.fail(firstId, "Runtime refused the start. Check its settings.");
+      });
+      fireEvent.click(await first.findByRole("button", { name: "Close toast" }));
+      expect(connection.startupAttempts.getAttempt(firstId)).toBeNull();
+      expect(connection.startupAttempts.getSnapshot()).toHaveLength(5);
+      await waitFor(() =>
+        expect(notifications.getAllByText(/^repo · task-[1-5]$/)).toHaveLength(5),
+      );
+      expect(notifications.getByText("Ordinary notification")).toBeDefined();
+      await act(async () => {
+        await connection.dispose();
+      });
+      await waitFor(() => expect(notifications.queryAllByText(/^repo · task-\d$/)).toHaveLength(0));
+      expect(notifications.queryByRole("button", { name: "View progress" })).toBeNull();
+      expect(view.getAllByRole("region", { name: /^Notifications/ })).toHaveLength(1);
+      expect(notifications.getByText("Ordinary notification")).toBeDefined();
+    } finally {
+      view.unmount();
+      if (ordinaryToastId !== undefined) act(() => toast.dismiss(ordinaryToastId));
       await connection.dispose();
-    });
-    await waitFor(() => expect(notifications.queryAllByText(/^repo · task-\d$/)).toHaveLength(0));
-    expect(notifications.queryByRole("button", { name: "View progress" })).toBeNull();
-    expect(view.getAllByRole("region", { name: /^Notifications/ })).toHaveLength(1);
-    expect(notifications.getByText("Ordinary notification")).toBeDefined();
-  } finally {
-    view.unmount();
-    if (ordinaryToastId !== undefined) act(() => toast.dismiss(ordinaryToastId));
-    await connection.dispose();
-  }
+    }
+  });
 });
 
 test("keeps worktree progress and failed cleanup inspectable through updates and a refused repair", async () => {

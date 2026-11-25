@@ -9,6 +9,7 @@ import { DiffWorkerProvider } from "./DiffWorkerProvider";
 describe("DiffWorkerProvider", () => {
   // This test starts a real worker and loads its WebAssembly module.
   test("uses Highlights on the page and renders file tokens in the worker pool", async () => {
+    await disposeHighlighter();
     const workerFactorySpy = spyOn(workerModule, "workerFactory").mockImplementation(
       () => new Worker(import.meta.resolve("@pierre/diffs/worker/worker-portable.js")),
     );

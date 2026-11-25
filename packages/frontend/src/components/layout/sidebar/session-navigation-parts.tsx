@@ -157,7 +157,7 @@ const sessionEntryStatusLabel = (tone: SessionEntryDotTone, unread: boolean): st
 
 /** Running moves; Background shows its static icon; the other states show their dot. */
 function SessionEntryStatusMark({ tone }: { tone: SessionEntryDotTone }): ReactElement {
-  if (tone === "running") return <RunningStatusDot size="sm" />;
+  if (tone === "running") return <RunningStatusDot />;
   if (tone === "background") {
     const BackgroundIcon = AGENT_SESSION_BACKGROUND_ICON;
     return (

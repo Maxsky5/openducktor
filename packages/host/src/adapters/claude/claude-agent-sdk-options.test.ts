@@ -102,14 +102,6 @@ const createRepositorySession = (): ClaudeSessionContext => {
   return session;
 };
 
-const deferred = <Value>() => {
-  let resolve!: (value: Value) => void;
-  const promise = new Promise<Value>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-  return { promise, resolve };
-};
-
 const createServiceInput = (events?: {
   backgroundFailures?: HostOperationErrorAggregate[];
   onBackgroundFailure?: () => void;
@@ -495,11 +487,12 @@ describe("buildClaudeAgentSdkBaseOptions", () => {
 
 describe("buildClaudeAgentSdkOptions", () => {
   test.each(["default", "acceptEdits", "dontAsk", "bypassPermissions", "auto"] as const)(
-    "excludes tools ahead of root and child approvals in %s mode",
+    "launches the sandbox in %s mode and still excludes tools ahead of approvals",
     async (permissionMode) => {
       const session = createRepositorySession();
       const policy: ClaudePolicyFields = {
         permissionMode,
+        sandbox: { enabled: true },
         permissions: { allow: ["Read", "Artifact", "AskUserQuestion", "Agent"] },
         toolAvailability: {
           Read: false,
@@ -513,7 +506,12 @@ describe("buildClaudeAgentSdkOptions", () => {
         const options = await buildOptions(session, undefined, policy);
         expect(options.disallowedTools).toEqual(["Read", "Artifact", "AskUserQuestion", "Agent"]);
         const args = captureSdkLaunchArgs(options);
+        expect(args).toContain(`--permission-mode=${permissionMode}`);
         expect(args).toContain("--disallowedTools=Read,Artifact,AskUserQuestion,Agent");
+        expect(options.sandbox).toMatchObject({ enabled: true, failIfUnavailable: true });
+        expect(options.allowDangerouslySkipPermissions === true).toBe(
+          permissionMode === "bypassPermissions",
+        );
         expect(options.tools).toEqual({ type: "preset", preset: "claude_code" });
         expect(options).not.toHaveProperty("allowedTools");
         policy.toolAvailability = {};
@@ -712,27 +710,6 @@ describe("buildClaudeAgentSdkOptions", () => {
     },
   );
 
-  test.each(["default", "acceptEdits", "dontAsk", "bypassPermissions", "auto"] as const)(
-    "maps explicit %s independently from sandbox enablement",
-    async (permissionMode) => {
-      const session = createSession();
-      try {
-        const options = await buildOptions(session, undefined, {
-          permissionMode,
-          sandbox: { enabled: true },
-        });
-        expect(options.permissionMode).toBe(permissionMode);
-        const args = captureSdkLaunchArgs(options);
-        expect(args).toContain(`--permission-mode=${permissionMode}`);
-        expect(options.sandbox?.enabled).toBe(true);
-        expect(options.allowDangerouslySkipPermissions === true).toBe(
-          permissionMode === "bypassPermissions",
-        );
-      } finally {
-        session.abortController.abort();
-      }
-    },
-  );
   test("keeps the full workspace-bound OpenDucktor catalog available for repository sessions", async () => {
     const session = createRepositorySession();
     const options = await buildOptions(session);
@@ -1179,7 +1156,7 @@ describe("buildClaudeAgentSdkOptions", () => {
   });
 
   test("removes the session-scoped MCP token directory when the session is aborted", async () => {
-    const cleanupCompleted = deferred<void>();
+    const cleanupCompleted = Promise.withResolvers<void>();
     const backgroundFailures: HostOperationErrorAggregate[] = [];
     const removeDirectory = rm;
     const removeSpy = spyOn(fsPromises, "rm").mockImplementation(async (path, options) => {
@@ -1237,7 +1214,7 @@ describe("buildClaudeAgentSdkOptions", () => {
   test("reports abort cleanup failures through the host background failure boundary", async () => {
     const cleanupError = new Error("cleanup denied");
     const backgroundFailures: HostOperationErrorAggregate[] = [];
-    const backgroundFailureReported = deferred<void>();
+    const backgroundFailureReported = Promise.withResolvers<void>();
     const removeDirectory = rm;
     const removeSpy = spyOn(fsPromises, "rm").mockImplementation(async (path, options) => {
       if (String(path).includes("openducktor-claude-mcp-")) {

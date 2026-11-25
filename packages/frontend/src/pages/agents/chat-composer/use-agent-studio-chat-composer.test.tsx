@@ -37,14 +37,8 @@ import {
   createHostRuntimeStatusFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { HostRuntimeStatusContextValue, RepoSettingsInput } from "@/types/state-slices";
-import {
-  createAgentSessionFixture,
-  createDeferred,
-  enableReactActEnvironment,
-} from "../agent-studio-test-utils";
+import { createAgentSessionFixture } from "../agent-studio-test-utils";
 import { useAgentStudioChatComposer } from "./use-agent-studio-chat-composer";
-
-enableReactActEnvironment();
 
 let messageCounter = 0;
 
@@ -1794,8 +1788,8 @@ describe("useAgentStudioChatComposer", () => {
   });
 
   test("invalidates the composer catalog, ignores stale repo loads, and drops a default absent from the new catalog", async () => {
-    const repoALoad = createDeferred<AgentRuntimeCatalog>();
-    const repoBLoad = createDeferred<AgentRuntimeCatalog>();
+    const repoALoad = Promise.withResolvers<AgentRuntimeCatalog>();
+    const repoBLoad = Promise.withResolvers<AgentRuntimeCatalog>();
     const loadCatalog = mock(
       ({ repoPath }: RuntimeWorkingDirectoryRef): Promise<AgentRuntimeCatalog> => {
         if (repoPath === "/repo-a") {

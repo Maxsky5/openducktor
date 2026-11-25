@@ -10,7 +10,6 @@ import {
 } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import { restoreAfterTestBody } from "@/test-utils/restore-after-test-body";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { AGENT_CHAT_ROW_WINDOW_SIZE } from "./agent-chat-row-windows";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
@@ -31,8 +30,6 @@ import {
 } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread";
 import { AgentChatThreads } from "./agent-chat-threads";
-
-enableReactActEnvironment();
 
 // Most tests read the calls of finished runs, so their runs do not fold by themselves.
 const DEFAULT_TEST_CHAT_SETTINGS = createChatSettingsFixture({ collapseFinishedToolCalls: false });
@@ -124,6 +121,31 @@ const buildLongSession = (externalSessionId: string, count = 80) => {
 };
 
 describe("AgentChatThread", () => {
+  test("announces a runtime message only while its session is working", async () => {
+    const message = "Our systems are thinking a bit more about this request before responding.";
+    const base = buildBaseModel();
+    const thread = (isSessionWorking: boolean, runtimeStatusMessage: string | null) =>
+      createElement(AgentChatThread, {
+        model: {
+          ...base,
+          transcript: buildSessionTranscript(buildSession({ runtimeStatusMessage })),
+          isSessionWorking,
+        },
+      });
+
+    const view = render(thread(true, message));
+    await act(flush);
+    expect(view.getByRole("status").textContent).toContain(message);
+
+    view.rerender(thread(false, message));
+    await act(flush);
+    expect(view.queryByRole("status")).toBeNull();
+
+    view.rerender(thread(true, null));
+    await act(flush);
+    expect(view.queryByRole("status")).toBeNull();
+  });
+
   test("keeps each request independent through updates, removal, and replacement instances", async () => {
     const question = buildQuestionRequest({ requestInstanceId: "question-instance" });
     const approval = buildApprovalRequest({ requestInstanceId: "approval-instance" });
@@ -1075,11 +1097,9 @@ describe("AgentChatThread", () => {
       expect(rendered.queryByText("Loading session")).not.toBeNull();
       expect(rendered.queryByText("Attachment message 140")).toBeNull();
 
-      await waitFor(async () => {
-        await animationFrameDriver.flushFrames();
-        await animationFrameDriver.flushTimers();
-        expect(rendered.queryByText("Attachment message 140")).not.toBeNull();
-      });
+      await animationFrameDriver.flushFrames();
+      await animationFrameDriver.flushTimers();
+      await rendered.findByText("Attachment message 140");
       expect(
         rendered.queryByText(`Attachment message ${140 - AGENT_CHAT_ROW_WINDOW_SIZE + 1}`),
       ).not.toBeNull();
@@ -1125,11 +1145,9 @@ describe("AgentChatThread", () => {
         }),
       );
 
-      await waitFor(async () => {
-        await animationFrameDriver.flushFrames();
-        await animationFrameDriver.flushTimers();
-        expect(rendered.queryByText("Turn 18 reply 18")).not.toBeNull();
-      });
+      await animationFrameDriver.flushFrames();
+      await animationFrameDriver.flushTimers();
+      await rendered.findByText("Turn 18 reply 18");
 
       rendered.rerender(
         createElement(AgentChatThread, {
@@ -1139,11 +1157,9 @@ describe("AgentChatThread", () => {
           },
         }),
       );
-      await waitFor(async () => {
-        await animationFrameDriver.flushFrames();
-        await animationFrameDriver.flushTimers();
-        expect(rendered.queryByText("Small transcript")).not.toBeNull();
-      });
+      await animationFrameDriver.flushFrames();
+      await animationFrameDriver.flushTimers();
+      await rendered.findByText("Small transcript");
 
       rendered.rerender(
         createElement(AgentChatThread, {
@@ -1163,7 +1179,8 @@ describe("AgentChatThread", () => {
       expect(rendered.queryByText("Turn 18 reply 18")).not.toBeNull();
       const immediateRowCount = rendered.container.querySelectorAll("[data-row-key]").length;
       expect(immediateRowCount).toBeGreaterThan(0);
-      expect(immediateRowCount).toBeLessThanOrEqual(AGENT_CHAT_ROW_WINDOW_SIZE * 3);
+      // Keep the session switch within the budget of 60 mounted rows.
+      expect(immediateRowCount).toBeLessThanOrEqual(60);
       expect(rendered.queryByText("Turn 1 request")).toBeNull();
 
       rendered.unmount();

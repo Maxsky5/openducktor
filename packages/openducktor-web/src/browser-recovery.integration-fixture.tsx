@@ -4,6 +4,7 @@ import {
   savedTestAuthorization,
 } from "../../host-client/src/remote/test-support/authorization";
 import assert from "node:assert/strict";
+import { waitForRemoteConnection } from "./test-support";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import {
   HOST_CHANNEL_SUBPROTOCOL,
@@ -155,6 +156,7 @@ try {
     const socketStarted = Promise.withResolvers<void>();
     const socketGate = Promise.withResolvers<void>();
     const attached = Promise.withResolvers<void>();
+    const replayed = Promise.withResolvers<void>();
     const channel = createFakeHostChannel({
       invoke: (command) => {
         if (command === "runtime_status") {
@@ -247,7 +249,7 @@ try {
     const controller = createTerminalTransportController(bridge.terminals, () => {});
     let view: ReturnType<typeof render> | undefined;
     try {
-      await waitFor(() => assert.equal(connection.readState().status, "connected"));
+      await waitForRemoteConnection(connection);
       await act(async () => {
         view = render(
           <ShellPlatformContext value={bridge}>
@@ -327,19 +329,22 @@ try {
           else Reflect.deleteProperty(document, "hidden");
         }
       }
-      controller.subscribe("terminal-1", () => {});
+      controller.subscribe("terminal-1", (message) => {
+        if (message.type === "output" && message.replay && message.sequenceEnd === 4)
+          replayed.resolve();
+      });
       await controller.connect();
       await controller.acknowledge("terminal-1", 2);
       recovering = true;
       let retry!: Promise<void>;
       await act(async () => {
         retry = connection.retry();
+        await Promise.race([socketStarted.promise, retry]);
       });
       const outcome = retry.then(
         () => null,
         (cause: unknown) => cause,
       );
-      await socketStarted.promise;
       assert.equal(connection.readState().status, "synchronizing");
       assert.equal(runtimeReads, 1);
       assert.equal(autopilotReads, 1);
@@ -373,7 +378,7 @@ try {
           payload: new Uint8Array([3, 4]),
         }),
       );
-      await Bun.sleep(0);
+      await replayed.promise;
       assert.equal(runtimeReads, 1);
       assert.equal(autopilotReads, 1);
       assert.equal(connection.readState().status, "synchronizing");

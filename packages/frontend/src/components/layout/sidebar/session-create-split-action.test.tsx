@@ -6,7 +6,7 @@ import {
   repoConfigSchema,
 } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import * as settingsModal from "@/components/features/settings/settings-modal";
 import { WorkspaceDialogsProvider } from "@/components/layout/workspace-dialogs";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
@@ -29,11 +29,14 @@ import {
 import { MemoryRouter } from "react-router";
 import { toast } from "sonner";
 import type { ChecksStateContextValue } from "@/types/state-slices";
+import { workspaceSessionQueryKeys } from "@openducktor/frontend-core/queries/workspace-sessions";
+import { workspaceSessionRecord } from "@openducktor/frontend-core/test-support/workspace-session-fixtures";
 import { issueImportListQueryOptions } from "@openducktor/frontend-core/tasks/issue-import/issue-import-model";
 import { SessionCreateSplitAction } from "./session-create-split-action";
 
-// The import dialog is a lazy module. Load it with the file, not inside a timed test.
+// Load the lazy dialogs before the test timeout starts.
 await import("@/pages/kanban/issue-import-dialog");
+await import("@/pages/workspace-sessions/workspace-session-history-dialog");
 
 const workspace = createWorkspaceRecordFixture({
   workspaceId: "alpha",
@@ -60,7 +63,7 @@ const renderSplitAction = ({
   compact?: boolean;
   provider: RepositoryGitProviderContext;
   onCreateTask?: () => void;
-  listArchived?: (workspaceId: string) => Promise<never[]>;
+  listArchived?: HostClient["workspaceSessionListArchived"];
   client?: Partial<HostClient>;
   refreshTaskData?: ({ repoPath }: WorkspaceRef) => Promise<void>;
   taskStoreCheck?: ChecksStateContextValue["taskStoreCheck"];
@@ -78,12 +81,10 @@ const renderSplitAction = ({
       ...client,
     },
   });
-  const view = render(
+  const tree = (activeWorkspace: typeof workspace | null) => (
     <MemoryRouter>
       <QueryProvider connection={connection}>
-        <ActiveWorkspaceContext.Provider
-          value={{ activeWorkspace: active, setActiveWorkspace: () => {} }}
-        >
+        <ActiveWorkspaceContext.Provider value={{ activeWorkspace, setActiveWorkspace: () => {} }}>
           <ChecksStateContext.Provider value={createChecksStateFixture({ taskStoreCheck })}>
             <TaskWorkflowActionsContext.Provider
               value={createTaskWorkflowActionsFixture({ onCreateTask })}
@@ -107,9 +108,14 @@ const renderSplitAction = ({
           </ChecksStateContext.Provider>
         </ActiveWorkspaceContext.Provider>
       </QueryProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
-  return { ...view, connection };
+  const view = render(tree(active));
+  return {
+    ...view,
+    connection,
+    setActiveWorkspace: (next: typeof workspace) => view.rerender(tree(next)),
+  };
 };
 
 describe("SessionCreateSplitAction", () => {
@@ -231,24 +237,55 @@ describe("SessionCreateSplitAction", () => {
   });
 
   test("opens archived chats for the workspace that was active when it opened", async () => {
-    const listArchived = mock(async (_workspaceId: string) => []);
+    const record = workspaceSessionRecord("archive", {
+      generatedTitle: "Archived in the first repository",
+      archivedAt: 2_000,
+    });
+    const listArchived = mock(async (workspaceId: string) =>
+      workspaceId === "alpha" ? [record] : [],
+    );
     const settings = spyOn(settingsModal, "useSettingsModal").mockReturnValue({
       openSettings: () => {},
     });
     try {
-      renderSplitAction({ provider: issueProvider(), listArchived });
+      const { connection, setActiveWorkspace } = renderSplitAction({
+        provider: issueProvider(),
+        listArchived,
+      });
+      connection.queryClient.setQueryData(workspaceSessionQueryKeys.list("alpha", true), [record]);
+      const trigger = screen.getByRole("button", { name: "More actions for openducktor" });
 
-      fireEvent.click(screen.getByRole("button", { name: "More actions for openducktor" }));
-      fireEvent.click(await screen.findByRole("button", { name: /Archived sessions/ }));
+      fireEvent.click(trigger);
+      const archived = await screen.findByRole("button", { name: /Archived sessions/ });
+      await act(async () => fireEvent.click(archived));
 
-      await screen.findByRole("heading", { name: "Archived sessions" });
+      const dialog = await screen.findByRole("dialog", { name: "Archived sessions" });
+      expect(within(dialog).getByText("Archived in the first repository")).toBeTruthy();
       await waitFor(() => expect(listArchived).toHaveBeenCalledWith("alpha"));
-      fireEvent.click(screen.getByRole("button", { name: "Close" }));
-      await waitFor(() =>
-        expect(
-          document.activeElement ===
-            screen.getByRole("button", { name: "More actions for openducktor" }),
-        ).toBe(true),
+      fireEvent.change(
+        within(dialog).getByRole("searchbox", { name: "Filter archived sessions" }),
+        {
+          target: { value: "first repository" },
+        },
+      );
+      await act(async () =>
+        setActiveWorkspace(
+          createWorkspaceRecordFixture({
+            workspaceId: "beta",
+            workspaceName: "Second repository",
+            repoPath: "/repos/beta",
+          }),
+        ),
+      );
+      const openDialog = within(screen.getByRole("dialog", { name: "Archived sessions" }));
+      expect(openDialog.getByDisplayValue("first repository")).toBeTruthy();
+      expect(openDialog.getByText("Archived in the first repository")).toBeTruthy();
+      expect(listArchived.mock.calls).toEqual([["alpha"]]);
+      await act(async () => fireEvent.click(openDialog.getByRole("button", { name: "Close" })));
+      await waitFor(
+        () =>
+          expect(document.activeElement === trigger, "Focus returns to the menu button").toBe(true),
+        { timeout: 500 },
       );
     } finally {
       settings.mockRestore();
@@ -306,9 +343,10 @@ describe("SessionCreateSplitAction", () => {
         }),
       );
       fireEvent.click(screen.getByRole("button", { name: "More actions for openducktor" }));
-      fireEvent.click(
-        await screen.findByRole("button", { name: /Import tasks from GitHub Issues/ }),
-      );
+      const importTasks = await screen.findByRole("button", {
+        name: /Import tasks from GitHub Issues/,
+      });
+      await act(async () => fireEvent.click(importTasks));
       fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
       fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
       fireEvent.click(screen.getByRole("button", { name: "Import selected" }));

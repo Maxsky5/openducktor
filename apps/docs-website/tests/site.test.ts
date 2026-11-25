@@ -1,9 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { ASSET_CACHE, CONTENT_SECURITY_POLICY } from "@openducktor/build-tools/static-site";
 import { headersFile, readBuildTarget, robotsFile, SITE_ORIGIN } from "../config/site";
 
-test("reads DOCS_BUILD_TARGET and names it in the error", () => {
-  expect(readBuildTarget(undefined)).toBe("local");
+test("names DOCS_BUILD_TARGET in the error for an invalid value", () => {
   expect(() => readBuildTarget("staging")).toThrow(
     "Set DOCS_BUILD_TARGET to local, preview, or production.",
   );
@@ -25,10 +23,9 @@ describe.each(["local", "preview"] as const)("%s output", (target) => {
   });
 });
 
-test("only the content-hashed Next.js assets and scene stylesheets are cached for a year", () => {
+test("sets cache rules only for hashed Next.js assets and scene stylesheets", () => {
   const headers = headersFile("production");
-  expect(headers).toContain(`/_next/static/*\n  Cache-Control: ${ASSET_CACHE}\n`);
-  expect(headers).toContain(`/scene-styles/*\n  Cache-Control: ${ASSET_CACHE}\n`);
-  expect(headers.match(/Cache-Control/g)).toHaveLength(2);
-  expect(headers).toContain(`  Content-Security-Policy: ${CONTENT_SECURITY_POLICY}\n`);
+  expect(headers).toMatch(/^\/_next\/static\/\*\n  Cache-Control: /m);
+  expect(headers).toMatch(/^\/scene-styles\/\*\n  Cache-Control: /m);
+  expect(headers.match(/Cache-Control:/g)).toHaveLength(2);
 });

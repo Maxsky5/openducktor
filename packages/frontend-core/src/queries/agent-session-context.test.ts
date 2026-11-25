@@ -1,60 +1,37 @@
-import { describe, expect, test } from "bun:test";
+import { expect, mock, test } from "bun:test";
 import type { AgentSessionLiveLoadContextInput } from "@openducktor/contracts";
-import { agentSessionContextQueryKeys } from "./agent-session-context";
+import { QueryClient } from "@tanstack/react-query";
+import { loadAgentSessionContextFromQuery } from "./agent-session-context";
 
-const sessionRefFixture = {
-  repoPath: "/repo/",
-  runtimeKind: "claude",
-  workingDirectory: "/repo/worktree/",
-  externalSessionId: "session-1",
-} satisfies AgentSessionLiveLoadContextInput;
+test("shares concurrent reads for equivalent paths and keeps session scopes separate", async () => {
+  const client = new QueryClient();
+  const session = {
+    repoPath: "/repo/",
+    runtimeKind: "claude",
+    workingDirectory: "/repo/worktree/",
+    externalSessionId: "session-1",
+  } satisfies AgentSessionLiveLoadContextInput;
+  const loadContext = mock(async ({ sessionScope }: AgentSessionLiveLoadContextInput) => ({
+    totalTokens: sessionScope?.kind === "workflow" ? 300 : sessionScope ? 200 : 100,
+  }));
+  const read = (input: AgentSessionLiveLoadContextInput) =>
+    loadAgentSessionContextFromQuery(client, input, loadContext);
 
-describe("agent session context query keys", () => {
-  test("keeps absent, repository, and workflow session scopes distinct", () => {
-    const withoutScope = agentSessionContextQueryKeys.usage(sessionRefFixture);
-    const repositoryScope = agentSessionContextQueryKeys.usage({
-      ...sessionRefFixture,
-      sessionScope: { kind: "repository", workspaceId: "workspace-1" },
-    });
-    const workflowScope = agentSessionContextQueryKeys.usage({
-      ...sessionRefFixture,
+  const results = await Promise.all([
+    read(session),
+    read({ ...session, repoPath: "/repo", workingDirectory: "/repo/worktree" }),
+    read({ ...session, sessionScope: { kind: "repository", workspaceId: "workspace-1" } }),
+    read({
+      ...session,
       sessionScope: {
         kind: "workflow",
         workspaceId: "workspace-1",
         taskId: "task-1",
         role: "build",
       },
-    });
+    }),
+  ]);
 
-    expect(withoutScope).toEqual([
-      "agent-session-context",
-      "/repo",
-      "claude",
-      "/repo/worktree",
-      "session-1",
-      null,
-      null,
-      null,
-    ]);
-    expect(repositoryScope).toEqual([
-      "agent-session-context",
-      "/repo",
-      "claude",
-      "/repo/worktree",
-      "session-1",
-      "repository",
-      null,
-      null,
-    ]);
-    expect(workflowScope).toEqual([
-      "agent-session-context",
-      "/repo",
-      "claude",
-      "/repo/worktree",
-      "session-1",
-      "workflow",
-      "task-1",
-      "build",
-    ]);
-  });
+  expect(results.map((usage) => usage?.totalTokens)).toEqual([100, 100, 200, 300]);
+  expect(loadContext).toHaveBeenCalledTimes(3);
 });

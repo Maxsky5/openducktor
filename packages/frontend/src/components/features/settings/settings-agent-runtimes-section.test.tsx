@@ -10,10 +10,7 @@ import {
 } from "@openducktor/contracts";
 import { fireEvent, screen, render as testingRender, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { AgentRuntimesSection } from "./settings-agent-runtimes-section";
-
-enableReactActEnvironment();
 
 const withQueryProvider = (ui: ReactNode): ReactNode => (
   <WorkflowTestProvider>{ui}</WorkflowTestProvider>
@@ -245,7 +242,7 @@ describe("AgentRuntimesSection", () => {
     try {
       renderer.rerender(createElement(AgentRuntimesSection, { ...props, focusRequest }));
       const codexInput = await screen.findByPlaceholderText("Path to Codex");
-      await waitFor(() => expect(document.activeElement).toBe(codexInput));
+      await waitFor(() => expect(document.activeElement === codexInput).toBe(true));
       expect(screen.getByRole("tab", { name: /Codex/i }).getAttribute("aria-selected")).toBe(
         "true",
       );

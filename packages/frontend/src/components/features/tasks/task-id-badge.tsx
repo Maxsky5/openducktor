@@ -56,7 +56,6 @@ function TaskIdBadgeComponent({
                 "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
               onClick={handleCopy}
-              data-testid="copy-task-id"
               aria-label="Copy task ID"
             >
               {copied ? (

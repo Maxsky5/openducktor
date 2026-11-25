@@ -1,111 +1,76 @@
-import { describe, expect, test } from "bun:test";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import type { ActiveWorkspace } from "@/types/state-slices";
+import { expect, mock, test } from "bun:test";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import { AgentsPageShell } from "./agents-page-shell";
 
-const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
-  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
-  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
-  repoPath,
+function renderShell(overrides: Partial<ComponentProps<typeof AgentsPageShell>> = {}) {
+  const retries = {
+    onRetryNavigationPersistence: mock(() => {}),
+    onRetryChatSettingsLoad: mock(() => {}),
+    onRetryGitProviderContext: mock(() => {}),
+  };
+  render(
+    <AgentsPageShell
+      activeWorkspace={{ workspaceId: "repo-1", workspaceName: "repo", repoPath: "/repo" }}
+      navigationPersistenceOperation="load"
+      navigationPersistenceError={null}
+      chatSettingsLoadError={null}
+      gitProviderContextLoadError={null}
+      workspace={<div>Conversation workspace</div>}
+      {...retries}
+      {...overrides}
+    />,
+  );
+  return retries;
+}
+
+test("offers to retry opening a conversation with no selected repository", async () => {
+  const { onRetryNavigationPersistence } = renderShell({
+    activeWorkspace: null,
+    navigationPersistenceError: new Error("Restore failed"),
+  });
+
+  expect(screen.getByRole("alert", { name: "Couldn't open your conversation" })).toBeDefined();
+  expect(screen.queryByText("Conversation workspace")).toBeNull();
+  expect(screen.queryByText("Restore failed")).toBeNull();
+
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Error details" }));
+  });
+  expect(screen.getByText("Restore failed")).toBeDefined();
+  expect(screen.queryByText("Repository", { exact: false })).toBeNull();
+
+  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+  expect(onRetryNavigationPersistence).toHaveBeenCalledTimes(1);
 });
 
-describe("AgentsPageShell", () => {
-  test("renders the navigation restore error state instead of the workspace", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentsPageShell, {
-        activeWorkspace: createActiveWorkspace("/repo"),
-        navigationPersistenceOperation: "load",
-        navigationPersistenceError: new Error("restore failed"),
-        chatSettingsLoadError: null,
-        gitProviderContextLoadError: null,
-        onRetryNavigationPersistence: () => {},
-        onRetryChatSettingsLoad: () => {},
-        onRetryGitProviderContext: () => {},
-        workspace: createElement("div", undefined, "workspace"),
-      }),
-    );
+test("opens the workspace after loading the saved selection", () => {
+  renderShell();
 
-    expect(html).toContain("Couldn&#x27;t open your conversation");
-    expect(html).not.toContain("workspace");
+  expect(screen.getByText("Conversation workspace")).toBeDefined();
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+test("can retry reading chat settings while the workspace stays open", () => {
+  const { onRetryChatSettingsLoad, onRetryGitProviderContext } = renderShell({
+    chatSettingsLoadError: new Error("Settings read failed"),
   });
 
-  test("omits the repository label when no active repo is selected", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentsPageShell, {
-        activeWorkspace: null,
-        navigationPersistenceOperation: "load",
-        navigationPersistenceError: new Error("restore failed"),
-        chatSettingsLoadError: null,
-        gitProviderContextLoadError: null,
-        onRetryNavigationPersistence: () => {},
-        onRetryChatSettingsLoad: () => {},
-        onRetryGitProviderContext: () => {},
-        workspace: createElement("div", undefined, "workspace"),
-      }),
-    );
+  expect(screen.getByText("Conversation workspace")).toBeDefined();
+  expect(screen.getByText("Settings read failed")).toBeDefined();
+  fireEvent.click(screen.getByRole("button", { name: "Retry load" }));
+  expect(onRetryChatSettingsLoad).toHaveBeenCalledTimes(1);
+  expect(onRetryGitProviderContext).not.toHaveBeenCalled();
+});
 
-    expect(html).not.toContain("Repository: null");
+test("can retry reading the Git provider while the workspace stays open", () => {
+  const { onRetryChatSettingsLoad, onRetryGitProviderContext } = renderShell({
+    gitProviderContextLoadError: new Error("Provider context read failed"),
   });
 
-  test("renders the workspace when no navigation error is present", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentsPageShell, {
-        activeWorkspace: createActiveWorkspace("/repo"),
-        navigationPersistenceOperation: "load",
-        navigationPersistenceError: null,
-        chatSettingsLoadError: null,
-        gitProviderContextLoadError: null,
-        onRetryNavigationPersistence: () => {},
-        onRetryChatSettingsLoad: () => {},
-        onRetryGitProviderContext: () => {},
-        workspace: createElement("div", undefined, "workspace"),
-      }),
-    );
-
-    expect(html).toContain("workspace");
-    expect(html).not.toContain('role="tablist"');
-  });
-
-  test("renders a retryable chat settings error banner without hiding the workspace", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentsPageShell, {
-        activeWorkspace: createActiveWorkspace("/repo"),
-        navigationPersistenceOperation: "load",
-        navigationPersistenceError: null,
-        chatSettingsLoadError: new Error("settings read failed"),
-        gitProviderContextLoadError: null,
-        onRetryNavigationPersistence: () => {},
-        onRetryChatSettingsLoad: () => {},
-        onRetryGitProviderContext: () => {},
-        workspace: createElement("div", undefined, "workspace"),
-      }),
-    );
-
-    expect(html).toContain("Task sessions couldn&#x27;t load session settings.");
-    expect(html).toContain("settings read failed");
-    expect(html).toContain("Retry load");
-    expect(html).toContain("workspace");
-  });
-
-  test("renders a retryable Git provider error without hiding Agent Studio", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentsPageShell, {
-        activeWorkspace: createActiveWorkspace("/repo"),
-        navigationPersistenceOperation: "load",
-        navigationPersistenceError: null,
-        chatSettingsLoadError: null,
-        gitProviderContextLoadError: new Error("provider context read failed"),
-        onRetryNavigationPersistence: () => {},
-        onRetryChatSettingsLoad: () => {},
-        onRetryGitProviderContext: () => {},
-        workspace: createElement("div", undefined, "workspace"),
-      }),
-    );
-
-    expect(html).toContain("Task sessions couldn&#x27;t load Git provider features.");
-    expect(html).toContain("provider context read failed");
-    expect(html).toContain("Retry provider load");
-    expect(html).toContain("workspace");
-  });
+  expect(screen.getByText("Conversation workspace")).toBeDefined();
+  expect(screen.getByText("Provider context read failed")).toBeDefined();
+  fireEvent.click(screen.getByRole("button", { name: "Retry provider load" }));
+  expect(onRetryGitProviderContext).toHaveBeenCalledTimes(1);
+  expect(onRetryChatSettingsLoad).not.toHaveBeenCalled();
 });

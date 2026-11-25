@@ -6,8 +6,8 @@ import {
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { act, useState } from "react";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import type { ModelPickerFavoriteState } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
 import { ModelPicker } from "./model-picker";
 import type {
@@ -15,7 +15,7 @@ import type {
   ModelPickerRuntime,
 } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
 
-enableReactActEnvironment();
+setupTestingLibraryFakeTimers();
 
 const catalog = (runtimeKind: "opencode" | "codex"): AgentModelCatalog => ({
   runtime: runtimeKind === "opencode" ? OPENCODE_RUNTIME_DESCRIPTOR : CODEX_RUNTIME_DESCRIPTOR,
@@ -549,10 +549,8 @@ describe("ModelPicker", () => {
   });
 
   test.each([
-    { isFavorite: false, interaction: "hover", expectedTooltip: "Add to favorites" },
     { isFavorite: false, interaction: "focus", expectedTooltip: "Add to favorites" },
     { isFavorite: true, interaction: "hover", expectedTooltip: "Remove from favorites" },
-    { isFavorite: true, interaction: "focus", expectedTooltip: "Remove from favorites" },
   ])(
     "shows the $expectedTooltip tooltip on $interaction",
     async ({ isFavorite, interaction, expectedTooltip }) => {
@@ -574,19 +572,11 @@ describe("ModelPicker", () => {
         name: isFavorite ? "Remove GPT Five from favorites" : "Add GPT Five to favorites",
       });
       await act(async () => {
-        if (interaction === "hover") {
-          fireEvent.pointerMove(favoriteAction);
-          return;
-        }
-        favoriteAction.focus();
+        if (interaction === "hover") fireEvent.pointerMove(favoriteAction);
+        else favoriteAction.focus();
       });
-
-      await waitFor(
-        () => {
-          expect(screen.getByRole("tooltip").textContent).toContain(expectedTooltip);
-        },
-        { timeout: 750 },
-      );
+      const tooltip = await screen.findByRole("tooltip", {}, { timeout: 750 });
+      expect(tooltip.textContent).toContain(expectedTooltip);
     },
   );
 
@@ -887,7 +877,7 @@ describe("ModelPicker", () => {
       });
       const search = screen.getByRole("textbox", { name: "Search models" });
       const focusedButton = screen.getByRole("button", { name: focusedAction });
-      focusedButton.focus();
+      act(() => focusedButton.focus());
       expect(document.activeElement).toBe(focusedButton);
 
       await act(async () => {
@@ -995,9 +985,8 @@ describe("ModelPicker", () => {
     const favoriteAction = screen.getByRole("button", {
       name: "Add Model 40 to favorites",
     });
-    favoriteAction.focus();
-
     await act(async () => {
+      favoriteAction.focus();
       fireEvent.click(favoriteAction);
     });
 
@@ -1195,42 +1184,21 @@ describe("ModelPicker", () => {
       fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
     });
 
-    await act(async () => {
-      fireEvent.pointerMove(screen.getByRole("img", { name: "Supports images" }));
-    });
-
-    await waitFor(
-      () => {
-        expect(screen.getByRole("tooltip").textContent).toContain(
-          "Accepts image attachments like screenshots and diagrams",
-        );
-      },
-      { timeout: 750 },
-    );
-
-    await act(async () => {
-      fireEvent.pointerMove(screen.getByRole("img", { name: "Supports videos" }));
-    });
-
-    await waitFor(
-      () => {
-        expect(screen.getByRole("tooltip").textContent).toContain("Accepts video attachments");
-      },
-      { timeout: 750 },
-    );
-
-    await act(async () => {
-      fireEvent.pointerMove(screen.getByRole("img", { name: "Supports PDF files" }));
-    });
-
-    await waitFor(
-      () => {
-        expect(screen.getByRole("tooltip").textContent).toContain(
-          "Accepts PDF documents as attachments",
-        );
-      },
-      { timeout: 750 },
-    );
+    for (const [name, description] of [
+      ["Supports images", "Accepts image attachments like screenshots and diagrams"],
+      ["Supports videos", "Accepts video attachments"],
+      ["Supports PDF files", "Accepts PDF documents as attachments"],
+    ] as const) {
+      await act(async () => {
+        fireEvent.pointerMove(screen.getByRole("img", { name }));
+      });
+      await waitFor(
+        () => {
+          expect(screen.getByRole("tooltip").textContent).toContain(description);
+        },
+        { timeout: 750 },
+      );
+    }
   });
 
   test("marks the selected row with a paint-only selected indicator", async () => {

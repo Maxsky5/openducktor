@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, expect, jest, test } from "bun:test";
+import { expect, jest, test } from "bun:test";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import {
@@ -11,13 +12,7 @@ import {
   DialogTitle,
 } from "./dialog";
 
-beforeEach(() => {
-  jest.useFakeTimers();
-});
-
-afterEach(() => {
-  jest.useRealTimers();
-});
+setupTestingLibraryFakeTimers();
 
 function Form() {
   const [value, setValue] = useState("");

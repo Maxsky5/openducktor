@@ -4,7 +4,6 @@ import type { Nodes } from "mdast";
 import { createElement, type ReactElement } from "react";
 import { MermaidSvgCacheProvider } from "@/components/ui/markdown-mermaid-svg-cache-context";
 import * as markdownStreamTree from "@/components/ui/markdown-stream-tree";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { createIntersectionObserverTestDriver } from "@/test-utils/intersection-observer-test-driver";
@@ -40,8 +39,6 @@ const waitForDiagram = (container: HTMLElement) =>
   waitFor(() => expect(within(container).getByText("Rendered diagram")).toBeTruthy(), {
     timeout: 500,
   });
-
-enableReactActEnvironment();
 
 const render = (element: ReactElement) => renderView(element, { wrapper: MermaidSvgCacheProvider });
 
@@ -310,7 +307,9 @@ describe("AgentChatMarkdownRenderer", () => {
   test("keeps a diagram after a display equation drawn while text streams", async () => {
     const diagramSpy = await spyOnDiagramRender();
     const equationAndDiagram = `$$\nx = 1\n\ny = 2\n$$\n\n${DIAGRAM_FENCE}`;
-    const rendered = render(chatMarkdown(`${equationAndDiagram}\n\nAfter`, true));
+    const rendered = await act(async () =>
+      render(chatMarkdown(`${equationAndDiagram}\n\nAfter`, true)),
+    );
     const blockSpy = spyOnBlockRenders();
 
     try {

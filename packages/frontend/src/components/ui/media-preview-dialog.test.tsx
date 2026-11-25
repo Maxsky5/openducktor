@@ -1,10 +1,7 @@
 import { afterEach, describe, expect, jest, spyOn, test } from "bun:test";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { Activity, type ReactElement } from "react";
-import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { MediaPreviewDialog } from "./media-preview-dialog";
-
-enableReactActEnvironment();
 
 afterEach(() => {
   jest.useRealTimers();

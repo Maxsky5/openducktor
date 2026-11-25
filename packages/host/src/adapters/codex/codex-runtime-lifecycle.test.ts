@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
@@ -20,28 +20,23 @@ import {
 } from "./codex-runtime-starter.test-support";
 
 describe("Codex runtime lifecycle", () => {
-  test.each([
-    { line: JSON.stringify({ id: 999, result: {} }), message: "unexpected id 999" },
-    { line: "{invalid JSON", message: "Invalid Codex app-server JSON" },
-    { line: null, message: "closed" },
-  ])(
-    "reports a fatal $message exit after cleanup so a replacement can start",
-    async ({ line, message }) => {
+  test(
+    "cleans up a closed app-server's process tree so a replacement can start",
+    async () => {
       const root = await mkdtemp(join(tmpdir(), "odt-codex-replacement-"));
       const runtimePidPath = join(root, "runtime.pid");
-      const fatalMessagePath = join(root, "fatal.json");
       const childPidPath = join(root, "child.pid");
+      const checkOrphanCleanup = process.platform !== "win32";
       const childPids: number[] = [];
       const exits: string[] = [];
+      const exited = Promise.withResolvers<string>();
       const handles: RuntimeHandle[] = [];
       let starts = 0;
       const codexAppServer = createTransportRegistry();
-      const options: Parameters<typeof writeCodex>[1] = {
+      const codexBinary = await writeCodex(root, {
         runtimePidPath,
-        fatalMessagePath,
-      };
-      if (process.platform !== "win32") options.childPidPath = childPidPath;
-      const codexBinary = await writeCodex(root, options);
+        ...(checkOrphanCleanup && { childPidPath }),
+      });
       const starter = createStarter({
         codexAppServer,
         toolDiscovery: stubTools({ codex: codexBinary }),
@@ -49,7 +44,13 @@ describe("Codex runtime lifecycle", () => {
       });
       const start = async () => {
         const handle = await Effect.runPromise(
-          starter.startRuntime(codexStartInput(codexBinary, exits)),
+          starter.startRuntime({
+            ...codexStartInput(codexBinary),
+            onRuntimeExit: (message) => {
+              exits.push(message);
+              exited.resolve(message);
+            },
+          }),
         );
         handles.push(handle);
         return handle;
@@ -57,42 +58,40 @@ describe("Codex runtime lifecycle", () => {
       try {
         const first = await start();
         const pid = Number(await readFile(runtimePidPath, "utf8"));
-        if (process.platform !== "win32") {
+        if (checkOrphanCleanup) {
           const childPid = Number(await readFile(childPidPath, "utf8"));
           childPids.push(childPid);
           expect(processIsAlive(childPid)).toBe(true);
         }
-        if (line === null) {
-          process.kill(pid, "SIGTERM");
-        } else {
-          await writeFile(fatalMessagePath, line);
-        }
-        await waitFor(() => exits.length === 1, PROCESS_WAIT_MS);
+        process.kill(pid, "SIGTERM");
+        expect(
+          await Effect.runPromise(
+            Effect.promise(() => exited.promise).pipe(Effect.timeout(PROCESS_WAIT_MS)),
+          ),
+        ).toContain("closed");
         // The OS reaps the process tree asynchronously after the exit report.
         await waitFor(
           () => !processIsAlive(pid) && childPids.every((child) => !processIsAlive(child)),
           PROCESS_WAIT_MS,
         );
-        expect(exits[0]).toContain(message);
-        await rm(fatalMessagePath, { force: true });
         const replacement = await start();
-        if (process.platform !== "win32") {
+        if (checkOrphanCleanup) {
           const childPid = Number(await readFile(childPidPath, "utf8"));
           childPids.push(childPid);
           expect(processIsAlive(childPid)).toBe(true);
         }
         expect(starts).toBe(2);
         expect(replacement.runtime.runtimeId).not.toBe(first.runtime.runtimeId);
-        await expect(
-          Effect.runPromise(
+        expect(
+          await Effect.runPromise(
             codexAppServer.request({
               runtimeId: replacement.runtime.runtimeId,
               method: "thread/loaded/list",
               params: {},
             }),
           ),
-        ).resolves.toEqual({ data: [], nextCursor: null });
-        await expect(Effect.runPromise(replacement.stop())).resolves.toBeUndefined();
+        ).toEqual({ data: [], nextCursor: null });
+        await Effect.runPromise(replacement.stop());
         // The OS reaps the stopped process tree asynchronously.
         await waitFor(() => childPids.every((child) => !processIsAlive(child)), PROCESS_WAIT_MS);
         expect(exits).toHaveLength(1);

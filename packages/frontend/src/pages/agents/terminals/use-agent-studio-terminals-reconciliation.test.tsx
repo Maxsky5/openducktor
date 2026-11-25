@@ -1,8 +1,10 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import type { TerminalSummary } from "@openducktor/contracts";
+import type { TerminalListResponse, TerminalSummary } from "@openducktor/contracts";
 import { act, screen, waitFor } from "@testing-library/react";
 import { useEffect, useRef } from "react";
 import { SessionPanel } from "@/features/session-panels";
+import { withAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import {
   terminalTabLabel,
   terminalTabLifecycle,
@@ -21,47 +23,62 @@ import {
   type TerminalTestDependencies,
 } from "./agent-studio-terminals-test-harness";
 
+await import("@/features/terminals/terminal-viewport");
+
+setupTestingLibraryFakeTimers();
+
 describe("useAgentStudioTerminals reconciliation", () => {
   test("keeps one stable tab while the authoritative list refreshes after creation", async () => {
     const baseDependencies = createTerminalTestDependencies();
     const created = { ...summaryForTask("task-a"), terminalId: "terminal-created" };
     let terminalListCalls = 0;
-    const refresh = Promise.withResolvers<void>();
+    const refresh = Promise.withResolvers<TerminalListResponse>();
     const dependencies: TerminalTestDependencies = {
       ...baseDependencies,
       hostClient: {
         ...baseDependencies.hostClient,
         terminalList: async () => {
           terminalListCalls += 1;
-          if (terminalListCalls > 1) await refresh.promise;
-          return {
-            hostInstanceId: "host-1",
-            revision: 1,
-            terminals: terminalListCalls > 1 ? [created] : [],
-          };
+          if (terminalListCalls > 1) return refresh.promise;
+          return { hostInstanceId: "host-1", revision: 1, terminals: [] };
         },
         terminalCreate: async () => createdTerminal(created),
       },
     };
-    const view = renderTaskTerminalPanels(dependencies);
+    const view = renderTaskTerminalPanels(dependencies, {
+      children: ({ panels }) => <SessionPanel model={panels.bottom} />,
+    });
+    const refreshed = {
+      hostInstanceId: "host-1",
+      revision: 3,
+      terminals: [{ ...created, label: "Updated shell" }],
+    };
     try {
       await waitFor(() => expect(view.terminals().startBlockedReason).toBeNull());
-      act(() => view.panels().bottomToggle.onToggle());
-      await waitFor(() => expect(view.terminals().tabs[0]?.requestState).toBe("ready"));
+      await act(async () => view.panels().bottomToggle.onToggle());
+      const { tabId } = requireTab(view.terminals().tabs[0]);
       act(() => view.terminals().onRetryDiscovery());
-      await waitFor(() => expect(terminalListCalls).toBe(2));
+      expect(terminalListCalls).toBe(2);
 
-      expect(view.terminals().tabs).toHaveLength(1);
-      expect(view.terminals().tabs[0]).toMatchObject({
+      expect(selectedBottomTerminal(view.panels())).toMatchObject({
+        tabId,
         terminalId: "terminal-created",
         summary: { label: "Shell 1" },
         requestState: "ready",
       });
       expect(bottomTerminalIds(view.panels())).toEqual(["terminal-created"]);
-      expect(selectedBottomTerminal(view.panels())?.terminalId).toBe("terminal-created");
+
+      refresh.resolve(refreshed);
+      await screen.findByRole("tab", { name: /Updated shell/ });
+      expect(bottomTerminalIds(view.panels())).toEqual(["terminal-created"]);
+      expect(selectedBottomTerminal(view.panels())).toMatchObject({
+        tabId,
+        terminalId: "terminal-created",
+        requestState: "ready",
+      });
     } finally {
-      refresh.resolve();
       view.unmount();
+      refresh.resolve(refreshed);
     }
   });
 
@@ -97,15 +114,10 @@ describe("useAgentStudioTerminals reconciliation", () => {
       const previousFocusRequest = view.panels().bottom.focusRequest;
 
       act(() => view.panels().bottom.onAddTab());
-      act(() => view.panels().bottom.onPick("terminal"));
+      await act(async () => view.panels().bottom.onPick("terminal"));
 
-      await waitFor(
-        () => {
-          expect(selectedBottomTerminal(view.panels())?.terminalId).toBe("terminal-created-second");
-          expect(view.panels().bottom.focusRequest).toBe(previousFocusRequest + 1);
-        },
-        { timeout: 2_000 },
-      );
+      expect(selectedBottomTerminal(view.panels())?.terminalId).toBe("terminal-created-second");
+      expect(view.panels().bottom.focusRequest).toBe(previousFocusRequest + 1);
       expect(bottomTerminalIds(view.panels())).toEqual([
         "terminal-task-a",
         "terminal-created-second",
@@ -189,39 +201,28 @@ describe("useAgentStudioTerminals reconciliation", () => {
         terminalList: async () => list,
       },
     };
-    const view = renderTaskTerminalPanels(dependencies);
+    const view = renderTaskTerminalPanels(dependencies, {
+      children: ({ panels }) => <SessionPanel model={panels.bottom} />,
+    });
     try {
-      await waitFor(() => expect(view.terminals().tabs[0]?.terminalId).toBe("terminal-task-a"), {
-        timeout: 500,
-      });
+      const original = await screen.findByRole("tab", { name: /Shell 1/ });
 
       list = { hostInstanceId: "host-2", revision: 1, terminals: [] };
       act(() => view.terminals().onRetryDiscovery());
 
-      await waitFor(
-        () =>
-          expect(view.terminals().tabs).toMatchObject([
-            { tabId: "tab:terminal-task-a", terminalId: null, requestState: "lost" },
-          ]),
-        { timeout: 500 },
-      );
-      expect(view.terminals().tabs[0]?.error).toContain("host restarted");
-      expect(view.panels().bottom.tabs).toHaveLength(1);
+      const restarted = await screen.findByText(/the terminal host restarted/i);
+      expect(screen.getAllByRole("tab")).toEqual([original]);
 
-      const replacement = { ...summaryForTask("task-a"), terminalId: "terminal-replacement" };
+      const replacement = {
+        ...summaryForTask("task-a"),
+        terminalId: "terminal-replacement",
+        label: "Replacement shell",
+      };
       list = { ...list, revision: 2, terminals: [replacement] };
       act(() => view.terminals().onRetryDiscovery());
-      await waitFor(
-        () =>
-          expect(
-            view.terminals().tabs.find((tab) => tab.terminalId === replacement.terminalId)
-              ?.requestState,
-          ).toBe("ready"),
-        { timeout: 500 },
-      );
-      const previousTab = view.terminals().tabs.find((tab) => tab.tabId === "tab:terminal-task-a");
-      expect(previousTab?.requestState).toBe("lost");
-      expect(previousTab?.error).toContain("host restarted");
+      const replacementTab = await screen.findByRole("tab", { name: /Replacement shell/ });
+      expect(screen.getAllByRole("tab")).toEqual([original, replacementTab]);
+      expect(screen.getByText(/the terminal host restarted/i)).toBe(restarted);
     } finally {
       view.unmount();
     }
@@ -340,29 +341,42 @@ describe("useAgentStudioTerminals reconciliation", () => {
       },
     );
     const mountedTaskIds = ["task-a", "task-b"];
-    const view = renderTaskTerminalPanels(createTerminalTestDependencies(), {
-      mountedTaskIds,
-      children: (result) => <SessionPanel model={result.panels.bottom} />,
-    });
     const activationsOf = (terminalId: string) =>
       activations.filter((entry) => entry.terminalId === terminalId);
     try {
-      await waitFor(() => expect(activationsOf("terminal-task-a")).not.toHaveLength(0));
-      act(() => view.panels().bottomToggle.onToggle());
-      act(() => view.panels().bottomToggle.onToggle());
-      await waitFor(() => expect(activationsOf("terminal-task-a").at(-1)?.focus).toBe(true));
+      await withAnimationFrameTestDriver(async (frames) => {
+        const view = await act(async () =>
+          renderTaskTerminalPanels(createTerminalTestDependencies(), {
+            mountedTaskIds,
+            children: (result) => <SessionPanel model={result.panels.bottom} />,
+          }),
+        );
+        try {
+          await screen.findByRole("application", { name: "Interactive terminal terminal-task-a" });
+          await frames.flushFrames();
+          expect(activationsOf("terminal-task-a")).not.toHaveLength(0);
 
-      view.update({ taskId: "task-b", mountedTaskIds });
-      await waitFor(() => expect(activationsOf("terminal-task-b")).not.toHaveLength(0));
-      const before = activationsOf("terminal-task-a").length;
-      view.update({ taskId: "task-a", mountedTaskIds });
-      await waitFor(() => expect(activationsOf("terminal-task-a").length).toBeGreaterThan(before));
+          act(() => view.panels().bottomToggle.onToggle());
+          act(() => view.panels().bottomToggle.onToggle());
+          await frames.flushFrames();
+          expect(activationsOf("terminal-task-a").at(-1)?.focus).toBe(true);
 
-      expect(activationsOf("terminal-task-a").slice(before)).toEqual([
-        { terminalId: "terminal-task-a", focus: false },
-      ]);
+          await act(async () => view.update({ taskId: "task-b", mountedTaskIds }));
+          await screen.findByRole("application", { name: "Interactive terminal terminal-task-b" });
+          await frames.flushFrames();
+          expect(activationsOf("terminal-task-b")).not.toHaveLength(0);
+
+          const before = activationsOf("terminal-task-a").length;
+          await act(async () => view.update({ taskId: "task-a", mountedTaskIds }));
+          await frames.flushFrames();
+          expect(activationsOf("terminal-task-a").slice(before)).toEqual([
+            { terminalId: "terminal-task-a", focus: false },
+          ]);
+        } finally {
+          view.unmount();
+        }
+      });
     } finally {
-      view.unmount();
       mountSpy.mockRestore();
     }
   });

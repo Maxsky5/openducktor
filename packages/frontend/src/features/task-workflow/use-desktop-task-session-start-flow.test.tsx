@@ -43,15 +43,11 @@ import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   createAgentSessionSummaryFixture,
   createChecksStateContextValue,
-  createDeferred,
   createHostRuntimeStatusContextValue,
   createTaskCardFixture,
   createTaskStoreCheckFixture,
-  enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import { useDesktopTaskSessionStartFlow } from "./use-desktop-task-session-start-flow";
-
-enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useDesktopTaskSessionStartFlow>[0];
 
@@ -798,7 +794,7 @@ describe("useDesktopTaskSessionStartFlow", () => {
   });
 
   test("reuse confirm starts directly from the source session when the reused session has no saved model", async () => {
-    const startSessionDeferred = createDeferred<ReturnType<typeof sessionIdentity>>();
+    const startSessionDeferred = Promise.withResolvers<ReturnType<typeof sessionIdentity>>();
     const startAgentSession = mock(() => startSessionDeferred.promise);
     const baseArgs = createBaseArgs();
     const harness = createHookHarness({
@@ -887,7 +883,7 @@ describe("useDesktopTaskSessionStartFlow", () => {
         id: task.id,
         status: "writing",
       });
-      const mutation = createDeferred<ReturnType<typeof toWireTaskCard>>();
+      const mutation = Promise.withResolvers<ReturnType<typeof toWireTaskCard>>();
       const taskApplyEvent = mock(() => mutation.promise);
       const tasksList = mock(async () => [toWireTaskCard(committed)]);
       hostClientFakes = {

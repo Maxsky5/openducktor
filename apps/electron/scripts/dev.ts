@@ -487,7 +487,7 @@ export const electronDevServerLogLines = (
   `[electron:dev] Renderer URL: ${rendererDevUrl}`,
 ];
 
-export const electronDebugEndpointLogLine = (cdpPort: number): string =>
+const electronDebugEndpointLogLine = (cdpPort: number): string =>
   `[electron:dev] CDP endpoint: http://127.0.0.1:${cdpPort}`;
 
 export const electronLaunchArgs = (

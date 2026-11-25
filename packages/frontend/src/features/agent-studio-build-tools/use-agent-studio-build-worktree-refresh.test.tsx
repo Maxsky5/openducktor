@@ -3,15 +3,12 @@ import type { AgentToolData } from "@openducktor/contracts";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
-  enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import {
   sessionMessageAt,
   sessionMessagesToArray,
 } from "@openducktor/frontend-core/test-support/session-message-test-helpers";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
-
-enableReactActEnvironment();
 
 type UseAgentStudioBuildWorktreeRefreshHook =
   (typeof import("./use-agent-studio-build-worktree-refresh"))["useAgentStudioBuildWorktreeRefresh"];

@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, jest, mock, test } from "bun:test";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { Effect } from "effect";
@@ -68,6 +68,9 @@ describe("Codex model catalog preview lifecycle", () => {
             code: -32603, message: "Model read failed"
           } }) + "\\n");
         }
+        if (request.method === "model/list" && ${modelReply === "none"}) {
+          process.stderr.write("model/list received\\n");
+        }
       }
     });
   `;
@@ -98,6 +101,7 @@ describe("Codex model catalog preview lifecycle", () => {
 
   test("times out an unanswered preview request and still releases the child", async () => {
     const children: CodexChildProcess[] = [];
+    const received = Promise.withResolvers<void>();
     const processTreeTerminator: ProcessTreeTerminator = mock(() =>
       Effect.sync(() => {
         children[0]?.kill();
@@ -108,18 +112,36 @@ describe("Codex model catalog preview lifecycle", () => {
       requestTimeoutMs: 500,
       spawnProcess: (_command, _args, options) => {
         const child = spawn(process.execPath, ["-e", serverScript("none")], options);
+        child.stderr.once("data", () => received.resolve());
         children.push(child);
         return child;
       },
     });
 
-    const failure = await Effect.runPromise(Effect.flip(readModels(process.cwd())));
+    jest.useFakeTimers();
+    try {
+      const result = Effect.runPromise(Effect.flip(readModels(process.cwd())));
+      await Promise.race([
+        received.promise,
+        result.then((failure) => {
+          throw failure;
+        }),
+      ]);
+      jest.advanceTimersByTime(500);
+      const failure = await result;
 
-    expect(failure._tag).toBe("HostOperationError");
-    expect(failure.message).toContain("Timed out waiting for Codex app-server request");
-    expect(processTreeTerminator).toHaveBeenCalledTimes(1);
-    expect(children[0]?.stdin.destroyed).toBe(true);
-    expect(children[0]?.killed).toBe(true);
+      expect(failure._tag).toBe("HostOperationError");
+      expect(failure.message).toContain(
+        "Timed out waiting for Codex app-server request model/list",
+      );
+      expect(processTreeTerminator).toHaveBeenCalledTimes(1);
+      expect(children[0]?.stdin.destroyed).toBe(true);
+      expect(children[0]?.killed).toBe(true);
+    } finally {
+      jest.useRealTimers();
+      const child = children[0];
+      if (child && !child.killed) child.kill();
+    }
   });
 
   test("reports both a model read failure and a cleanup failure", async () => {

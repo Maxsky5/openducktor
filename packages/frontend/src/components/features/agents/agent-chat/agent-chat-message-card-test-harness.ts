@@ -1,7 +1,6 @@
 import { QueryProvider } from "@/test-utils/query-provider";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { type ComponentProps, createElement } from "react";
-import { renderToReadableStream } from "react-dom/server";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 import { resolveAgentChatRuntimePresentation } from "@openducktor/frontend-core/sessions/send/agent-chat-runtime-presentation";
@@ -78,12 +77,4 @@ export const createMessageCardElement = ({
     null,
     createElement(AgentChatSettingsProvider, { value: chatSettings }, cardWithTranscriptContext),
   );
-};
-
-export const renderMessageCardToHtml = async (
-  element: ReturnType<typeof createMessageCardElement>,
-): Promise<string> => {
-  const stream = await renderToReadableStream(element);
-  await stream.allReady;
-  return await new Response(stream).text();
 };

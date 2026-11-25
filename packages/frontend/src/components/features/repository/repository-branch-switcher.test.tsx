@@ -79,17 +79,6 @@ const flush = async (): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
-const createDeferred = <T,>() => {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  let reject!: (cause?: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-
-  return { promise, resolve, reject };
-};
-
 const BranchStateProvider = ({ children }: PropsWithChildren) => {
   const currentBranchState = useSyncExternalStore(
     (listener) => {
@@ -435,7 +424,7 @@ describe("RepositoryBranchSwitcher", () => {
   });
 
   test("clears pending branch state after a successful switch completes", async () => {
-    const deferred = createDeferred<void>();
+    const deferred = Promise.withResolvers<void>();
     switchBranch.mockImplementation(() => deferred.promise);
     resetBranchState();
 
@@ -492,8 +481,8 @@ describe("RepositoryBranchSwitcher", () => {
   });
 
   test("keeps the active repository pending branch when an inactive switch completes", async () => {
-    const repoASwitch = createDeferred<void>();
-    const repoBSwitch = createDeferred<void>();
+    const repoASwitch = Promise.withResolvers<void>();
+    const repoBSwitch = Promise.withResolvers<void>();
     switchBranch.mockImplementation((branchName: string) =>
       branchName === "feature/repo-a" ? repoASwitch.promise : repoBSwitch.promise,
     );
@@ -562,7 +551,7 @@ describe("RepositoryBranchSwitcher", () => {
   });
 
   test("restores the active branch after a switch fails", async () => {
-    const deferred = createDeferred<void>();
+    const deferred = Promise.withResolvers<void>();
     switchBranch.mockImplementationOnce(() => deferred.promise);
     resetBranchState();
     const rendered = render(

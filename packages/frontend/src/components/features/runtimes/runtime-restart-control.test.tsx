@@ -1,8 +1,10 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, jest, mock, test } from "bun:test";
 import type { RuntimeLifecycleImpact, RuntimeRestartResult } from "@openducktor/contracts";
-import { act, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, within } from "@testing-library/react";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { MINIMUM_LOADER_MS } from "@openducktor/frontend-core/lib/use-minimum-loader";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { startHostRuntimeEventsHarness } from "@/test-utils/host-runtime-events-harness";
 import {
@@ -98,14 +100,25 @@ const renderControl = (
   };
 };
 
-const getConfirmButton = async (view: ReturnType<typeof render>): Promise<HTMLElement> => {
-  const buttons = await view.findAllByRole("button", { name: "Restart" });
-  const confirm = buttons.at(-1);
-  if (!confirm) throw new Error("The confirm button is missing.");
-  return confirm;
+const openReview = async (view: ReturnType<typeof render>): Promise<void> => {
+  await act(async () => {
+    fireEvent.click(view.getByRole("button", { name: "Restart OpenCode runtime" }));
+  });
+  act(() => jest.advanceTimersByTime(MINIMUM_LOADER_MS));
+};
+
+const getConfirmButton = (view: ReturnType<typeof render>): HTMLElement =>
+  within(view.getByRole("dialog")).getByRole("button", { name: "Restart" });
+
+const confirmRestart = async (view: ReturnType<typeof render>): Promise<void> => {
+  await act(async () => {
+    fireEvent.click(getConfirmButton(view));
+  });
 };
 
 describe("RuntimeRestartControl", () => {
+  setupTestingLibraryFakeTimers();
+
   test("states that no live sessions are affected and restarts after confirmation", async () => {
     const restart = mock(async (): Promise<RuntimeRestartResult> => ({
       type: "completed",
@@ -116,11 +129,12 @@ describe("RuntimeRestartControl", () => {
       runtimeRestart: restart,
     });
 
-    fireEvent.click(view.getByRole("button", { name: "Restart OpenCode runtime" }));
-    await view.findByText(NO_IMPACT_MESSAGE);
-    fireEvent.click(await getConfirmButton(view));
+    await openReview(view);
+    expect(view.getByText(NO_IMPACT_MESSAGE)).toBeDefined();
+    expect(restart).not.toHaveBeenCalled();
+    await confirmRestart(view);
 
-    await waitFor(() => expect(restart).toHaveBeenCalledWith("opencode", "confirm-1"));
+    expect(restart).toHaveBeenCalledWith("opencode", "confirm-1");
     view.unmount();
   });
 
@@ -136,18 +150,18 @@ describe("RuntimeRestartControl", () => {
       runtimeRestart: restart,
     });
 
-    fireEvent.click(view.getByRole("button", { name: "Restart OpenCode runtime" }));
-    await view.findByText(NO_IMPACT_MESSAGE);
-    fireEvent.click(await getConfirmButton(view));
+    await openReview(view);
+    expect(view.getByText(NO_IMPACT_MESSAGE)).toBeDefined();
+    await confirmRestart(view);
 
-    await view.findByText(RUNTIME_IMPACT_CHANGED_NOTICE);
+    expect(view.getByText(RUNTIME_IMPACT_CHANGED_NOTICE)).toBeDefined();
     expect(view.getByText("Build login")).toBeDefined();
     expect(view.getByText("Waiting for input")).toBeDefined();
     expect(view.getByText("Repo A")).toBeDefined();
     expect(restart).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(await getConfirmButton(view));
-    await waitFor(() => expect(restart).toHaveBeenLastCalledWith("opencode", "confirm-2"));
+    await confirmRestart(view);
+    expect(restart).toHaveBeenLastCalledWith("opencode", "confirm-2");
     view.unmount();
   });
 
@@ -164,16 +178,18 @@ describe("RuntimeRestartControl", () => {
       events,
     );
 
-    fireEvent.click(view.getByRole("button", { name: "Restart OpenCode runtime" }));
-    await view.findByText(NO_IMPACT_MESSAGE);
+    await openReview(view);
+    expect(view.getByText(NO_IMPACT_MESSAGE)).toBeDefined();
 
     // A change of another kind needs no new read.
     act(() => events.emit({ type: "runtime_impact_changed", runtimeKinds: ["codex"] }));
     expect(readImpact).toHaveBeenCalledTimes(1);
 
     current = impactWithSession("confirm-2");
-    act(() => events.emit({ type: "runtime_impact_changed", runtimeKinds: ["opencode"] }));
-    await view.findByText("Build login");
+    await act(async () => {
+      await events.emit({ type: "runtime_impact_changed", runtimeKinds: ["opencode"] });
+    });
+    expect(view.getByText("Build login")).toBeDefined();
     expect(view.queryByText(NO_IMPACT_MESSAGE)).toBeNull();
 
     // Without live updates the list is not current, so confirmation waits for a new read.
@@ -184,8 +200,8 @@ describe("RuntimeRestartControl", () => {
         message: "Lost.",
       }),
     );
-    await view.findByText(/Lost\./);
-    expect((await getConfirmButton(view)).hasAttribute("disabled")).toBe(true);
+    expect(view.getByText(/Lost\./)).toBeDefined();
+    expect(getConfirmButton(view).hasAttribute("disabled")).toBe(true);
     await act(async () => {
       await events.emit({
         __openducktorConnectionControl: true,
@@ -195,12 +211,10 @@ describe("RuntimeRestartControl", () => {
         missedEventNames: [],
       });
     });
-    await waitFor(async () =>
-      expect((await getConfirmButton(view)).hasAttribute("disabled")).toBe(false),
-    );
+    expect(getConfirmButton(view).hasAttribute("disabled")).toBe(false);
 
-    fireEvent.click(await getConfirmButton(view));
-    await waitFor(() => expect(restart).toHaveBeenCalledWith("opencode", "confirm-2"));
+    await confirmRestart(view);
+    expect(restart).toHaveBeenCalledWith("opencode", "confirm-2");
     view.unmount();
   });
 
@@ -212,9 +226,9 @@ describe("RuntimeRestartControl", () => {
       { runtimeRestartImpact: readImpact, runtimeRestart: () => restartResult.promise },
       events,
     );
-    fireEvent.click(view.getByRole("button", { name: "Restart OpenCode runtime" }));
-    await view.findByText("Build login");
-    fireEvent.click(await getConfirmButton(view));
+    await openReview(view);
+    expect(view.getByText("Build login")).toBeDefined();
+    await confirmRestart(view);
 
     // The restart changes the runtime and releases its sessions. The review reads nothing then.
     act(() => {
@@ -232,8 +246,8 @@ describe("RuntimeRestartControl", () => {
     await act(async () => {
       restartResult.reject(new Error("The runtime did not stop."));
     });
-    await view.findByText("The runtime did not stop.");
-    await waitFor(() => expect(readImpact).toHaveBeenCalledTimes(2));
+    expect(view.getByText("The runtime did not stop.")).toBeDefined();
+    expect(readImpact).toHaveBeenCalledTimes(2);
     view.unmount();
   });
 
@@ -249,9 +263,9 @@ describe("RuntimeRestartControl", () => {
       runtimeRestart: restart,
     });
 
-    fireEvent.click(view.getByRole("button", { name: "Restart OpenCode runtime" }));
-    await view.findByText(/Live sessions could not be read\./);
-    const confirm = await getConfirmButton(view);
+    await openReview(view);
+    expect(view.getByText(/Live sessions could not be read\./)).toBeDefined();
+    const confirm = getConfirmButton(view);
     expect(confirm.hasAttribute("disabled")).toBe(true);
     fireEvent.click(confirm);
     expect(restart).not.toHaveBeenCalled();

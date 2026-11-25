@@ -1,4 +1,8 @@
-import { workspaceSessionCatalog } from "../../test-support/workspace-session-ownership";
+import {
+  workspaceSessionCatalog,
+  workspaceSessionOwnership,
+} from "../../test-support/workspace-session-ownership";
+import { gitFixtureCommand, gitFixtureEnv } from "../../test-support/git-repository-fixture";
 import { HostOperationError } from "../../effect/host-errors";
 import { WorktreeActionExitError } from "../actions/worktree-action-runner";
 import { createWorkspaceSessionImportService } from "./workspace-session-import-service";
@@ -69,9 +73,10 @@ const commitIdentity = [
 ];
 
 const runGit = (cwd: string, ...args: string[]) =>
-  execFileSync("git", args, {
+  execFileSync(gitFixtureCommand, args, {
     cwd,
     encoding: "utf8",
+    env: gitFixtureEnv,
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
 
@@ -98,7 +103,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     );
     fixtureRepoPath = path.join(fixtureRoot, "repository");
     await mkdir(fixtureRepoPath);
-    runGit(fixtureRepoPath, "init", "-b", "main");
+    runGit(fixtureRepoPath, "init", "--template=", "-b", "main");
     runGit(fixtureRepoPath, "config", "core.autocrlf", "false");
     runGit(fixtureRepoPath, "config", "core.eol", "lf");
     await writeFile(path.join(fixtureRepoPath, "tracked.txt"), "committed\n");
@@ -174,7 +179,10 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       }),
     };
     const targetDependencies = {
-      git: createGitCliAdapter({ resolveCommand: () => Effect.succeed("git") }),
+      git: createGitCliAdapter({
+        resolveCommand: () => Effect.succeed(gitFixtureCommand),
+        readEnv: () => gitFixtureEnv,
+      }),
       settingsConfig: createSettingsConfigAdapter({
         configPath: path.join(root, "settings.json"),
         sharedSettings: createSqliteSharedSettingsDatabase(database),
@@ -290,8 +298,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     });
     const source = draft.session.executionTarget.workingDirectory;
     await writeFile(path.join(source, "tracked.txt"), "source commit\n");
-    runGit(source, "add", "tracked.txt");
-    runGit(source, ...commitIdentity, "commit", "-m", "Source checkout change");
+    runGit(source, ...commitIdentity, "commit", "-am", "Source checkout change");
     const sourceHead = runGit(source, "rev-parse", "HEAD");
     await writeFile(path.join(source, "tracked.txt"), "uncommitted source change\n");
     await writeFile(path.join(source, ".env"), "SOURCE_ENV=1\n");
@@ -382,7 +389,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
   };
 
   // Each case adds real worktrees with several Git processes.
-  test("lists registered worktrees and creates fresh chats in one without changing it", async () => {
+  test("lists worktrees and preserves a shared checkout through chat creation and archive", async () => {
     const h = setup();
     const external = path.join(root, "external");
     const detached = path.join(root, "detached");
@@ -419,6 +426,24 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       });
     expect(first.session.id).not.toBe(second.session.id);
     expect(first.session.externalSessionId).toBeNull();
+    const ref = { workspaceId: "fairnest", sessionId: first.session.id };
+
+    expect(await h.router.invoke("workspace_session_archive_preview", ref)).toMatchObject({
+      branchName: "renamed",
+      sharedWith: [{ workspaceId: "fairnest", sessionId: second.session.id }],
+      taskOwners: [],
+    });
+    await expect(
+      h.router.invoke("workspace_session_archive", {
+        ...ref,
+        removeWorktree: true,
+        worktreeConfirmation: { workingDirectory: external, branchName: "renamed" },
+      }),
+    ).rejects.toThrow("Saved sessions work in a removed worktree");
+    const archived = await h.router.invoke("workspace_session_archive", ref);
+
+    expect(archived.archivedAt).not.toBeNull();
+    expect(archived.executionTarget).toEqual(first.session.executionTarget);
     expect(registeredWorktreePaths()).toEqual(before);
     expect(runGit(external, "branch", "--show-current")).toBe("renamed");
     expect(await readFile(path.join(external, "tracked.txt"), "utf8")).toBe("local change\n");
@@ -517,35 +542,6 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     ).toEqual([]);
   }, 15_000);
 
-  test("keeps a shared existing worktree when another chat needs it", async () => {
-    const h = setup();
-    const external = path.join(root, "external");
-    gitCommand("worktree", "add", "-b", "external", external, "main");
-    const input = existingWorktreeInput(h, external);
-    const first = await h.router.invoke("workspace_session_create", input);
-    const second = await h.router.invoke("workspace_session_create", input);
-    const ref = { workspaceId: "fairnest", sessionId: first.session.id };
-
-    expect(await h.router.invoke("workspace_session_archive_preview", ref)).toMatchObject({
-      branchName: "external",
-      sharedWith: [{ workspaceId: "fairnest", sessionId: second.session.id }],
-      taskOwners: [],
-    });
-    await expect(
-      h.router.invoke("workspace_session_archive", {
-        ...ref,
-        removeWorktree: true,
-        worktreeConfirmation: { workingDirectory: external, branchName: "external" },
-      }),
-    ).rejects.toThrow("Saved sessions work in a removed worktree");
-    const archived = await h.router.invoke("workspace_session_archive", ref);
-
-    expect(archived.archivedAt).not.toBeNull();
-    expect(archived.executionTarget).toEqual(first.session.executionTarget);
-    expect(registeredWorktreePaths()).toContain(external);
-    expect(gitCommand("branch", "--list", "external")).toContain("external");
-  }, 15_000);
-
   // Competing requests run two real Git worktree operations and SQLite writes on Windows.
   test("a failed create leaves a competing chat's real worktree and files intact", async () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
@@ -573,6 +569,10 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       await Effect.runPromise(Deferred.await(entered));
       const winner = await h.router.invoke("workspace_session_create", h.createInput);
       const directory = winner.session.executionTarget.workingDirectory;
+      expect(winner.session.executionTarget).toMatchObject({
+        kind: "local_worktree",
+        branchName: "odt/named-chat",
+      });
       await writeFile(path.join(directory, "owned.txt"), "Keep the winning request's file.");
       await Effect.runPromise(Deferred.succeed(release, undefined));
       const failed = await loser;
@@ -583,6 +583,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
         "Keep the winning request's file.",
       );
       expect(registeredWorktreePaths()).toContain(directory);
+      expect(runGit(directory, "symbolic-ref", "HEAD")).toBe("refs/heads/odt/named-chat");
       expect(
         await h.router.invoke("workspace_session_list_active", { workspaceId: "fairnest" }),
       ).toEqual([winner.session]);
@@ -668,31 +669,8 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     ).toEqual([restored]);
   }, 15_000);
 
-  test("creates from_name from the target branch instead of the source checkout HEAD", async () => {
-    await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
-    const h = setup({ actions: false });
-    gitCommand("branch", "release", "main~1");
-    // A tag with the same name must not replace the selected branch.
-    gitCommand("tag", "release", "main");
-    const { session } = await h.router.invoke("workspace_session_create", {
-      ...h.createInput,
-      targetBranch: { branch: "release" },
-    });
-    expect(session.targetBranch).toEqual({ branch: "release" });
-    expect(
-      gitCommand(
-        "-C",
-        session.executionTarget.workingDirectory,
-        "rev-parse",
-        "HEAD",
-        "--symbolic-full-name",
-        "HEAD",
-      ).split("\n"),
-    ).toEqual([initialHead, "refs/heads/odt/named-chat"]);
-  });
-
   // Real Git worktree commands and SQLite writes can exceed the host suite limit on Windows.
-  test("creates from_name from a dirty checkout with copy, worktree actions, and dirty-source isolation", async () => {
+  test("creates a named worktree from the selected branch and preserves the dirty checkout", async () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
     await writeFile(path.join(repoPath, "tracked.txt"), "uncommitted\n");
     await writeFile(path.join(repoPath, "staged.txt"), "staged\n");
@@ -700,12 +678,18 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     await writeFile(path.join(repoPath, "untracked.txt"), "untracked\n");
     const sourceStatus = gitCommand("status", "--porcelain");
     const h = setup();
+    gitCommand("branch", "release", initialHead);
+    // A tag with the same name points to a different commit.
+    gitCommand("tag", "release", fixtureHead);
+    const targetBranch = { branch: "release" };
     const branchName = "feature/archive-review";
     const { session } = await h.router.invoke("workspace_session_create", {
       ...h.createInput,
+      targetBranch,
       worktree: { mode: "from_name", name: "different-directory-name", branchName },
     });
     const directory = session.executionTarget.workingDirectory;
+    expect(session.targetBranch).toEqual(targetBranch);
     expect(await readFile(path.join(directory, "tracked.txt"), "utf8")).toBe("committed\n");
     expect(await readFile(path.join(repoPath, "tracked.txt"), "utf8")).toBe("uncommitted\n");
     expect(gitCommand("status", "--porcelain")).toBe(sourceStatus);
@@ -728,7 +712,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     ]);
     expect(
       gitCommand("-C", directory, "rev-parse", "HEAD", "--symbolic-full-name", "HEAD").split("\n"),
-    ).toEqual([fixtureHead, `refs/heads/${branchName}`]);
+    ).toEqual([initialHead, `refs/heads/${branchName}`]);
     expect(directory).toBe(await realpath(directory));
     expect(directory).toBe(
       path.join(root, "worktrees", "workspace-sessions", "different-directory-name"),
@@ -736,9 +720,36 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     expect(h.starts).toEqual([]);
   }, 15_000);
 
-  // Real Git worktree creation, a commit, archive checks, and SQLite writes can exceed 5 seconds on Windows.
-  test("archives a from_name session and removes its worktree and branch", async () => {
-    const h = setup({ actions: false });
+  const saveWorktreeSession = (
+    executionTarget: Extract<WorkspaceSession["executionTarget"], { kind: "local_worktree" }>,
+    externalSessionId: string | null = null,
+  ) =>
+    Effect.runPromise(
+      createSqliteWorkspaceSessionStore(database).create({
+        ...database.scope,
+        ...(externalSessionId !== null && {
+          ownershipScope: workspaceSessionOwnership(database.scope),
+        }),
+        session: {
+          id: crypto.randomUUID(),
+          runtimeKind: "opencode",
+          externalSessionId,
+          executionTarget,
+          roleSnapshot: null,
+          selectedModel: null,
+          generatedTitle: null,
+          manualTitle: null,
+          targetBranch: null,
+          createdAt: 1,
+          updatedAt: 2,
+          archivedAt: executionTarget.worktreeState === "removed" ? 2 : null,
+        },
+      }),
+    );
+
+  // The archive and restore use real Git worktrees, commits, and SQLite on Windows.
+  test("archives a named worktree and restores it from the advanced default branch", async () => {
+    const h = setup();
     const branchName = "feature/archive-review";
     const directory = path.join(root, "worktrees", "workspace-sessions", "archive-review");
     gitCommand("worktree", "add", "-b", branchName, directory);
@@ -753,39 +764,20 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     );
     await writeFile(path.join(directory, "tracked.txt"), "discard this edit\n");
     await writeFile(path.join(directory, "untracked.txt"), "discard this file\n");
-    const archived = await Effect.runPromise(
-      createSqliteWorkspaceSessionStore(database).create({
-        workspaceId: "fairnest",
-        repoPath,
-        session: {
-          id: crypto.randomUUID(),
-          runtimeKind: "opencode",
-          externalSessionId: null,
-          executionTarget: {
-            kind: "local_worktree",
-            workingDirectory: directory,
-            branchName,
-            worktreeState: "present",
-          },
-          roleSnapshot: null,
-          selectedModel: null,
-          generatedTitle: null,
-          manualTitle: null,
-          targetBranch: null,
-          createdAt: 1,
-          updatedAt: 2,
-          archivedAt: null,
-        },
-      }),
-    );
-    const ref = { workspaceId: "fairnest", sessionId: archived.id };
-    const result = await h.router.invoke("workspace_session_archive", {
+    const session = await saveWorktreeSession({
+      kind: "local_worktree",
+      workingDirectory: directory,
+      branchName,
+      worktreeState: "present",
+    });
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    const archived = await h.router.invoke("workspace_session_archive", {
       ...ref,
       confirmStop: true,
       removeWorktree: true,
       worktreeConfirmation: { workingDirectory: directory, branchName },
     });
-    expect(result.executionTarget).toMatchObject({
+    expect(archived.executionTarget).toMatchObject({
       kind: "local_worktree",
       branchName,
       worktreeState: "removed",
@@ -795,78 +787,15 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     await expect(readFile(path.join(directory, "tracked.txt"), "utf8")).rejects.toThrow();
     expect(
       await h.router.invoke("workspace_session_list_archived", { workspaceId: "fairnest" }),
-    ).toEqual([result]);
+    ).toEqual([archived]);
     expect(
       await h.router.invoke("workspace_session_ids_list", {
         workspaceId: "fairnest",
       }),
-    ).toEqual([result.id]);
+    ).toEqual([archived.id]);
     await expect(h.router.invoke("workspace_session_ids_list", {})).rejects.toThrow("workspaceId");
-  }, 15_000);
 
-  // Each case creates and removes a real Git worktree, which can exceed the host limit on Windows.
-  test.each(["unrelated repository", "plain directory"] as const)(
-    "restore keeps a replacement %s and its archived record unchanged",
-    async (replacement) => {
-      await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
-      const h = setup({ actions: false });
-      const { session } = await h.router.invoke("workspace_session_create", h.createInput);
-      const ref = { workspaceId: "fairnest", sessionId: session.id };
-      const directory = session.executionTarget.workingDirectory;
-      const archived = await h.router.invoke("workspace_session_archive", {
-        ...ref,
-        removeWorktree: true,
-        worktreeConfirmation: { workingDirectory: directory, branchName: "odt/named-chat" },
-      });
-      await mkdir(directory);
-      if (replacement === "unrelated repository") runGit(directory, "init", "-b", "main");
-      const retainedFile = path.join(directory, "retained.txt");
-      await writeFile(retainedFile, "Keep this replacement checkout.\n");
-      const actionCount = h.actionRuns.length;
-
-      await expect(h.router.invoke("workspace_session_restore", ref)).rejects.toThrow(
-        replacement === "plain directory" ? "is not a Git checkout" : "not a registered worktree",
-      );
-
-      expect(await h.router.invoke("workspace_session_get", ref)).toEqual(archived);
-      expect(await readFile(retainedFile, "utf8")).toBe("Keep this replacement checkout.\n");
-      expect(h.actionRuns).toHaveLength(actionCount);
-    },
-    15_000,
-  );
-
-  // Real Git worktree commands and SQLite writes can exceed the host suite limit on Windows.
-  test("restores an archived removed-worktree session from the current default branch", async () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
-    const h = setup();
-    const branchName = "feature/archive-review";
-    const directory = path.join(root, "worktrees", "workspace-sessions", "restored-chat");
-    const archived = await Effect.runPromise(
-      createSqliteWorkspaceSessionStore(database).create({
-        workspaceId: "fairnest",
-        repoPath,
-        session: {
-          id: crypto.randomUUID(),
-          runtimeKind: "opencode",
-          externalSessionId: null,
-          executionTarget: {
-            kind: "local_worktree",
-            workingDirectory: directory,
-            branchName,
-            worktreeState: "removed",
-          },
-          roleSnapshot: null,
-          selectedModel: null,
-          generatedTitle: null,
-          manualTitle: null,
-          targetBranch: null,
-          createdAt: 1,
-          updatedAt: 2,
-          archivedAt: 2,
-        },
-      }),
-    );
-    const ref = { workspaceId: "fairnest", sessionId: archived.id };
     const sibling = await Effect.runPromise(
       createSqliteWorkspaceSessionStore(database).create({
         workspaceId: "fairnest",
@@ -925,6 +854,36 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     expect(gitCommand("-C", directory, "branch", "--show-current")).toBe("feature/current-chat");
   }, 15_000);
 
+  // The repository fixture and the restore use real Git and SQLite on Windows.
+  test.each(["unrelated repository", "plain directory"] as const)(
+    "restore keeps a replacement %s and its archived record unchanged",
+    async (replacement) => {
+      const h = setup({ actions: false });
+      const directory = path.join(root, "replacement-checkout");
+      const archived = await saveWorktreeSession({
+        kind: "local_worktree",
+        workingDirectory: directory,
+        branchName: "odt/named-chat",
+        worktreeState: "removed",
+      });
+      const ref = { workspaceId: "fairnest", sessionId: archived.id };
+      await mkdir(directory);
+      if (replacement === "unrelated repository") runGit(directory, "init", "-b", "main");
+      const retainedFile = path.join(directory, "retained.txt");
+      await writeFile(retainedFile, "Keep this replacement checkout.\n");
+      const actionCount = h.actionRuns.length;
+
+      await expect(h.router.invoke("workspace_session_restore", ref)).rejects.toThrow(
+        replacement === "plain directory" ? "is not a Git checkout" : "not a registered worktree",
+      );
+
+      expect(await h.router.invoke("workspace_session_get", ref)).toEqual(archived);
+      expect(await readFile(retainedFile, "utf8")).toBe("Keep this replacement checkout.\n");
+      expect(h.actionRuns).toHaveLength(actionCount);
+    },
+    15_000,
+  );
+
   // Real Git worktree commands and SQLite writes can exceed the host suite limit on Windows.
   test("reports a linked checkout on its branch field and leaves both worktrees untouched", async () => {
     const h = setup();
@@ -969,255 +928,267 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     expect(h.events).toEqual([]);
   }, 15_000);
 
-  // Each case runs real Git and SQLite archive and restore work across many child processes.
-  test.each([
-    null,
-    "alias cleanup",
-    "branch deletion",
-    "archive save",
-    "changed branch",
-    "branch snapshot save",
-    "replacement dangling alias",
-  ] as const)(
-    "imports, retries after %s, and restores a native symlink path",
-    async (scenario) => {
-      const failureStage =
-        scenario === "changed branch"
-          ? "branch deletion"
-          : scenario === "replacement dangling alias"
-            ? "alias cleanup"
-            : scenario;
-      await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=restored\n");
-      const directory = path.join(root, "external-worktree");
-      const alias = path.join(root, "native-alias");
-      gitCommand("worktree", "add", "-b", "feature/external", directory);
-      await symlink(directory, alias, "junction");
-      const h = setup({ actions: false });
-      const registry = createLiveSessionAdapterRegistry();
-      const metadata = {
-        externalSessionId: "external-alias",
-        runtimeKind: "opencode" as const,
-        workingDirectory: alias,
-        title: "Native alias",
-        updatedAt: 123,
-      };
-      await Effect.runPromise(
-        registry.register(
-          createAgentSessionRuntimeAdapterTestDouble(
-            { runtimeId: "test-runtime", runtimeKind: "opencode" },
-            {
-              sessionImport: {
-                scanSessions: () => {
-                  let read = false;
-                  return {
-                    next: () =>
-                      Effect.sync(() => {
-                        if (read) return { done: true as const, value: undefined };
-                        read = true;
-                        return { done: false as const, value: [metadata] };
-                      }),
-                  };
-                },
-                inspectSession: (ref) => {
-                  expect(ref.workingDirectory).toBe(alias);
-                  return Effect.succeed({
-                    metadata,
-                    selectedModel: null,
-                    attach: Effect.void,
-                  });
-                },
+  const externalAliasId = "external-alias";
+
+  const importNativeAlias = async (h: ReturnType<typeof setup>, alias: string) => {
+    const registry = createLiveSessionAdapterRegistry();
+    const metadata = {
+      externalSessionId: externalAliasId,
+      runtimeKind: "opencode" as const,
+      workingDirectory: alias,
+      title: "Native alias",
+      updatedAt: 123,
+    };
+    await Effect.runPromise(
+      registry.register(
+        createAgentSessionRuntimeAdapterTestDouble(
+          { runtimeId: "test-runtime", runtimeKind: "opencode" },
+          {
+            sessionImport: {
+              scanSessions: () => {
+                let read = false;
+                return {
+                  next: () =>
+                    Effect.sync(() => {
+                      if (read) return { done: true as const, value: undefined };
+                      read = true;
+                      return { done: false as const, value: [metadata] };
+                    }),
+                };
+              },
+              inspectSession: (ref) => {
+                expect(ref.workingDirectory).toBe(alias);
+                return Effect.succeed({
+                  metadata,
+                  selectedModel: null,
+                  attach: Effect.void,
+                });
               },
             },
-          ),
+          },
         ),
+      ),
+    );
+    const importer = createWorkspaceSessionImportService({
+      ...h.dependencies,
+      registry,
+      publishUpdated: () => Effect.void,
+    });
+    try {
+      const catalogRequestId = crypto.randomUUID();
+      await Effect.runPromise(
+        importer.list({
+          workspaceId: "fairnest",
+          catalogRequestId,
+          runtimeKind: "opencode",
+          search: "",
+          pageSize: 50,
+        }),
       );
-      const importer = createWorkspaceSessionImportService({
-        ...h.dependencies,
-        settings: {
-          ...h.dependencies.settings,
-          getWorkspaceCatalog: () => Effect.succeed(workspaceSessionCatalog(h.config)),
-        },
-        registry,
-        publishUpdated: () => Effect.void,
-        runtimeAdmission: { admit: (_runtimeKind, effect) => effect },
-      });
-      try {
-        const catalogRequestId = crypto.randomUUID();
-        await Effect.runPromise(
-          importer.list({
-            workspaceId: "fairnest",
-            catalogRequestId,
-            runtimeKind: "opencode",
-            search: "",
-            pageSize: 50,
-          }),
-        );
-        const { session } = await Effect.runPromise(
-          importer.importSession({
-            workspaceId: "fairnest",
-            catalogRequestId,
-            runtimeKind: "opencode",
-            externalSessionId: metadata.externalSessionId,
-            workingDirectory: alias,
-          }),
-        );
-        expect(session.executionTarget).toEqual({
-          kind: "local_worktree",
+      const { session } = await Effect.runPromise(
+        importer.importSession({
+          workspaceId: "fairnest",
+          catalogRequestId,
+          runtimeKind: "opencode",
+          externalSessionId: metadata.externalSessionId,
           workingDirectory: alias,
-          branchName: "feature/external",
-          worktreeState: "present",
-        });
-        const branchChanged = scenario === "changed branch" || scenario === "branch snapshot save";
-        const confirmedBranch = branchChanged ? "feature/renamed" : "feature/external";
-        if (branchChanged) gitCommand("-C", alias, "branch", "-m", confirmedBranch);
-        const confirmedTarget = {
-          kind: "local_worktree" as const,
-          workingDirectory: alias,
-          branchName: confirmedBranch,
-          worktreeState: "present" as const,
-        };
-        const ref = { workspaceId: "fairnest", sessionId: session.id };
+        }),
+      );
+      return session;
+    } finally {
+      await Effect.runPromise(importer.shutdown());
+    }
+  };
+
+  // Each case uses real Git worktrees and SQLite across archive or restore.
+  test.each([
+    { scenario: "import", behavior: "archives and restores the imported path" },
+    {
+      scenario: "alias cleanup",
+      behavior: "preserves dangling aliases until the user repairs the path",
+    },
+    { scenario: "archive save", behavior: "finishes archiving after the save fails" },
+    {
+      scenario: "renamed branch",
+      behavior: "recovers from snapshot and deletion failures and restores the renamed branch",
+    },
+  ] as const)(
+    "native worktree alias $behavior",
+    async ({ scenario }) => {
+      const directory = path.join(root, "external-worktree");
+      const alias = path.join(root, "native-alias");
+      const originalTarget = {
+        kind: "local_worktree",
+        workingDirectory: alias,
+        branchName: "feature/external",
+        worktreeState: "present",
+      } as const;
+      gitCommand("worktree", "add", "-b", originalTarget.branchName, directory);
+      await symlink(directory, alias, "junction");
+      const h = setup({ actions: false });
+      const session =
+        scenario === "import"
+          ? await importNativeAlias(h, alias)
+          : await saveWorktreeSession(originalTarget, externalAliasId);
+      expect(session.executionTarget).toEqual(originalTarget);
+
+      const renamed = scenario === "renamed branch";
+      const branchName = renamed ? "feature/renamed" : originalTarget.branchName;
+      if (renamed) gitCommand("-C", alias, "branch", "-m", branchName);
+      const confirmedTarget = { ...originalTarget, branchName };
+      const ref = { workspaceId: "fairnest", sessionId: session.id };
+      const restore = scenario === "import" || renamed;
+      if (restore) {
+        await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=restored\n");
         const preview = await h.router.invoke("workspace_session_archive_preview", ref);
-        expect(preview).toMatchObject({ branchName: confirmedBranch, worktreeExists: true });
-        const archiveInput = {
-          ...ref,
-          confirmStop: true,
-          removeWorktree: true,
-          worktreeConfirmation: { workingDirectory: alias, branchName: confirmedBranch },
-        };
-        if (failureStage) {
-          const failure = Effect.fail(
-            new HostOperationError({
-              operation: "test.archive",
-              message: `Injected ${failureStage} failure`,
-            }),
-          );
-          const failingService = createWorkspaceSessionService({
-            ...h.dependencies,
-            worktreeFiles: {
-              ...h.dependencies.worktreeFiles,
-              prepareWorktreeAliasRemoval: (aliasPath, canonicalPath) =>
-                h.dependencies.worktreeFiles
-                  .prepareWorktreeAliasRemoval(aliasPath, canonicalPath)
-                  .pipe(
-                    Effect.map((prepared) => ({
-                      remove: failureStage === "alias cleanup" ? failure : prepared.remove,
-                    })),
-                  ),
-            },
-            git: {
-              ...h.dependencies.git,
-              deleteLocalBranch: (...args) =>
-                failureStage === "branch deletion"
-                  ? failure
-                  : h.dependencies.git.deleteLocalBranch(...args),
-            },
-            store: {
-              ...h.dependencies.store,
-              setExecutionTarget: (input) =>
-                failureStage === "branch snapshot save"
-                  ? failure
-                  : h.dependencies.store.setExecutionTarget(input),
-              archive: (input) =>
-                failureStage === "archive save" ? failure : h.dependencies.store.archive(input),
-            },
-          });
-          await expect(Effect.runPromise(failingService.archive(archiveInput))).rejects.toThrow(
-            failureStage === "archive save"
-              ? "Could not save the archived session"
-              : `Injected ${failureStage} failure`,
-          );
-          if (failureStage === "branch snapshot save")
-            expect(registeredWorktreePaths()).toContain(directory);
-          else expect(registeredWorktreePaths()).not.toContain(directory);
-          expect(await h.router.invoke("workspace_session_get", ref)).toEqual({
-            ...session,
-            executionTarget:
-              failureStage === "branch snapshot save" ? session.executionTarget : confirmedTarget,
-          });
-        }
-        const retryService = createWorkspaceSessionService(h.dependencies);
-        const retryRouter = toPromiseHostCommandRouter(
-          createEffectHostCommandRouter({
-            handlers: createWorkspaceSessionCommandHandlers(retryService, () => Effect.void),
+        expect(preview).toMatchObject({ branchName, worktreeExists: true });
+      }
+      const archiveInput = {
+        ...ref,
+        confirmStop: true,
+        removeWorktree: true,
+        worktreeConfirmation: { workingDirectory: alias, branchName },
+      };
+      const failureStages = {
+        import: [],
+        "alias cleanup": ["alias cleanup"],
+        "archive save": ["archive save"],
+        "renamed branch": ["branch snapshot save", "branch deletion"],
+      } as const;
+      for (const stage of failureStages[scenario]) {
+        const failure = Effect.fail(
+          new HostOperationError({
+            operation: "test.archive",
+            message: `Injected ${stage} failure`,
           }),
         );
-        if (scenario === "replacement dangling alias") {
-          await unlink(alias);
-          await symlink(path.join(root, "unrelated-missing"), alias, "junction");
-          await expect(
-            retryRouter.invoke("workspace_session_archive", archiveInput),
-          ).rejects.toThrow();
-          expect(gitCommand("branch", "--list", confirmedBranch)).toContain(confirmedBranch);
-          expect(await readlink(alias)).toBe(path.join(root, "unrelated-missing"));
-          expect(await h.router.invoke("workspace_session_get", ref)).toEqual({
-            ...session,
-            executionTarget: confirmedTarget,
-          });
-          return;
-        }
-        if (scenario === "alias cleanup") {
-          await expect(
-            retryRouter.invoke("workspace_session_archive", archiveInput),
-          ).rejects.toThrow("Cannot verify dangling worktree alias");
-          expect(await readlink(alias)).toBe(directory);
-          expect(gitCommand("branch", "--list", confirmedBranch)).toContain(confirmedBranch);
-          // Model the explicit user repair requested by the error, then retry.
-          await unlink(alias);
-        }
-        const archived = await retryRouter.invoke("workspace_session_archive", archiveInput);
-        expect(archived.executionTarget).toEqual({
-          kind: "local_worktree",
-          workingDirectory: alias,
-          branchName: confirmedBranch,
-          worktreeState: "removed",
+        const failingService = createWorkspaceSessionService({
+          ...h.dependencies,
+          worktreeFiles: {
+            ...h.dependencies.worktreeFiles,
+            prepareWorktreeAliasRemoval: (aliasPath, canonicalPath) =>
+              h.dependencies.worktreeFiles
+                .prepareWorktreeAliasRemoval(aliasPath, canonicalPath)
+                .pipe(
+                  Effect.map((prepared) => ({
+                    remove: stage === "alias cleanup" ? failure : prepared.remove,
+                  })),
+                ),
+          },
+          git: {
+            ...h.dependencies.git,
+            deleteLocalBranch: (...args) =>
+              stage === "branch deletion" ? failure : h.dependencies.git.deleteLocalBranch(...args),
+          },
+          store: {
+            ...h.dependencies.store,
+            setExecutionTarget: (input) =>
+              stage === "branch snapshot save"
+                ? failure
+                : h.dependencies.store.setExecutionTarget(input),
+            archive: (input) =>
+              stage === "archive save" ? failure : h.dependencies.store.archive(input),
+          },
         });
-        expect(registeredWorktreePaths()).not.toContain(directory);
-        expect(gitCommand("branch", "--list", confirmedBranch)).toBe("");
-        await expect(realpath(alias)).rejects.toThrow("ENOENT");
-        expect(await h.router.invoke("workspace_session_get", ref)).toEqual(archived);
-        const restored = await h.router.invoke("workspace_session_restore", ref);
-        expect(restored.executionTarget).toEqual(confirmedTarget);
-        expect(restored.externalSessionId).toBe(session.externalSessionId);
-        expect(restored.archivedAt).toBeNull();
-        expect(registeredWorktreePaths()).toContain(await realpath(alias));
-        expect(runGit(alias, "branch", "--show-current")).toBe(confirmedBranch);
-        expect(await h.router.invoke("workspace_session_get", ref)).toEqual(restored);
-      } finally {
-        await Effect.runPromise(importer.shutdown());
+        await expect(Effect.runPromise(failingService.archive(archiveInput))).rejects.toThrow(
+          stage === "archive save"
+            ? "Could not save the archived session"
+            : `Injected ${stage} failure`,
+        );
+        if (stage === "branch snapshot save") {
+          expect(registeredWorktreePaths()).toContain(directory);
+          expect(await realpath(alias)).toBe(directory);
+        } else {
+          expect(registeredWorktreePaths()).not.toContain(directory);
+        }
+        if (stage === "branch deletion") {
+          expect(gitCommand("branch", "--list", branchName)).toContain(branchName);
+          await expect(lstat(alias)).rejects.toThrow("ENOENT");
+        }
+        expect(await h.router.invoke("workspace_session_get", ref)).toEqual({
+          ...session,
+          executionTarget: stage === "branch snapshot save" ? originalTarget : confirmedTarget,
+        });
       }
+
+      const retryRouter = toPromiseHostCommandRouter(
+        createEffectHostCommandRouter({
+          handlers: createWorkspaceSessionCommandHandlers(
+            createWorkspaceSessionService(h.dependencies),
+            () => Effect.void,
+          ),
+        }),
+      );
+      if (scenario === "alias cleanup") {
+        await expect(retryRouter.invoke("workspace_session_archive", archiveInput)).rejects.toThrow(
+          "Cannot verify dangling worktree alias",
+        );
+        expect(await readlink(alias)).toBe(directory);
+        expect(gitCommand("branch", "--list", branchName)).toContain(branchName);
+
+        const replacement = path.join(root, "unrelated-missing");
+        await unlink(alias);
+        await symlink(replacement, alias, "junction");
+        await expect(retryRouter.invoke("workspace_session_archive", archiveInput)).rejects.toThrow(
+          "Cannot verify dangling worktree alias",
+        );
+        expect(await readlink(alias)).toBe(replacement);
+        expect(gitCommand("branch", "--list", branchName)).toContain(branchName);
+        expect(await h.router.invoke("workspace_session_get", ref)).toEqual(session);
+        // Model the explicit user repair requested by the error, then retry.
+        await unlink(alias);
+      }
+      const archived = await retryRouter.invoke("workspace_session_archive", archiveInput);
+      expect(archived).toEqual({
+        ...session,
+        archivedAt: expect.any(Number),
+        executionTarget: { ...confirmedTarget, worktreeState: "removed" },
+      });
+      expect(registeredWorktreePaths()).not.toContain(directory);
+      expect(gitCommand("branch", "--list", branchName)).toBe("");
+      await expect(realpath(alias)).rejects.toThrow("ENOENT");
+      expect(await h.router.invoke("workspace_session_get", ref)).toEqual(archived);
+      if (!restore) return;
+
+      const restored = await h.router.invoke("workspace_session_restore", ref);
+      expect(restored.executionTarget).toEqual(confirmedTarget);
+      expect(restored.externalSessionId).toBe(externalAliasId);
+      expect(restored.archivedAt).toBeNull();
+      expect(registeredWorktreePaths()).toContain(await realpath(alias));
+      expect(runGit(alias, "branch", "--show-current")).toBe(branchName);
+      expect(await readFile(path.join(alias, ".env"), "utf8")).toBe("TEST_VALUE=restored\n");
+      expect(await h.router.invoke("workspace_session_get", ref)).toEqual(restored);
     },
     15_000,
   );
 
   // Real Git worktree commands and SQLite writes can exceed the host suite limit on Windows.
-  test("keeps the default branch after its session worktree disappears", async () => {
+  test("keeps the protected default branch with and without its session worktree", async () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
     gitCommand("checkout", "-b", "other-checkout");
-    const h = setup();
+    const h = setup({ actions: false });
     const { session } = await h.router.invoke("workspace_session_create", {
       ...h.createInput,
-      worktree: { mode: "from_branch", name: "missing-main-review", branchName: "main" },
+      worktree: { mode: "from_branch", name: "main-review", branchName: "main" },
     });
-    const directory = session.executionTarget.workingDirectory;
-    gitCommand("worktree", "remove", "--force", directory);
-    const branchHead = gitCommand("rev-parse", "refs/heads/main");
     const ref = { workspaceId: "fairnest", sessionId: session.id };
+    const directory = session.executionTarget.workingDirectory;
+    const branchHead = gitCommand("rev-parse", "refs/heads/main");
+    await expect(
+      h.router.invoke("workspace_session_archive", { ...ref, removeWorktree: true }),
+    ).rejects.toThrow("protected branch main");
+    expect(registeredWorktreePaths()).toContain(directory);
+
+    gitCommand("worktree", "remove", "--force", directory);
     await expect(h.router.invoke("workspace_session_archive_preview", ref)).rejects.toThrow(
       "protected branch main",
     );
     if (session.executionTarget.kind !== "local_worktree") throw new Error("Expected worktree");
-    const config = repoConfigSchema.parse({
-      workspaceId: "fairnest",
-      workspaceName: "Test",
-      repoPath,
-      defaultTargetBranch: { branch: "main" },
-    });
     await expect(
       Effect.runPromise(
         removeWorkspaceSessionWorktree(
           h.targetDependencies,
-          config,
+          h.config,
           session.executionTarget,
           directory,
         ),
@@ -1230,32 +1201,20 @@ describe("Workspace Session commands with real Git and SQLite", () => {
         worktreeConfirmation: { workingDirectory: directory, branchName: "main" },
       }),
     ).rejects.toThrow("protected branch main");
-    expect(gitCommand("rev-parse", "refs/heads/main")).toBe(branchHead);
-    expect(gitCommand("branch", "--show-current")).toBe("other-checkout");
     expect(await h.router.invoke("workspace_session_get", ref)).toEqual(session);
-  }, 15_000);
 
-  // Real Git worktree commands can exceed the host suite limit on Windows.
-  test("keeps a protected default-branch worktree when removal is refused", async () => {
-    await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
-    gitCommand("checkout", "-b", "other-checkout");
-    const h = setup({ actions: false });
-    const { session } = await h.router.invoke("workspace_session_create", {
-      ...h.createInput,
-      worktree: { mode: "from_branch", name: "main-review", branchName: "main" },
-    });
-    const ref = { workspaceId: "fairnest", sessionId: session.id };
-    await expect(
-      h.router.invoke("workspace_session_archive", { ...ref, removeWorktree: true }),
-    ).rejects.toThrow("protected branch main");
-    expect(registeredWorktreePaths()).toContain(session.executionTarget.workingDirectory);
     const archived = await h.router.invoke("workspace_session_archive", {
       ...ref,
       removeWorktree: false,
     });
     expect(archived.executionTarget).toEqual(session.executionTarget);
-    gitCommand("worktree", "remove", "--force", session.executionTarget.workingDirectory);
-    await expect(h.router.invoke("workspace_session_restore", ref)).rejects.toThrow();
+    expect(archived.archivedAt).not.toBeNull();
+    await expect(h.router.invoke("workspace_session_restore", ref)).rejects.toThrow(
+      "Cannot restore because branch main already exists",
+    );
     expect(await h.router.invoke("workspace_session_get", ref)).toEqual(archived);
+    expect(gitCommand("rev-parse", "refs/heads/main")).toBe(branchHead);
+    expect(gitCommand("branch", "--show-current")).toBe("other-checkout");
+    expect(registeredWorktreePaths()).not.toContain(directory);
   }, 15_000);
 });

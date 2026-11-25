@@ -1,0 +1,4 @@
+[test]
+root = "scripts"
+preload = ["./tools/bun-test-preload.ts"]
+pathIgnorePatterns = ["**/*.post-build.test.ts"]

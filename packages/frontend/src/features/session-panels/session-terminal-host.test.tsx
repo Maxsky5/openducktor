@@ -354,7 +354,7 @@ test.each(["discovered", "created", "stale-failed", "evict-created"] as const)(
         </SessionTerminalHost>
       </QueryProvider>
     );
-    const view = render(content(["build"], "build"));
+    const view = await act(async () => render(content(["build"], "build")));
     try {
       await waitFor(() => expect(model("build").isLoading).toBe(false));
       if (mode.includes("created"))

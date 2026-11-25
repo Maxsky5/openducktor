@@ -14,7 +14,6 @@ import {
   codexTurnFixture,
   codexUserMessageInput,
   createAdapterWithTransport,
-  createDeferred,
   createHarness,
   createRuntimeStreamSubscription,
   flushCodexAdapterWork,
@@ -31,7 +30,7 @@ const failureOf = (promise: Promise<unknown>): Promise<Error | null> =>
   );
 
 class RejectableTurnTransport extends RecordingTransport {
-  private readonly turnStartFailure = createDeferred<never>();
+  private readonly turnStartFailure = Promise.withResolvers<never>();
 
   constructor() {
     super("runtime-live", false);
@@ -51,10 +50,10 @@ class RejectableTurnTransport extends RecordingTransport {
 }
 
 class DeferredSteerTransport extends RecordingTransport {
-  readonly turnStartRequested = createDeferred<void>();
-  readonly steerRequested = createDeferred<void>();
-  private readonly turnStartResponse = createDeferred<CodexAppServerTurnStartResult>();
-  private readonly steerResponse = createDeferred<CodexAppServerTurnSteerResult>();
+  readonly turnStartRequested = Promise.withResolvers<void>();
+  readonly steerRequested = Promise.withResolvers<void>();
+  private readonly turnStartResponse = Promise.withResolvers<CodexAppServerTurnStartResult>();
+  private readonly steerResponse = Promise.withResolvers<CodexAppServerTurnSteerResult>();
 
   constructor() {
     super("runtime-live", false);
@@ -174,8 +173,8 @@ describe("CodexAppServerAdapter runtime teardown", () => {
   });
 
   test("rejects settings when the runtime releases the session during catalog validation", async () => {
-    const validationStarted = createDeferred<void>();
-    const allowValidation = createDeferred<void>();
+    const validationStarted = Promise.withResolvers<void>();
+    const allowValidation = Promise.withResolvers<void>();
     const transport = new RecordingTransport("runtime-live", false);
     const request = transport.request.bind(transport);
     transport.request = async (input) => {
@@ -257,8 +256,8 @@ describe("CodexAppServerAdapter runtime teardown", () => {
   });
 
   test("does not report a late dynamic-tool rejection to a replacement session", async () => {
-    const responseStarted = createDeferred<void>();
-    const responseCompleted = createDeferred<void>();
+    const responseStarted = Promise.withResolvers<void>();
+    const responseCompleted = Promise.withResolvers<void>();
     const { subscribeEvents, emitServerRequest } = createRuntimeStreamSubscription();
     const liveMutations: CodexLiveSessionMutation[] = [];
     const { adapter } = createHarness({
@@ -306,8 +305,8 @@ describe("CodexAppServerAdapter runtime teardown", () => {
   });
 
   test("does not report a late server-request response failure to a replacement session", async () => {
-    const responseStarted = createDeferred<void>();
-    const responseCompleted = createDeferred<void>();
+    const responseStarted = Promise.withResolvers<void>();
+    const responseCompleted = Promise.withResolvers<void>();
     const { subscribeEvents, emitServerRequest } = createRuntimeStreamSubscription();
     const liveMutations: CodexLiveSessionMutation[] = [];
     const { adapter } = createHarness({
@@ -628,8 +627,8 @@ describe("CodexAppServerAdapter runtime teardown", () => {
   });
 
   test("drops queued runtime events from a released runtime generation", async () => {
-    const mutationStarted = createDeferred<void>();
-    const allowMutation = createDeferred<void>();
+    const mutationStarted = Promise.withResolvers<void>();
+    const allowMutation = Promise.withResolvers<void>();
     const { subscribeEvents, emitNotification, captureLatestSubscription, subscriptionCount } =
       createRuntimeStreamSubscription();
     let mutationCount = 0;

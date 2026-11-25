@@ -1,10 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { act } from "react";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { Combobox, type ComboboxGroup } from "./combobox";
-
-enableReactActEnvironment();
 
 const createGroupedOptions = (): ComboboxGroup[] => [
   {

@@ -83,11 +83,13 @@ function MainChatPreview() {
 for (const departure of [false, true]) {
   test(`main chat returns keyboard focus only to the same owner; departure=${departure}`, async () => {
     const modalSpy = spyOn(modals, "AgentsPageModalContent").mockImplementation(() => <></>);
-    const h = createDialogPreviewHarness(
-      "src/file.ts",
-      <SettingsModalProvider>
-        <MainChatPreview />
-      </SettingsModalProvider>,
+    const h = await act(async () =>
+      createDialogPreviewHarness(
+        "src/file.ts",
+        <SettingsModalProvider>
+          <MainChatPreview />
+        </SettingsModalProvider>,
+      ),
     );
     try {
       const link = await screen.findByRole("link", { name: "Open file" });
@@ -123,11 +125,13 @@ for (const departure of [false, true]) {
 
 test("main chat remembers the invoking link when focus moves during worktree lookup", async () => {
   const modalSpy = spyOn(modals, "AgentsPageModalContent").mockImplementation(() => <></>);
-  const h = createDialogPreviewHarness(
-    "src/file.ts",
-    <SettingsModalProvider>
-      <MainChatPreview />
-    </SettingsModalProvider>,
+  const h = await act(async () =>
+    createDialogPreviewHarness(
+      "src/file.ts",
+      <SettingsModalProvider>
+        <MainChatPreview />
+      </SettingsModalProvider>,
+    ),
   );
   const deferred = Promise.withResolvers<string>();
   h.canonicalize.mockImplementationOnce(() => deferred.promise);

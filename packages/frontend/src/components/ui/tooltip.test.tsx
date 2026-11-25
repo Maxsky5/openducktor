@@ -1,101 +1,49 @@
-import { describe, expect, test } from "bun:test";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
+import { expect, jest, test } from "bun:test";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./tooltip";
 
-const getTooltipState = (): string | null | undefined =>
-  document.querySelector('[data-slot="tooltip-content"]')?.getAttribute("data-state");
+setupTestingLibraryFakeTimers();
 
-describe("TooltipProvider", () => {
-  test("waits 80ms before the first tooltip and shows the next one at once", async () => {
+test.each([
+  { group: "one provider", nested: false },
+  { group: "nested providers with equal settings", nested: true },
+])(
+  "waits 80ms for the first tooltip and opens the next one at once in $group",
+  async ({ nested }) => {
+    const secondTooltip = (
+      <Tooltip>
+        <TooltipTrigger>Close terminal</TooltipTrigger>
+        <TooltipContent>Close this terminal</TooltipContent>
+      </Tooltip>
+    );
     render(
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger>New terminal</TooltipTrigger>
           <TooltipContent>Open a new terminal</TooltipContent>
         </Tooltip>
-        <Tooltip>
-          <TooltipTrigger>Close terminal</TooltipTrigger>
-          <TooltipContent>Close this terminal</TooltipContent>
-        </Tooltip>
+        {nested ? <TooltipProvider>{secondTooltip}</TooltipProvider> : secondTooltip}
       </TooltipProvider>,
     );
 
-    const firstTrigger = screen.getByText("New terminal");
-    const hoveredAt = performance.now();
-    fireEvent.pointerMove(firstTrigger, { pointerType: "mouse" });
-    expect(getTooltipState()).toBeUndefined();
+    const firstTrigger = screen.getByRole("button", { name: "New terminal" });
+    await act(async () => {
+      fireEvent.pointerMove(firstTrigger, { pointerType: "mouse" });
+      jest.advanceTimersByTime(79);
+    });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    await act(async () => jest.advanceTimersByTime(1));
+    expect(screen.getByRole("tooltip").textContent).toBe("Open a new terminal");
 
-    await waitFor(() => expect(getTooltipState()).toBe("delayed-open"), { timeout: 500 });
-    expect(performance.now() - hoveredAt).toBeGreaterThanOrEqual(75);
-
-    fireEvent.pointerLeave(firstTrigger, { pointerType: "mouse" });
-    // Leave the hover grace area that Radix keeps between the trigger and the tooltip.
-    fireEvent.pointerMove(document, { clientX: 500, clientY: 500 });
-    fireEvent.pointerMove(screen.getByText("Close terminal"), { pointerType: "mouse" });
-
-    await waitFor(() =>
-      expect(screen.getAllByText("Close this terminal").length).toBeGreaterThan(0),
+    await act(async () => fireEvent.pointerLeave(firstTrigger, { pointerType: "mouse" }));
+    // Move outside the hover area between the trigger and tooltip before entering the next one.
+    await act(async () => fireEvent.pointerMove(document, { clientX: 500, clientY: 500 }));
+    await act(async () =>
+      fireEvent.pointerMove(screen.getByRole("button", { name: "Close terminal" }), {
+        pointerType: "mouse",
+      }),
     );
-    const nextTooltip = screen
-      .getAllByText("Close this terminal")[0]
-      ?.closest('[data-slot="tooltip-content"]');
-    expect(nextTooltip?.getAttribute("data-state")).toBe("instant-open");
-  });
-});
-
-describe("Tooltip mounting", () => {
-  test("mounts its content only once it opens", async () => {
-    let contentRenders = 0;
-    function Content() {
-      contentRenders += 1;
-      return <>Open a new terminal</>;
-    }
-    render(
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger>New terminal</TooltipTrigger>
-          <TooltipContent>
-            <Content />
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>,
-    );
-    expect(contentRenders).toBe(0);
-    expect(document.querySelector('[data-slot="tooltip-content"]')).toBeNull();
-    fireEvent.pointerMove(screen.getByText("New terminal"), { pointerType: "mouse" });
-    await waitFor(() => expect(getTooltipState()).toBe("delayed-open"), { timeout: 500 });
-    expect(contentRenders).toBeGreaterThan(0);
-  });
-
-  test("a nested provider with the same settings shares the open delay of its parent", async () => {
-    render(
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger>New terminal</TooltipTrigger>
-          <TooltipContent>Open a new terminal</TooltipContent>
-        </Tooltip>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger>Close terminal</TooltipTrigger>
-            <TooltipContent>Close this terminal</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </TooltipProvider>,
-    );
-    const firstTrigger = screen.getByText("New terminal");
-    fireEvent.pointerMove(firstTrigger, { pointerType: "mouse" });
-    await waitFor(() => expect(getTooltipState()).toBe("delayed-open"), { timeout: 500 });
-    fireEvent.pointerLeave(firstTrigger, { pointerType: "mouse" });
-    fireEvent.pointerMove(document, { clientX: 500, clientY: 500 });
-    fireEvent.pointerMove(screen.getByText("Close terminal"), { pointerType: "mouse" });
-    // One provider: the second tooltip opens at once, as in one group.
-    await waitFor(() =>
-      expect(
-        screen
-          .getAllByText("Close this terminal")[0]
-          ?.closest('[data-slot="tooltip-content"]')
-          ?.getAttribute("data-state"),
-      ).toBe("instant-open"),
-    );
-  });
-});
+    expect(screen.getByRole("tooltip").textContent).toBe("Close this terminal");
+  },
+);

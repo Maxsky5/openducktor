@@ -10,6 +10,7 @@ import { afterAll, expect, spyOn, test } from "bun:test";
 import { Effect, Fiber, Stream } from "effect";
 import { WebSocket } from "ws";
 import { get, type IncomingMessage } from "node:http";
+import { setImmediate } from "node:timers/promises";
 import os from "node:os";
 import {
   REMOTE_BASELINE_CAPABILITIES,
@@ -19,6 +20,7 @@ import {
   TERMINAL_PROTOCOL_VERSION,
   REMOTE_SOCKET_CONNECTION_PREFIX,
   REMOTE_SOCKET_AUTHORIZATION_PREFIX,
+  encodeHostChannelFrame,
   encodeTerminalProtocolFrame,
   decodeTerminalProtocolFrame,
   decodeTerminalListSummary,
@@ -942,35 +944,35 @@ test("an open channel holds its admission, and closing the last channel arms its
 });
 
 test("ending the listener leaves accepted channel work under the host command lifetime", async () => {
-  let begin!: () => void;
-  let release!: () => void;
-  const started = new Promise<void>((resolve) => {
-    begin = resolve;
-  });
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const f = await fixture({ started: begin, gate });
+  const started = Promise.withResolvers<void>();
+  const gate = Promise.withResolvers<void>();
+  const f = await fixture({ started: started.resolve, gate: gate.promise });
   try {
     const channel = await f.channel((await f.negotiate()).result.connectionId);
-    const response = channel
-      .request({ method: "invoke", command: "set_theme", args: { theme: "dark" } })
-      .catch(() => null);
-    await started;
+    channel.socket.send(
+      encodeHostChannelFrame({
+        type: "request",
+        id: 0,
+        method: "invoke",
+        command: "set_theme",
+        args: { theme: "dark" },
+      }),
+    );
+    await started.promise;
     await f.stopNetwork();
+    await channel.closed;
     let drained = false;
     const drain = Effect.runPromise(f.commands.drain()).then(() => {
       drained = true;
     });
-    await Promise.resolve();
+    await setImmediate();
     expect(drained).toBe(false);
-    release();
-    await response;
+
+    gate.resolve();
     await drain;
     expect(f.mutations).toEqual(["dark"]);
-    expect(drained).toBe(true);
   } finally {
-    release();
+    gate.resolve();
     await f.close();
   }
 });

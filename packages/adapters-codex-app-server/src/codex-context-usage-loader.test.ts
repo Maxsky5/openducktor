@@ -4,7 +4,6 @@ import {
   codexSessionRef,
   codexSessionRuntimeRef,
   codexStartSessionInput,
-  createDeferred,
   createHarness,
   createRuntimeStreamSubscription,
   flushCodexAdapterWork,
@@ -16,9 +15,9 @@ import { codexTokenUsageFixture } from "./test-fixtures/codex-protocol";
 
 const blockResume = (transport: RecordingTransport) => {
   const request = transport.request.bind(transport);
-  const started = createDeferred<void>();
-  const resume = createDeferred<void>();
-  const completed = createDeferred<void>();
+  const started = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
+  const completed = Promise.withResolvers<void>();
   transport.request = async (input) => {
     if (input.method === "thread/resume") {
       started.resolve(undefined);
@@ -81,8 +80,8 @@ describe("CodexContextUsageLoader", () => {
     await expect(loading).rejects.toThrow("was released while loading context usage");
     expect(transports.get("runtime-live")?.calls ?? []).toEqual([]);
 
-    const preparationStarted = createDeferred<void>();
-    const preparation = createDeferred<() => void>();
+    const preparationStarted = Promise.withResolvers<void>();
+    const preparation = Promise.withResolvers<() => void>();
     const prepared = createHarness({
       subscribeEvents: () => {
         preparationStarted.resolve(undefined);
