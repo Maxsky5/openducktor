@@ -103,6 +103,7 @@ const deriveComposerPolicy = ({
     (draft.attachments ?? []).length > 0 && draftHasSlashCommandSegment(draft);
   const pendingSendBlockedReason = pendingSendBlockedReasonFor(model, draft, steersTurn);
   const speedBlockedReason = blockedSpeedReason(model.speed);
+  const turnSpeedBlockedReason = steersTurn ? null : speedBlockedReason;
 
   const sendInputBlocked =
     model.canSend === false ||
@@ -110,17 +111,18 @@ const deriveComposerPolicy = ({
     isComposerInputDisabled ||
     hasSlashAttachmentConflict ||
     pendingSendBlockedReason !== null ||
-    speedBlockedReason !== null ||
     !hasComposerSendContent(draft, model.pendingSendItems);
-  const defaultSendDisabled = sendInputBlocked || hasBlockingAttachments;
+  const defaultSendDisabled =
+    sendInputBlocked || hasBlockingAttachments || speedBlockedReason !== null;
   const steerBlockedReason = steersTurn ? draftSteerBlockedReason(draft, model) : null;
   const sendBlockedReason = !settingsReady
     ? "Load session settings before sending. Use Retry settings if the read failed."
-    : (speedBlockedReason ?? steerBlockedReason);
+    : (steerBlockedReason ?? turnSpeedBlockedReason);
   const sendDisabled =
     !settingsReady ||
     sendInputBlocked ||
     steerBlockedReason !== null ||
+    turnSpeedBlockedReason !== null ||
     Object.keys(attachmentErrors).length > 0;
   const placeholder = composerPlaceholderFor(model, primaryMode, settingsReady, steerShortcutLabel);
 

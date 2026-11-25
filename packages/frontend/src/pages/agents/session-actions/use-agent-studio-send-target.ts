@@ -92,9 +92,9 @@ export function useAgentStudioSendTarget({
       activity,
       activityKey,
       capture: () => isCurrentContext,
-      canSend: () => {
-        if (isStarting || speedBlockedReason !== null || !agentStudioReady || taskId.length === 0)
-          return false;
+      canSend: (options) => {
+        if (isStarting || !agentStudioReady || taskId.length === 0) return false;
+        if (!options?.steersRunningTurn && speedBlockedReason !== null) return false;
         if (selectedSessionIdentity !== null) return true;
         return (
           canStartSession &&
@@ -105,9 +105,10 @@ export function useAgentStudioSendTarget({
           !isCatalogLoading
         );
       },
-      resolve: async (parts) => {
+      resolve: async (parts, options) => {
         if (!isCurrentContext()) return null;
-        if (speedBlockedReason !== null) throw new Error(speedBlockedReason);
+        if (!options?.steersRunningTurn && speedBlockedReason !== null)
+          throw new Error(speedBlockedReason);
         requireSystemCommandTarget(parts, selectedSessionIdentity);
         if (selectedSessionIdentity) {
           assertCanPrepareSession(selectedSessionIdentity);

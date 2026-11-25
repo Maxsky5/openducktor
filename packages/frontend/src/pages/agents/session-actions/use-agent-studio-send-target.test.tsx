@@ -61,12 +61,22 @@ enableReactActEnvironment();
 type HookArgs = Parameters<typeof useAgentStudioSendTarget>[0] & {
   reusablePrompts: ReusablePrompt[];
   sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
+  isSessionWorking?: boolean;
+  foregroundTurnActive?: boolean;
 };
 
 /** An Agent Studio chat: its send target with the shared send rules. */
-const useTaskChatSend = ({ reusablePrompts, sendAgentMessage, ...targetArgs }: HookArgs) =>
+const useTaskChatSend = ({
+  reusablePrompts,
+  sendAgentMessage,
+  isSessionWorking = false,
+  foregroundTurnActive,
+  ...targetArgs
+}: HookArgs) =>
   useAgentChatSendForTarget(useAgentStudioSendTarget(targetArgs), {
     identity: targetArgs.selectedSessionIdentity,
+    isSessionWorking,
+    foregroundTurnActive,
     selectedModelDescriptor,
     draftRules: { reusablePrompts, supportsAttachments: true },
     sendAgentMessage,
@@ -769,4 +779,48 @@ describe("useAgentStudioSendTarget", () => {
       }
     },
   );
+
+  test("allows active-turn steering when next-turn speed is blocked while blocking new turns", async () => {
+    const sendAgentMessage = mock(async () => null);
+    const activeSession = sessionIdentity("session-running");
+    const harness = createTaskHarness({
+      ...createBaseArgs(),
+      selectedSessionIdentity: activeSession,
+      speedBlockedReason: "Fast mode requires an active plan.",
+      isSessionWorking: true,
+      foregroundTurnActive: true,
+      sendAgentMessage,
+    });
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().canSend).toBe(true);
+      await harness.run(async (state) => {
+        expect(await state.onSend(createDraft("queue next"), "default")).toBe(false);
+        expect(await state.onSend(createDraft("steer running"), "steer")).toBe(true);
+      });
+      expect(sendAgentMessage).toHaveBeenCalledTimes(1);
+      expect(sendAgentMessage).toHaveBeenCalledWith(
+        activeSession,
+        [{ kind: "text", text: "steer running" }],
+        expect.objectContaining({ mode: "steer", assertCanSubmit: expect.any(Function) }),
+      );
+
+      await harness.update({
+        ...createBaseArgs(),
+        selectedSessionIdentity: activeSession,
+        speedBlockedReason: "Fast mode requires an active plan.",
+        isSessionWorking: false,
+        foregroundTurnActive: false,
+        sendAgentMessage,
+      });
+      expect(harness.getLatest().canSend).toBe(false);
+      await harness.run(async (state) => {
+        expect(await state.onSend(createDraft("idle steer"), "steer")).toBe(false);
+      });
+      expect(sendAgentMessage).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
 });

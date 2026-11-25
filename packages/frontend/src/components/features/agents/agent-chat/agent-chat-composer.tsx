@@ -251,7 +251,7 @@ export function AgentChatComposer({
             keywords: ["submit", "send"],
             target: { kind: "session", key: model.displayedSessionKey ?? "draft" },
             disabledReason: () =>
-              defaultSendDisabled ? (sendBlockedReason ?? "Sending is unavailable.") : null,
+              sendDisabled ? (sendBlockedReason ?? "Sending is unavailable.") : null,
             run: submitComposerAction,
           },
           {

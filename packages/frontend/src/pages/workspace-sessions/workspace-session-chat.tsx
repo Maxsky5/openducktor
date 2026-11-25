@@ -246,7 +246,8 @@ export function WorkspaceSessionChat({
   const target = useMemo(
     () =>
       sendTarget({
-        canSend: canInteract && speedBlockedReason === null,
+        canSend: canInteract,
+        speedBlockedReason,
         assertCanSubmit,
       }),
     [assertCanSubmit, canInteract, sendTarget, speedBlockedReason],

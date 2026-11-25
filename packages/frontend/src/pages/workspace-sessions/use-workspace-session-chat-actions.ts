@@ -246,9 +246,11 @@ export function useWorkspaceSessionChatActions(
   const sendTarget = useCallback(
     ({
       canSend,
+      speedBlockedReason = null,
       assertCanSubmit,
     }: {
       canSend: boolean;
+      speedBlockedReason?: string | null;
       assertCanSubmit: NonNullable<AgentMessageSendOptions["assertCanSubmit"]>;
     }): AgentChatSendTarget => ({
       activity,
@@ -257,8 +259,12 @@ export function useWorkspaceSessionChatActions(
         const version = recipientVersion.current;
         return () => isMounted() && isCurrentWorkspace() && recipientVersion.current === version;
       },
-      canSend: () => canSend && preparation.ready && !resuming.current,
-      resolve: async () => {
+      canSend: (options) =>
+        canSend &&
+        preparation.ready &&
+        !resuming.current &&
+        (options?.steersRunningTurn === true || speedBlockedReason === null),
+      resolve: async (_parts, options) => {
         setError(null);
         const version = recipientVersion.current;
         const assertCurrentRecipient = () => {
@@ -266,6 +272,8 @@ export function useWorkspaceSessionChatActions(
             throw new Error(CHAT_UNAVAILABLE);
         };
         assertCurrentRecipient();
+        if (!options?.steersRunningTurn && speedBlockedReason !== null)
+          throw new Error(speedBlockedReason);
         const identity = workspaceSessionIdentity(record);
         if (!preparation.ready || !identity)
           throw new Error("The session is not ready. Reopen it before sending.");
