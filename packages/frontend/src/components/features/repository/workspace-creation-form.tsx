@@ -289,7 +289,10 @@ function WorkspaceModelsFields({
         <div className="flex min-w-0 items-center gap-2">
           <FolderGit2 className="size-3.5 shrink-0" aria-hidden="true" />
           <span className="shrink-0 font-medium text-foreground">Repository</span>
-          <span className="min-w-0 truncate font-mono text-muted-foreground">
+          <span
+            className="min-w-0 truncate font-mono text-muted-foreground"
+            title={controller.repoPath}
+          >
             {controller.repoPath}
           </span>
         </div>
