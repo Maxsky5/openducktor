@@ -18,8 +18,13 @@ const DIAGRAM_OPTIONS = {
   fontFamily: '"Space Grotesk", "Avenir Next", "Segoe UI", sans-serif',
   fontFamilyMono: '"IBM Plex Mono", "SF Mono", Menlo, Monaco, Consolas, monospace',
   fontSize: 14,
-  // Right-angle edges with rounded corners.
-  config: { flowchart: { curve: "step" } },
+  // Right-angle edges with rounded corners, one row of sequence actors, and flat commit labels.
+  config: {
+    flowchart: { curve: "step" },
+    state: { curve: "step" },
+    sequence: { mirrorActors: false },
+    gitGraph: { rotateCommitLabel: false },
+  },
 };
 
 export type DiagramRenderer = LazyModuleState<PeleRender>;
