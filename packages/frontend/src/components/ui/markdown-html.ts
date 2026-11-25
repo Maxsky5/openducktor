@@ -126,8 +126,9 @@ const CHECK_ICON =
  * is a static, read-only box: a document can hold many items.
  */
 const taskCheckboxHtml = (html: string): string => {
-  if (readTagAttributes(html).get("type") !== "checkbox") return html;
-  const checked = /\schecked=/.test(html.slice(0, html.indexOf(">")));
+  const attributes = readTagAttributes(html);
+  if (attributes.get("type") !== "checkbox") return html;
+  const checked = attributes.has("checked");
   return (
     `<span role="checkbox" aria-checked="${checked}" aria-disabled="true" aria-label="${checked ? "Done" : "Not done"}"` +
     ` data-state="${checked ? "checked" : "unchecked"}" data-markdown-task=""` +
@@ -156,14 +157,15 @@ export const createMarkdownHooks = ({
   images,
   taskItems,
 }: {
-  links: MarkdownLinks | undefined;
+  /** `text` shows links as text. Local links open in the app. */
+  links: "text" | MarkdownLocalLinks | null;
   images: MarkdownImageMode | null;
   taskItems: boolean;
 }): Components => {
   const hooks: Components = {};
   if (taskItems) hooks.input = taskCheckboxHtml;
   if (links === "text") hooks.a = (html) => `<span>${innerHtml(html)}</span>`;
-  else if (links?.local) hooks.a = localLinkHtml;
+  else if (links) hooks.a = localLinkHtml;
   if (images === "label") hooks.img = imageLabelHtml;
   else if (images === "host") hooks.img = hostImageHtml;
   return hooks;

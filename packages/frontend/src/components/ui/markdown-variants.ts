@@ -2,7 +2,10 @@ import { cn } from "@/lib/utils";
 
 export type MarkdownRendererVariant = "compact" | "document";
 
-/** The text styles of each view variant. `markdown.css` styles the parts that Words adds. */
+/**
+ * The text styles of each view variant. `markdown.css` styles the parts that Words adds, such as
+ * code blocks.
+ */
 export const MARKDOWN_CLASSES = {
   compact: cn(
     "markdown-body prose prose-sm max-w-none text-[13px] leading-relaxed text-foreground",
@@ -12,7 +15,6 @@ export const MARKDOWN_CLASSES = {
     "prose-hr:border-input prose-th:border-input prose-td:border-input",
     "prose-code:rounded-md prose-code:px-1 prose-code:text-[11px] prose-code:font-medium prose-code:text-rose-600 prose-code:dark:text-rose-400",
     "prose-code:before:content-none prose-code:after:content-none",
-    "prose-pre:my-2 prose-pre:text-[11px] prose-pre:text-foreground",
     "prose-blockquote:my-2 prose-blockquote:border-input prose-blockquote:bg-muted/30 prose-blockquote:px-3 prose-blockquote:py-1 prose-blockquote:text-foreground",
   ),
   document: cn(
@@ -24,7 +26,6 @@ export const MARKDOWN_CLASSES = {
     "prose-table:my-3 prose-th:border-input prose-td:border-input prose-td:wrap-anywhere",
     "prose-code:rounded-md prose-code:px-1 prose-code:text-[12px] prose-code:font-medium prose-code:text-rose-600 prose-code:dark:text-rose-400",
     "prose-code:before:content-none prose-code:after:content-none",
-    "prose-pre:my-3 prose-pre:bg-transparent prose-pre:p-0 prose-pre:text-foreground",
     "prose-blockquote:border-input prose-blockquote:bg-muted/30 prose-blockquote:px-3 prose-blockquote:py-1 prose-blockquote:text-foreground",
   ),
 } satisfies Record<MarkdownRendererVariant, string>;

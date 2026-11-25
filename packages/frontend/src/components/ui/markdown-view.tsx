@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { openClickedLink } from "@/lib/link-open";
+import { revealElement } from "@/lib/reveal-element";
 import { useOpenExternalUrl } from "@/lib/open-external-url";
 import { useShellPlatform } from "@/lib/shell-platform";
 import { cn } from "@/lib/utils";
@@ -57,7 +58,14 @@ export type MarkdownViewProps = {
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId"> | undefined;
 };
 
-const TASK_ITEM = /\[[ xX]\]/;
+/*
+ * Words formats in place only without hooks, plugins, and a URL hook, so each one is on only when
+ * the text can use it. These checks are cheap, and each can be wrong only one way.
+ */
+const TASK_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\]/m;
+const IMAGE = /!\[[^\]\n]*\][([]/;
+/** An inline link or a link reference. A local path cannot be a bare autolink. */
+const LINK = /\]\(|\]:/;
 
 const showOpenFailure = (cause: unknown): void => {
   toast.error("Failed to open link", { description: errorMessage(cause) });
@@ -72,11 +80,12 @@ const closestLink = (event: LinkEvent): HTMLAnchorElement | null => {
 };
 
 /**
- * Scrolls to the target of an in-page link, such as a footnote, without a route change. Words
- * writes the ids of footnotes as they appear in their links.
+ * Reveals the target of an in-page link, such as a footnote, without a route change. Words writes
+ * the ids of footnotes as they appear in their links.
  */
 const scrollToFragment = (href: string): void => {
-  document.getElementById(href.slice(1))?.scrollIntoView({ block: "nearest" });
+  const target = document.getElementById(href.slice(1));
+  if (target) revealElement(target);
 };
 
 type DiagramPreview = { svg: string; open: boolean };
@@ -127,9 +136,7 @@ export const MarkdownView = memo(function MarkdownView({
     setPreview((current) => current && { ...current, open: false });
   };
 
-  // Words formats in place only without plugins, hooks, and a URL hook, so each one is on only
-  // when the text can use it.
-  const hasImages = markdown.includes("![");
+  const hasImages = IMAGE.test(markdown);
   const imageMode = images === "label" ? "label" : "host";
   const hostImages = useMemo<HostImageOptions | null>(
     () =>
@@ -143,7 +150,7 @@ export const MarkdownView = memo(function MarkdownView({
           },
     [images, resolveTaskAssetSource, taskAssetContext],
   );
-  const local = links !== "text" ? (links?.local ?? null) : null;
+  const local = links !== "text" && LINK.test(markdown) ? (links?.local ?? null) : null;
   const usesUrlHook = local !== null || hasImages;
   // A label shows any image, also one whose source the browser cannot load.
   const urlTransform = useMemo(
@@ -158,15 +165,15 @@ export const MarkdownView = memo(function MarkdownView({
   const hooks = useMemo(
     () =>
       createMarkdownHooks({
-        links,
+        links: links === "text" ? "text" : local,
         images: hasImages ? imageMode : null,
         taskItems: hasTaskItems,
       }),
-    [hasImages, hasTaskItems, imageMode, links],
+    [hasImages, hasTaskItems, imageMode, links, local],
   );
   const islands = useMemo<ReactiveIslands | undefined>(
     () =>
-      hostImages
+      hostImages && hasImages
         ? {
             [HOST_IMAGE_ISLAND]: {
               inline: true,
@@ -184,7 +191,7 @@ export const MarkdownView = memo(function MarkdownView({
             },
           }
         : undefined,
-    [hostImages],
+    [hasImages, hostImages],
   );
   const plugins = useMemo(() => {
     const config: PluginConfig = {};

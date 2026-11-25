@@ -6,26 +6,13 @@ import { DialogClose, DialogContent, DialogDescription, DialogTitle } from "./di
 type DiagramSize = { width: number; height: number };
 const controlClassName = "size-8 text-muted-foreground hover:text-foreground";
 
-const SVG_TAG = /^<svg\b[^>]*>/;
-const ATTRIBUTE_VALUE = (name: string) => new RegExp(`\\s${name}="([^"]*)"`);
+const VIEW_BOX = /^<svg\b[^>]*?\sviewBox="[\d.-]+[\s,]+[\d.-]+[\s,]+([\d.]+)[\s,]+([\d.]+)"/;
 
-/**
- * The size of the drawing, from the `viewBox` or the `width` and `height` of its root tag. The
- * markup comes from the page, so it is HTML, not strict XML.
- */
+/** The size of a Pele drawing, from the `viewBox` that Pele writes on its root tag. */
 function readDiagramSize(svg: string): DiagramSize | null {
-  const tag = SVG_TAG.exec(svg.trimStart())?.[0] ?? "";
-  const [, , viewBoxWidth, viewBoxHeight] = (ATTRIBUTE_VALUE("viewBox").exec(tag)?.[1] ?? "")
-    .trim()
-    .split(/[\s,]+/)
-    .map(Number);
-  if (viewBoxWidth && viewBoxHeight && viewBoxWidth > 0 && viewBoxHeight > 0) {
-    return { width: viewBoxWidth, height: viewBoxHeight };
-  }
-  const width = Number.parseFloat(ATTRIBUTE_VALUE("width").exec(tag)?.[1] ?? "");
-  const height = Number.parseFloat(ATTRIBUTE_VALUE("height").exec(tag)?.[1] ?? "");
-  return Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0
-    ? { width, height }
+  const [, width, height] = VIEW_BOX.exec(svg.trimStart()) ?? [];
+  return Number(width) > 0 && Number(height) > 0
+    ? { width: Number(width), height: Number(height) }
     : null;
 }
 

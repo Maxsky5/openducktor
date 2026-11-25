@@ -1,0 +1,468 @@
+/*
+ * The theme of Pele diagrams, which the desktop app and the mobile diagram page share. A diagram
+ * sits on a canvas. In flowchart, state, sequence, class, entity, gantt, and journey diagrams, each
+ * part takes a tint of a palette hue: indigo for steps, amber for decisions and notes, emerald for
+ * start, end, and done work, sky for data and states, fuchsia for other shapes, rose for critical
+ * work. Groups and frames are violet outlines. Charts use the same hues as series colors. A
+ * diagram that sets its own colors, such as with `classDef`, keeps them.
+ *
+ * The rules read only Pele variables and `--diagram-*` variables. Each app sets them for its theme:
+ * - `--pele-bg` (the canvas), `--pele-fg`, `--pele-muted`, `--pele-fg-on-light`, `--pele-fg-on-dark`,
+ *   `--pele-surface`, `--pele-surface-alt`, `--pele-border`, and `--pele-error`.
+ * - `--diagram-indigo`, `--diagram-sky`, `--diagram-emerald`, `--diagram-amber`, `--diagram-rose`,
+ *   `--diagram-fuchsia`, `--diagram-violet`, and `--diagram-lime`.
+ * - `--diagram-fill-mix`, `--diagram-text-mix`, `--diagram-solid-mix`, and
+ *   `--diagram-event-opacity`.
+ * - `--diagram-node-base`, `--diagram-warm-base`, `--diagram-surface`, and `--diagram-rule`.
+ * - `--diagram-author-l`, `--diagram-author-c`, `--diagram-author-alpha`,
+ *   `--diagram-sequence-on-light`, and `--diagram-sequence-on-dark`.
+ */
+
+/*
+ * Diagram text keeps geometric precision. With the `optimizeLegibility` of app text, Chromium
+ * paints SVG text through a scaled font that goes stale after a style change, and the labels then
+ * drift away from their shapes.
+ */
+.pele {
+  text-rendering: geometricPrecision;
+  --pele-line: color-mix(in oklab, var(--pele-fg) 75%, var(--pele-bg));
+  --pele-accent: var(--diagram-indigo);
+  --pele-critical: var(--diagram-rose);
+  /* `DIAGRAM_RADIUS` in `@openducktor/frontend-core/lib/diagram-drawing` has the same value. */
+  --pele-radius: 10px;
+  --pele-heading-weight: 600;
+  --pele-title-weight: 600;
+  --pele-bold-weight: 600;
+  --pele-series-1: var(--diagram-indigo);
+  --pele-series-2: var(--diagram-sky);
+  --pele-series-3: var(--diagram-emerald);
+  --pele-series-4: var(--diagram-amber);
+  --pele-series-5: var(--diagram-rose);
+  --pele-series-6: var(--diagram-fuchsia);
+  --pele-series-7: var(--diagram-violet);
+  --pele-series-8: var(--pele-muted);
+  /* Borders move from the hue toward the text color, so they keep contrast. */
+  --diagram-border-mix: 66%;
+}
+
+/* Each part takes its fill, line, and text from its hue, through the variables that Pele reads. */
+:is(.pele-flowchart, .pele-state, .pele-sequence, .pele-class, .pele-er, .pele-gantt, .pele-journey)
+  :is(.pele-node, .pele-note, .pele-task, .pele-frame, .pele-cluster) {
+  --hue: var(--diagram-indigo);
+  --tint-base: var(--diagram-node-base);
+  --_s: color-mix(in oklab, var(--hue) var(--diagram-fill-mix), var(--tint-base));
+  --_a: var(--_s);
+  --_b: color-mix(in oklab, var(--hue) var(--diagram-border-mix), var(--pele-fg));
+  --_c: var(--hue);
+}
+
+.pele .pele-node .pele-label {
+  font-weight: 500;
+}
+
+:is(.pele-flowchart, .pele-state, .pele-sequence, .pele-class, .pele-er, .pele-gantt)
+  :is(.pele-node, .pele-note, .pele-task)
+  .pele-label,
+.pele-journey .pele-task > text {
+  fill: color-mix(in oklab, var(--hue) var(--diagram-text-mix), var(--pele-fg));
+}
+
+.pele .pele-shape-diam,
+.pele .pele-note {
+  --hue: var(--diagram-amber);
+  --tint-base: var(--diagram-warm-base);
+}
+
+.pele :is(.pele-shape-stadium, .pele-shape-circle, .pele-shape-dbl-circ),
+.pele :is(.pele-state-start, .pele-state-end) {
+  --hue: var(--diagram-emerald);
+}
+
+.pele .pele-shape-cyl,
+.pele-state .pele-node:not(.pele-state-start, .pele-state-end),
+.pele-gantt .pele-task {
+  --hue: var(--diagram-sky);
+}
+
+.pele :is(.pele-shape-hex, .pele-shape-fr-rect, .pele-shape-odd) {
+  --hue: var(--diagram-fuchsia);
+  --tint-base: var(--diagram-warm-base);
+}
+
+.pele-gantt .pele-crit {
+  --hue: var(--diagram-rose);
+  --tint-base: var(--diagram-warm-base);
+}
+
+.pele-gantt .pele-done {
+  --hue: var(--diagram-emerald);
+}
+
+.pele-gantt .pele-active {
+  --hue: var(--diagram-indigo);
+}
+
+/* The mind map root is the hub. It is a surface with a strong outline, so the branches keep the
+   hues. */
+.pele-mindmap .pele-root {
+  --_s: var(--diagram-surface);
+  --_b: color-mix(in oklab, var(--pele-fg) 25%, var(--pele-bg));
+  stroke-width: 1.5;
+}
+
+.pele-mindmap .pele-root .pele-label {
+  fill: var(--pele-fg);
+  font-weight: 600;
+}
+
+/* Start and end states draw with the line and text colors. */
+.pele :is(.pele-state-start, .pele-state-end) {
+  --_l: var(--hue);
+  --_fg: var(--hue);
+  stroke-width: 1.5;
+}
+
+/* Groups and frames are violet outlines, so the nodes inside stay in front. The nodes inside a
+   group inherit its variables, so the group sets its own fill and keeps the fill mix. */
+.pele :is(.pele-cluster, .pele-frame) {
+  --hue: var(--diagram-violet);
+  --_s: color-mix(in oklab, var(--hue) 4%, var(--pele-bg));
+}
+
+.pele .pele-cluster > rect {
+  stroke: var(--_b);
+  stroke-dasharray: 5 4;
+}
+
+/* Critical blocks are rose and break blocks are amber, so they stand out from the other blocks. */
+.pele .pele-frame-critical {
+  --hue: var(--diagram-rose);
+}
+
+.pele .pele-frame-break {
+  --hue: var(--diagram-amber);
+}
+
+/* A sequence frame holds dashed replies and dashed dividers, so its outline stays solid. Pele
+   draws the dividers with the line of all frames, so they take the frame line here. */
+.pele .pele-frame > rect:first-child {
+  fill: color-mix(in oklab, var(--hue) 3%, transparent);
+  stroke: var(--_b);
+}
+
+.pele .pele-frame > path {
+  stroke: var(--_b);
+}
+
+/* The kind tab of a sequence frame, such as `alt`, is a pill in the frame hue. */
+.pele .pele-frame > rect:has(+ .pele-frame-kind) {
+  fill: color-mix(in oklab, var(--hue) 18%, var(--pele-bg));
+}
+
+/* The label of an else branch sits on the frame, like the label of the first branch. */
+.pele .pele-frame > rect:has(+ .pele-frame-label) {
+  fill: none;
+}
+
+.pele :is(.pele-cluster-label, .pele-frame-label, .pele-frame-kind) {
+  fill: color-mix(in oklab, var(--hue) 66%, var(--pele-fg));
+  font-weight: 600;
+}
+
+.pele .pele-note rect {
+  fill: var(--_s);
+  stroke: var(--_b);
+}
+
+/*
+ * Each sequence participant has its own hue, for its boxes, its lifeline, and its activation bars.
+ * The preparation step adds a `pele-hue-<name>` class to each in the order of the participants.
+ * Violet stays for blocks. Messages, their labels, the step numbers, and the notes stay near the
+ * text color, so they read on every lifeline and belong to no participant.
+ */
+.pele.pele-sequence .pele-hue-fuchsia {
+  --hue: var(--diagram-fuchsia);
+  --tint-base: var(--diagram-warm-base);
+}
+
+.pele.pele-sequence .pele-hue-emerald {
+  --hue: var(--diagram-emerald);
+}
+
+.pele.pele-sequence .pele-hue-amber {
+  --hue: var(--diagram-amber);
+  --tint-base: var(--diagram-warm-base);
+}
+
+.pele.pele-sequence .pele-hue-sky {
+  --hue: var(--diagram-sky);
+}
+
+.pele.pele-sequence .pele-hue-rose {
+  --hue: var(--diagram-rose);
+  --tint-base: var(--diagram-warm-base);
+}
+
+.pele.pele-sequence .pele-hue-lime {
+  --hue: var(--diagram-lime);
+}
+
+.pele.pele-sequence :is(.pele-lifeline, .pele-activation) {
+  --_b: color-mix(in oklab, var(--hue) var(--diagram-border-mix), var(--pele-fg));
+}
+
+.pele.pele-sequence .pele-lifeline {
+  stroke: var(--_b);
+  stroke-width: 1.5;
+}
+
+/* Pele paints activation bars from their group, so each bar sets its own paint. */
+.pele.pele-sequence .pele-activation {
+  fill: color-mix(
+    in oklab,
+    var(--hue) calc(var(--diagram-fill-mix) * 1.6),
+    var(--diagram-node-base)
+  );
+  stroke: var(--_b);
+}
+
+.pele.pele-sequence .pele-note {
+  --_s: color-mix(in oklab, var(--pele-fg) 5%, var(--diagram-node-base));
+  --_b: color-mix(in oklab, var(--pele-fg) 30%, var(--pele-bg));
+}
+
+.pele.pele-sequence :is(.pele-note, .pele-actor) .pele-label {
+  fill: var(--pele-fg);
+}
+
+.pele .pele-sequence-number > rect {
+  fill: var(--pele-fg);
+}
+
+/*
+ * Sequence highlights and boxes paint their author color from `--author-fill`, through the
+ * lightness and chroma of the theme. Pele picks the text and line colors on them from
+ * `--pele-fg-on-light` and `--pele-fg-on-dark`, so each theme sets those for sequences. Pele sets
+ * the app colors on the root of each drawing, so these colors go on its children.
+ */
+.pele-sequence [style*="--author-fill"] {
+  fill: oklch(
+    from var(--author-fill) var(--diagram-author-l) var(--diagram-author-c) h /
+      var(--diagram-author-alpha)
+  );
+}
+
+.pele-sequence > * {
+  --pele-fg-on-light: var(--diagram-sequence-on-light);
+  --pele-fg-on-dark: var(--diagram-sequence-on-dark);
+}
+
+/* Actor icons draw with the weight of the message lines. */
+.pele-sequence
+  :is(
+    .pele-actor-actor,
+    .pele-actor-boundary,
+    .pele-actor-control,
+    .pele-actor-entity,
+    .pele-actor-database
+  )
+  > :is(circle, path) {
+  stroke-width: 1.5;
+}
+
+/* Gantt bars take their tint, not a solid accent, so their labels stay readable. */
+.pele-gantt .pele-task {
+  --_r: 4px;
+}
+
+.pele-gantt .pele-task > rect {
+  fill: var(--_s);
+  fill-opacity: 1;
+  stroke: var(--_b);
+}
+
+.pele-gantt :is(.pele-task .pele-label, .pele-section-label) {
+  font-weight: 500;
+}
+
+.pele-gantt .pele-section-label {
+  fill: var(--pele-fg);
+}
+
+/* Pele bands every other gantt section. The others have no fill. */
+.pele-gantt .pele-section:not([fill="none"]) {
+  fill: color-mix(in oklab, var(--pele-muted) 7%, transparent);
+  rx: 6px;
+}
+
+/*
+ * Class and entity boxes have a name band in a strong tint over a light body. The preparation step
+ * adds the band and the `pele-banded` class. A box without members is all name band. Entity rows
+ * alternate between the body and a lighter tint.
+ */
+.pele :is(.pele-node.pele-class, .pele-node.pele-entity) {
+  --diagram-header-fill: color-mix(
+    in oklab,
+    var(--hue) calc(var(--diagram-fill-mix) * 1.6),
+    var(--tint-base)
+  );
+}
+
+.pele .pele-node-header,
+.pele :is(.pele-node.pele-class, .pele-node.pele-entity):not(.pele-banded) > rect {
+  fill: var(--diagram-header-fill);
+}
+
+.pele .pele-node-header {
+  stroke: none;
+}
+
+.pele .pele-banded > rect:first-child {
+  fill: color-mix(in oklab, var(--hue) calc(var(--diagram-fill-mix) / 3), var(--tint-base));
+}
+
+.pele .pele-er-stripes {
+  fill: color-mix(in oklab, var(--hue) calc(var(--diagram-fill-mix) * 0.8), var(--tint-base));
+}
+
+.pele :is(.pele-er-type, .pele-member) {
+  fill: color-mix(in oklab, var(--pele-muted) 60%, var(--pele-fg));
+}
+
+.pele-class .pele-attribute {
+  fill: color-mix(in oklab, var(--pele-fg) 85%, var(--pele-muted));
+}
+
+.pele .pele-annotation {
+  fill: color-mix(in oklab, var(--pele-muted) 45%, var(--pele-fg));
+}
+
+.pele-class .pele-method {
+  fill: color-mix(in oklab, var(--hue) var(--diagram-text-mix), var(--pele-fg));
+}
+
+.pele:is(.pele-class, .pele-er) .pele-node > .pele-label {
+  font-weight: 600;
+}
+
+/* Timeline periods and git branch tags take a tint with dark text. Events stay lighter. */
+:is(.pele-timeline .pele-period, .pele-gitGraph .pele-branch) > rect {
+  fill-opacity: 0.32;
+}
+
+:is(.pele-timeline .pele-period, .pele-gitGraph .pele-branch) text {
+  fill: var(--pele-fg);
+  font-weight: 600;
+}
+
+.pele-timeline .pele-event > rect {
+  fill-opacity: var(--diagram-event-opacity);
+}
+
+.pele-timeline .pele-event text {
+  font-weight: 500;
+}
+
+/* The dotted tail of a git branch stays behind its commits. */
+.pele-gitGraph .pele-lane {
+  opacity: 0.4;
+}
+
+/* The commit label plate grows by a canvas border, so the lines stay clear of the text. */
+.pele-gitGraph .pele-commit-label > rect {
+  stroke: var(--pele-bg);
+  stroke-width: 4px;
+}
+
+/* Pie slices are lighter tints in the light theme, so all slice labels are dark. */
+.pele-pie {
+  --pele-series-1: color-mix(in oklab, var(--diagram-indigo) var(--diagram-solid-mix), white);
+  --pele-series-2: color-mix(in oklab, var(--diagram-sky) var(--diagram-solid-mix), white);
+  --pele-series-3: color-mix(in oklab, var(--diagram-emerald) var(--diagram-solid-mix), white);
+  --pele-series-4: color-mix(in oklab, var(--diagram-amber) var(--diagram-solid-mix), white);
+  --pele-series-5: color-mix(in oklab, var(--diagram-rose) var(--diagram-solid-mix), white);
+  --pele-series-6: color-mix(in oklab, var(--diagram-fuchsia) var(--diagram-solid-mix), white);
+  --pele-series-7: color-mix(in oklab, var(--diagram-violet) var(--diagram-solid-mix), white);
+}
+
+.pele-pie .pele-slice-labels {
+  fill: var(--pele-fg-on-light);
+  font-weight: 600;
+}
+
+.pele .pele-slice {
+  stroke: var(--pele-bg);
+  stroke-width: 2.5px;
+}
+
+/* A journey face shows its score: emerald for happy, amber for neutral, rose for sad. */
+.pele .pele-face {
+  --face: var(--diagram-amber);
+}
+
+.pele .pele-face-happy {
+  --face: var(--diagram-emerald);
+}
+
+.pele .pele-face-sad {
+  --face: var(--diagram-rose);
+}
+
+.pele .pele-face > circle {
+  fill: color-mix(in oklab, var(--face) 22%, var(--diagram-warm-base));
+  stroke: var(--face);
+}
+
+.pele .pele-face > g {
+  fill: color-mix(in oklab, var(--face) 70%, var(--pele-fg));
+}
+
+.pele-journey .pele-grid {
+  stroke: var(--diagram-rule);
+}
+
+/* Journey sections are header bars in a stronger tint of the step hue, not outlines. */
+.pele-journey .pele-section > rect {
+  fill: color-mix(in oklab, var(--diagram-indigo) 26%, var(--pele-bg));
+  stroke: none;
+}
+
+.pele-journey .pele-section > text {
+  fill: color-mix(in oklab, var(--diagram-indigo) var(--diagram-text-mix), var(--pele-fg));
+}
+
+.pele-journey .pele-task {
+  --_b: color-mix(in oklab, var(--hue) 45%, var(--pele-bg));
+}
+
+.pele-journey path.pele-edge {
+  stroke-width: 1.5;
+}
+
+.pele .pele-edge path:not(.pele-marker) {
+  stroke-width: 1.5;
+}
+
+/* Arrowheads take a rounded outline of the line color, so they match the 1.5px lines. */
+.pele .pele-edge .pele-marker {
+  stroke: var(--_l);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.pele :is(.pele-edge-label, .pele-cardinality) {
+  fill: color-mix(in oklab, var(--pele-fg) 88%, var(--pele-muted));
+  font-weight: 500;
+}
+
+/*
+ * A canvas halo keeps the lines off class multiplicities, and the lifelines off sequence messages
+ * and block labels. Pele puts a canvas plate behind the other edge labels.
+ */
+.pele .pele-cardinality,
+.pele.pele-sequence :is(.pele-edge-label text, .pele-frame-label) {
+  paint-order: stroke;
+  stroke: var(--pele-bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}

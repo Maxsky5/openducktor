@@ -9,14 +9,9 @@ import { MarkdownMermaid } from "./markdown-mermaid";
 import { MarkdownPreviewModal } from "./markdown-preview-modal";
 import { MarkdownRenderer } from "./markdown-renderer";
 import { MarkdownStreamRenderer } from "./markdown-stream-renderer";
+import { loadMarkdownModules } from "@/test-utils/markdown-modules";
 
-// Load the lazy modules before the tests, so a test does not wait for its first import.
-await Promise.all([
-  import("pele"),
-  import("@pierre/words/highlights"),
-  import("@pierre/highlights/themes/pierre-light"),
-  import("@pierre/highlights/themes/pierre-dark"),
-]);
+await loadMarkdownModules();
 
 const render = (element: ReactNode) => renderView(element, { wrapper: IsolatedMarkdownWrapper });
 
@@ -344,10 +339,10 @@ describe("diagrams", () => {
   });
 
   test("draws a diagram outside a Markdown view", async () => {
-    const view = render(<MarkdownMermaid source={"flowchart LR\n  A --> B"} expandable />);
+    const view = render(<MarkdownMermaid source={"flowchart LR\n  A --> B"} />);
 
     await waitFor(() => expect(view.container.querySelector("svg.pele")).not.toBeNull());
-    expect(view.getByRole("button", { name: "Open diagram preview" })).toBeTruthy();
+    expect(view.getByRole("group", { name: "Mermaid diagram" })).toBeTruthy();
   });
 });
 

@@ -17,8 +17,11 @@ export const DIAGRAM_CONFIG = {
 /** Class members show in the code font, as the signatures that they are. */
 export const DIAGRAM_MONOSPACE: readonly "members"[] = ["members"];
 
-/** The corner radius of diagram boxes. `--pele-radius` in the diagram styles has the same value. */
-export const DIAGRAM_RADIUS = 10;
+/**
+ * The corner radius of diagram boxes. `--pele-radius` in `@openducktor/theme/diagrams.css` has the
+ * same value.
+ */
+const DIAGRAM_RADIUS = 10;
 
 const NODE_START = /(?=<g class="pele-node )/;
 
@@ -47,10 +50,13 @@ const memberShift = (nameEnd: number, attributesEnd: number, bottom: number): nu
   return 0;
 };
 
+const NODE_CLASSES = /^<g class="([^"]*)"/;
+
 /**
- * Gives a class or entity box a name band. A class with an empty member box loses that box's
- * divider, and its members move by half the empty height, so they sit centered in the space. The
- * node text runs from the start of the node to the start of the next node.
+ * Gives a class or entity box a name band and the `pele-banded` class. A class with an empty
+ * member box loses that box's divider, and its members move by half the empty height, so they sit
+ * centered in the space. The node text runs from the start of the node to the start of the next
+ * node.
  */
 const withNameBand = (node: string): string => {
   const box = BOX.exec(node);
@@ -59,10 +65,9 @@ const withNameBand = (node: string): string => {
   const [rect, x, y, width, height] = box;
   const [line, attribute, left, nameEnd, right, attributesEnd] = dividers;
   const top = Number(y);
-  const banded = node.replace(
-    rect,
-    rect + headerBand(Number(x), top, Number(width), Number(nameEnd)),
-  );
+  const banded = node
+    .replace(rect, rect + headerBand(Number(x), top, Number(width), Number(nameEnd)))
+    .replace(NODE_CLASSES, '<g class="$1 pele-banded"');
   const shift =
     attributesEnd === undefined
       ? 0
@@ -77,21 +82,20 @@ const withNameBand = (node: string): string => {
         );
 };
 
-/** The number of participant colors. The diagram styles define `pele-hue-0` to `pele-hue-5`. */
-const PARTICIPANT_HUES = 6;
+/** The participant hues, in order. The diagram styles define a `pele-hue-<name>` class for each. */
+const PARTICIPANT_HUES: readonly string[] = ["fuchsia", "emerald", "amber", "sky", "rose", "lime"];
 
 const PARTICIPANT_PART =
   /class="(pele-node pele-actor[^"]*|pele-lifeline|pele-activation)" data-id="([^"]+)"/g;
 
 /**
- * Gives each sequence participant a color class, in the order of the participants: its boxes at
- * the top and the bottom, its lifeline, and its activation bars.
+ * Gives each sequence participant a hue class, in the order of the participants: its boxes at the
+ * top and the bottom, its lifeline, and its activation bars.
  */
 const withParticipantHues = (svg: string): string => {
-  if (!svg.includes('class="pele pele-sequence"')) return svg;
-  const hues = new Map<string, number>();
+  const hues = new Map<string, string>();
   return svg.replace(PARTICIPANT_PART, (_part: string, classes: string, id: string) => {
-    const hue = hues.get(id) ?? hues.size % PARTICIPANT_HUES;
+    const hue = hues.get(id) ?? PARTICIPANT_HUES[hues.size % PARTICIPANT_HUES.length] ?? "";
     hues.set(id, hue);
     return `class="${classes} pele-hue-${hue}" data-id="${id}"`;
   });
@@ -106,13 +110,13 @@ const STYLE_FILL = /(^|;)fill:/g;
  * styles paint the fill from the variable, so the dark theme can keep the hue at a dark tint.
  */
 const withAuthorFillVariables = (svg: string): string =>
-  svg.includes('class="pele pele-sequence"')
-    ? svg.replace(
-        STYLE_ATTRIBUTE,
-        (_attribute: string, style: string) =>
-          ` style="${style.replace(STYLE_FILL, "$1--author-fill:")}"`,
-      )
-    : svg;
+  svg.replace(
+    STYLE_ATTRIBUTE,
+    (_attribute: string, style: string) =>
+      ` style="${style.replace(STYLE_FILL, "$1--author-fill:")}"`,
+  );
+
+const SEQUENCE = 'class="pele pele-sequence"';
 
 /**
  * Prepares a Pele drawing for the diagram styles:
@@ -124,5 +128,7 @@ const withAuthorFillVariables = (svg: string): string =>
  * - Sequence author colors move into a variable, so each theme can paint them.
  * - Each sequence participant gets its own color.
  */
-export const prepareDiagram = (svg: string): string =>
-  withParticipantHues(withAuthorFillVariables(svg.split(NODE_START).map(withNameBand).join("")));
+export const prepareDiagram = (svg: string): string => {
+  const banded = svg.split(NODE_START).map(withNameBand).join("");
+  return banded.includes(SEQUENCE) ? withParticipantHues(withAuthorFillVariables(banded)) : banded;
+};

@@ -1,116 +1,81 @@
 import { describe, expect, test } from "bun:test";
-import { prepareDiagram } from "./diagram-drawing";
+import { render } from "pele";
+import { DIAGRAM_CONFIG, DIAGRAM_MONOSPACE, prepareDiagram } from "./diagram-drawing";
 
-const node = (kind: string, id: string, inner: string): string =>
-  `<g class="pele-node pele-${kind}" data-id="${id}" transform="translate(0,0)">` +
-  `<rect x="-50" y="-40" width="100" height="80" fill="var(--_s)" stroke="var(--_b)" style="rx:var(--_r)"/>` +
-  `${inner}</g>`;
+const draw = (source: string): string =>
+  prepareDiagram(render(source, { monospace: DIAGRAM_MONOSPACE, config: DIAGRAM_CONFIG }).svg);
 
-const bands = (svg: string): string[] =>
-  [...prepareDiagram(svg).matchAll(/<path class="pele-node-header" d="([^"]+)"\/>/g)].map(
-    (match) => match[1] ?? "",
-  );
+/** The markup of one node, from its start to the start of the next node. */
+const nodeOf = (svg: string, id: string): string => {
+  const start = svg.indexOf(`data-id="${id}"`);
+  const end = svg.indexOf('<g class="pele-node', start);
+  return svg.slice(start, end === -1 ? undefined : end);
+};
+
+const dividerOf = (node: string): string =>
+  /class="pele-divider" d="([^"]+)"/.exec(node)?.[1] ?? "";
 
 describe("prepareDiagram", () => {
-  test("gives a class box a band from its top corners down to its first divider", () => {
-    const svg = node(
-      "class",
-      "Task",
-      '<path class="pele-divider" d="M-50,-12H50M-50,10H50" fill="none"/>',
-    );
+  test("gives each class and entity box with members a name band down to its first divider", () => {
+    const svg =
+      draw(
+        "classDiagram\n  class Task {\n    +string id\n    +start() void\n  }\n  class Runtime",
+      ) + draw("erDiagram\n  TASK {\n    string id\n  }\n  TASK ||--o{ SESSION : runs");
 
-    expect(bands(svg)).toEqual(["M-50,-12V-30A10,10 0 0 1 -40,-40H40A10,10 0 0 1 50,-30V-12Z"]);
+    const task = nodeOf(svg, "Task");
+    const firstDivider = /M-?[\d.]+,(-?[\d.]+)H/.exec(dividerOf(task))?.[1];
+    expect(task).toContain(`class="pele-node-header" d="M`);
+    expect(task).toContain(`V${firstDivider}Z"`);
+    expect(nodeOf(svg, "TASK")).toContain("pele-node-header");
+    expect(nodeOf(svg, "Runtime")).not.toContain("pele-node-header");
+    expect(nodeOf(svg, "SESSION")).not.toContain("pele-node-header");
   });
 
   test.each([
-    ["no attributes", "M-50,-12H50M-50,-2H50", -5],
-    ["no methods", "M-50,-12H50M-50,30H50", 5],
+    ["only methods", "Store", "class Store {\n    +find(id) Task\n  }", "-"],
+    [
+      "only attributes",
+      "Status",
+      "class Status {\n    <<enumeration>>\n    OPEN\n    DONE\n  }",
+      "",
+    ],
   ])(
-    "drops the divider of an empty member box in a class with %s and centers the members",
-    (_case, path, shift) => {
-      const svg = node(
-        "class",
-        "Status",
-        `<path class="pele-divider" d="${path}" fill="none"/><g class="pele-members" font-size="12"></g>`,
-      );
+    "drops the empty member box of a class with %s and centers its members",
+    (_case, id, body, shiftSign) => {
+      const node = nodeOf(draw(`classDiagram\n  ${body}`), id);
 
-      const result = prepareDiagram(svg);
-
-      expect(result).toContain('<path class="pele-divider" d="M-50,-12H50" fill="none"/>');
-      expect(result).toContain(
-        `<g class="pele-members" transform="translate(0,${shift})" font-size="12">`,
+      expect(dividerOf(node)).toMatch(/^M-?[\d.]+,-?[\d.]+H[\d.]+$/);
+      expect(node).toMatch(
+        new RegExp(`class="pele-members" transform="translate\\(0,${shiftSign}\\d`),
       );
     },
   );
 
-  test("keeps both dividers of a class with attributes and methods", () => {
-    const svg = node("class", "Task", '<path class="pele-divider" d="M-50,-12H50M-50,10H50"/>');
-
-    expect(prepareDiagram(svg)).toContain('<path class="pele-divider" d="M-50,-12H50M-50,10H50"/>');
-  });
-
-  test("ends the band of an entity at its divider after the row stripes", () => {
-    const svg = node(
-      "entity",
-      "TASK",
-      '<g class="pele-er-stripes"><rect x="-50" width="100" y="-5" height="20"/></g>' +
-        '<path class="pele-er-divider" d="M-50,-5H50"/>',
+  test("keeps both member boxes of a class with attributes and methods", () => {
+    const node = nodeOf(
+      draw("classDiagram\n  class Task {\n    +string id\n    +start() void\n  }"),
+      "Task",
     );
 
-    expect(bands(svg)).toEqual(["M-50,-5V-30A10,10 0 0 1 -40,-40H40A10,10 0 0 1 50,-30V-5Z"]);
+    expect(dividerOf(node).match(/M/g)).toHaveLength(2);
+    expect(node).not.toContain("translate(0,");
   });
 
-  test("adds no band to a box without members, also when a later box has a divider", () => {
-    const svg =
-      node("class", "Empty", '<text class="pele-label">Empty</text>') +
-      node("class", "Full", '<path class="pele-divider" d="M-50,0H50"/>');
-
-    const result = prepareDiagram(svg);
-
-    expect(bands(svg)).toHaveLength(1);
-    expect(result.indexOf("pele-node-header")).toBeGreaterThan(result.indexOf('data-id="Full"'));
-  });
-
-  test("moves the author fills of a sequence into a variable and keeps their other styles", () => {
-    const svg =
-      '<svg class="pele pele-sequence" style="max-width:100%;--_bg:var(--pele-bg,#fff)">' +
-      '<rect class="pele-rect" style="rx:var(--_r);fill:rgb(191, 223, 255);"/>' +
-      '<rect style="fill:rgba(255, 200, 120, 0.3)"/></svg>';
-
-    expect(prepareDiagram(svg)).toBe(
-      '<svg class="pele pele-sequence" style="max-width:100%;--_bg:var(--pele-bg,#fff)">' +
-        '<rect class="pele-rect" style="rx:var(--_r);--author-fill:rgb(191, 223, 255);"/>' +
-        '<rect style="--author-fill:rgba(255, 200, 120, 0.3)"/></svg>',
+  test("gives each sequence participant one hue and moves author fills into a variable", () => {
+    const svg = draw(
+      "sequenceDiagram\n  participant U\n  participant H\n  rect rgb(191, 223, 255)\n    U->>+H: Ask\n    H-->>-U: Answer\n  end",
     );
+
+    expect(svg).toContain('pele-actor-participant pele-hue-fuchsia" data-id="U"');
+    expect(svg).toContain('pele-actor-participant pele-hue-emerald" data-id="H"');
+    expect(svg).toContain('class="pele-lifeline pele-hue-emerald" data-id="H"');
+    expect(svg).toContain('class="pele-activation pele-hue-emerald" data-id="H"');
+    expect(svg).toContain("--author-fill:rgb(191, 223, 255)");
+    expect(svg).not.toMatch(/style="(?:[^"]*;)?fill:/);
   });
 
-  test("gives each sequence participant one color for its boxes, lifeline, and activations", () => {
-    const svg =
-      '<svg class="pele pele-sequence">' +
-      '<path class="pele-lifeline" data-id="U"/><path class="pele-lifeline" data-id="H"/>' +
-      '<rect class="pele-activation" data-id="H"/>' +
-      '<g class="pele-node pele-actor pele-actor-participant pele-actor-footer" data-id="H"></g>' +
-      '<g class="pele-node pele-actor pele-actor-actor" data-id="U"></g></svg>';
-
-    expect(prepareDiagram(svg)).toBe(
-      '<svg class="pele pele-sequence">' +
-        '<path class="pele-lifeline pele-hue-0" data-id="U"/>' +
-        '<path class="pele-lifeline pele-hue-1" data-id="H"/>' +
-        '<rect class="pele-activation pele-hue-1" data-id="H"/>' +
-        '<g class="pele-node pele-actor pele-actor-participant pele-actor-footer pele-hue-1" data-id="H"></g>' +
-        '<g class="pele-node pele-actor pele-actor-actor pele-hue-0" data-id="U"></g></svg>',
-    );
-  });
-
-  test("keeps the author fills of other diagrams", () => {
-    const svg =
-      '<svg class="pele pele-flowchart"><g class="pele-node" style="fill:#9f6;stroke:#333"></g></svg>';
-
-    expect(prepareDiagram(svg)).toBe(svg);
-  });
-
-  test("leaves other diagram nodes unchanged", () => {
-    const svg = node("shape-rect", "Step", '<path class="pele-divider" d="M-50,0H50"/>');
+  test("leaves a flowchart unchanged", () => {
+    const svg = render("flowchart LR\n  A[Start] --> B{Valid?}", { config: DIAGRAM_CONFIG }).svg;
 
     expect(prepareDiagram(svg)).toBe(svg);
   });

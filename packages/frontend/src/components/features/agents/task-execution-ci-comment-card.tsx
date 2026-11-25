@@ -1,7 +1,7 @@
 import type { PullRequestReviewActivity } from "@openducktor/contracts";
 import { ChevronRight, CircleAlert, ExternalLink, Lightbulb, MessageSquare } from "lucide-react";
 import type { ReactElement } from "react";
-import { memo, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import type { MarkdownLinks } from "@/components/ui/markdown-html";
@@ -18,25 +18,22 @@ import { TaskExecutionCiRelativeTime } from "./task-execution-ci-relative-time";
 
 function useOpenReviewUrl() {
   const openExternalUrl = useOpenExternalUrl();
-  return (url: string, failureMessage: string): void => {
-    void openExternalUrl(url).catch((error) => {
-      toast.error(failureMessage, { description: errorMessage(error) });
-    });
-  };
+  return useCallback(
+    (url: string, failureMessage: string): void => {
+      void openExternalUrl(url).catch((error) => {
+        toast.error(failureMessage, { description: errorMessage(error) });
+      });
+    },
+    [openExternalUrl],
+  );
 }
 
 /** Links of a review comment open in the system browser, as its other review links do. */
 function useReviewMarkdownLinks(): MarkdownLinks {
-  const openExternalUrl = useOpenExternalUrl();
+  const openReviewUrl = useOpenReviewUrl();
   return useMemo(
-    () => ({
-      open: (href: string) => {
-        void openExternalUrl(href).catch((error) => {
-          toast.error("Failed to open link", { description: errorMessage(error) });
-        });
-      },
-    }),
-    [openExternalUrl],
+    () => ({ open: (href: string) => openReviewUrl(href, "Failed to open link") }),
+    [openReviewUrl],
   );
 }
 

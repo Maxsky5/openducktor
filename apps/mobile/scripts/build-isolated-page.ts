@@ -7,7 +7,7 @@
  * Run `bun run build:page` in apps/mobile after a change in `page-src`.
  */
 import { createHash } from "node:crypto";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { BunPlugin } from "bun";
 
@@ -79,15 +79,20 @@ const inlineFontSources = async (css: string, directory: string): Promise<string
   return result;
 };
 
-const inlineFontsPlugin: BunPlugin = {
+/**
+ * Inlines the fonts of the style sheets in the folder of a page. Other style sheets, such as the
+ * diagram theme that a page imports as text, keep their default loader.
+ */
+const inlineFontsPlugin = (directory: string): BunPlugin => ({
   name: "inline-css-fonts",
   setup(build) {
-    build.onLoad({ filter: /\.css$/ }, async (args) => ({
+    const folder = directory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    build.onLoad({ filter: new RegExp(`^${folder}/.+\\.css$`) }, async (args) => ({
       contents: await inlineFontSources(await readFile(args.path, "utf8"), path.dirname(args.path)),
       loader: "css",
     }));
   },
-};
+});
 
 /** Stops text inside an inline element from closing that element early. */
 const escapeInline = (text: string, element: "script" | "style"): string =>
@@ -116,7 +121,7 @@ export const pageHtml = (script: string, style: string): string => {
 
 /**
  * Builds one page entry into its HTML text. A `<name>.css` file beside the entry is the page
- * style sheet; it can `@import` package styles.
+ * style sheet. It can `@import` the style sheets of its folder, whose fonts the page inlines.
  */
 export const buildIsolatedPage = async (entry: string): Promise<string> => {
   const styleEntry = entry.replace(/\.ts$/, ".css");
@@ -128,7 +133,8 @@ export const buildIsolatedPage = async (entry: string): Promise<string> => {
     splitting: false,
     sourcemap: "none",
     define: { "process.env.NODE_ENV": JSON.stringify("production") },
-    plugins: [inlineFontsPlugin],
+    // Bun reports the real paths of the files that it loads.
+    plugins: [inlineFontsPlugin(path.dirname(await realpath(entry)))],
   });
   if (!result.success) {
     throw new Error(`The page ${entry} did not build:\n${result.logs.map(String).join("\n")}`);

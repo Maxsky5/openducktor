@@ -29,6 +29,14 @@ const DIAGRAM_OPTIONS = {
 
 export type DiagramRenderer = LazyModuleState<PeleRender>;
 
+/** Pele with the preparation step that the diagram styles need, on every drawing. */
+const withPreparation =
+  (render: PeleRender): PeleRender =>
+  (source, options) => {
+    const drawn = render(source, options);
+    return { ...drawn, svg: prepareDiagram(drawn.svg) };
+  };
+
 /**
  * Pele measures each label in the font that draws it, so it loads with the diagram fonts. Class
  * members use the code font, which the app loads only when a view first shows code.
@@ -36,26 +44,64 @@ export type DiagramRenderer = LazyModuleState<PeleRender>;
 const pele = createLazyModule(() =>
   Promise.all([
     import("pele"),
-    document.fonts.load('500 14px "Space Grotesk"'),
-    document.fonts.load('12px "IBM Plex Mono"'),
-  ]).then(([module]) => module.render),
+    document.fonts.load(`500 ${DIAGRAM_OPTIONS.fontSize}px ${DIAGRAM_OPTIONS.fontFamily}`),
+    document.fonts.load(`${DIAGRAM_OPTIONS.fontSize}px ${DIAGRAM_OPTIONS.fontFamilyMono}`),
+  ]).then(([module]) => withPreparation(module.render)),
 );
 
 /** The diagram renderer. It starts to load when `needed` is true. */
 export const useDiagramRenderer = (needed: boolean): DiagramRenderer => pele.useModule(needed);
 
+const MERMAID_FENCE = /^ {0,3}(?:`{3,}|~{3,})\s*mermaid\b/m;
+
 /** A fence that a view draws as a diagram. The check is cheap, and it can be wrong only one way. */
-export const mayHaveDiagram = (markdown: string): boolean => markdown.includes("mermaid");
+export const mayHaveDiagram = (markdown: string): boolean => MERMAID_FENCE.test(markdown);
 
 export type DrawnDiagram = { status: "ready"; svg: string } | { status: "error"; message: string };
 
-export const drawDiagram = (render: PeleRender, source: string): DrawnDiagram => {
+/**
+ * The last drawings, by source. A view draws its diagrams when it mounts, and chat rows and
+ * dialogs mount again often, so they reuse the drawing.
+ */
+const drawings = new Map<string, DrawnDiagram>();
+const DRAWING_LIMIT = 64;
+
+const draw = (render: PeleRender, source: string): DrawnDiagram => {
   try {
-    return { status: "ready", svg: prepareDiagram(render(source, DIAGRAM_OPTIONS).svg) };
+    return { status: "ready", svg: render(source, DIAGRAM_OPTIONS).svg };
   } catch (cause) {
     return { status: "error", message: errorMessage(cause) };
   }
 };
+
+export const drawDiagram = (render: PeleRender, source: string): DrawnDiagram => {
+  const cached = drawings.get(source);
+  if (cached) {
+    drawings.delete(source);
+    drawings.set(source, cached);
+    return cached;
+  }
+  const drawn = draw(render, source);
+  drawings.set(source, drawn);
+  const oldest = drawings.keys().next();
+  if (drawings.size > DRAWING_LIMIT && !oldest.done) drawings.delete(oldest.value);
+  return drawn;
+};
+
+/** A diagram that cannot show, with what the user can do. */
+export type DiagramFailure = { title: string; message: string; action: string };
+
+export const rendererFailure = (message: string): DiagramFailure => ({
+  title: "Diagram renderer failed to load",
+  message,
+  action: "Reload the app to show diagrams.",
+});
+
+export const sourceFailure = (message: string): DiagramFailure => ({
+  title: "Diagram preview failed",
+  message,
+  action: "Edit the Mermaid source to fix the diagram.",
+});
 
 const ALERT_ICON =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 size-4 shrink-0" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>';
@@ -70,7 +116,7 @@ const diagramHtml = (svg: string): string =>
   `<div data-markdown="mermaid" ${DIAGRAM_ATTRIBUTE}="">${svg}` +
   `<button type="button" data-diagram-expand="" aria-label="Open diagram preview" title="Open diagram preview">${EXPAND_ICON}</button></div>`;
 
-const diagramErrorHtml = (title: string, message: string, action: string): string =>
+const diagramErrorHtml = ({ title, message, action }: DiagramFailure): string =>
   `<div data-diagram-error="" role="alert">${ALERT_ICON}<div><p class="font-medium">${escapeHtml(title)}</p>` +
   `<p class="whitespace-pre-wrap font-mono text-xs">${escapeHtml(message)}</p>` +
   `<p class="text-xs">${escapeHtml(action)}</p></div></div>`;
@@ -90,11 +136,7 @@ export const createDiagramRenderer = (state: DiagramRenderer): DiagramRendererEn
   });
   if (state.status === "loading") return entry(() => LOADING_HTML);
   if (state.status === "failed") {
-    const html = diagramErrorHtml(
-      "Diagram renderer failed to load",
-      state.message,
-      "Reload the app to show diagrams.",
-    );
+    const html = diagramErrorHtml(rendererFailure(state.message));
     return entry(() => html);
   }
   const render = state.value;
@@ -104,10 +146,6 @@ export const createDiagramRenderer = (state: DiagramRenderer): DiagramRendererEn
     const drawn = drawDiagram(render, options.code);
     return drawn.status === "ready"
       ? diagramHtml(drawn.svg)
-      : diagramErrorHtml(
-          "Diagram preview failed",
-          drawn.message,
-          "Edit the Mermaid source to fix the diagram.",
-        );
+      : diagramErrorHtml(sourceFailure(drawn.message));
   });
 };

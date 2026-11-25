@@ -13,9 +13,9 @@ import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { TaskDetailsMarkdownContent } from "./task-details-markdown-content";
+import { loadMarkdownModules } from "@/test-utils/markdown-modules";
 
-// Load the diagram renderer before the tests, so a test does not wait for its first import.
-await import("pele");
+await loadMarkdownModules();
 
 enableReactActEnvironment();
 

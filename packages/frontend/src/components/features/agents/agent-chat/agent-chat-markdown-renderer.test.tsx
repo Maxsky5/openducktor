@@ -7,9 +7,9 @@ import { createTestClientConnection } from "@openducktor/frontend-core/test-supp
 import { QueryProvider } from "@/test-utils/query-provider";
 import { ChatFileLinkContext } from "./agent-chat-file-link-context";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
+import { loadMarkdownModules } from "@/test-utils/markdown-modules";
 
-// Load the diagram renderer before the tests, so a test does not wait for its first import.
-await import("pele");
+await loadMarkdownModules();
 
 
 const render = (element: ReactElement) => renderView(element, { wrapper: QueryProvider });
