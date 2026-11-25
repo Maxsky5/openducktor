@@ -1,173 +1,105 @@
 import { AlertCircle, Expand } from "lucide-react";
-import {
-  createContext,
-  type ReactNode,
-  useContext,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useMemo, useState } from "react";
 import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { Dialog, DialogTrigger } from "./dialog";
+import { drawDiagram, useDiagramRenderer } from "./markdown-diagram";
 import { MarkdownMermaidDialog } from "./markdown-mermaid-dialog";
-import { drawMermaidSvg, peekMermaidSvg } from "./markdown-mermaid-svg-cache";
-import { useMermaidSvgCache } from "./markdown-mermaid-svg-cache-context";
-import { MarkdownOpenFenceContext } from "./markdown-open-fence";
-import {
-  getMermaidErrorMessage,
-  type MermaidPreview,
-  type MermaidPreviews,
-} from "./markdown-mermaid-state";
 
-const MermaidPreviewContext = createContext<MermaidPreviews | null>(null);
-
-/** The last preview of the diagram, and the source that it shows. */
-type DrawnDiagram = { source: string; preview: MermaidPreview };
-
-const createRenderId = (reactId: string): string =>
-  `odt-mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}-${crypto.randomUUID()}`;
-
-export function MermaidPreviewProvider({
-  previews,
-  children,
+function DiagramAlert({
+  title,
+  message,
+  action,
 }: {
-  previews: MermaidPreviews;
-  children: ReactNode;
+  title: string;
+  message: string;
+  action: string;
 }) {
   return (
-    <MermaidPreviewContext.Provider value={previews}>{children}</MermaidPreviewContext.Provider>
+    <div className="flex items-start gap-2 text-sm text-destructive" role="alert">
+      <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <div>
+        <p className="font-medium">{title}</p>
+        <p className="whitespace-pre-wrap font-mono text-xs">{message}</p>
+        <p className="text-xs">{action}</p>
+      </div>
+    </div>
   );
 }
 
+/** A Mermaid diagram outside a Markdown view, such as the diagram node of the visual editor. */
 export function MarkdownMermaid({
   source,
-  renderDelayMs = 0,
   expandable = false,
 }: {
   source: string;
-  renderDelayMs?: number;
   expandable?: boolean;
 }) {
-  const reactId = useId();
-  const preparedPreview = useContext(MermaidPreviewContext)?.get(source);
-  // A source in a fence that is not closed is incomplete, so a render now would show a partial
-  // diagram or an error.
-  const sourceOpen = useContext(MarkdownOpenFenceContext) === source;
-  const svgCache = useMermaidSvgCache();
-  const [drawn, setDrawn] = useState<DrawnDiagram | null>(() => {
-    const svg = peekMermaidSvg(svgCache, source, createRenderId(reactId));
-    return svg === null ? null : { source, preview: { status: "ready", svg } };
-  });
+  const renderer = useDiagramRenderer(true);
+  const drawn = useMemo(
+    () => (renderer.status === "ready" ? drawDiagram(renderer.value, source) : null),
+    [renderer, source],
+  );
   const [openSvg, setOpenSvg] = useState<string | null>(null);
   // A diagram dialog sits outside the hidden view, so a switch closes it.
   useOnSessionViewHide(() => setOpenSvg(null));
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const drawnSource = drawn?.source;
+  const markup = useMemo(() => (drawn?.status === "ready" ? { __html: drawn.svg } : null), [drawn]);
 
-  useLayoutEffect(() => {
-    if (preparedPreview || sourceOpen || drawnSource === source) {
-      return;
-    }
-    const cachedSvg = peekMermaidSvg(svgCache, source, createRenderId(reactId));
-    if (cachedSvg !== null) {
-      setDrawn({ source, preview: { status: "ready", svg: cachedSvg } });
-      return;
-    }
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    let active = true;
-    let scheduled = false;
-    let renderFrame: number | null = null;
-    let renderTimeout: ReturnType<typeof setTimeout> | null = null;
-    const renderDiagram = async (): Promise<void> => {
-      let preview: MermaidPreview;
-      try {
-        const svg = await drawMermaidSvg(svgCache, source, createRenderId(reactId));
-        preview = { status: "ready", svg };
-      } catch (cause) {
-        preview = { status: "error", message: getMermaidErrorMessage(cause) };
-      }
-      if (active) {
-        setDrawn({ source, preview });
-      }
-    };
-    // Mermaid layout blocks the main thread. Draw only near the viewport, after it can paint.
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!active || scheduled || !entry?.isIntersecting) return;
-        scheduled = true;
-        observer.disconnect();
-        if (renderDelayMs > 0) {
-          renderTimeout = setTimeout(() => void renderDiagram(), renderDelayMs);
-          return;
-        }
-        renderFrame = requestAnimationFrame(() => {
-          renderFrame = requestAnimationFrame(() => void renderDiagram());
-        });
-      },
-      { rootMargin: "200px" },
-    );
-    observer.observe(viewport);
-    return () => {
-      active = false;
-      observer.disconnect();
-      if (renderFrame !== null) cancelAnimationFrame(renderFrame);
-      if (renderTimeout !== null) clearTimeout(renderTimeout);
-    };
-  }, [drawnSource, preparedPreview, reactId, renderDelayMs, source, sourceOpen, svgCache]);
+  const diagram = markup ? (
+    <span
+      className="flex w-full justify-center [&_svg]:h-auto [&_svg]:max-w-full"
+      // oxlint-disable-next-line react/no-danger -- Pele escapes diagram text and filters links and styles
+      dangerouslySetInnerHTML={markup}
+    />
+  ) : null;
 
-  const preview = preparedPreview ?? drawn?.preview ?? null;
-
-  const diagram =
-    preview?.status === "ready" ? (
-      <span
-        className="flex w-full justify-center [&_svg]:h-auto [&_svg]:max-w-full"
-        // oxlint-disable-next-line react/no-danger -- Mermaid strict-mode output passes through DOMPurify
-        dangerouslySetInnerHTML={{ __html: preview.svg }}
+  let content = diagram;
+  if (renderer.status === "loading") {
+    content = <p className="text-sm text-muted-foreground">Loading diagram…</p>;
+  } else if (renderer.status === "failed") {
+    content = (
+      <DiagramAlert
+        title="Diagram renderer failed to load"
+        message={renderer.message}
+        action="Reload the app to show diagrams."
       />
-    ) : null;
+    );
+  } else if (drawn?.status === "error") {
+    content = (
+      <DiagramAlert
+        title="Diagram preview failed"
+        message={drawn.message}
+        action="Edit the Mermaid source to fix the diagram."
+      />
+    );
+  } else if (expandable && drawn?.status === "ready") {
+    const svg = drawn.svg;
+    content = (
+      <DialogTrigger asChild>
+        <button
+          type="button"
+          aria-label="Open diagram preview"
+          className="group relative flex w-full cursor-zoom-in justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => setOpenSvg(svg)}
+        >
+          {diagram}
+          <Expand
+            className="pointer-events-none absolute top-3 right-3 size-4 text-muted-foreground group-hover:text-foreground group-focus-visible:text-foreground"
+            aria-hidden="true"
+          />
+        </button>
+      </DialogTrigger>
+    );
+  }
 
   return (
     <Dialog open={openSvg !== null} onOpenChange={(open) => !open && setOpenSvg(null)}>
       <div
-        ref={viewportRef}
         role="group"
-        aria-busy={!preview}
+        aria-busy={renderer.status === "loading"}
         aria-label="Mermaid diagram"
-        className="my-3 overflow-hidden rounded-md border border-border bg-white"
+        className="my-3 overflow-hidden rounded-md border border-border bg-card"
       >
-        <div className="flex min-h-40 items-center justify-center p-3">
-          {expandable && preview?.status === "ready" ? (
-            <DialogTrigger asChild>
-              <button
-                type="button"
-                aria-label="Open diagram preview"
-                className="group relative flex w-full cursor-zoom-in justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                onClick={() => setOpenSvg(preview.svg)}
-              >
-                {diagram}
-                <Expand
-                  className="pointer-events-none absolute top-3 right-3 size-4 text-muted-foreground group-hover:text-foreground group-focus-visible:text-foreground dark:text-background/70 dark:group-hover:text-background dark:group-focus-visible:text-background"
-                  aria-hidden="true"
-                />
-              </button>
-            </DialogTrigger>
-          ) : (
-            diagram
-          )}
-          {preview?.status === "error" ? (
-            <div className="flex items-start gap-2 text-sm text-destructive" role="alert">
-              <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              <div>
-                <p className="font-medium">Diagram preview failed</p>
-                <p className="text-xs">
-                  {preview.message} Edit the Mermaid source to fix the diagram.
-                </p>
-              </div>
-            </div>
-          ) : null}
-        </div>
+        <div className="flex min-h-40 items-center justify-center p-3">{content}</div>
       </div>
       {openSvg ? <MarkdownMermaidDialog svg={openSvg} /> : null}
     </Dialog>

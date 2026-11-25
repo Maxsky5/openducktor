@@ -37,16 +37,9 @@ export function MarkdownMermaidDialog({ svg }: { svg: string }) {
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
   const dragRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
   const [viewportSize, setViewportSize] = useState<DiagramSize | null>(null);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [imageError, setImageError] = useState(false);
   const [zoom, setZoom] = useState(1);
   const diagramSize = useMemo(() => readDiagramSize(svg), [svg]);
-
-  useEffect(() => {
-    const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
-    setImageUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [svg]);
+  const markup = useMemo(() => ({ __html: svg }), [svg]);
 
   useEffect(() => {
     if (!viewport) return;
@@ -63,8 +56,8 @@ export function MarkdownMermaidDialog({ svg }: { svg: string }) {
       : 0;
   const width = diagramSize ? diagramSize.width * fitScale * zoom : 0;
   const height = diagramSize ? diagramSize.height * fitScale * zoom : 0;
-  const hasPreviewError = imageError || !diagramSize;
-  const canShowImage = !hasPreviewError && imageUrl !== null && fitScale > 0;
+  const hasPreviewError = !diagramSize;
+  const canShowDiagram = !hasPreviewError && fitScale > 0;
 
   const fit = () => {
     setZoom(1);
@@ -166,7 +159,7 @@ export function MarkdownMermaidDialog({ svg }: { svg: string }) {
         tabIndex={0}
         role="region"
         aria-label="Diagram preview viewport"
-        className="min-h-0 flex-1 overflow-auto bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        className="min-h-0 flex-1 overflow-auto bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         onPointerDown={startDrag}
         onPointerMove={moveDrag}
         onPointerUp={stopDrag}
@@ -177,7 +170,7 @@ export function MarkdownMermaidDialog({ svg }: { svg: string }) {
             The diagram preview could not load. Close it and try the diagram again.
           </p>
         )}
-        {canShowImage && (
+        {canShowDiagram && (
           <div
             className="flex items-center justify-center"
             style={{
@@ -185,12 +178,13 @@ export function MarkdownMermaidDialog({ svg }: { svg: string }) {
               minHeight: Math.max(viewportSize?.height ?? 0, height),
             }}
           >
-            <img
-              src={imageUrl}
-              alt="Expanded Mermaid diagram"
-              draggable={false}
-              style={{ width, height, maxWidth: "none" }}
-              onError={() => setImageError(true)}
+            <div
+              role="img"
+              aria-label="Expanded Mermaid diagram"
+              className="shrink-0 select-none [&>svg]:h-full! [&>svg]:w-full! [&>svg]:max-w-none!"
+              style={{ width, height }}
+              // oxlint-disable-next-line react/no-danger -- Pele escapes diagram text and filters links and styles
+              dangerouslySetInnerHTML={markup}
             />
           </div>
         )}

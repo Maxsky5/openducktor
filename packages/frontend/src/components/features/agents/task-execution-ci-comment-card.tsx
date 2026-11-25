@@ -1,15 +1,14 @@
 import type { PullRequestReviewActivity } from "@openducktor/contracts";
 import { ChevronRight, CircleAlert, ExternalLink, Lightbulb, MessageSquare } from "lucide-react";
-import type { ComponentProps, MouseEvent, ReactElement } from "react";
-import { memo, useState } from "react";
-import type { Components, ExtraProps } from "react-markdown";
+import type { ReactElement } from "react";
+import { memo, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import type { MarkdownLinks } from "@/components/ui/markdown-html";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useOpenExternalUrl } from "@/lib/open-external-url";
-import { cn } from "@/lib/utils";
 import { PierrePreloadedDiffViewer } from "./pierre-diff-viewer";
 import {
   commentLocationLabel,
@@ -26,47 +25,20 @@ function useOpenReviewUrl() {
   };
 }
 
-type TaskExecutionCiMarkdownLinkProps = ComponentProps<"a"> & ExtraProps;
-
-export function TaskExecutionCiMarkdownLink({
-  node: _node,
-  children,
-  className,
-  href,
-  ...props
-}: TaskExecutionCiMarkdownLinkProps): ReactElement {
-  const openReviewUrl = useOpenReviewUrl();
-  const openLink = (event: MouseEvent<HTMLAnchorElement>): void => {
-    event.preventDefault();
-    if (href) {
-      openReviewUrl(href, "Failed to open link");
-    }
-  };
-  const openLinkFromAuxiliaryClick = (event: MouseEvent<HTMLAnchorElement>): void => {
-    if (event.button === 1) {
-      openLink(event);
-    }
-  };
-  return (
-    <a
-      {...props}
-      href={href}
-      target={undefined}
-      onClick={openLink}
-      onAuxClick={openLinkFromAuxiliaryClick}
-      className={cn(
-        "text-foreground underline decoration-muted-foreground underline-offset-2 transition hover:decoration-foreground",
-        className,
-      )}
-    >
-      {children}
-    </a>
+/** Links of a review comment open in the system browser, as its other review links do. */
+function useReviewMarkdownLinks(): MarkdownLinks {
+  const openExternalUrl = useOpenExternalUrl();
+  return useMemo(
+    () => ({
+      open: (href: string) => {
+        void openExternalUrl(href).catch((error) => {
+          toast.error("Failed to open link", { description: errorMessage(error) });
+        });
+      },
+    }),
+    [openExternalUrl],
   );
 }
-
-const CI_COMMENT_MARKDOWN_COMPONENTS: Components = {
-  a: TaskExecutionCiMarkdownLink,
-};
 
 type TaskExecutionCiSuggestedChangeProps = {
   patch: string;
@@ -125,6 +97,7 @@ const TaskExecutionCiCommentBody = memo(function TaskExecutionCiCommentBody({
   const hasBody = comment.body.trim().length > 0;
   const hasPatch = Boolean(comment.patch?.trim() && filePath);
   const hasSuggestionPatches = comment.suggestionPatches.length > 0 && filePath !== null;
+  const markdownLinks = useReviewMarkdownLinks();
 
   return (
     <div>
@@ -148,7 +121,7 @@ const TaskExecutionCiCommentBody = memo(function TaskExecutionCiCommentBody({
           <MarkdownRenderer
             markdown={comment.body}
             variant="compact"
-            components={CI_COMMENT_MARKDOWN_COMPONENTS}
+            links={markdownLinks}
             className="min-w-0 break-words prose-p:break-words prose-li:break-words prose-code:break-words prose-pre:max-w-full prose-pre:whitespace-pre-wrap prose-pre:break-words prose-blockquote:break-words [&_pre_code]:whitespace-pre-wrap [&_pre_code]:break-words"
           />
         </div>

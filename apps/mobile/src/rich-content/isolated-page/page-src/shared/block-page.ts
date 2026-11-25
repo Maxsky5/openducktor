@@ -1,12 +1,10 @@
 /**
- * The shared code of the block pages. It renders one Markdown block with micromark, GFM, and
- * KaTeX math, then reports its height. micromark escapes raw HTML and removes unsafe link
- * protocols. A link press goes to the app, which applies its link policy. Each block page has a
- * CSS entry beside it that imports the KaTeX styles and `block-page.css`.
+ * The shared code of the block pages. It renders one Markdown block with `@pierre/words`, as the
+ * desktop views do: GFM, and math drawn as SVG. Then it reports its height. Words drops raw HTML
+ * and links with unsafe protocols. A link press goes to the app, which applies its link policy.
+ * Each block page has a CSS entry beside it that imports `block-page.css`.
  */
-import { micromark } from "micromark";
-import { gfm, gfmHtml } from "micromark-extension-gfm";
-import { math, mathHtml } from "micromark-extension-math";
+import { createHtmlRenderer } from "@pierre/words/html";
 import {
   BLOCK_PAGE_CHANNEL,
   type BlockPageOutboundMessage,
@@ -20,15 +18,8 @@ import {
   startPageChannel,
 } from "./page-runtime";
 
-/**
- * Replaces the diagram code blocks in `root` with diagrams in the colors of `message`. It returns
- * false when `isCurrent` turns false during the work, because a newer message replaces the render.
- */
-export type DiagramRenderer = (
-  root: PageElement,
-  message: BlockRenderMessage,
-  isCurrent: () => boolean,
-) => Promise<boolean>;
+/** Replaces the diagram code blocks in `root` with diagrams in the colors of `message`. */
+export type DiagramRenderer = (root: PageElement, message: BlockRenderMessage) => void;
 
 /** A picture of the rendered block, or null when the block is not a single picture. */
 export type BlockSnapshotter = (
@@ -81,22 +72,12 @@ export const startBlockPage = (
   const render = async (message: BlockRenderMessage): Promise<void> => {
     await fontsLoaded;
     applyTheme(message);
-    // micromark escapes raw HTML and empties unsafe link destinations, and the page policy runs
-    // only the page script.
+    // Words drops raw HTML and unsafe link destinations, and the page policy runs only the page
+    // script.
     // react-doctor-disable-next-line react-doctor/dangerous-html-sink
-    root.innerHTML = micromark(message.markdown, {
-      extensions: [gfm(), math()],
-      // As on desktop, a formula that KaTeX cannot read shows its source in the error color, with
-      // the error as its title. The rest of the block still renders.
-      htmlExtensions: [
-        gfmHtml(),
-        mathHtml({ throwOnError: false, errorColor: message.colors.error }),
-      ],
-    });
+    root.innerHTML = renderMarkdown(message.markdown);
     replaceImages(root);
-    const current =
-      renderDiagrams === null || (await renderDiagrams(root, message, () => latest === null));
-    if (!current) return;
+    renderDiagrams?.(root, message);
     // The app keys each height by its render message, so each message gets a size reply, also
     // when the height stays the same.
     lastHeight = -1;
@@ -126,9 +107,9 @@ export const startBlockPage = (
     const anchor = event.target?.closest("a") ?? null;
     if (anchor === null) return;
     event.preventDefault();
-    // micromark empties an unsafe destination, so the app shows why it stays closed.
-    const href = anchor.getAttribute("href");
-    if (href !== null) post({ type: "link", url: href });
+    // Words drops an unsafe destination, so the app gets an empty URL and shows why it stays
+    // closed.
+    post({ type: "link", url: anchor.getAttribute("href") ?? "" });
   });
   observePageSize(root, reportSize);
 };
@@ -160,6 +141,18 @@ const applyTheme = ({
   style.setProperty("--table-rule", colors.tableRule);
   style.setProperty("--table-header-rule", colors.tableHeaderRule);
   style.setProperty("--code-background", colors.codeBackground);
+};
+
+const MARKDOWN_OPTIONS = { math: true, controls: false, lineNumbers: false } as const;
+
+/** The HTML of one block. A block renders once, so each render uses a new renderer. */
+const renderMarkdown = (markdown: string): string => {
+  const renderer = createHtmlRenderer(MARKDOWN_OPTIONS);
+  try {
+    return renderer.render(markdown, false).html;
+  } finally {
+    renderer.dispose();
+  }
 };
 
 /** Images cannot load in the page, so each one shows its alt text. */

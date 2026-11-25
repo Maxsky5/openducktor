@@ -91,46 +91,26 @@ describe("rich Markdown lazy module boundaries", () => {
     expect(compatibility).not.toContain("@tiptap/");
   });
 
-  test("keeps parser-backed math detection and KaTeX out of the base renderer graph", async () => {
-    const renderer = await readSource("../../ui/markdown-renderer.tsx");
-    const candidateRenderer = await readSource("../../ui/markdown-renderer-math-candidate.tsx");
-    const mathRenderer = await readSource("../../ui/markdown-renderer-math.tsx");
-    const baseGraph = await readStaticModuleGraph("../../ui/markdown-renderer.tsx");
-    const candidateGraph = await readStaticModuleGraph(
-      "../../ui/markdown-renderer-math-candidate.tsx",
-    );
-    const mathGraph = await readStaticModuleGraph("../../ui/markdown-renderer-math.tsx");
-
-    expect(renderer).toContain('import("./markdown-renderer-math-candidate")');
-    expect(renderer).not.toContain("markdown-math-detection");
-    expect(baseGraph.packages).not.toContain("remark-math");
-    expect(baseGraph.packages).not.toContain("remark-parse");
-    expect(baseGraph.packages).not.toContain("unified");
-    expect(baseGraph.packages).not.toContain("unist-util-visit");
-    expect(baseGraph.packages).not.toContain("rehype-katex");
-    expect(baseGraph.packages).not.toContain("katex/dist/katex.min.css");
-    expect(candidateRenderer).toContain('lazy(() => import("./markdown-renderer-math"))');
-    expect(candidateGraph.packages).toContain("remark-math");
-    expect(candidateGraph.packages).not.toContain("rehype-katex");
-    expect(candidateGraph.packages).not.toContain("katex/dist/katex.min.css");
-    expect(candidateRenderer).toContain("fallback={fallback ?? fallbackContent}");
-    expect(mathRenderer).toContain('import "katex/dist/katex.min.css"');
-    expect(mathGraph.packages).toContain("remark-math");
-    expect(mathRenderer).toContain('from "rehype-katex"');
-  });
-
-  test("keeps parser-backed Mermaid detection out of the base renderer graph", async () => {
-    const renderer = await readSource("../../ui/markdown-renderer.tsx");
-    const baseGraph = await readStaticModuleGraph("../../ui/markdown-renderer.tsx");
-    const candidateGraph = await readStaticModuleGraph(
-      "../../ui/markdown-renderer-mermaid-candidate.tsx",
-    );
-
-    expect(renderer).toContain('import("./markdown-renderer-mermaid-candidate")');
-    expect(baseGraph.packages).not.toContain("remark-parse");
-    expect(baseGraph.packages).not.toContain("unified");
-    expect(baseGraph.packages).not.toContain("unist-util-visit");
-    expect(candidateGraph.packages).toContain("remark-parse");
-    expect(candidateGraph.packages).toContain("unist-util-visit");
+  test("loads diagrams and code highlighting only when a Markdown view shows them", async () => {
+    for (const entry of [
+      "../../ui/markdown-renderer.tsx",
+      "../../ui/markdown-stream-renderer.tsx",
+    ]) {
+      const graph = await readStaticModuleGraph(entry);
+      for (const packageName of [
+        "pele",
+        "@pierre/highlights",
+        "@pierre/words/highlights",
+        "katex",
+        "remark-parse",
+        "unified",
+      ]) {
+        expect(graph.packages).not.toContain(packageName);
+      }
+    }
+    const diagrams = await readSource("../../ui/markdown-diagram.ts");
+    const code = await readSource("../../ui/markdown-code.ts");
+    expect(diagrams).toContain('import("pele")');
+    expect(code).toContain('import("@pierre/words/highlights")');
   });
 });

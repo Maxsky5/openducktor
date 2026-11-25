@@ -68,7 +68,7 @@ test("renders create_task through the real message card as a Kanban-style task",
   expect(card?.textContent?.indexOf("Add task search shortcut")).toBeLessThan(
     card?.textContent?.indexOf("task-1") ?? -1,
   );
-  expect(card?.querySelector(".markdown-body")?.textContent).toBe(task().description);
+  expect(card?.querySelector(".markdown-body")?.textContent?.trim()).toBe(task().description);
   const openButton = card?.querySelector('button[aria-label="Open task details"]');
   expect(openButton?.textContent).toBe("Open");
   expect(openButton?.querySelector("svg.lucide-square-arrow-out-up-right")).not.toBeNull();

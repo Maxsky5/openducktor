@@ -8,7 +8,7 @@ import { lazy, memo, type ReactElement, Suspense, useCallback, useRef, useState 
 import { MarkdownPreviewModal } from "@/components/ui/markdown-preview-modal";
 import {
   type IssueImageContext,
-  useIssueImageComponents,
+  useIssueImages,
 } from "@/components/features/issue-source/issue-markdown-renderer";
 
 import { CollapsibleCard, CollapsibleCardEmpty } from "@/components/ui/collapsible-card";
@@ -51,7 +51,7 @@ export const TaskDetailsDocumentSection = memo(
     taskAssetContext,
     issueImageContext,
   }: TaskDetailsDocumentSectionProps): ReactElement {
-    const issueImageComponents = useIssueImageComponents(issueImageContext);
+    const issueImages = useIssueImages(issueImageContext);
     const [modalSnapshot, setModalSnapshot] = useState<{
       markdown: string;
       title: string;
@@ -130,7 +130,7 @@ export const TaskDetailsDocumentSection = memo(
               title={modalSnapshot.title}
               stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
               {...(taskAssetContext ? { taskAssetContext } : {})}
-              {...(issueImageComponents ? { components: issueImageComponents } : {})}
+              {...(issueImages ? { images: issueImages } : {})}
             />
           ) : null}
         </>

@@ -43,7 +43,7 @@ const blockPageColorsSchema = z.strictObject({
   fill: colorSchema,
   /** Code blocks, quotes, and diagram nodes. */
   codeBackground: colorSchema,
-  /** A formula that KaTeX cannot read. */
+  /** The errors in a diagram. */
   error: colorSchema,
 });
 

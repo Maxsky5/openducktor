@@ -1,3 +1,2 @@
 /* The diagram page styles: the same as the block page. */
-@import "katex/dist/katex.min.css";
 @import "./shared/block-page.css";

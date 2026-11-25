@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Editor } from "@tiptap/core";
-import { hasMarkdownMath } from "@/components/ui/markdown-math-detection";
+import { hasMarkdownMath } from "@/test-utils/markdown-math";
 import { assessVisualMarkdownCompatibility } from "./task-description-markdown";
 import { createTaskDescriptionMarkdownExtensions } from "./task-description-markdown-extensions";
 

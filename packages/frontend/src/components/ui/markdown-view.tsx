@@ -1,0 +1,279 @@
+/**
+ * The Markdown view of the app. `@pierre/words` parses and renders the text into its own DOM, so a
+ * long document or a streamed reply renders in a fraction of a millisecond. The view adds what
+ * Words leaves to the app: link and diagram clicks, task checkboxes, and images that the host loads.
+ */
+import type { TaskAssetRenderContext } from "@openducktor/contracts";
+import type { PluginConfig } from "@pierre/words/html";
+import { Markdown, type ReactiveIslands } from "@pierre/words/react";
+import type { KeyboardEvent, MouseEvent, ReactElement } from "react";
+import { memo, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
+import { openClickedLink } from "@/lib/link-open";
+import { useOpenExternalUrl } from "@/lib/open-external-url";
+import { useShellPlatform } from "@/lib/shell-platform";
+import { cn } from "@/lib/utils";
+import { Dialog } from "./dialog";
+import { useDialogPresence } from "./dialog-presence";
+import { mayHaveCodeFence, useCodeHighlighter } from "./markdown-code";
+import {
+  createDiagramPlugin,
+  DIAGRAM_EXPAND_ATTRIBUTE,
+  mayHaveDiagram,
+  useDiagramRenderer,
+} from "./markdown-diagram";
+import {
+  type HostImageOptions,
+  isHostImage,
+  MarkdownHostImage,
+  type MarkdownImageSource,
+} from "./markdown-host-image";
+import {
+  createMarkdownHooks,
+  createMarkdownUrlTransform,
+  HOST_IMAGE_ISLAND,
+  LOCAL_LINK_ATTRIBUTE,
+  type MarkdownLinks,
+  parseHostImageData,
+} from "./markdown-html";
+import { MarkdownMermaidDialog } from "./markdown-mermaid-dialog";
+import { MARKDOWN_CLASSES, type MarkdownRendererVariant } from "./markdown-variants";
+
+/** How the images of a view show. `label` shows each image as a chip with its text. */
+export type MarkdownImages = "label" | MarkdownImageSource;
+
+export type MarkdownViewProps = {
+  markdown: string;
+  /** True while the text grows at its end. Words then completes unfinished syntax. */
+  streaming: boolean;
+  variant: MarkdownRendererVariant;
+  className?: string | undefined;
+  /** Shows math and diagram fences as text, for short previews. */
+  lightweight: boolean;
+  links?: MarkdownLinks | undefined;
+  images?: MarkdownImages | undefined;
+  taskAssetContext?: Omit<TaskAssetRenderContext, "assetId"> | undefined;
+};
+
+const CODE_CONTROLS = { code: { copy: true, download: false } } as const;
+const TASK_ITEM = /\[[ xX]\]/;
+
+const showOpenFailure = (cause: unknown): void => {
+  toast.error("Failed to open link", { description: errorMessage(cause) });
+};
+
+type LinkEvent = MouseEvent<HTMLDivElement> | KeyboardEvent<HTMLDivElement>;
+
+/** The link of the view that an event targets. */
+const closestLink = (event: LinkEvent): HTMLAnchorElement | null => {
+  const anchor = event.target instanceof Element ? event.target.closest("a") : null;
+  return anchor && event.currentTarget.contains(anchor) ? anchor : null;
+};
+
+/**
+ * Scrolls to the target of an in-page link, such as a footnote, without a route change. Words
+ * writes the ids of footnotes as they appear in their links.
+ */
+const scrollToFragment = (href: string): void => {
+  document.getElementById(href.slice(1))?.scrollIntoView({ block: "nearest" });
+};
+
+type DiagramPreview = { svg: string; open: boolean };
+
+/** Mounts only while a diagram preview shows, so the views of a transcript do not watch the session view. */
+function DiagramPreviewDialog({
+  preview,
+  onClose,
+}: {
+  preview: DiagramPreview;
+  onClose: () => void;
+}): ReactElement {
+  // The dialog sits outside the hidden view, so a switch closes it.
+  useOnSessionViewHide(onClose);
+  return (
+    <Dialog open={preview.open} onOpenChange={(open) => !open && onClose()}>
+      <MarkdownMermaidDialog svg={preview.svg} />
+    </Dialog>
+  );
+}
+
+export const MarkdownView = memo(function MarkdownView({
+  markdown,
+  streaming,
+  variant,
+  className,
+  lightweight,
+  links,
+  images,
+  taskAssetContext,
+}: MarkdownViewProps): ReactElement {
+  const { resolveTaskAssetSource } = useShellPlatform();
+  const openExternalUrl = useOpenExternalUrl();
+  const showsDiagrams = !lightweight && mayHaveDiagram(markdown);
+  const diagrams = useDiagramRenderer(showsDiagrams);
+  const showsCode = mayHaveCodeFence(markdown);
+  const highlighter = useCodeHighlighter(showsCode);
+  const [preview, setPreview] = useState<DiagramPreview | null>(null);
+  const previewMounted = useDialogPresence(preview?.open ?? false);
+
+  // Words formats in place only without plugins, hooks, and a URL hook, so each one is on only
+  // when the text can use it.
+  const hasImages = markdown.includes("![");
+  const imageMode = images === "label" ? "label" : "host";
+  const hostImages = useMemo<HostImageOptions | null>(
+    () =>
+      images === "label"
+        ? null
+        : {
+            taskAssets: taskAssetContext
+              ? { context: taskAssetContext, resolveTaskAssetSource }
+              : null,
+            source: images ?? null,
+          },
+    [images, resolveTaskAssetSource, taskAssetContext],
+  );
+  const local = links !== "text" ? (links?.local ?? null) : null;
+  const usesUrlHook = local !== null || hasImages;
+  // A label shows any image, also one whose source the browser cannot load.
+  const urlTransform = useMemo(
+    () =>
+      createMarkdownUrlTransform(
+        hostImages ? (src) => isHostImage(src, hostImages) : () => true,
+        local,
+      ),
+    [hostImages, local],
+  );
+  const hasTaskItems = TASK_ITEM.test(markdown);
+  const hooks = useMemo(
+    () =>
+      createMarkdownHooks({
+        links,
+        images: hasImages ? imageMode : null,
+        taskItems: hasTaskItems,
+      }),
+    [hasImages, hasTaskItems, imageMode, links],
+  );
+  const islands = useMemo<ReactiveIslands | undefined>(
+    () =>
+      hostImages
+        ? {
+            [HOST_IMAGE_ISLAND]: {
+              inline: true,
+              render: (data) => {
+                const image = parseHostImageData(data);
+                return image ? (
+                  <MarkdownHostImage
+                    src={image.src}
+                    alt={image.alt}
+                    title={image.title}
+                    options={hostImages}
+                  />
+                ) : null;
+              },
+            },
+          }
+        : undefined,
+    [hostImages],
+  );
+  const plugins = useMemo(() => {
+    const config: PluginConfig = {};
+    if (showsCode && highlighter.status === "ready") config.code = highlighter.value;
+    if (showsDiagrams) config.mermaid = createDiagramPlugin(diagrams);
+    return config.code || config.mermaid ? config : undefined;
+  }, [diagrams, highlighter, showsCode, showsDiagrams]);
+
+  const openLink = (anchor: HTMLAnchorElement, event: LinkEvent): void => {
+    const destination = anchor.getAttribute(LOCAL_LINK_ATTRIBUTE);
+    if (destination !== null) {
+      const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+      if (local && !modified) local.open(destination, anchor);
+      return;
+    }
+    // Words keeps the text of a link whose destination is unsafe, without a destination.
+    const href = anchor.getAttribute("href");
+    if (!href) return;
+    if (href.startsWith("#")) {
+      scrollToFragment(href);
+      return;
+    }
+    if (links !== "text" && links?.open) {
+      links.open(href);
+      return;
+    }
+    const { x, y, width, height } = anchor.getBoundingClientRect();
+    void openClickedLink(href, event, { x, y, width, height }, openExternalUrl).catch(
+      showOpenFailure,
+    );
+  };
+
+  const handleClick = (event: MouseEvent<HTMLDivElement>): void => {
+    const expand =
+      event.target instanceof Element
+        ? event.target.closest(`[${DIAGRAM_EXPAND_ATTRIBUTE}]`)
+        : null;
+    if (expand && event.currentTarget.contains(expand)) {
+      const svg = expand.closest("[data-diagram]")?.querySelector("svg");
+      if (svg) setPreview({ svg: svg.outerHTML, open: true });
+      return;
+    }
+    const anchor = closestLink(event);
+    if (!anchor) return;
+    event.preventDefault();
+    if (event.button === 0) openLink(anchor, event);
+  };
+
+  // Enter opens the link once, also when the key repeats.
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    if (event.key !== "Enter") return;
+    const anchor = closestLink(event);
+    if (!anchor) return;
+    event.preventDefault();
+    if (!event.repeat) openLink(anchor, event);
+  };
+
+  // A middle click opens a web link in the system browser. Other buttons do nothing.
+  const handleAuxClick = (event: MouseEvent<HTMLDivElement>): void => {
+    const anchor = closestLink(event);
+    if (!anchor) return;
+    event.preventDefault();
+    const href = anchor.getAttribute("href");
+    if (event.button !== 1 || !href || href.startsWith("#")) return;
+    if (links !== "text" && links?.open) links.open(href);
+    else void openExternalUrl(href).catch(showOpenFailure);
+  };
+
+  const handleContextMenu = (event: MouseEvent<HTMLDivElement>): void => {
+    if (closestLink(event)) event.preventDefault();
+  };
+
+  return (
+    <>
+      <Markdown
+        mode={streaming ? "streaming" : "static"}
+        isAnimating={streaming}
+        math={!lightweight}
+        controls={CODE_CONTROLS}
+        lineNumbers={false}
+        components={hooks}
+        {...(islands ? { islands } : {})}
+        {...(plugins ? { plugins } : {})}
+        {...(usesUrlHook ? { urlTransform } : {})}
+        className={cn(MARKDOWN_CLASSES[variant], className)}
+        onClick={handleClick}
+        onKeyDown={handleKeyDown}
+        onAuxClick={handleAuxClick}
+        onContextMenu={handleContextMenu}
+      >
+        {markdown}
+      </Markdown>
+      {previewMounted && preview ? (
+        <DiagramPreviewDialog
+          preview={preview}
+          onClose={() => setPreview((current) => current && { ...current, open: false })}
+        />
+      ) : null}
+    </>
+  );
+});

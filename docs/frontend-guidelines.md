@@ -66,6 +66,18 @@ The app uses shadcn semantic tokens with Tailwind CSS v4. Theme tokens are in `p
 | Chat input, user message | `bg-chat-surface`, `shadow-chat`                                 |
 | Sidebar                  | `bg-sidebar`, `text-sidebar-foreground`, `border-sidebar-border` |
 
+## Markdown views
+
+Read views show Markdown with `MarkdownRenderer` for a complete text and `MarkdownStreamRenderer` for a reply that streams. Both use `MarkdownView` in `packages/frontend/src/components/ui/markdown-view.tsx`. The visual editor keeps TipTap.
+
+- `@pierre/words` parses and renders the text into its own DOM. It drops raw HTML and links with unsafe protocols.
+- Words gives HTML hooks, not React components. Pass `links` and `images` to change how links open and how images show. Do not add a React component for a Markdown element.
+- The view handles link clicks, middle clicks, and Enter on the view root. A local link, such as a file citation in a chat reply, keeps its destination in `data-local-link` and points nowhere.
+- Images that the host loads, such as task assets, host files, and issue attachments, mount as Words islands with their React components.
+- Words draws math as SVG. A `$` opens inline math only with the Pandoc rules, so prices such as `$5 and $10` stay text.
+- `@pierre/highlights` highlights code in the Pierre themes of the diff views. Pele draws Mermaid diagrams. Both load the first time that a view shows a code fence or a diagram.
+- A `lightweight` view shows math and diagram fences as text, for short previews.
+
 ## Floating windows
 
 A floating window stays over the app while the user works on something else, such as the detached Processes list. `FloatingWindow` is in `packages/frontend/src/components/ui/floating-window.tsx`.

@@ -1,6 +1,6 @@
 /**
  * Builds each isolated page entry `src/rich-content/isolated-page/page-src/<name>.ts`, with its
- * optional `<name>.css`, into one self-contained `assets/pages/<name>.html`. The page has inline JS and CSS, inline woff2 fonts,
+ * optional `<name>.css`, into one self-contained `assets/pages/<name>.html`. The page has inline JS and CSS, inline fonts,
  * and a Content Security Policy that blocks every load except inline data and runs only the page
  * script. The build fails when the output would load another file or a remote resource.
  *
@@ -14,10 +14,11 @@ import type { BunPlugin } from "bun";
 /**
  * The page Content Security Policy. `scriptHash` is the base64 SHA-256 hash of the page script, so
  * only that script runs. Markup that a renderer bug lets into the page, such as an `onerror`
- * attribute, cannot run script.
+ * attribute, cannot run script. `'wasm-unsafe-eval'` lets the page compile the WebAssembly of the
+ * Markdown renderer, and it does not allow `eval` of script.
  */
 export const pageContentSecurityPolicy = (scriptHash: string): string =>
-  `default-src 'none'; script-src 'sha256-${scriptHash}'; style-src 'unsafe-inline'; img-src data:; font-src data:`;
+  `default-src 'none'; script-src 'sha256-${scriptHash}' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; img-src data:; font-src data:`;
 
 const MOBILE_ROOT = path.resolve(import.meta.dir, "..");
 export const PAGE_SOURCE_DIRECTORY = path.join(
@@ -115,7 +116,7 @@ export const pageHtml = (script: string, style: string): string => {
 
 /**
  * Builds one page entry into its HTML text. A `<name>.css` file beside the entry is the page
- * style sheet; it can `@import` package styles, such as `katex/dist/katex.min.css`.
+ * style sheet; it can `@import` package styles.
  */
 export const buildIsolatedPage = async (entry: string): Promise<string> => {
   const styleEntry = entry.replace(/\.ts$/, ".css");

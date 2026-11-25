@@ -1,6 +1,5 @@
 import type { TaskAssetRenderContext } from "@openducktor/contracts";
 import type { ReactElement } from "react";
-import type { Components } from "react-markdown";
 import {
   Dialog,
   DialogBody,
@@ -10,8 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DocumentCopyButton } from "@/components/ui/document-copy-button";
-import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
-import { hasLabeledCodeFence } from "@/lib/markdown-utils";
+import { type MarkdownImages, MarkdownRenderer } from "@/components/ui/markdown-renderer";
 
 export type MarkdownPreviewModalProps = {
   markdown: string;
@@ -21,7 +19,7 @@ export type MarkdownPreviewModalProps = {
   title?: string;
   stripTaskDescriptionFrontMatter?: boolean;
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
-  components?: Components;
+  images?: MarkdownImages;
 };
 
 export function MarkdownPreviewModal({
@@ -32,7 +30,7 @@ export function MarkdownPreviewModal({
   title,
   stripTaskDescriptionFrontMatter = false,
   taskAssetContext,
-  components,
+  images,
 }: MarkdownPreviewModalProps): ReactElement {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -52,10 +50,9 @@ export function MarkdownPreviewModal({
             <MarkdownRenderer
               markdown={markdown}
               variant="document"
-              premiumCodeBlocks={hasLabeledCodeFence(markdown)}
               stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
               {...(taskAssetContext ? { taskAssetContext } : {})}
-              {...(components ? { components } : {})}
+              {...(images ? { images } : {})}
             />
             <DocumentCopyButton
               markdown={markdown}

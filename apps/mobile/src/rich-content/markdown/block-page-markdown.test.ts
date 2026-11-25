@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { micromark } from "micromark";
+import { createHtmlRenderer } from "@pierre/words/html";
 import { MAX_BLOCK_MARKDOWN_LENGTH } from "../isolated-page/block-page-messages";
 import { blockPageMarkdown } from "./block-page-markdown";
 import { parseMarkdownDocument } from "./markdown-document";
@@ -26,9 +26,12 @@ describe("blockPageMarkdown", () => {
     expect(markdown).toBe(
       'See [the spec][Spec] and ![chart][c] for $O(n)$.\n\n[Spec]: <https://x.dev/a\\<b\\>> "The \\"spec\\""\n[c]: </c.png>',
     );
-    expect(micromark(markdown ?? "")).toBe(
-      '<p>See <a href="https://x.dev/a%3Cb%3E" title="The &quot;spec&quot;">the spec</a> and <img src="/c.png" alt="chart" /> for $O(n)$.</p>\n',
+    // The page renders the text with Words.
+    const html = createHtmlRenderer().render(markdown ?? "", false).html;
+    expect(html).toContain(
+      'href="https://x.dev/a%3Cb%3E" title="The &quot;spec&quot;">the spec</a>',
     );
+    expect(html).toContain('src="/c.png" alt="chart"');
   });
 
   test("returns null for a text longer than a page renders", () => {

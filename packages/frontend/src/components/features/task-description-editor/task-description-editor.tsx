@@ -13,7 +13,6 @@ import {
 import type { EditorFocus } from "@/types/editor-focus";
 import { Button } from "@/components/ui/button";
 import type { IssueImageContext } from "@/components/features/issue-source/github-issue-image";
-import type { MermaidPreviews } from "@/components/ui/markdown-mermaid-state";
 import { TaskDescriptionEditorLoading } from "./task-description-editor-loading";
 import type { MarkdownImageRenderer } from "./task-description-image-context";
 import { splitTaskDescriptionFrontMatter } from "@openducktor/frontend-core/tasks/description/task-description-front-matter";
@@ -43,20 +42,25 @@ function useVisualMarkdownCompatibility(markdown: string, mode: "auto" | "visual
   const [state, setState] = useState<{
     markdown: string;
     result: VisualMarkdownCompatibility | null;
-    mermaidPreviews: MermaidPreviews;
-  }>({ markdown, result: null, mermaidPreviews: new Map() });
+  }>({ markdown, result: null });
   const lastVisualChange = useRef<string | null>(null);
   const isCurrent = state.markdown === markdown && state.result !== null;
 
+  // The effect runs an async check of the text and stores its result with the text it covers.
+  // react-doctor-disable-next-line react-doctor/no-derived-state-effect
   useEffect(() => {
     if (lastVisualChange.current === markdown) {
       lastVisualChange.current = null;
-      setState({ markdown, result: { compatible: true }, mermaidPreviews: new Map() });
+      // The state keys the check result by the text that it covers, so it is not a copy of a prop.
+      // react-doctor-disable-next-line react-doctor/no-derived-state
+      setState({ markdown, result: { compatible: true } });
       return;
     }
     if (mode === "markdown" || isCurrent) return;
     let active = true;
-    setState({ markdown, result: null, mermaidPreviews: new Map() });
+    // A null result marks the check of this text as pending.
+    // react-doctor-disable-next-line react-doctor/no-derived-state
+    setState({ markdown, result: null });
     void (async () => {
       try {
         const [{ assessVisualMarkdownCompatibility }] = await Promise.all([
@@ -64,7 +68,7 @@ function useVisualMarkdownCompatibility(markdown: string, mode: "auto" | "visual
           loadTaskDescriptionVisualEditor(),
         ]);
         const result = assessVisualMarkdownCompatibility(markdown);
-        if (active) setState({ markdown, result, mermaidPreviews: new Map() });
+        if (active) setState({ markdown, result });
       } catch {
         if (active) {
           setState({
@@ -74,7 +78,6 @@ function useVisualMarkdownCompatibility(markdown: string, mode: "auto" | "visual
               reason:
                 "Visual mode could not load its Markdown compatibility check. Keep editing in Markdown mode and retry after reloading the app.",
             },
-            mermaidPreviews: new Map(),
           });
         }
       }
@@ -92,7 +95,6 @@ function useVisualMarkdownCompatibility(markdown: string, mode: "auto" | "visual
         : null;
   return {
     compatibility,
-    mermaidPreviews: state.mermaidPreviews,
     isCurrent: state.markdown === markdown,
     markVisualChange: (value: string) => {
       lastVisualChange.current = value;
@@ -123,8 +125,10 @@ function TaskDescriptionEditorSession({
   previews,
 }: TaskDescriptionEditorProps): ReactElement {
   const [mode, setMode] = useState<"auto" | "visual" | "markdown">("auto");
-  const { compatibility, mermaidPreviews, isCurrent, markVisualChange } =
-    useVisualMarkdownCompatibility(markdown, mode);
+  const { compatibility, isCurrent, markVisualChange } = useVisualMarkdownCompatibility(
+    markdown,
+    mode,
+  );
   const frontMatter = splitTaskDescriptionFrontMatter(markdown);
   const renderContext = useMemo(
     () => (workspaceId && taskId ? { workspaceId, taskId, scope: "description" as const } : null),
@@ -176,7 +180,6 @@ function TaskDescriptionEditorSession({
           onUpload={stageImage}
           uploads={uploads}
           previews={previews}
-          mermaidPreviews={mermaidPreviews}
           renderContext={renderContext}
           issueImageContext={issueImageContext}
           renderImage={renderImage}

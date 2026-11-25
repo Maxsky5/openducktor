@@ -1,0 +1,202 @@
+/*
+ * Markdown that `@pierre/words` renders. The prose classes of each view variant style the text.
+ * These rules style the parts that Words adds: code frames, diagrams, task items, and links.
+ */
+
+.markdown-body a {
+  color: var(--foreground);
+  text-decoration-line: underline;
+  text-decoration-color: var(--muted-foreground);
+  text-underline-offset: 2px;
+  transition: text-decoration-color 150ms var(--motion-ease-out);
+}
+
+.markdown-body a:hover {
+  text-decoration-color: var(--foreground);
+}
+
+.markdown-body a:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* A GFM task item shows its checkbox in place of the list bullet. A top-level task list starts at
+   the left edge. A nested list keeps the list indent of the prose, so it shows its level. */
+.markdown-body li:has(> [data-markdown-task]) {
+  list-style: none;
+  padding-inline-start: 0;
+}
+
+.markdown-body ul:has(> li > [data-markdown-task]) {
+  list-style: none;
+}
+
+.markdown-body > ul:has(> li > [data-markdown-task]) {
+  padding-inline-start: 0;
+}
+
+.markdown-body [data-markdown="code-block"] {
+  margin-block: 0.75rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: oklch(from var(--muted) l c h / 30%);
+}
+
+.markdown-body [data-markdown="code-header"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.25rem 0.375rem 0.25rem 0.875rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-family: "IBM Plex Mono", "SF Mono", Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.25rem;
+}
+
+.markdown-body [data-markdown="code-header"] button {
+  border-radius: 0.375rem;
+  padding: 0 0.5rem;
+  color: var(--muted-foreground);
+}
+
+.markdown-body [data-markdown="code-header"] button:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.markdown-body [data-markdown="code-header"] button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 0;
+}
+
+.markdown-body [data-markdown="code-block"] pre {
+  margin: 0;
+  padding: 0.75rem 0.875rem;
+  overflow: auto;
+  border-radius: 0;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.markdown-body pre code {
+  display: block;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  white-space: pre;
+}
+
+.markdown-body pre code::before,
+.markdown-body pre code::after {
+  content: none;
+}
+
+.markdown-body [data-markdown="code-lines"] {
+  display: block;
+}
+
+/* Pele draws diagrams with these colors. They follow the theme without a new render. */
+.pele {
+  --pele-bg: var(--card);
+  --pele-fg: var(--card-foreground);
+  --pele-muted: var(--muted-foreground);
+  --pele-line: var(--muted-foreground);
+  --pele-surface: var(--muted);
+  --pele-surface-alt: var(--accent);
+  --pele-border: var(--border);
+  --pele-accent: var(--primary);
+  --pele-error: var(--destructive);
+  --pele-font: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+  --pele-font-mono: "IBM Plex Mono", "SF Mono", Menlo, Monaco, Consolas, monospace;
+  --pele-radius: 6px;
+}
+
+.markdown-body [data-markdown="mermaid"] {
+  position: relative;
+  display: flex;
+  justify-content: safe center;
+  overflow-x: auto;
+  padding: 0.75rem;
+  background: var(--card);
+}
+
+.markdown-body [data-markdown="mermaid"] svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.markdown-body [data-diagram-expand] {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  border-radius: 0.375rem;
+  padding: 0.25rem;
+  color: var(--muted-foreground);
+  cursor: zoom-in;
+}
+
+.markdown-body [data-diagram-expand]:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.markdown-body [data-diagram-expand]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 0;
+}
+
+.markdown-body [data-diagram-error] {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  color: var(--destructive);
+  font-size: 0.875rem;
+}
+
+.markdown-body [data-diagram-error] p {
+  margin: 0;
+}
+
+.markdown-body [data-diagram-loading] {
+  display: flex;
+  min-height: 10rem;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+/* Words draws math as SVG in the font of the text. */
+.markdown-body :is([data-markdown="math"], [data-markdown="math-display"]) {
+  font-size: 1.2em;
+}
+
+.markdown-body [data-markdown="math-display"] {
+  box-sizing: content-box;
+  padding-block: 0.5em;
+  overflow-x: auto;
+}
+
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Footnotes end the text below a rule, in a smaller size. */
+.markdown-body section[data-footnotes] {
+  margin-top: 1rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.5rem;
+  font-size: 0.875em;
+}
