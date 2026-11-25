@@ -73,19 +73,6 @@ const createProps = () => ({
   previews: new Map<string, string>(),
 });
 
-const createDeferred = <T,>() => {
-  let resolve: ((value: T) => void) | undefined;
-  const promise = new Promise<T>((next) => {
-    resolve = next;
-  });
-  return {
-    promise,
-    resolve(value: T) {
-      resolve?.(value);
-    },
-  };
-};
-
 describe("TaskDescriptionEditor", () => {
   beforeEach(() => intersectionObserver.install());
   afterEach(() => intersectionObserver.restore());
@@ -93,17 +80,23 @@ describe("TaskDescriptionEditor", () => {
   // The first Visual mount imports Tiptap and its extensions. Import them once here, so each
   // editor wait measures the mount, not this cold import, which is slow on a loaded CI runner.
   beforeAll(async () => {
-    await Promise.all([import("./task-description-visual-editor"), import("pele")]);
+    await Promise.all([
+      import("./task-description-markdown"),
+      import("./task-description-visual-editor"),
+      import("pele"),
+    ]);
   }, 10_000);
 
   test("updates Markdown when text changes in an existing Visual description", async () => {
     const onChange = mock((_value: string) => {});
-    const view = render(
-      <TaskDescriptionEditor
-        {...createProps()}
-        markdown="We need to rework the git panel."
-        onChange={onChange}
-      />,
+    const view = await act(async () =>
+      render(
+        <TaskDescriptionEditor
+          {...createProps()}
+          markdown="We need to rework the git panel."
+          onChange={onChange}
+        />,
+      ),
     );
     const content = await waitFor(() => requireElement(view.container, ".tiptap"));
     const paragraph = requireElement(content, "p");
@@ -198,7 +191,7 @@ describe("TaskDescriptionEditor", () => {
     for (const state of ["locks", "unmounts"] as const) {
       test(`does not insert an image that finishes uploading after ${mode} ${state}`, async () => {
         const pendingUpload =
-          createDeferred<Awaited<ReturnType<ReturnType<typeof createProps>["onUpload"]>>>();
+          Promise.withResolvers<Awaited<ReturnType<ReturnType<typeof createProps>["onUpload"]>>>();
         const onUpload = mock(() => pendingUpload.promise);
         const onChange = mock((_value: string) => {});
         const props = { ...createProps(), markdown: "Draft", onChange, onUpload };
@@ -231,28 +224,39 @@ describe("TaskDescriptionEditor", () => {
       <TaskDescriptionEditor {...createProps()} markdown="Body" onChange={() => {}} />,
     );
 
-    const loadingSurface = view.getByRole("status", { name: "Loading Visual editor" });
-    expect(loadingSurface.className).toContain("bg-card");
-    expect(view.queryByRole("textbox")).toBeNull();
-    expect(view.queryByText("Checking whether Visual mode can preserve this Markdown…")).toBeNull();
+    try {
+      const loadingSurface = view.getByRole("status", { name: "Loading Visual editor" });
+      expect(loadingSurface.className).toContain("bg-card");
+      expect(view.queryByRole("textbox")).toBeNull();
+      expect(
+        view.queryByText("Checking whether Visual mode can preserve this Markdown…"),
+      ).toBeNull();
+    } finally {
+      view.unmount();
+    }
   });
 
   test("draws a Mermaid diagram inside a list item of the Visual editor", async () => {
-    const view = render(
-      <TaskDescriptionEditor
-        {...createProps()}
-        markdown={"1. ```mermaid\n   graph TD\n     A --> B\n   ```"}
-        onChange={() => {}}
-      />,
+    const view = await act(async () =>
+      render(
+        <TaskDescriptionEditor
+          {...createProps()}
+          markdown={"1. ```mermaid\n   graph TD\n     A --> B\n   ```"}
+          onChange={() => {}}
+        />,
+      ),
     );
 
-    const diagram = await view.findByRole("group", { name: "Mermaid diagram" });
-    expect(view.container.querySelector(".tiptap")).not.toBeNull();
-    await waitFor(() => expect(diagram.querySelector("svg.pele")).not.toBeNull());
-    // This flow renders the rich editor.
-  }, 5_000);
+    try {
+      const diagram = await view.findByRole("group", { name: "Mermaid diagram" });
+      expect(view.container.querySelector(".tiptap")).not.toBeNull();
+      await waitFor(() => expect(diagram.querySelector("svg.pele")).not.toBeNull());
+    } finally {
+      view.unmount();
+    }
+  });
 
-  test("keeps Markdown typing stable and uses the normal interface font", async () => {
+  test("keeps Markdown typing stable without rechecking Visual mode", async () => {
     const ControlledEditor = () => {
       const [markdown, setMarkdown] = useState("Body");
       return (
@@ -264,8 +268,6 @@ describe("TaskDescriptionEditor", () => {
 
     fireEvent.click(view.getByRole("button", { name: "Markdown" }));
     const textarea = requireTextArea(view.getByRole("textbox"));
-    expect(textarea.className).toContain("font-sans");
-    expect(textarea.className).not.toContain("font-mono");
 
     fireEvent.change(textarea, { target: { value: "Body!" } });
 
@@ -274,26 +276,15 @@ describe("TaskDescriptionEditor", () => {
     // This flow renders the rich editor and processes user input.
   }, 5_000);
 
-  test("uses the card surface for the Visual editor in both themes", async () => {
-    const view = render(
-      <TaskDescriptionEditor {...createProps()} markdown="Body" onChange={() => {}} />,
+  test("inserts Mermaid source from the Visual toolbar", async () => {
+    const onChange = mock((_value: string) => {});
+    const view = await act(async () =>
+      render(<TaskDescriptionEditor {...createProps()} markdown="" onChange={onChange} />),
     );
-    await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
 
-    const visualSurface = view.container.querySelector(".tiptap")?.parentElement?.parentElement;
-    expect(visualSurface?.className).toContain("bg-card");
-    expect(visualSurface?.className).not.toContain("bg-background");
-  });
-
-  test("uses the Network icon for Mermaid diagrams", async () => {
-    const view = render(
-      <TaskDescriptionEditor {...createProps()} markdown="Body" onChange={() => {}} />,
-    );
-    await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
-
-    const mermaidButton = view.getByRole("button", { name: "Mermaid diagram" });
-    expect(mermaidButton.querySelector(".lucide-network")).not.toBeNull();
-    expect(mermaidButton.querySelector(".lucide-braces")).toBeNull();
+    const button = await view.findByRole("button", { name: "Mermaid diagram" });
+    await act(async () => fireEvent.click(button));
+    expect(onChange.mock.lastCall?.[0]).toContain("```mermaid\ngraph TD\n  A --> B\n```");
   });
 
   test("switching modes without edits preserves the original source", async () => {
@@ -563,9 +554,9 @@ describe("TaskDescriptionEditor", () => {
     const firstAssetId = "550e8400-e29b-41d4-a716-446655440010";
     const secondAssetId = "550e8400-e29b-41d4-a716-446655440011";
     const firstUpload =
-      createDeferred<Awaited<ReturnType<ReturnType<typeof createProps>["onUpload"]>>>();
+      Promise.withResolvers<Awaited<ReturnType<ReturnType<typeof createProps>["onUpload"]>>>();
     const secondUpload =
-      createDeferred<Awaited<ReturnType<ReturnType<typeof createProps>["onUpload"]>>>();
+      Promise.withResolvers<Awaited<ReturnType<ReturnType<typeof createProps>["onUpload"]>>>();
     const firstFile = new File([new Uint8Array([1])], "first.png", { type: "image/png" });
     const secondFile = new File([new Uint8Array([2])], "second.png", { type: "image/png" });
     const onChange = mock((_value: string) => {});

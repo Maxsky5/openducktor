@@ -11,7 +11,6 @@ import { loadMarkdownModules } from "@/test-utils/markdown-modules";
 
 await loadMarkdownModules();
 
-
 const render = (element: ReactElement) => renderView(element, { wrapper: QueryProvider });
 
 const chat = (markdown: string, streaming = false): ReactElement => (
