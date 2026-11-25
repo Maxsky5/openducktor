@@ -29,6 +29,7 @@ export type TranscriptSlideController = {
     addedHeightPx: number,
     firstMountedKey: string | null,
   ) => boolean;
+  slideRows: (rows: readonly HTMLElement[], offsetPx: number) => void;
   trackPendingEntry: (
     animation: Animation,
     container: HTMLDivElement | null,
@@ -63,6 +64,29 @@ const readCurrentTranslateY = (element: HTMLElement): number => {
 export const createTranscriptSlideController = (): TranscriptSlideController => {
   let state: SlideMotionState = { kind: "idle" };
   let baseline: SlideBaseline | null = null;
+  const rowAnimations = new Set<Animation>();
+
+  const cancelRowAnimations = (): void => {
+    for (const animation of rowAnimations) {
+      animation.cancel();
+    }
+    rowAnimations.clear();
+  };
+
+  const slideRows = (rows: readonly HTMLElement[], offsetPx: number): void => {
+    if (rows.length === 0 || offsetPx <= 0.5) return;
+    for (const row of rows) {
+      const animation = row.animate(
+        [{ transform: `translateY(${offsetPx}px)` }, { transform: "none" }],
+        ENTRY_TIMING,
+      );
+      rowAnimations.add(animation);
+      const cleanup = (): void => {
+        rowAnimations.delete(animation);
+      };
+      void animation.finished?.then(cleanup, cleanup);
+    }
+  };
 
   const syncBaseline = (container: HTMLDivElement | null, firstMountedKey: string | null): void => {
     baseline = container
@@ -182,6 +206,7 @@ export const createTranscriptSlideController = (): TranscriptSlideController => 
     options?: { preserveVisualPosition?: boolean },
   ): void => {
     const { container, turnsClip, turns } = elements;
+    cancelRowAnimations();
     let remainingOffsetPx = 0;
     if (state.kind === "sliding") {
       const previous = state;
@@ -216,6 +241,7 @@ export const createTranscriptSlideController = (): TranscriptSlideController => 
     readGrowthPx,
     syncBaseline,
     slide,
+    slideRows,
     trackPendingEntry,
     handlePinnedResize,
     cancel,

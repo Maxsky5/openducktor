@@ -7,6 +7,7 @@ import {
   type TranscriptSlideController,
   type TranscriptSlideElements,
 } from "./agent-chat-transcript-slide-controller";
+import { readMountedRows } from "./agent-chat-window-shared";
 
 /** The rows of the transcript of a session that the hook saw at its last commit. */
 type KnownRows = {
@@ -73,8 +74,16 @@ const readEnteringRows = (
   }
 
   // Do not animate history prepended above the previously known start of the transcript.
-  if (known.firstKey === null || rows[0]?.key !== known.firstKey) {
-    return NO_ENTERING_ROWS;
+  if (known.firstKey === null) return NO_ENTERING_ROWS;
+  if (rows[0]?.key !== known.firstKey) {
+    // A history prepend shifts the previous first row to a later index.
+    const movedFirstRowForward = rows.some((row, index) => index > 0 && row.key === known.firstKey);
+    if (movedFirstRowForward) return NO_ENTERING_ROWS;
+    // Allow an in-place first-row id replacement (such as confirming an optimistic user message)
+    // while still rejecting a full transcript replacement that shares no prior rows.
+    const preservedPriorTranscript =
+      known.count === 1 || rows.slice(1).some((row) => known.keys.has(row.key));
+    if (!preservedPriorTranscript) return NO_ENTERING_ROWS;
   }
 
   // Rows inserted before an already-mounted final row (e.g., turn duration separator or a
@@ -162,6 +171,28 @@ const collectUnshownEnteringRows = (
   return newlyMounted;
 };
 
+const collectVisibleRowsAbove = (
+  turns: HTMLElement,
+  container: HTMLDivElement | null,
+  firstInserted: HTMLElement,
+  offsetPx: number,
+): HTMLElement[] => {
+  const mounted = readMountedRows(turns);
+  const stopIndex = mounted.indexOf(firstInserted);
+  if (stopIndex <= 0) return [];
+  const containerTop = container ? container.getBoundingClientRect().top : 0;
+  const rowsAbove: HTMLElement[] = [];
+  for (let index = 0; index < stopIndex; index += 1) {
+    const row = mounted[index];
+    if (!row) continue;
+    // Include rows currently inside the viewport and rows that just moved past the top edge.
+    if (!container || row.getBoundingClientRect().bottom + offsetPx >= containerTop) {
+      rowsAbove.push(row);
+    }
+  }
+  return rowsAbove;
+};
+
 type UseAgentChatRowEntryMotionInput = {
   sessionKey: string | null;
   isGrouped: boolean;
@@ -217,6 +248,7 @@ export function useAgentChatRowEntryMotion({
     sessionKey: string | null;
     isGrouped: boolean;
     row: AgentChatTranscriptRow | null;
+    heightPx: number | null;
   } | null>(null);
 
   useLayoutEffect(() => {
@@ -254,7 +286,6 @@ export function useAgentChatRowEntryMotion({
     previousTailOpenRunRef.current = tailOpenRun ? { sessionKey, ...tailOpenRun } : null;
     const previousLastRow = previousLastRowRef.current;
     const currentLastRow = rows.at(-1) ?? null;
-    previousLastRowRef.current = { sessionKey, isGrouped, row: currentLastRow };
 
     const elements: TranscriptSlideElements = {
       container: containerRef.current,
@@ -262,25 +293,87 @@ export function useAgentChatRowEntryMotion({
       turns: turnsRef?.current ?? null,
     };
     const firstMountedKey = mountedRows[0]?.key ?? null;
+    const isFollowingTail = isPinned() && isLatestWindow;
     if (!elements.turns || prefersReducedMotion()) {
+      previousLastRowRef.current = {
+        sessionKey,
+        isGrouped,
+        row: currentLastRow,
+        heightPx: null,
+      };
       slideController.syncBaseline(elements.container, firstMountedKey);
       return;
     }
 
-    const isFollowingTail = isPinned() && isLatestWindow;
+    const currentLastRowHeightPx =
+      isFollowingTail && currentLastRow
+        ? (elements.turns
+            .querySelector<HTMLElement>(`[data-row-key="${CSS.escape(currentLastRow.key)}"]`)
+            ?.getBoundingClientRect().height ?? null)
+        : null;
+    previousLastRowRef.current = {
+      sessionKey,
+      isGrouped,
+      row: currentLastRow,
+      heightPx: currentLastRowHeightPx,
+    };
+
     const newlyMounted = collectUnshownEnteringRows(elements.turns, entering, shownRef);
     if (newlyMounted.length > 0) {
       if (entering.mode === "inserted-before-tail") {
         // Following the bottom keeps the existing answer below this row stationary. Fade the
-        // inserted row in place without shifting or clipping the tail row that follows it.
+        // inserted row in place, slide only actual tail growth on the turns container, and shift
+        // visible rows above the insertion via GPU transform so they glide upward without snapping.
         for (const row of newlyMounted) {
           row.animate(ENTRY_FADE_KEYFRAMES, ENTRY_TIMING);
         }
+        if (!isFollowingTail) {
+          slideController.syncBaseline(elements.container, firstMountedKey);
+          return;
+        }
+        syncScrollPosition();
+        const insertedSpanPx = measureVerticalSpan(newlyMounted);
         const netGrowthPx = slideController.readGrowthPx(elements.container, firstMountedKey);
-        const tailGrowthPx =
-          netGrowthPx !== null ? netGrowthPx - measureVerticalSpan(newlyMounted) : 0;
-        if (slideController.isSliding() && isFollowingTail && tailGrowthPx > 0.5) {
-          slideController.slide(elements, tailGrowthPx, firstMountedKey);
+        const measuredTailGrowthPx =
+          previousLastRow &&
+          previousLastRow.sessionKey === sessionKey &&
+          previousLastRow.isGrouped === isGrouped &&
+          previousLastRow.row !== null &&
+          currentLastRow !== null &&
+          previousLastRow.row.key === currentLastRow.key &&
+          previousLastRow.heightPx !== null &&
+          currentLastRowHeightPx !== null
+            ? Math.max(0, currentLastRowHeightPx - previousLastRow.heightPx)
+            : 0;
+        const rawTailGrowthPx =
+          netGrowthPx !== null ? Math.max(0, netGrowthPx - insertedSpanPx) : measuredTailGrowthPx;
+        const maxScrollTop = elements.container
+          ? Math.max(0, elements.container.scrollHeight - elements.container.clientHeight)
+          : 0;
+        const effectiveScrollDeltaPx =
+          netGrowthPx !== null ? Math.max(0, netGrowthPx) : maxScrollTop;
+        const tailSlidePx = Math.min(
+          rawTailGrowthPx,
+          Math.max(0, effectiveScrollDeltaPx - insertedSpanPx),
+        );
+        const aboveSlidePx = Math.min(
+          insertedSpanPx,
+          Math.max(0, effectiveScrollDeltaPx - tailSlidePx),
+        );
+        const firstInserted = newlyMounted[0];
+        if (firstInserted && aboveSlidePx > 0.5) {
+          slideController.slideRows(
+            collectVisibleRowsAbove(
+              elements.turns,
+              elements.container,
+              firstInserted,
+              aboveSlidePx,
+            ),
+            aboveSlidePx,
+          );
+        }
+        if (tailSlidePx > 0.5) {
+          slideController.slide(elements, tailSlidePx, firstMountedKey);
         } else {
           slideController.syncBaseline(elements.container, firstMountedKey);
         }

@@ -1077,4 +1077,156 @@ describe("useAgentChatRowEntryMotion", () => {
       harness.dispose();
     }
   });
+
+  test("handles first-row optimistic id confirmation plus append while rejecting single-row history prepends and full reloads", async () => {
+    const initialRows = [createMessageRow("optimistic-u1", "user")];
+    const harness = await mountMotionHarness({
+      initialProps: {
+        sessionKey: "session-first-row-swap",
+        isGrouped: false,
+        rows: initialRows,
+        mountedRows: initialRows,
+      },
+      clientHeight: 100,
+      initialScrollTop: 0,
+      rowHeightFor: () => 80,
+    });
+    const { turns } = harness.getElements();
+
+    try {
+      // Confirming the sole optimistic user row while appending an overflowing reply slides the reply.
+      const confirmedWithReply = [
+        createMessageRow("confirmed-u1", "user"),
+        createMessageRow("reply-1"),
+      ];
+      await harness.rerender({
+        sessionKey: "session-first-row-swap",
+        isGrouped: false,
+        rows: confirmedWithReply,
+        mountedRows: confirmedWithReply,
+      });
+
+      const replySlide = harness.recorded.find((entry) => entry.element === turns);
+      expect(replySlide?.keyframes).toEqual([
+        { transform: "translateY(60px)" },
+        { transform: "none" },
+      ]);
+      expect(
+        harness.recorded
+          .filter((entry) => entry.element !== turns)
+          .map((entry) => entry.element.getAttribute("data-row-key")),
+      ).toEqual(["reply-1"]);
+
+      replySlide?.finish();
+      await act(flush);
+      harness.recorded.length = 0;
+
+      // Full transcript replacement with no surviving prior rows does not animate.
+      const replacedTranscript = [
+        createMessageRow("other-1", "user"),
+        createMessageRow("other-2"),
+        createMessageRow("other-3"),
+      ];
+      await harness.rerender({
+        sessionKey: "session-first-row-swap",
+        isGrouped: false,
+        rows: replacedTranscript,
+        mountedRows: replacedTranscript,
+      });
+      expect(harness.recorded).toEqual([]);
+    } finally {
+      harness.dispose();
+    }
+
+    // Genuine history prepend above a single known row still produces no animation.
+    const prependHarness = await mountMotionHarness({
+      initialProps: {
+        sessionKey: "session-single-prepend",
+        isGrouped: false,
+        rows: [createMessageRow("u-1", "user")],
+        mountedRows: [createMessageRow("u-1", "user")],
+      },
+      clientHeight: 100,
+      initialScrollTop: 0,
+      rowHeightFor: () => 80,
+    });
+    try {
+      const prepended = [createMessageRow("h-0", "user"), createMessageRow("u-1", "user")];
+      await prependHarness.rerender({
+        sessionKey: "session-single-prepend",
+        isGrouped: false,
+        rows: prepended,
+        mountedRows: prepended,
+      });
+      expect(prependHarness.recorded).toEqual([]);
+    } finally {
+      prependHarness.dispose();
+    }
+  });
+
+  test("slides tail footer growth and rows above an inserted turn_duration separator across window eviction", async () => {
+    const allRows = Array.from({ length: 21 }, (_, index) => createMessageRow(`r-${index}`));
+    let lastRowHeight = 100;
+    const harness = await mountMotionHarness({
+      initialProps: {
+        sessionKey: "session-duration-tail-growth",
+        isGrouped: false,
+        rows: allRows,
+        mountedRows: allRows.slice(1),
+      },
+      clientHeight: 400,
+      initialScrollTop: 500,
+      rowHeightFor: (key) => {
+        if (key === "r-20:duration") return 56;
+        if (key === "r-20") return lastRowHeight;
+        return 40;
+      },
+    });
+    const { container, turns, turnsClip } = harness.getElements();
+
+    try {
+      // Turn ends: r-20:duration (+56px) inserts before r-20, r-20 adds its footer (+24px),
+      // and r-1 evicts from the 20-row window in the same commit.
+      lastRowHeight = 124;
+      const updatedTail = createMessageRow("r-20", "assistant", "Final answer with footer");
+      const withDuration = [
+        ...allRows.slice(0, -1),
+        createDurationRow("r-20:duration"),
+        updatedTail,
+      ];
+      await harness.rerender({
+        sessionKey: "session-duration-tail-growth",
+        isGrouped: false,
+        rows: withDuration,
+        mountedRows: withDuration.slice(2),
+      });
+
+      const turnsSlide = harness.recorded.find((entry) => entry.element === turns);
+      expect(turnsSlide?.keyframes).toEqual([
+        { transform: "translateY(24px)" },
+        { transform: "none" },
+      ]);
+      const aboveRowSlide = harness.recorded.find(
+        (entry) => entry.element.getAttribute("data-row-key") === "r-19",
+      );
+      expect(aboveRowSlide?.keyframes).toEqual([
+        { transform: "translateY(56px)" },
+        { transform: "none" },
+      ]);
+      const durationFade = harness.recorded.find(
+        (entry) => entry.element.getAttribute("data-row-key") === "r-20:duration",
+      );
+      expect(durationFade?.keyframes).toEqual([{ opacity: 0 }, { opacity: 1 }]);
+      expect(
+        harness.recorded.some((entry) => entry.element.getAttribute("data-row-key") === "r-20"),
+      ).toBe(false);
+
+      // Cancelling (e.g. user scroll up) cancels both the turns slide and above-row slides.
+      harness.slideController.cancel({ container, turnsClip, turns });
+      expect(turnsSlide?.cancelled).toBe(true);
+      expect(aboveRowSlide?.cancelled).toBe(true);
+    } finally {
+      harness.dispose();
+    }
+  });
 });
