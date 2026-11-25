@@ -565,7 +565,7 @@ describe("OpenCode V2 subagent projection and history", () => {
       await runtime.release();
     }
   });
-  test("keeps background subagents running until structured native completion", () => {
+  test("completes a background subagent at its structured native report", () => {
     const projector = new OpenCodeLiveMessageProjector();
     const message = backgroundLaunch();
     projector.seed([message]);
@@ -576,32 +576,45 @@ describe("OpenCode V2 subagent projection and history", () => {
       externalSessionId: "ses_child",
     });
     expect(projectMessage(message).parts[0]).not.toHaveProperty("endedAtMs");
-    expect(
-      projector.apply({
-        id: "evt_child_complete",
-        created: 9,
-        type: "session.inbox.enqueued",
-        durable,
-        data: {
-          sessionID: ref.externalSessionId,
-          inboxID: "msg_child_complete",
-          item: {
-            type: "synthetic",
-            delivery: "steer",
-            payload: {
-              text: "Native child result",
-              description: "Research completed",
-              metadata: {
-                source: "subagent",
-                childID: "ses_child",
-                agent: "research",
-                state: "completed",
-              },
+    // The report shows on the card while it waits in the inbox for delivery.
+    const queued = projector.apply({
+      id: "evt_child_complete",
+      created: 9,
+      type: "session.inbox.enqueued",
+      durable,
+      data: {
+        sessionID: ref.externalSessionId,
+        inboxID: "msg_child_complete",
+        item: {
+          type: "synthetic",
+          delivery: "steer",
+          payload: {
+            text: "Native child result",
+            description: "Research completed",
+            metadata: {
+              source: "subagent",
+              childID: "ses_child",
+              agent: "research",
+              state: "completed",
             },
           },
         },
+      },
+    });
+    expect(queued).toEqual([
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          partId: "call_child:subagent",
+          status: "completed",
+          endedAtMs: 9,
+        }),
       }),
-    ).toEqual([]);
+    ]);
+    expect(projector.projectHistory([message])[0]?.parts[0]).toMatchObject({
+      status: "completed",
+      endedAtMs: 9,
+    });
     const delivery: V2Event = {
       id: "evt_child_delivered",
       type: "session.inbox.delivered",

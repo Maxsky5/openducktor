@@ -529,6 +529,7 @@ test.each(["history", "child ancestry", "diff", "import inspection"] as const)(
           cursor: { next: null, prev: null },
         });
       if (path.endsWith("/diff")) return respond({ data: [] });
+      if (path.endsWith("/inbox")) return respond({ data: [] });
       if (path.startsWith("/api/session/")) {
         const id = path.split("/").at(-1)!;
         const data = {

@@ -17,6 +17,8 @@ import {
   type OpenCodeExecutionEndWatch,
 } from "./opencode-background-tasks";
 import { nativeRequest, operationError } from "./opencode-client";
+import { keptResultMetadata } from "./opencode-kept-result";
+import { createOpenCodeMessageId } from "./opencode-message-id";
 import type { OpencodeSessionRuntimeSignal } from "./opencode-session-runtime-signals";
 
 type SessionIdle = Extract<AgentEvent, { type: "session_idle" }>;
@@ -214,9 +216,10 @@ export const createOpenCodeBackgroundSession = ({
     },
     /**
      * Interrupts the root of the session tree and stops its background work in the rounds of
-     * `stopBackgroundWork`. Undelivered notices are cancelled, so no result keeps the tree
-     * running. A session that takes a notice starts a reply, so the watch, which starts before the
-     * root interrupt, interrupts that reply too.
+     * `stopBackgroundWork`. A session that takes a notice starts a reply, so the watch, which
+     * starts before the root interrupt, interrupts that reply too. An undelivered notice wakes its
+     * session, so the stop cancels it and queues the same result again with no wake: OpenCode
+     * delivers it with the next input of the session, and the call card keeps its result.
      */
     stopTree: async (ref: SessionRef, interruptRoot: () => Promise<void>): Promise<void> => {
       const pendingInterrupts: Promise<void>[] = [];
@@ -253,10 +256,39 @@ export const createOpenCodeBackgroundSession = ({
           settle: async (notices) => {
             await Promise.all(
               notices.map(async ({ key: inboxID, sessionID }) => {
-                await nativeRequest(ref, "cancel a task result", () =>
-                  client.session.inbox.cancel({ sessionID, inboxID }),
+                const notice = tasks.resultNotice(inboxID);
+                if (!notice)
+                  throw operationError(
+                    ref,
+                    "stop the background tasks",
+                    "runtime_unavailable",
+                    `The notice of the task result '${inboxID}' is unknown.`,
+                  );
+                tasks.recordSettle(inboxID);
+                let delivered: boolean | undefined;
+                try {
+                  await nativeRequest(ref, "cancel a task result", () =>
+                    client.session.inbox.cancel({ sessionID, inboxID }),
+                  );
+                  await observeCleanup(ref, tasks.waitForSettle(inboxID));
+                } finally {
+                  delivered = tasks.takeSettle(inboxID);
+                }
+                // The session took the notice, so the watch interrupts its reply.
+                if (delivered !== false) return;
+                // `resume: false` admits the result without a wake (`Session.synthetic`).
+                const id = createOpenCodeMessageId();
+                tasks.parkResult(sessionID, id);
+                await nativeRequest(ref, "keep a task result", () =>
+                  client.session.synthetic({
+                    sessionID,
+                    id,
+                    ...notice.payload,
+                    metadata: keptResultMetadata(notice.payload.metadata, notice.time.created),
+                    delivery: notice.delivery,
+                    resume: false,
+                  }),
                 );
-                await observeCleanup(ref, tasks.waitForSettle(inboxID));
               }),
             );
           },

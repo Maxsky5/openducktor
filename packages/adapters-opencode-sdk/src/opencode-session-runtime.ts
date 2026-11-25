@@ -283,8 +283,11 @@ export const createPrepareOpencodeSessionRuntime =
       ensureMcp: mcpBridge.ensure,
       restoreMcp: mcpBridge.restore,
       awaitGenerationModel: generationModels.awaitModel,
-      projectHistory: (sessionID, messages) =>
-        (projectors.get(sessionID) ?? new OpenCodeLiveMessageProjector()).projectHistory(messages),
+      projectHistory: (sessionID, messages, inbox) =>
+        (projectors.get(sessionID) ?? new OpenCodeLiveMessageProjector()).projectHistory(
+          messages,
+          inbox,
+        ),
       admitted: (binding) => {
         // The events of a faulted conversation apply again only after a read of it.
         if (!faulted.has(binding.detail.id) && !projectors.has(binding.detail.id))
@@ -397,6 +400,7 @@ export const createPrepareOpencodeSessionRuntime =
             );
           projector.inbox.set(item.id, item);
         }
+        projector.updateProjectionContext();
         const queuedIds = new Set(inbox.map((item) => item.id));
         for (const item of projector.inbox.values())
           if (item.type === "user" && !queuedIds.has(item.id) && !projector.messages.has(item.id))
@@ -1116,9 +1120,18 @@ export const createPrepareOpencodeSessionRuntime =
         });
         const sending = (attachTails.get(messageInput.repoPath) ?? Promise.resolve()).then(() => {
           signal.throwIfAborted();
+          const sessionID = messageInput.externalSessionId;
+          // An input to an idle session joins a waiting steer, such as a kept task result.
+          const joinWaitingSteer =
+            !nativeRunning.has(sessionID) &&
+            [...(awaitingTurns.get(sessionID) ?? [])].every((pending) => pending === turn) &&
+            [...(projectors.get(sessionID)?.inbox.values() ?? [])].some(
+              (item) => item.type === "synthetic" && item.delivery === "steer",
+            );
           return controller.sendUserMessage(messageInput, {
             signal,
             assertCommandIdle,
+            joinWaitingSteer,
             onSent: () => {
               turn.submitted = true;
               clearPending();

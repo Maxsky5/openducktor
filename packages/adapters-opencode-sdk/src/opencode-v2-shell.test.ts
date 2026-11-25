@@ -143,6 +143,62 @@ describe("OpenCode V2 shell projection", () => {
     },
   );
 
+  test("shows a result that waits in the inbox on its card, live and in history", () => {
+    const result = makeNotice({ state: "cancelled" });
+    const waiting = {
+      id: result.id,
+      sessionID: ref.externalSessionId,
+      time: { created: 9 },
+      type: "synthetic" as const,
+      delivery: "steer" as const,
+      payload: { text: result.text, description: command, metadata: result.metadata ?? {} },
+    };
+    const expected = { callId: "call_checks", status: "error", output, endedAtMs: 9 };
+    // A reread after Stop session lists the kept result in the inbox of the session.
+    expect(
+      new OpenCodeLiveMessageProjector().projectHistory([launch()], [waiting])[0]?.parts,
+    ).toMatchObject([expected]);
+    const projector = new OpenCodeLiveMessageProjector();
+    projector.seed([launch()]);
+    const queued = projector.apply({
+      id: "evt_result_queued",
+      type: "session.inbox.enqueued",
+      created: 9,
+      durable,
+      data: {
+        sessionID: ref.externalSessionId,
+        inboxID: waiting.id,
+        item: { type: "synthetic", delivery: "steer", payload: waiting.payload },
+      },
+    });
+    expect(queued).toEqual([
+      expect.objectContaining({ type: "assistant_part", part: expect.objectContaining(expected) }),
+    ]);
+    // A cancellation changes no card, because Stop session keeps the same result again.
+    expect(
+      projector.apply({
+        id: "evt_result_cancelled",
+        type: "session.inbox.cancelled",
+        created: 10,
+        durable: { ...durable, seq: 2 },
+        data: { sessionID: ref.externalSessionId, inboxID: waiting.id },
+      }),
+    ).toEqual([
+      expect.objectContaining({ type: "transcript_retracted", messageIds: [waiting.id] }),
+    ]);
+  });
+
+  test("ends the card of a kept result at its original notice, not at its later delivery", () => {
+    const kept = makeNotice({ state: "cancelled" });
+    kept.time = { created: 90_000 };
+    kept.metadata = { ...kept.metadata, openducktor: { endedAt: 12 } };
+    expect(projectMessages([launch(), kept])[0]?.parts).toMatchObject([
+      { callId: "call_checks", status: "error", endedAtMs: 12 },
+    ]);
+    kept.metadata = { ...kept.metadata, openducktor: { endedAt: "yesterday" } };
+    expect(() => projectMessages([launch(), kept])).toThrow("invalid OpenDucktor metadata");
+  });
+
   test("matches identical commands by native shell ID", () => {
     const other = launch();
     other.id = "msg_other_launch";

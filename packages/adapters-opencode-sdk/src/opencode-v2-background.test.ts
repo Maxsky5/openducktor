@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { JsonValue, V2Event } from "@opencode/client";
+import { z } from "zod";
 import type { OpencodeSessionRuntimeSignal } from "./opencode-session-runtime-signals";
 import { prepareFixture } from "./opencode-v2-live.test-support";
 import {
@@ -21,6 +22,8 @@ const prepareTree = async (
   override?: (request: NativeRequest) => Response | Promise<Response> | undefined,
   childID = CHILD,
 ) => {
+  /** The results that Stop session queued again. */
+  const kept: { sessionID: string; id: string; payload: NoticePayload; resume: unknown }[] = [];
   const fixture = prepareFixture((request) => {
     const { url } = request;
     if (
@@ -37,6 +40,23 @@ const prepareTree = async (
     if (request.method === "DELETE" && cancel) {
       events.cancelled(cancel[1]!, cancel[2]!);
       return noContent();
+    }
+    // Stop session queues the result of a stopped task again, with no wake.
+    const synthetic = /^\/api\/session\/([^/]+)\/synthetic$/.exec(url.pathname);
+    if (request.method === "POST" && synthetic) {
+      const { id, text, description, metadata, delivery } = keptResultSchema.parse(request.body);
+      const payload =
+        description === undefined ? { text, metadata } : { text, description, metadata };
+      kept.push({ sessionID: synthetic[1]!, id, payload, resume: request.body.resume });
+      events.notice(synthetic[1]!, id, payload, delivery);
+      return response({
+        id,
+        sessionID: synthetic[1]!,
+        time: { created: nextId },
+        type: "synthetic",
+        payload,
+        delivery,
+      });
     }
     return undefined;
   });
@@ -184,7 +204,12 @@ const prepareTree = async (
       });
       if (reason === "user") report(sessionID, "cancelled");
     },
-    notice: (sessionID: string, inboxID: string, payload: NoticePayload) =>
+    notice: (
+      sessionID: string,
+      inboxID: string,
+      payload: NoticePayload,
+      delivery: "steer" | "queue" = "steer",
+    ) =>
       push({
         id: id(),
         type: "session.inbox.enqueued",
@@ -195,7 +220,7 @@ const prepareTree = async (
           inboxID,
           item: {
             type: "synthetic",
-            delivery: "steer",
+            delivery,
             payload,
           },
         },
@@ -226,7 +251,7 @@ const prepareTree = async (
   };
   /** Takes the signals since the last call. */
   const take = () => signals.splice(0);
-  return { fixture, runtime, events, flush, take };
+  return { fixture, runtime, events, flush, take, kept };
 };
 
 type TreeEvents = Awaited<ReturnType<typeof prepareTree>>["events"];
@@ -270,6 +295,20 @@ type NoticePayload = {
   description?: string;
   metadata: Record<string, JsonValue>;
 };
+
+/** The payload that Stop session keeps: the notice, with the time of the original notice. */
+const keptPayload = (payload: NoticePayload): NoticePayload => ({
+  ...payload,
+  metadata: { ...payload.metadata, openducktor: { endedAt: expect.any(Number) } },
+});
+
+const keptResultSchema = z.object({
+  id: z.string().startsWith("msg_"),
+  text: z.string(),
+  description: z.string().optional(),
+  metadata: z.record(z.string(), z.json()),
+  delivery: z.enum(["steer", "queue"]),
+});
 
 /** The report of `SubagentCompletion.deliver` in OpenCode 2.4.1. */
 const subagentReport = (state: "completed" | "cancelled"): NoticePayload => ({
@@ -763,6 +802,117 @@ describe("OpenCode background tasks", () => {
     }
   });
 
+  test("sends the next input with a kept result as one steer, so the agent reads both together", async () => {
+    const deliveries: unknown[] = [];
+    let events!: TreeEvents;
+    const tree = await prepareTree(({ url, method, body }) => {
+      if (method === "DELETE" && url.pathname === "/api/shell/sh_build") {
+        events.notice(
+          ref.externalSessionId,
+          "msg_build_done",
+          shellNotice("sh_build", "bun run build"),
+        );
+        return noContent();
+      }
+      if (url.pathname.endsWith("/interrupt")) return interruptReply(events, url);
+      if (method === "PUT" && url.pathname.includes("/instructions/entries/")) return noContent();
+      if (method === "POST" && url.pathname === `/api/session/${ref.externalSessionId}/prompt`) {
+        deliveries.push(body.delivery);
+        return response({
+          id: body.id,
+          sessionID: ref.externalSessionId,
+          time: { created: 99 },
+          type: "user",
+          payload: { text: body.text },
+          delivery: body.delivery,
+        });
+      }
+      return undefined;
+    });
+    events = tree.events;
+    const { runtime, flush, kept } = tree;
+    try {
+      events.backgroundCall(
+        ref.externalSessionId,
+        "call_build",
+        "shell",
+        { command: "bun run build" },
+        { shellID: "sh_build", truncated: false },
+      );
+      await flush();
+      await runtime.connection.stopSession(ref);
+      expect(kept).toHaveLength(1);
+      await flush();
+      await runtime.connection.resumeSession({
+        ...ref,
+        sessionScope,
+        runtimePolicy: { kind: "opencode" },
+      });
+      await runtime.connection.sendUserMessage({
+        ...ref,
+        sessionScope,
+        runtimePolicy: { kind: "opencode" },
+        delivery: "new_turn",
+        parts: [{ kind: "text", text: "Use another build command" }],
+      });
+      // OpenCode promotes all waiting steers in one step, before a queued input.
+      expect(deliveries).toEqual(["steer"]);
+    } finally {
+      await runtime.release();
+    }
+  });
+
+  test("tracks a later run of a stopped subagent after its report waits for the next input", async () => {
+    let events!: TreeEvents;
+    const tree = await prepareTree(({ url }) =>
+      url.pathname.endsWith("/interrupt") ? interruptReply(events, url) : undefined,
+    );
+    events = tree.events;
+    const { runtime, flush, take, kept } = tree;
+    try {
+      events.backgroundCall(
+        ref.externalSessionId,
+        "call_child",
+        "subagent",
+        { agent: "research", prompt: "Check" },
+        { sessionID: CHILD },
+      );
+      events.started(CHILD);
+      events.step(CHILD);
+      await flush();
+      take();
+      await runtime.connection.stopSession(ref);
+      expect(kept).toEqual([
+        expect.objectContaining({
+          sessionID: ref.externalSessionId,
+          payload: keptPayload(subagentReport("cancelled")),
+          resume: false,
+        }),
+      ]);
+      // OpenCode delivers the kept report with the next input. It ends no task and wakes no stop.
+      events.delivered(ref.externalSessionId, kept[0]!.id);
+      events.backgroundCall(
+        ref.externalSessionId,
+        "call_again",
+        "subagent",
+        { agent: "research", prompt: "Check again" },
+        { sessionID: CHILD },
+      );
+      await flush();
+      expect(
+        lifecycle(take())
+          .filter((item) => "background" in item)
+          .at(-1),
+      ).toEqual({
+        background: ref.externalSessionId,
+        tasks: [`subagent:${CHILD}:call_again`],
+        resultPending: false,
+      });
+    } finally {
+      await runtime.release();
+    }
+  });
+
   test("keeps the result of a task whose notice arrives before its start pending until delivery", async () => {
     const { runtime, events, flush, take } = await prepareTree();
     try {
@@ -902,7 +1052,7 @@ describe("OpenCode background tasks", () => {
         .stopBackgroundTask({ ...ref, taskId: "shell:sh_dev" })
         .catch((cause: unknown) => cause);
       expect(String(failed)).toContain("OpenCode could not stop a background task");
-      expect(String(failed)).toContain("OpenCode sent an invalid shell notice");
+      expect(String(failed)).toContain("OpenCode returned invalid shell result metadata");
       expect(
         fixture.requests
           .filter(({ method }) => method !== "GET")
@@ -1120,9 +1270,9 @@ describe("OpenCode background tasks", () => {
     }
   });
 
-  test("stops every task of the tree and cancels undelivered results", async () => {
+  test("stops every task of the tree and keeps undelivered results without a wake", async () => {
     let push!: (sessionID: string, inboxID: string, shellID: string) => void;
-    const { fixture, runtime, events, flush, take } = await prepareTree(({ url, method }) => {
+    const { fixture, runtime, events, flush, take, kept } = await prepareTree(({ url, method }) => {
       if (method === "DELETE" && url.pathname === "/api/shell/sh_dev") {
         // OpenCode fails the job of a removed shell and sends its notice.
         push(ref.externalSessionId, "msg_dev_done", "sh_dev");
@@ -1167,9 +1317,57 @@ describe("OpenCode background tasks", () => {
         "DELETE /api/shell/sh_dev",
         `DELETE /api/session/${ref.externalSessionId}/inbox/msg_lint_done`,
         `DELETE /api/session/${ref.externalSessionId}/inbox/msg_dev_done`,
+        `POST /api/session/${ref.externalSessionId}/synthetic`,
+        `POST /api/session/${ref.externalSessionId}/synthetic`,
       ]);
+      // OpenCode delivers each result with the next input, so the agent learns how its task ended.
+      expect(
+        kept.map(({ sessionID, payload, resume }) => ({ sessionID, payload, resume })),
+      ).toEqual(
+        expect.arrayContaining([
+          {
+            sessionID: ref.externalSessionId,
+            payload: keptPayload(shellNotice("sh_lint", "bun run lint")),
+            resume: false,
+          },
+          {
+            sessionID: ref.externalSessionId,
+            payload: keptPayload(shellNotice("sh_dev", "bun run dev", "error")),
+            resume: false,
+          },
+        ]),
+      );
+      expect(kept.map(({ id }) => id)).not.toContain("msg_lint_done");
       await flush();
-      expect(lifecycle(take()).at(-1)).toEqual({ idle: ref.externalSessionId, outcome: undefined });
+      const signals = take();
+      // A queued result is no pending result of the session, so it stays idle.
+      expect(lifecycle(signals).at(-1)).toEqual({
+        idle: ref.externalSessionId,
+        outcome: undefined,
+      });
+      expect(
+        lifecycle(signals)
+          .filter((item) => "background" in item)
+          .at(-1),
+      ).toEqual({ background: ref.externalSessionId, tasks: [], resultPending: false });
+      // The cards of the stopped calls keep their results.
+      const cards = new Map(
+        signals.flatMap((signal) =>
+          signal.type === "session_event" &&
+          signal.event.type === "assistant_part" &&
+          signal.event.part.kind === "tool"
+            ? [[signal.event.part.callId, signal.event.part] as const]
+            : [],
+        ),
+      );
+      // The kept copy keeps the time of the original notice, which the card shows as its end.
+      const devEnd = kept.find(({ payload }) => payload.metadata.shellID === "sh_dev")?.payload
+        .metadata.openducktor;
+      expect(cards.get("call_dev")).toMatchObject({
+        status: "error",
+        output: "Done",
+        endedAtMs: z.object({ endedAt: z.number() }).parse(devEnd).endedAt,
+      });
     } finally {
       await runtime.release();
     }
@@ -1509,7 +1707,7 @@ describe("OpenCode background tasks", () => {
       return undefined;
     });
     events = tree.events;
-    const { fixture, runtime, flush, take } = tree;
+    const { fixture, runtime, flush, take, kept } = tree;
     try {
       events.backgroundCall(
         CHILD,
@@ -1528,6 +1726,20 @@ describe("OpenCode background tasks", () => {
           )
           .map(({ url }) => url.pathname),
       ).toEqual(["/api/shell/sh_build", "/api/shell/sh_replacement"]);
+      // The child took the first result, so it keeps only the cancelled one for its next input.
+      // The root keeps the report of the stopped child round.
+      const keptBy = kept.map(({ sessionID, payload }) => [
+        sessionID,
+        payload.metadata.source,
+        payload.metadata.shellID ?? payload.metadata.childID,
+      ]);
+      expect(keptBy).toHaveLength(2);
+      expect(keptBy).toEqual(
+        expect.arrayContaining([
+          [CHILD, "shell", "sh_replacement"],
+          [ref.externalSessionId, "subagent", CHILD],
+        ]),
+      );
       await flush();
       expect(
         lifecycle(take())
@@ -1583,7 +1795,7 @@ describe("OpenCode background tasks", () => {
         if (!noticeFirst) unreadableNotice();
         const failed = await stopping;
         expect(String(failed)).toContain("OpenCode could not stop the background tasks");
-        expect(String(failed)).toContain("OpenCode sent an invalid shell notice");
+        expect(String(failed)).toContain("OpenCode returned invalid shell result metadata");
         await flush();
         const signals = take();
         expect(signals.find((signal) => signal.type === "session_fault")).toMatchObject({

@@ -7,6 +7,7 @@ import {
   type OpenCodeClient,
   type SessionInfo,
   type ModelRef,
+  type SessionInboxInfo,
   type SessionMessageInfo,
 } from "@opencode/client";
 import {
@@ -112,9 +113,11 @@ export type OpenCodeControlHooks = {
     signal: AbortSignal,
   ) => Promise<void>;
   admitted: (binding: OpenCodeSessionBinding) => void;
+  /** Projects the history with the result notices that still wait in the inbox. */
   projectHistory: (
     sessionID: string,
     messages: SessionMessageInfo[],
+    inbox: SessionInboxInfo[],
   ) => AgentSessionHistoryMessage[];
 };
 
@@ -604,10 +607,21 @@ export class OpencodeSdkAdapter {
     return binding;
   }
 
+  /**
+   * Sends user input. `joinWaitingSteer` sends it as a steer: OpenCode delivers all waiting steers
+   * in one step, but a queued input after them in a step of its own (`SessionInbox.promote`), so
+   * the agent reads a waiting notice, such as a task result that Stop session kept, with the input.
+   */
   async sendUserMessage(
     input: SendAgentUserMessageInput,
-    options?: { signal?: AbortSignal; onSent?: () => void; assertCommandIdle?: () => void },
+    options?: {
+      signal?: AbortSignal;
+      onSent?: () => void;
+      assertCommandIdle?: () => void;
+      joinWaitingSteer?: boolean;
+    },
   ): Promise<AcceptedAgentInput> {
+    const delivery = options?.joinWaitingSteer ? "steer" : nativeDelivery(input);
     let submitted = false;
     const onSent = () => {
       submitted = true;
@@ -706,7 +720,7 @@ export class OpencodeSdkAdapter {
         const sending = this.client.session.command({
           ...payload,
           name: commands[0].command.trigger,
-          delivery: nativeDelivery(input),
+          delivery,
         });
         onSent();
         await sending;
@@ -721,7 +735,7 @@ export class OpencodeSdkAdapter {
       const sending = this.client.session.prompt({
         ...payload,
         id: messageId,
-        delivery: nativeDelivery(input),
+        delivery,
       });
       onSent();
       const unknownResult = (cause: unknown) =>
@@ -925,10 +939,11 @@ export class OpencodeSdkAdapter {
   async loadSessionHistory(input: LoadAgentSessionHistoryInput) {
     const detail = await this.readNativeSession(input, "read history");
     return nativeRequest(input, "read history", async () => {
-      const history = this.hooks.projectHistory(
-        detail.id,
-        await readOpenCodeTranscript(this.client, detail),
-      );
+      const [messages, inbox] = await Promise.all([
+        readOpenCodeTranscript(this.client, detail),
+        this.client.session.inbox.list({ sessionID: detail.id }),
+      ]);
+      const history = this.hooks.projectHistory(detail.id, messages, inbox);
       if (detail.fork)
         history.unshift({
           role: "system",

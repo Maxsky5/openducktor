@@ -5,6 +5,7 @@ import type {
   SessionInboxUser,
   SessionMessageInfo,
   SessionMessageAssistant,
+  SessionMessageSynthetic,
   SessionMessageUser,
 } from "@opencode/client";
 import {
@@ -29,6 +30,7 @@ import {
 } from "@openducktor/contracts";
 import { readOpenCodeGoalKickoffObjective } from "./opencode-goals";
 import { jobContext, updateJobTool, type JobContext } from "./opencode-job-projection";
+import { resultEndedAt } from "./opencode-kept-result";
 import {
   type AcceptedAgentUserMessage,
   type AgentEvent,
@@ -289,7 +291,7 @@ const subagentCompletions = (
     )
       continue;
     for (const callID of openCalls.get(childID) ?? [])
-      completions.set(callID, { state, created: message.time.created });
+      completions.set(callID, { state, created: resultEndedAt(message) });
     openCalls.delete(childID);
   }
   return completions;
@@ -377,16 +379,36 @@ const isInstructionNotice = (message: SessionMessageInfo): boolean =>
   (message.type === "synthetic" &&
     instructionPathsSchema.safeParse(message.metadata?.instruction).success);
 
+/** A notice that waits in the inbox, in the shape of the message that its delivery records. */
+export const waitingNotice = (
+  item: Extract<SessionInboxInfo, { type: "synthetic" }>,
+): SessionMessageSynthetic => ({
+  id: item.id,
+  type: "synthetic",
+  time: { created: item.time.created },
+  ...item.payload,
+});
+
+const waitingNotices = (inbox: Iterable<SessionInboxInfo>): SessionMessageSynthetic[] =>
+  [...inbox].flatMap((item) => (item.type === "synthetic" ? [waitingNotice(item)] : []));
+
+/**
+ * The context of a projection. A call card shows the result of its task from the notice of
+ * OpenCode, also while the notice waits in the inbox for delivery. Stop session leaves the notice
+ * of a stopped task waiting, so the next input of the session delivers it.
+ */
 export const messageProjectionContext = (
   messages: Iterable<SessionMessageInfo>,
+  inbox: Iterable<SessionInboxInfo> = [],
 ): OpenCodeMessageProjectionContext => {
   const retained = [...messages];
+  const results = [...retained, ...waitingNotices(inbox)];
   return {
-    completions: subagentCompletions(retained),
+    completions: subagentCompletions(results),
     durations: nativeTurnDurations(retained),
     completedReplies: completedOpenCodeReplies(retained),
-    shells: shellContext(retained),
-    jobs: jobContext(retained),
+    shells: shellContext(results),
+    jobs: jobContext(results),
     shownFailures: shownFailures(retained),
   };
 };

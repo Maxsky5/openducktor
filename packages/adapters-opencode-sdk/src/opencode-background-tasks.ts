@@ -8,6 +8,9 @@ import {
 import { z } from "zod";
 import { callJob, isJobNoticeSource, readJobNotice, type JobTool } from "./opencode-job-projection";
 
+/** A task notice: the synthetic inbox item that tells the session how its task ended. */
+export type TaskNotice = Extract<SessionInboxInfo, { type: "synthetic" }>;
+
 /** How a native execution ended. */
 export type OpenCodeExecutionEnd = "succeeded" | "failed" | "interrupted" | "shutdown";
 
@@ -209,6 +212,15 @@ export class OpenCodeBackgroundTasks extends BackgroundWorkLedger<OpenCodeBackgr
   private readonly executionWaiters = new BackgroundWaiters();
   /** The child sessions whose current execution took a model step, so its round sends a report. */
   private readonly steppedRounds = new Set<string>();
+  /** The task notices in the inbox, by inbox ID, until the inbox delivers or cancels them. */
+  private readonly notices = new Map<string, TaskNotice>();
+  /** How each result that Stop session cancels settles, by inbox ID: true when it was delivered. */
+  private readonly cancels = new Map<string, boolean | undefined>();
+  /**
+   * The owner of each result that Stop session queued again with no wake, by inbox ID. Its task
+   * ended, so its notice is no task notice and no pending result.
+   */
+  private readonly parked = new Map<string, string>();
 
   constructor(private readonly parentOf: (sessionID: string) => string | undefined) {
     super((rootID) => ({
@@ -306,8 +318,10 @@ export class OpenCodeBackgroundTasks extends BackgroundWorkLedger<OpenCodeBackgr
 
   /** Ends the task of a notice in the inbox of its owner. Returns false when nothing changed. */
   notice(sessionID: string, item: SessionInboxInfo): boolean {
+    if (this.parked.has(item.id)) return false;
     const key = readNoticeKey(item);
-    if (key === undefined) return false;
+    if (key === undefined || item.type !== "synthetic") return false;
+    this.notices.set(item.id, item);
     const entry = this.get(key);
     if (entry?.sessionID !== sessionID) {
       if (!entry) {
@@ -335,8 +349,37 @@ export class OpenCodeBackgroundTasks extends BackgroundWorkLedger<OpenCodeBackgr
     return () => this.watches.delete(watch);
   }
 
+  /**
+   * The notice of the pending result `inboxID`. Stop session cancels it and queues it again with no
+   * wake (`parkResult`).
+   */
+  resultNotice(inboxID: string): TaskNotice | undefined {
+    return this.resultOwner(inboxID) === undefined ? undefined : this.notices.get(inboxID);
+  }
+
+  /** Starts to record how the pending result `inboxID` settles, for `takeSettle`. */
+  recordSettle(inboxID: string): void {
+    this.cancels.set(inboxID, undefined);
+  }
+
+  /** Tells if the recorded result was delivered, or undefined when it did not settle yet. */
+  takeSettle(inboxID: string): boolean | undefined {
+    const delivered = this.cancels.get(inboxID);
+    this.cancels.delete(inboxID);
+    return delivered;
+  }
+
+  /** Records the ID of the result that Stop session queues again with no wake. */
+  parkResult(sessionID: string, inboxID: string): void {
+    this.parked.set(inboxID, sessionID);
+  }
+
   /** Clears the pending result of a delivered or cancelled notice in the inbox of its owner. */
   settle(sessionID: string, inboxID: string, delivered: boolean): boolean {
+    this.notices.delete(inboxID);
+    if (this.cancels.has(inboxID)) this.cancels.set(inboxID, delivered);
+    // A queued result again is no task notice, so its delivery wakes no stop watch.
+    if (this.parked.delete(inboxID)) return false;
     let notice = this.resultOwner(inboxID) === sessionID;
     const early = this.early.get(sessionID);
     if (early)
@@ -409,6 +452,10 @@ export class OpenCodeBackgroundTasks extends BackgroundWorkLedger<OpenCodeBackgr
    */
   override removeSession(sessionID: string, cause: Error): boolean {
     const changed = super.removeSession(sessionID, cause);
+    for (const [inboxID, notice] of this.notices)
+      if (notice.sessionID === sessionID) this.notices.delete(inboxID);
+    for (const [inboxID, owner] of this.parked)
+      if (owner === sessionID) this.parked.delete(inboxID);
     this.early.delete(sessionID);
     this.steppedRounds.delete(sessionID);
     this.woken.delete(sessionID);

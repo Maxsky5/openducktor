@@ -99,6 +99,9 @@ export const createController = (
   const requests: NativeRequest[] = [];
   const client = nativeClient((request) => {
     requests.push(request);
+    // A history read lists the inbox with the messages. These conversations wait for nothing.
+    if (request.method === "GET" && /^\/api\/session\/[^/]+\/inbox$/.test(request.url.pathname))
+      return response([]);
     return handle(request);
   });
   const controller = new OpencodeSdkAdapter(

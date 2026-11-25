@@ -5,6 +5,7 @@ import type {
 } from "@opencode/client";
 import type { AgentTranscriptStreamPart } from "@openducktor/contracts";
 import { z } from "zod";
+import { resultEndedAt } from "./opencode-kept-result";
 
 type ToolPart = Extract<AgentTranscriptStreamPart, { kind: "tool" }>;
 
@@ -80,7 +81,7 @@ const parseResult = (message: SessionMessageSynthetic): JobResult & { jobID: str
   return {
     jobID: notice.jobID,
     noticeId: message.id,
-    endedAtMs: message.time.created,
+    endedAtMs: resultEndedAt(message),
     state: notice.state,
     output: message.text.slice(prefix.length, -suffix.length),
   };

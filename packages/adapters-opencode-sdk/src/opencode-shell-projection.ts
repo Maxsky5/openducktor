@@ -6,6 +6,7 @@ import type {
 } from "@opencode/client";
 import type { AgentTranscriptStreamPart } from "@openducktor/contracts";
 import { z } from "zod";
+import { resultEndedAt } from "./opencode-kept-result";
 
 export type ShellContext = {
   results: ReadonlyMap<string, Result>;
@@ -172,7 +173,7 @@ const parseResult = (message: SessionMessageSynthetic): Result => {
   const cancelled = metadata.state === "cancelled";
   const result: Result = {
     noticeId: message.id,
-    endedAtMs: message.time.created,
+    endedAtMs: resultEndedAt(message),
     output: outputText(output, metadata.truncated),
     status: failed || cancelled ? "error" : "completed",
     metadata: {
