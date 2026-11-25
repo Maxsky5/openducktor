@@ -4,13 +4,12 @@
  */
 
 /**
- * Right-angle edges with rounded corners, one row of sequence actors, flat commit labels, and no
- * empty member boxes in a class without members.
+ * Right-angle edges with rounded corners, flat commit labels, and no empty member boxes in a class
+ * without members.
  */
 export const DIAGRAM_CONFIG = {
   flowchart: { curve: "step" },
   state: { curve: "step" },
-  sequence: { mirrorActors: false },
   gitGraph: { rotateCommitLabel: false },
   class: { hideEmptyMembersBox: true },
 };
@@ -78,6 +77,26 @@ const withNameBand = (node: string): string => {
         );
 };
 
+/** The number of participant colors. The diagram styles define `pele-hue-0` to `pele-hue-5`. */
+const PARTICIPANT_HUES = 6;
+
+const PARTICIPANT_PART =
+  /class="(pele-node pele-actor[^"]*|pele-lifeline|pele-activation)" data-id="([^"]+)"/g;
+
+/**
+ * Gives each sequence participant a color class, in the order of the participants: its boxes at
+ * the top and the bottom, its lifeline, and its activation bars.
+ */
+const withParticipantHues = (svg: string): string => {
+  if (!svg.includes('class="pele pele-sequence"')) return svg;
+  const hues = new Map<string, number>();
+  return svg.replace(PARTICIPANT_PART, (_part: string, classes: string, id: string) => {
+    const hue = hues.get(id) ?? hues.size % PARTICIPANT_HUES;
+    hues.set(id, hue);
+    return `class="${classes} pele-hue-${hue}" data-id="${id}"`;
+  });
+};
+
 const STYLE_ATTRIBUTE = /\sstyle="([^"]*)"/g;
 const STYLE_FILL = /(^|;)fill:/g;
 
@@ -103,6 +122,7 @@ const withAuthorFillVariables = (svg: string): string =>
  * - A class with only attributes or only methods loses the divider of its empty member box, so the
  *   box shows no blank strip, and its members center in the space.
  * - Sequence author colors move into a variable, so each theme can paint them.
+ * - Each sequence participant gets its own color.
  */
 export const prepareDiagram = (svg: string): string =>
-  withAuthorFillVariables(svg.split(NODE_START).map(withNameBand).join(""));
+  withParticipantHues(withAuthorFillVariables(svg.split(NODE_START).map(withNameBand).join("")));

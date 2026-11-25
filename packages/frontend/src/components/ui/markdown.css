@@ -119,6 +119,7 @@
   --diagram-rose: oklch(0.645 0.246 16.439);
   --diagram-fuchsia: oklch(0.667 0.295 322.15);
   --diagram-violet: oklch(0.606 0.25 292.717);
+  --diagram-lime: oklch(0.648 0.2 131.684);
   --diagram-fill-mix: 15%;
   --diagram-line-mix: 62%;
   --diagram-text-mix: 58%;
@@ -146,6 +147,7 @@
   --diagram-rose: oklch(0.712 0.194 13.428);
   --diagram-fuchsia: oklch(0.74 0.238 322.16);
   --diagram-violet: oklch(0.702 0.183 293.541);
+  --diagram-lime: oklch(0.841 0.238 128.85);
   --diagram-fill-mix: 20%;
   --diagram-line-mix: 70%;
   --diagram-text-mix: 30%;
@@ -319,13 +321,90 @@
 }
 
 /* Pele paints activation bars from their group, so the bars take the sky tint here. */
-.pele .pele-activation {
-  fill: color-mix(in oklab, var(--diagram-sky) 30%, var(--diagram-node-base));
-  stroke: color-mix(in oklab, var(--diagram-sky) var(--diagram-line-mix), var(--diagram-canvas));
+/*
+ * Each sequence participant has its own hue, for its boxes, its lifeline, and its activation bars.
+ * The preparation step adds `pele-hue-0` to `pele-hue-5` in the order of the participants. Violet
+ * stays for blocks. Messages, their labels, the step numbers, and the notes stay near the text
+ * color, so they read on every lifeline and belong to no participant.
+ */
+.pele.pele-sequence {
+  --pele-line: color-mix(in oklab, var(--foreground) 78%, var(--diagram-canvas));
+}
+
+.pele.pele-sequence .pele-hue-0 {
+  --hue: var(--diagram-fuchsia);
+  --tint-base: var(--diagram-warm-base);
+}
+
+.pele.pele-sequence .pele-hue-1 {
+  --hue: var(--diagram-emerald);
+}
+
+.pele.pele-sequence .pele-hue-2 {
+  --hue: var(--diagram-amber);
+  --tint-base: var(--diagram-warm-base);
+}
+
+.pele.pele-sequence .pele-hue-3 {
+  --hue: var(--diagram-sky);
+}
+
+.pele.pele-sequence .pele-hue-4 {
+  --hue: var(--diagram-rose);
+  --tint-base: var(--diagram-warm-base);
+}
+
+.pele.pele-sequence .pele-hue-5 {
+  --hue: var(--diagram-lime);
+}
+
+/* The lines of a participant move from its hue toward the text color, so they keep contrast. */
+.pele.pele-sequence :is(.pele-actor, .pele-lifeline, .pele-activation) {
+  --_b: color-mix(in oklab, var(--hue) 66%, var(--foreground));
+}
+
+.pele.pele-sequence .pele-lifeline {
+  stroke: var(--_b);
+  stroke-width: 1.5;
+  stroke-dasharray: none;
+}
+
+.pele.pele-sequence .pele-activation {
+  fill: color-mix(
+    in oklab,
+    var(--hue) calc(var(--diagram-fill-mix) * 1.6),
+    var(--diagram-node-base)
+  );
+  stroke: var(--_b);
+}
+
+.pele.pele-sequence .pele-note {
+  --_s: color-mix(in oklab, var(--foreground) 5%, var(--diagram-node-base));
+  --_b: color-mix(in oklab, var(--foreground) 30%, var(--diagram-canvas));
+}
+
+.pele.pele-sequence .pele-note .pele-label {
+  fill: var(--foreground);
+}
+
+/* A canvas halo keeps the lifelines off the message and block labels. */
+.pele.pele-sequence :is(.pele-edge-label text, .pele-frame-label) {
+  paint-order: stroke;
+  stroke: var(--pele-bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.pele.pele-sequence .pele-actor .pele-label {
+  fill: var(--foreground);
+}
+
+.pele.pele-sequence .pele-edge-label {
+  fill: color-mix(in oklab, var(--foreground) 90%, var(--muted-foreground));
 }
 
 .pele .pele-sequence-number > rect {
-  fill: var(--diagram-indigo);
+  fill: var(--foreground);
 }
 
 /*
@@ -537,7 +616,10 @@
   font-weight: 500;
 }
 
-.pele-sequence .pele-actor .pele-label,
+.pele-sequence .pele-actor .pele-label {
+  font-weight: 500;
+}
+
 .pele-mindmap .pele-root .pele-label {
   font-weight: 600;
 }

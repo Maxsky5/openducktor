@@ -84,6 +84,24 @@ describe("prepareDiagram", () => {
     );
   });
 
+  test("gives each sequence participant one color for its boxes, lifeline, and activations", () => {
+    const svg =
+      '<svg class="pele pele-sequence">' +
+      '<path class="pele-lifeline" data-id="U"/><path class="pele-lifeline" data-id="H"/>' +
+      '<rect class="pele-activation" data-id="H"/>' +
+      '<g class="pele-node pele-actor pele-actor-participant pele-actor-footer" data-id="H"></g>' +
+      '<g class="pele-node pele-actor pele-actor-actor" data-id="U"></g></svg>';
+
+    expect(prepareDiagram(svg)).toBe(
+      '<svg class="pele pele-sequence">' +
+        '<path class="pele-lifeline pele-hue-0" data-id="U"/>' +
+        '<path class="pele-lifeline pele-hue-1" data-id="H"/>' +
+        '<rect class="pele-activation pele-hue-1" data-id="H"/>' +
+        '<g class="pele-node pele-actor pele-actor-participant pele-actor-footer pele-hue-1" data-id="H"></g>' +
+        '<g class="pele-node pele-actor pele-actor-actor pele-hue-0" data-id="U"></g></svg>',
+    );
+  });
+
   test("keeps the author fills of other diagrams", () => {
     const svg =
       '<svg class="pele pele-flowchart"><g class="pele-node" style="fill:#9f6;stroke:#333"></g></svg>';
