@@ -156,9 +156,10 @@ const localLinkHtml = (html: string): string => {
   const href = readTagAttributes(html).get("href") ?? "";
   if (!href.startsWith(LOCAL_LINK_PREFIX)) return html;
   const destination = escapeHtml(decodeURIComponent(href.slice(LOCAL_LINK_PREFIX.length)));
+  // A callback keeps a `$&` or `$'` in the destination as text, not as a replacement pattern.
   return html.replace(
     /^<a data-markdown="a" href="[^"]*"/,
-    `${WORDS_LINK} href="#" ${LOCAL_LINK_ATTRIBUTE}="${destination}" title="${destination}"`,
+    () => `${WORDS_LINK} href="#" ${LOCAL_LINK_ATTRIBUTE}="${destination}" title="${destination}"`,
   );
 };
 

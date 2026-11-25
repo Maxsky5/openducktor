@@ -1,5 +1,5 @@
 import { type ComponentProps, type ReactElement, useMemo } from "react";
-import type { MarkdownImageProps } from "@/components/ui/markdown-host-image";
+import type { MarkdownImageProps } from "@/components/ui/markdown-host-image-kind";
 import { type MarkdownImages, MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { GithubIssueImage, type IssueImageContext } from "./github-issue-image";
 import { isHostLoadedIssueImageUrl } from "@openducktor/frontend-core/tasks/issue-import/issue-image-url";

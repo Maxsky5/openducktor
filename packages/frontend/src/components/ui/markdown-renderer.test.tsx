@@ -128,6 +128,21 @@ describe("links", () => {
     fireEvent.keyDown(link, { key: "Enter", repeat: true });
     expect(open).toHaveBeenCalledTimes(2);
   });
+
+  test("keeps a local destination with replacement tokens as text", () => {
+    const local = { handles: (href: string) => href.startsWith("src/"), open: mock(() => {}) };
+    const view = render(
+      <MarkdownStreamRenderer
+        markdown="Read [the file](src/$&/onmouseover=alert(1)//)."
+        streaming={false}
+        links={{ local }}
+      />,
+    );
+    const link = view.getByRole("link", { name: "the file" });
+
+    expect(link.getAttribute("data-local-link")).toBe("src/$&/onmouseover=alert(1)//");
+    expect(link.getAttribute("onmouseover")).toBeNull();
+  });
 });
 
 describe("forged marks", () => {
@@ -389,6 +404,18 @@ describe("diagrams", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Close diagram preview" }));
     await waitFor(() => expect(view.queryByRole("dialog")).toBeNull());
     expect(view.getByText("Outro")).toBeTruthy();
+  });
+
+  test("gives focus back to the expand button when the preview closes", async () => {
+    const view = render(<MarkdownRenderer markdown={FLOWCHART} />);
+    const expand = await view.findByRole("button", { name: "Open diagram preview" });
+    expand.focus();
+    fireEvent.click(expand);
+
+    const dialog = await view.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close diagram preview" }));
+    await waitFor(() => expect(view.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(expand);
   });
 
   test("shows the parse error and what to do for an invalid diagram", async () => {

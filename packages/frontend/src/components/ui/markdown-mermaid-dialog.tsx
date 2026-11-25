@@ -16,7 +16,13 @@ function readDiagramSize(svg: string): DiagramSize | null {
   return width > 0 && height > 0 ? { width, height } : null;
 }
 
-export function MarkdownMermaidDialog({ svg }: { svg: string }): ReactElement {
+export function MarkdownMermaidDialog({
+  svg,
+  onCloseAutoFocus,
+}: {
+  svg: string;
+  onCloseAutoFocus?: (event: Event) => void;
+}): ReactElement {
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
   const dragRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
   const [viewportSize, setViewportSize] = useState<DiagramSize | null>(null);
@@ -73,6 +79,7 @@ export function MarkdownMermaidDialog({ svg }: { svg: string }): ReactElement {
   return (
     <DialogContent
       closeButton={null}
+      onCloseAutoFocus={onCloseAutoFocus}
       className="my-0 h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] gap-0 bg-background p-0 outline-none"
     >
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2.5">

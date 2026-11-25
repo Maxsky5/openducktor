@@ -20,12 +20,12 @@ import {
   mayHaveDiagram,
   useDiagramRenderer,
 } from "./markdown-diagram";
+import { MarkdownHostImage } from "./markdown-host-image";
 import {
   type HostImageOptions,
   isHostImage,
-  MarkdownHostImage,
   type MarkdownImageSource,
-} from "./markdown-host-image";
+} from "./markdown-host-image-kind";
 import {
   createMarkdownHooks,
   createMarkdownUrlTransform,
@@ -63,7 +63,8 @@ const TASK_ITEM = /\[[ xX]\]/;
 /** An inline link, a link reference, or an autolink with a scheme, such as `<file:///a.ts>`. */
 const LINK = /\]\(|\]:|<[a-z][\w+.-]*:/i;
 
-type DiagramPreview = { svg: string; open: boolean };
+/** The open diagram, and the element that had the focus when it opened. */
+type DiagramPreview = { svg: string; open: boolean; opener: HTMLElement | null };
 
 /**
  * Closes the diagram preview when the session view hides, because the dialog sits outside the
@@ -84,7 +85,15 @@ function DiagramPreviewDialog({
 }): ReactElement {
   return (
     <Dialog open={preview.open} onOpenChange={(open) => !open && onClose()}>
-      <MarkdownMermaidDialog svg={preview.svg} />
+      <MarkdownMermaidDialog
+        svg={preview.svg}
+        // Words writes the expand button, so the preview has no dialog trigger that Radix gives the
+        // focus back to. The focus goes back to the element that opened the preview.
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          preview.opener?.focus();
+        }}
+      />
     </Dialog>
   );
 }
@@ -186,7 +195,8 @@ export const MarkdownView = memo(function MarkdownView({
       event.target instanceof Element ? event.target.closest(`[${DIAGRAM_ATTRIBUTE}]`) : null;
     const svg = diagram?.querySelector("svg.pele");
     if (svg && !closestLink(event) && event.currentTarget.contains(svg)) {
-      setPreview({ svg: svg.outerHTML, open: true });
+      const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      setPreview({ svg: svg.outerHTML, open: true, opener });
       return;
     }
     linkEvents.onClick(event);
