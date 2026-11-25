@@ -1,7 +1,26 @@
-import { expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 
-// The case starts a browser process and bundles its React entry point.
+let view: Bun.WebView;
+
+/*
+ * The first browser start on a fresh GitHub Linux runner took 1 to 14 seconds, and a second start
+ * on the same runner took under 1 second. The test measures the tab, so the browser starts before
+ * it.
+ */
+beforeAll(async () => {
+  view = new Bun.WebView({
+    backend: process.platform === "darwin" ? "webkit" : { type: "chrome", url: false },
+    console: globalThis.console,
+  });
+  await view.navigate("about:blank");
+}, 30_000);
+
+afterAll(() => {
+  view.close();
+});
+
+// The case bundles its React entry point.
 test("a web runner tab opens, takes keyboard focus and keeps its iframe when hidden", async () => {
   const { outputs } = await Bun.build({
     entrypoints: [
@@ -40,10 +59,6 @@ test("a web runner tab opens, takes keyboard focus and keeps its iframe when hid
       "/fixture.js": new Response(script, { headers: { "content-type": "text/javascript" } }),
       "/favicon.ico": new Response(null, { status: 204 }),
     },
-  });
-  await using view = new Bun.WebView({
-    backend: process.platform === "darwin" ? "webkit" : { type: "chrome", url: false },
-    console: globalThis.console,
   });
   const url = new URL(app.url);
   url.searchParams.set("preview", preview.url.origin);
