@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { HostUnreachableError } from "@openducktor/host-client";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
 import { setupTestingLibraryFakeTimers } from "../../test-support/testing-library-fake-timers";
 import type { AppVisibility } from "../../platform/app-visibility";
@@ -222,6 +223,67 @@ test.each([
         timeout: 500,
       });
       expect(view.result.current.branchKey).toBe("detached");
+    } finally {
+      view.unmount();
+      queryClient.clear();
+    }
+  },
+);
+
+test.each([
+  { cause: "a lost host", lostHost: true },
+  { cause: "another failure", lostHost: false },
+])(
+  "a worktree branch read that fails with $cause keeps the checkout only for a lost host",
+  async ({ lostHost }) => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    let fail = false;
+    createTestClientConnection({
+      queryClient,
+      client: {
+        gitGetCurrentBranch: async () => {
+          if (!fail) return { name: "main", detached: false };
+          throw lostHost
+            ? new HostUnreachableError(new TypeError("Failed to fetch"))
+            : new Error("Branch read denied.");
+        },
+      },
+    });
+    const view = renderHook(
+      () =>
+        useWorkspaceSessionBranch({
+          repoPath: "/repo",
+          workingDirectory: "/repo/worktree",
+          isWorktree: true,
+          isSwitchingBranch: false,
+          activeBranch: null,
+          visibility,
+        }),
+      {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        ),
+      },
+    );
+    try {
+      await waitFor(() => expect(view.result.current.previewBranch).toBe("branch:main"));
+      const branchKey = view.result.current.branchKey;
+      fail = true;
+      await act(async () => {
+        await view.result.current.readBranch().catch(() => {});
+      });
+      await waitFor(() => expect(view.result.current.worktreeBranch.isError).toBe(true));
+
+      if (lostHost) {
+        // The Git reads keep their keys and data while the host is away.
+        expect(view.result.current.branchFailed).toBe(false);
+        expect(view.result.current.branchKey).toBe(branchKey);
+        expect(view.result.current.currentBranch?.name).toBe("main");
+      } else {
+        expect(view.result.current.branchFailed).toBe(true);
+        expect(view.result.current.branchKey).toBe("unknown");
+        expect(view.result.current.currentBranch).toBeNull();
+      }
     } finally {
       view.unmount();
       queryClient.clear();

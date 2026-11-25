@@ -66,7 +66,13 @@ type GitRefreshDeps = {
   onFailedCheck: (message: string) => void;
 };
 
-type ManualRun = { key: string; promise: Promise<void> | null; state: ManualRefreshState };
+type ManualRun = {
+  key: string;
+  promise: Promise<void> | null;
+  state: ManualRefreshState;
+  /** A lost host connection failed the run, so the reconnect clears its failure. */
+  lostConnection: boolean;
+};
 type FetchRun = { force: boolean; promise: Promise<void> };
 /**
  * A manual run has no visit, so a return to its context continues it. `clears` is the failed manual
@@ -153,7 +159,12 @@ export class GitRefreshCoordinator {
     const key = manualRefreshKey(view);
     const running = this.#manualRuns.get(key);
     if (running?.promise) return running.promise;
-    const run: ManualRun = { key, promise: null, state: { isRefreshing: true, error: null } };
+    const run: ManualRun = {
+      key,
+      promise: null,
+      state: { isRefreshing: true, error: null },
+      lostConnection: false,
+    };
     this.#manualRuns.set(key, run);
     this.#notify();
     run.promise = this.#settleManual(
@@ -170,10 +181,22 @@ export class GitRefreshCoordinator {
       await refresh;
     } catch (cause) {
       error = errorMessage(cause);
+      run.lostConnection = isConnectionFailure(cause);
     }
     run.promise = null;
     run.state = { isRefreshing: false, error };
     this.#notify();
+  }
+
+  /** Clears each Refresh failure that a lost host connection caused, after the connection returns. */
+  clearConnectionFailures(): void {
+    let cleared = false;
+    for (const [key, run] of this.#manualRuns) {
+      if (run.promise || !run.lostConnection) continue;
+      this.#manualRuns.delete(key);
+      cleared = true;
+    }
+    if (cleared) this.#notify();
   }
 
   async #runManual(view: GitRefreshView, run: ManualRun): Promise<void> {

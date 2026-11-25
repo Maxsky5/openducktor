@@ -50,7 +50,7 @@ export function useGitRefresh({
   refreshOnFocus: boolean;
   visibility: AppVisibility;
 }): GitRefreshControl {
-  const { feedback } = useClientConnection();
+  const { feedback, host } = useClientConnection();
   const [coordinator] = useState(
     () =>
       new GitRefreshCoordinator({
@@ -88,6 +88,16 @@ export function useGitRefresh({
     if (!refreshOnFocus) return;
     return visibility.subscribe(() => refreshWhenVisible());
   }, [refreshOnFocus, visibility]);
+  // The reconnect reads the views again, so a Refresh failure of the lost connection is stale.
+  useEffect(() => {
+    const { connectionState } = host;
+    let previous = connectionState.getSnapshot();
+    return connectionState.subscribe(() => {
+      const next = connectionState.getSnapshot();
+      if (previous !== "connected" && next === "connected") coordinator.clearConnectionFailures();
+      previous = next;
+    });
+  }, [coordinator, host]);
   const manualRefresh = useCallback(() => coordinator.refresh("hard"), [coordinator]);
   const manual = useMemo<ManualRefresh>(
     () => ({ refresh: manualRefresh, isRefreshing: state.isRefreshing, refreshError: state.error }),

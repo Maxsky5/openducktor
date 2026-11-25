@@ -4,6 +4,7 @@ import type {
 } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useHostConnectionState } from "@openducktor/frontend-core/connection/use-host-connection-state";
 import { applyWorkspaceAgentStudioStateAction } from "./agent-studio-state-writer";
 
 export function useAgentStudioWorkspaceStateSave({
@@ -18,6 +19,8 @@ export function useAgentStudioWorkspaceStateSave({
   enabled: boolean;
 }) {
   const queryClient = useQueryClient();
+  // A save waits for the host connection, so a lost connection does not replace the page.
+  const connected = useHostConnectionState() === "connected";
   const lastSaveRef = useRef<SaveRequest | null>(null);
   const [failure, setFailure] = useState<SaveFailure | null>(null);
   const loadedKey = loadedState ? JSON.stringify(loadedState) : null;
@@ -53,7 +56,7 @@ export function useAgentStudioWorkspaceStateSave({
       : null;
 
   useEffect(() => {
-    if (!enabled || !workspaceId || !loadedState) {
+    if (!enabled || !connected || !workspaceId || !loadedState) {
       return;
     }
     const lastSave = lastSaveRef.current;
@@ -75,7 +78,7 @@ export function useAgentStudioWorkspaceStateSave({
     lastSaveRef.current = request;
     setFailure(null);
     void save(request);
-  }, [enabled, loadedKey, loadedState, save, state, stateKey, workspaceId]);
+  }, [connected, enabled, loadedKey, loadedState, save, state, stateKey, workspaceId]);
 
   const retrySave = useCallback((): Promise<void> => {
     if (!currentFailure) {

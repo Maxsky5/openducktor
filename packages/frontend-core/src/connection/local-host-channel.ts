@@ -30,7 +30,12 @@ import {
 } from "@openducktor/host-client/channel";
 import { waitWithAbort, type RemoteSocketConnection } from "@openducktor/host-client/remote";
 import { errorMessage } from "../lib/errors";
-import { hostEventStreamEventName, type InvokeOptions } from "@openducktor/host-client";
+import type { HostConnectionState } from "./host-connection-state";
+import {
+  HostUnreachableError,
+  hostEventStreamEventName,
+  type InvokeOptions,
+} from "@openducktor/host-client";
 import type { JSONType } from "zod";
 
 export type LocalHostChannelEvent = HostEventEnvelope | ConnectionControlEvent;
@@ -108,6 +113,8 @@ export type LocalHostChannelDependencies = {
   notificationCursor: NotificationCursor | null;
   /** Runs when the channel closes because nothing uses it. */
   onDispose(): void;
+  /** Receives each change between a connected channel and a lost one. */
+  onConnectionChange(state: HostConnectionState): void;
   schedule?(callback: () => void, delayMs: number): () => void;
 };
 
@@ -119,6 +126,14 @@ type TaskRecord = {
 type Open = OpenedHostChannel & { abort: AbortController };
 /** One connection attempt. `open` is set once the attempt finished its setup. */
 type Attempt = { abort: AbortController; open: Open | null };
+
+/** The host refused the session of this page, as after a host restart. Only a reload recovers. */
+export class HostSessionRefusedError extends Error {
+  constructor(cause: unknown) {
+    super("The host restarted. Reload the page to reconnect.", { cause });
+    this.name = "HostSessionRefusedError";
+  }
+}
 
 const RECONNECT_BASE_MS = 500;
 const RECONNECT_MAX_MS = 5_000;
@@ -138,6 +153,7 @@ export const createLocalHostChannel = ({
   openSocket,
   notificationCursor: initialNotificationCursor,
   onDispose,
+  onConnectionChange,
   schedule = defaultSchedule,
 }: LocalHostChannelDependencies): LocalHostChannel => {
   /** The listeners of each host event name, so an event reaches only its own listeners. */
@@ -161,6 +177,8 @@ export const createLocalHostChannel = ({
   };
   let hasOpened = false;
   let hasReportedFailure = false;
+  /** A refused session ends the reconnects of this channel. */
+  let refusal: HostSessionRefusedError | null = null;
   let connectionWarning: string | null = null;
   const { promise: ready, resolve: resolveReady } = Promise.withResolvers<void>();
 
@@ -212,14 +230,12 @@ export const createLocalHostChannel = ({
   const reportFailure = (cause: unknown) => {
     if (hasReportedFailure) return;
     hasReportedFailure = true;
+    onConnectionChange("reconnecting");
     connectionWarning = hasOpened
       ? `The host channel reported an error after opening: ${errorMessage(cause)}`
       : `The host channel reported an error before opening: ${errorMessage(cause)}`;
-    notifications.fail(
-      new Error(
-        "Notification connection failed. The stream will reconnect when the host is available.",
-      ),
-    );
+    // A typed cause lets notification coordination wait quietly for the reconnect.
+    notifications.fail(new HostUnreachableError(cause));
     const lostState = failedRemoteAccessState({
       code: "transport_failure",
       message: "Remote operator status stream was lost.",
@@ -341,6 +357,7 @@ export const createLocalHostChannel = ({
   /** Clears the failure state and tells control listeners what the reconnect missed. */
   const announceOpen = (opened: HostChannelReplay) => {
     attempts = 0;
+    onConnectionChange("connected");
     const recovers = connectionWarning !== null;
     connectionWarning = null;
     hasReportedFailure = false;
@@ -365,6 +382,7 @@ export const createLocalHostChannel = ({
   const connect = (): Promise<Open> => {
     if (open) return Promise.resolve(open);
     if (opening) return opening.promise;
+    if (refusal) return Promise.reject(refusal);
     cancelRetry?.();
     cancelRetry = null;
     const abort = new AbortController();
@@ -403,7 +421,12 @@ export const createLocalHostChannel = ({
       settle();
       if (disposed) return;
       reportFailure(cause);
-      scheduleReconnect();
+      if (cause instanceof HostSessionRefusedError) {
+        refusal = cause;
+        onConnectionChange("reload-required");
+      } else {
+        scheduleReconnect();
+      }
     });
     return promise;
   };

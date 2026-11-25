@@ -168,3 +168,55 @@ test("keeps a failed retry busy for 500 ms and reports it outside blocked work",
     toast.dismiss("host-connection-retry");
   }
 });
+
+test("keeps the lost connection dialog stable while automatic attempts run", async () => {
+  const failure = {
+    code: "transport_failure" as const,
+    message: "Failed to fetch",
+    nextAction:
+      "Check the selected host address, network, TLS and proxy configuration, then retry.",
+  };
+  let state: RemoteConnectionState = { status: "connected", generation: 1 };
+  let notify = (_state: RemoteConnectionState) => {};
+  const connection = {
+    readState: () => state,
+    subscribeState: (listener: (next: RemoteConnectionState) => void) => {
+      notify = listener;
+      return () => {};
+    },
+    retry: mock(async () => {}),
+    connect: async () => {},
+    disconnect: async () => {},
+  };
+  render(
+    <RemoteConnectionBoundary connection={connection}>
+      <button type="button">Send work</button>
+    </RemoteConnectionBoundary>,
+  );
+  const dialogText = () => screen.getByRole("dialog").textContent;
+  const retryEnabled = () =>
+    !screen.getByRole("button", { name: /Retry connection/ }).hasAttribute("disabled");
+
+  await act(async () => {
+    state = { status: "disconnected", generation: 2, failure };
+    notify(state);
+  });
+  const lost = dialogText();
+  expect(lost).toContain("Host connection lost");
+  expect(lost).toContain(failure.nextAction);
+  expect(retryEnabled()).toBe(true);
+
+  // An automatic attempt has no failure of its own. The dialog keeps the same content.
+  await act(async () => {
+    state = { status: "connecting", generation: 3 };
+    notify(state);
+  });
+  expect(dialogText()).toBe(lost);
+  expect(retryEnabled()).toBe(true);
+
+  await act(async () => {
+    state = { status: "connected", generation: 3 };
+    notify(state);
+  });
+  expect(screen.queryByRole("dialog")).toBeNull();
+});

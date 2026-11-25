@@ -11,12 +11,15 @@ import {
 import {
   createHostChannelSession,
   HostChannelProtocolError,
+  requireHostInvocationEpoch,
   HostChannelRequestError,
+  hostChannelInvokeError,
   openHostChannel,
   type HostChannelCursors,
   type HostChannelEvent,
   type HostChannelHandlers,
 } from "./channel";
+import { HostUnreachableError } from "./host-unreachable-error";
 
 const boundary = { epoch: "00000000-0000-4000-8000-000000000002", sequence: 3 };
 const subscriptionId = "00000000-0000-4000-8000-000000000009";
@@ -53,6 +56,24 @@ const settled = async <T>(promise: Promise<T>) => {
     return { cause };
   }
 };
+
+describe("hostChannelInvokeError", () => {
+  test("marks a request that the channel did not carry as unreachable", () => {
+    const lost = new Error("The host channel closed.");
+    const protocol = new HostChannelProtocolError("The host channel sent an invalid message.");
+    expect(hostChannelInvokeError(lost)).toBeInstanceOf(HostUnreachableError);
+    expect(hostChannelInvokeError(protocol)).toBe(protocol);
+    const changedHost = (() => {
+      try {
+        requireHostInvocationEpoch("previous-host", "replacement-host");
+      } catch (cause) {
+        if (cause instanceof Error) return cause;
+      }
+      throw new Error("A changed host must refuse the request.");
+    })();
+    expect(hostChannelInvokeError(changedHost)).toBe(changedHost);
+  });
+});
 
 describe("createHostChannelSession", () => {
   test("sends a request with a new ID and resolves with the result body", async () => {

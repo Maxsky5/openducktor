@@ -1,6 +1,7 @@
 import { CancelledError, type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { isConnectionFailure } from "@openducktor/frontend-core/lib/command-outcome";
 import {
   invalidateCurrentBranchQuery,
   invalidateRepoBranchesQuery,
@@ -180,6 +181,8 @@ export function useWorkspaceBranchProbe({
     }
 
     if (outcome.status === "degraded") {
+      // The connection indicator reports a lost host. The next focus probes again.
+      if (isConnectionFailure(outcome.error.cause)) return;
       setBranchSyncDegraded(repoPath, true);
       reportBranchProbeError(outcome.error);
       return;

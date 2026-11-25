@@ -9,6 +9,7 @@ import type {
 } from "@openducktor/contracts";
 import { createHostClient } from "@openducktor/host-client";
 import type { HostConnection } from "@openducktor/frontend-core/connection/host-connection";
+import { connectedHostConnectionState } from "@openducktor/frontend-core/connection/host-connection-state";
 import type { NotificationBridge } from "@openducktor/frontend-core/platform/notification-bridge";
 import type { SystemWake } from "@openducktor/frontend-core/platform/system-wake";
 import type { TerminalBridge } from "@openducktor/frontend-core/terminals/terminal-bridge";
@@ -161,6 +162,7 @@ export const createDisabledAppUpdateBridge = (state: DisabledAppUpdateState): Ap
 
 export const createUnavailableShellBridge = (): ShellBridge => ({
   subscribeStartupProgress: failUnavailable,
+  connectionState: connectedHostConnectionState,
   subscribeWorkspaceProviderSetupUpdates: failUnavailable,
   client: createHostClient(unavailable),
   subscribeWorkspaceSessionUpdates: failUnavailable,

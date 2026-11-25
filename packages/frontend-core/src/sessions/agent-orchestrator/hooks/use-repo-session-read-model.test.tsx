@@ -48,6 +48,8 @@ import {
 } from "../../../lib/agent-session-activity-state";
 import { canResumeInterruptedTurn } from "../../../lib/agent-session-interrupted-turn";
 import { sessionMessagesToArray } from "../../../test-support/session-message-test-helpers";
+import { HOST_UNREACHABLE_MESSAGE, HostUnreachableError } from "@openducktor/host-client";
+import { HOST_CONNECTION_WAITING_MESSAGE } from "../../../lib/host-failure";
 import {
   createAgentSessionTranscriptEventConsumer,
   type AgentSessionTranscriptEventConsumer,
@@ -2185,6 +2187,7 @@ describe("useRepoSessionReadModel", () => {
       expect(state.harness.getLatest().sessionReadModelLoadState).toMatchObject({
         kind: "failed",
         source: "task-records",
+        failureKind: "other",
       });
       expect(state.getSession()).toMatchObject({
         sessionAssociation: { kind: "workflow", taskId: "task-1" },
@@ -2220,6 +2223,7 @@ describe("useRepoSessionReadModel", () => {
       expect(state.harness.getLatest().sessionReadModelLoadState).toMatchObject({
         kind: "failed",
         source: "task-records",
+        failureKind: "other",
       });
 
       await state.harness.run(async () => {
@@ -2229,6 +2233,7 @@ describe("useRepoSessionReadModel", () => {
       expect(state.harness.getLatest().sessionReadModelLoadState).toMatchObject({
         kind: "failed",
         source: "task-records",
+        failureKind: "other",
       });
     } finally {
       releaseSnapshot.resolve();
@@ -2843,6 +2848,7 @@ describe("useRepoSessionReadModel", () => {
         expect(state.harness.getLatest().sessionReadModelLoadState).toMatchObject({
           kind: "failed",
           source: "live-stream",
+          failureKind: "other",
         });
 
       // A task-record read fails. The stream failure stays public.
@@ -2974,6 +2980,7 @@ describe("useRepoSessionReadModel", () => {
         message:
           "Failed to reconcile task session records for repo '/repo': Cannot reconcile persisted session 'thread-1' because its registered repository scope for workspace 'workspace-1' does not match the incoming workflow scope for task 'task-1' and role 'build'.",
         source: "task-records",
+        failureKind: "other",
       });
 
       await state.harness.run(() => {
@@ -3032,6 +3039,7 @@ describe("useRepoSessionReadModel", () => {
         message:
           "Failed to reconcile task session records for repo '/repo': Cannot reconcile persisted session 'thread-1' because its registered repository scope for workspace 'workspace-1' does not match the incoming workflow scope for task 'task-1' and role 'build'.",
         source: "task-records",
+        failureKind: "other",
       });
       expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
       expect(state.getSession()?.sessionAssociation).toEqual({
@@ -3299,6 +3307,7 @@ describe("useRepoSessionReadModel", () => {
         message:
           "Failed to apply initial live-session snapshot for repo '/repo': Cannot apply live snapshot for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the incoming repository scope for workspace 'workspace-1'.",
         source: "live-stream",
+        failureKind: "other",
       });
     } finally {
       await state.harness.unmount();
@@ -4005,6 +4014,7 @@ describe("useRepoSessionReadModel", () => {
         workspaceRepoPath: "/repo",
         message: "Live-session observation failed: The observation stream stopped.",
         source: "live-stream",
+        failureKind: "other",
       });
     } finally {
       await state.harness.unmount();
@@ -4232,6 +4242,64 @@ describe("useRepoSessionReadModel", () => {
       ]);
     } finally {
       await state.harness.unmount();
+    }
+  });
+  test("waits quietly when a task-record read lost the host", async () => {
+    const state = createState(
+      (emit) =>
+        emit({ type: "snapshot", repoPath: "/repo", messageQueues: [], sessions: [snapshot()] }),
+      record,
+      { agentSessionsListForTasks: async () => [{ taskId: "task-1", agentSessions: [record] }] },
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(async () => {
+        await state.queryClient
+          .fetchQuery({
+            queryKey: agentSessionQueryKeys.list(workspaceScope, "task-1"),
+            queryFn: async () => {
+              throw new HostUnreachableError(new TypeError("Failed to fetch"));
+            },
+            staleTime: 0,
+            retry: false,
+          })
+          .catch(() => {});
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+      expect(state.harness.getLatest().sessionReadModelLoadState).toEqual({
+        kind: "failed",
+        workspaceRepoPath: "/repo",
+        message: HOST_CONNECTION_WAITING_MESSAGE,
+        source: "task-records",
+        failureKind: "host-unreachable",
+      });
+    } finally {
+      await state.harness.unmount();
+      state.queryClient.clear();
+    }
+  });
+  test("shows a live observation that could not start, with its Retry, also for a lost host", async () => {
+    const state = createState(() => {}, record, {
+      agentSessionsListForTasks: async () => [{ taskId: "task-1", agentSessions: [record] }],
+    });
+    state.observeAgentSessionLive.mockImplementationOnce(async () => {
+      throw new HostUnreachableError(new TypeError("Failed to fetch"));
+    });
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+      // The observation does not start again by itself, so the failure stays visible.
+      expect(state.harness.getLatest().sessionReadModelLoadState).toMatchObject({
+        source: "live-stream",
+        failureKind: "other",
+        message: `Failed to observe live sessions for repo '/repo': ${HOST_UNREACHABLE_MESSAGE}`,
+      });
+    } finally {
+      await state.harness.unmount();
+      state.queryClient.clear();
     }
   });
 });

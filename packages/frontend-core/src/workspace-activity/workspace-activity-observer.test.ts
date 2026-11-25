@@ -8,6 +8,7 @@ import {
   type WorkspaceActivityArchivedSessionsPort,
 } from "./workspace-activity-observer";
 import { createLiveSnapshotEnvelope } from "../test-support/agent-session-live-fixture";
+import { HOST_CONNECTION_WAITING_MESSAGE, HOST_UNREACHABLE_FAILURE } from "../lib/host-failure";
 
 const runtimeKind = "codex" as const;
 
@@ -531,10 +532,16 @@ describe("createWorkspaceActivityObserver", () => {
     await harness.settle();
     harness.emit("/alpha", createLiveSnapshotEnvelope({ repoPath: "/alpha", sessions: [] }));
 
-    harness.observer.setSessionRecordsError("Workspace Session updates are unavailable.");
+    harness.observer.setSessionRecordsError({ kind: "other", message: "Updates stopped." });
     expect(harness.observer.getWorkspaceActivity("alpha")).toEqual({
       kind: "unavailable",
-      reason: "Workspace Session updates are unavailable.",
+      reason: "Updates stopped.",
+    });
+    // A lost host connection shows the quiet waiting text.
+    harness.observer.setSessionRecordsError(HOST_UNREACHABLE_FAILURE);
+    expect(harness.observer.getWorkspaceActivity("alpha")).toEqual({
+      kind: "unavailable",
+      reason: HOST_CONNECTION_WAITING_MESSAGE,
     });
 
     harness.observer.setSessionRecordsError(null);

@@ -1,3 +1,5 @@
+import { failureText, type HostFailureKind, type HostFeedbackFailure } from "../lib/host-failure";
+
 export type AgentSessionReadModelFailureSource = "task-records" | "live-stream";
 
 export type AgentSessionReadModelLoadState =
@@ -17,6 +19,8 @@ export type AgentSessionReadModelLoadState =
       workspaceRepoPath: string;
       message: string;
       source: AgentSessionReadModelFailureSource;
+      /** A lost host connection waits quietly. Its message is the quiet waiting text. */
+      failureKind: HostFailureKind;
     };
 
 export const unavailableAgentSessionReadModelLoadState: AgentSessionReadModelLoadState =
@@ -42,12 +46,33 @@ export const failedAgentSessionReadModelLoadState = (
   workspaceRepoPath: string,
   message: string,
   source: AgentSessionReadModelFailureSource,
+  failureKind: HostFailureKind = "other",
 ): AgentSessionReadModelLoadState => ({
   kind: "failed",
   workspaceRepoPath,
   message,
   source,
+  failureKind,
 });
+
+/** The failed state of a typed failure. Views show its message as it is. */
+export const failedLoadStateFor = (
+  workspaceRepoPath: string,
+  source: AgentSessionReadModelFailureSource,
+  failure: HostFeedbackFailure,
+): AgentSessionReadModelLoadState =>
+  failedAgentSessionReadModelLoadState(
+    workspaceRepoPath,
+    failureText(failure),
+    source,
+    failure.kind,
+  );
+
+/** The failure of the read model, or null when it did not fail. */
+export const agentSessionReadModelFailure = (
+  state: AgentSessionReadModelLoadState,
+): HostFeedbackFailure | null =>
+  state.kind === "failed" ? { kind: state.failureKind, message: state.message } : null;
 
 /** The live-stream failure that no fresh snapshot has confirmed as recovered yet, else null. */
 export const unresolvedLiveStreamFailure = (
@@ -65,15 +90,15 @@ export const unresolvedLiveStreamFailure = (
  */
 export const failedTaskRecordsLoadState = ({
   workspaceRepoPath,
-  message,
+  failure,
   liveStreamFailure,
 }: {
   workspaceRepoPath: string;
-  message: string;
+  failure: HostFeedbackFailure;
   liveStreamFailure: string | null;
 }): AgentSessionReadModelLoadState =>
   liveStreamFailure === null
-    ? failedAgentSessionReadModelLoadState(workspaceRepoPath, message, "task-records")
+    ? failedLoadStateFor(workspaceRepoPath, "task-records", failure)
     : failedAgentSessionReadModelLoadState(workspaceRepoPath, liveStreamFailure, "live-stream");
 
 export const currentAgentSessionReadModelLoadState = ({

@@ -10,6 +10,7 @@ import type { ActiveWorkspace } from "@/types/state-slices";
 import type { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
 import { workspaceConflictChatKey } from "./workspace-git-conflict-assistance";
 import { workspaceConflictRecipientBlockedReason } from "@openducktor/frontend-core/git/conflicts/conflict-assistance";
+import { failureTextOf } from "@openducktor/frontend-core/lib/host-failure";
 
 export type WorkspaceConflictChatActions = {
   workspace: ActiveWorkspace;
@@ -38,7 +39,7 @@ export function useWorkspaceConflictChatActions(input: {
   const assertCanSubmit = useAgentMessageSendPolicy();
   const blockedReason =
     workspaceConflictRecipientBlockedReason(record) ??
-    readModel.workspaceSessionRecordsError ??
+    failureTextOf(readModel.workspaceSessionRecordsError) ??
     getAgentMessageSendBlockedReason({
       session: input.session,
       runtime:

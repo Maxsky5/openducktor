@@ -39,6 +39,11 @@ import { HostTerminalClient } from "./terminal-client";
 import { HostBrowserClient } from "./browser-client";
 import { HostWorkflowLibraryClient } from "./workflow-library-client";
 
+export {
+  HOST_UNREACHABLE_MESSAGE,
+  HostUnreachableError,
+  isHostUnreachableError,
+} from "./host-unreachable-error";
 export { HostInvokeError } from "./invoke-utils";
 export type { InvokeFn, InvokeOptions } from "./invoke-utils";
 export { HostTerminalClientError } from "./terminal-client";

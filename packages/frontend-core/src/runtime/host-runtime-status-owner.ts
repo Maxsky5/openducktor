@@ -1,7 +1,11 @@
 import type { HostRuntimeSnapshot, HostRuntimeStatus, RuntimeKind } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import { CONNECTION_RECONNECTED_EVENT_KIND } from "../recovery/connection-control-events";
-import { errorMessage } from "../lib/errors";
+import {
+  HOST_UNREACHABLE_FAILURE,
+  type HostFeedbackFailure,
+  toHostFeedbackFailure,
+} from "../lib/host-failure";
 import { scheduleTask, type ScheduleTask } from "../lib/scheduling";
 import type { RuntimeChangeListener } from "../connection/host-connection";
 import {
@@ -21,9 +25,9 @@ export type HostRuntimeStatusOwnerPorts = {
 
 type HostRuntimeStatusConnection = {
   /** Live runtime updates are unavailable. Cached state is not current. */
-  streamError: string | null;
+  streamError: HostFeedbackFailure | null;
   /** Only a full read clears this error. Live row updates can clear the query error. */
-  readError: string | null;
+  readError: HostFeedbackFailure | null;
   /** A baseline read succeeded after the last subscription, reconnect, or host change. */
   hasBaseline: boolean;
   isRefreshing: boolean;
@@ -88,7 +92,7 @@ export const createHostRuntimeStatusOwner = ({
 
   // Records a stream failure or recovery, then tells the event listeners.
   const changeStream = (
-    streamError: string | null,
+    streamError: HostFeedbackFailure | null,
     patch: Partial<HostRuntimeStatusConnection> = {},
   ): void => {
     streamEpoch += 1;
@@ -115,7 +119,7 @@ export const createHostRuntimeStatusOwner = ({
   };
 
   // An explicit refresh ends when the latest baseline read settles, not when its own read does.
-  const settleBaseline = (readError: string | null): void => {
+  const settleBaseline = (readError: HostFeedbackFailure | null): void => {
     updateConnection({ hasBaseline: readError === null, readError, isRefreshing: false });
   };
 
@@ -145,7 +149,7 @@ export const createHostRuntimeStatusOwner = ({
         settleBaseline(null);
       } catch (cause) {
         if (!isLatest()) return;
-        settleBaseline(errorMessage(cause));
+        settleBaseline(toHostFeedbackFailure(cause));
       }
     })();
     return latestBaseline;
@@ -167,13 +171,14 @@ export const createHostRuntimeStatusOwner = ({
               connection.readError !== null
             )
               throw new Error(
-                connection.readError ??
-                  connection.streamError ??
+                connection.readError?.message ??
+                  connection.streamError?.message ??
                   "Runtime recovery did not establish current host state.",
               );
           });
         }
-        changeStream(event.message ?? "Runtime updates are unavailable.", { hasBaseline: false });
+        // The shared stream reports only a lost host connection.
+        changeStream(HOST_UNREACHABLE_FAILURE, { hasBaseline: false });
         return;
       }
       // A runtime or MCP bridge change updates the cache. Impact changes concern open reviews only.
@@ -236,7 +241,7 @@ export const createHostRuntimeStatusOwner = ({
         controller.abort();
         unsubscribe?.();
         unsubscribe = null;
-        changeStream(errorMessage(cause));
+        changeStream(toHostFeedbackFailure(cause));
       },
     );
     return subscription;
@@ -274,7 +279,7 @@ export const createHostRuntimeStatusOwner = ({
       await readBaseline(refreshSession);
     },
     getConnection: () => connection,
-    getStreamHealth: () => ({ error: connection.streamError, epoch: streamEpoch }),
+    getStreamHealth: () => ({ error: connection.streamError?.message ?? null, epoch: streamEpoch }),
     subscribeEvents: (listener) => {
       eventListeners.add(listener);
       return () => {

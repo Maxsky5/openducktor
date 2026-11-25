@@ -4,7 +4,11 @@ import type {
   WorkspaceAgentStudioState,
   WorkspaceAgentStudioStateAction,
 } from "@openducktor/contracts";
-import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import {
+  createTestClientConnection,
+  createTestHostConnection,
+} from "@openducktor/frontend-core/test-support/test-client-connection";
+import { createHostConnectionStore } from "@openducktor/frontend-core/connection/host-connection-state";
 import { useSessionNavigationRecovery } from "@openducktor/frontend-core/sessions/navigation/use-session-navigation-recovery";
 import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
 import { createHookHarness as createSharedHookHarness } from "./agent-studio-test-utils";
@@ -113,6 +117,37 @@ describe("useAgentStudioWorkspaceStateSave", () => {
     });
     await harness.waitFor(() => workspaceReplaceAgentStudioState.mock.calls.length === 1);
 
+    expect(workspaceReplaceAgentStudioState).toHaveBeenCalledWith("repo-a", nextState);
+    await harness.unmount();
+  });
+
+  test("waits for the host connection before it saves a change", async () => {
+    const loadedState = { openTaskIds: ["task-1"] };
+    const nextState = { openTaskIds: ["task-1", "task-2"] };
+    const workspaceReplaceAgentStudioState = mock(
+      async (_workspaceId: string, state: WorkspaceAgentStudioState) => createRepoConfig(state),
+    );
+    const connectionState = createHostConnectionStore("reconnecting");
+    const harness = createSharedHookHarness(
+      useAgentStudioWorkspaceStateSave,
+      { workspaceId: "repo-a", loadedState, state: loadedState, enabled: true },
+      {
+        connection: createTestClientConnection({
+          host: createTestHostConnection({
+            connectionState,
+            client: asApplyHost(workspaceReplaceAgentStudioState),
+          }),
+        }),
+      },
+    );
+
+    await harness.mount();
+    await harness.update({ workspaceId: "repo-a", loadedState, state: nextState, enabled: true });
+    expect(workspaceReplaceAgentStudioState).not.toHaveBeenCalled();
+    expect(harness.getLatest().saveError).toBeNull();
+
+    await harness.run(() => connectionState.setState("connected"));
+    await harness.waitFor(() => workspaceReplaceAgentStudioState.mock.calls.length === 1);
     expect(workspaceReplaceAgentStudioState).toHaveBeenCalledWith("repo-a", nextState);
     await harness.unmount();
   });

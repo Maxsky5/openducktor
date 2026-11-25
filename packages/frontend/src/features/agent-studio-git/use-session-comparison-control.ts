@@ -2,7 +2,7 @@ import type { GitTargetBranch } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { sessionComparisonOptions } from "@openducktor/frontend-core/git/session-comparison-options";
-import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { hostFailureText } from "@openducktor/frontend-core/lib/host-failure";
 import {
   targetBranchFromSelection,
   targetBranchSelectionValue,
@@ -47,7 +47,7 @@ export function useSessionComparisonControl(input: {
     targetBranchSelectionValue: selectionValue,
     targetBranchHelpText: input.helpText,
     targetBranchesPending: branches.isPending && input.editable,
-    targetBranchesError: branches.isError ? errorMessage(branches.error) : null,
+    targetBranchesError: branches.isError ? hostFailureText(branches.error) : null,
     retryTargetBranches: retryBranches,
     onUpdateTargetBranch: input.editable ? onUpdateTargetBranch : undefined,
   };

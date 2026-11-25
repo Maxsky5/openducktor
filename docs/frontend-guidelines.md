@@ -17,6 +17,19 @@ Read [the TanStack Query cache strategy](tanstack-query-cache-strategy.md) befor
 - Use operation-specific flags such as `isLoadingTasks` and `isLoadingChecks`.
 - Do not use a generic busy flag or a magic string.
 
+## Host connection
+
+Each `HostConnection` carries one connection state in `connectionState`: `connected`, `reconnecting`, or `reload-required`. The local host channel sets it when it loses or opens its socket. A remote bridge derives it from its remote connection and never asks for a reload.
+
+- Read the state with `useHostConnectionState` from `packages/frontend-core/src/connection/use-host-connection-state.ts`. Do not add another connection state or probe.
+- Each local channel connection asks the web host for the page session again. A restarted web host has a new app token and refuses the session. The shell then fails `prepare` with `HostSessionRefusedError`, and the channel stops its reconnects and reports `reload-required`.
+- `HostConnectionIndicator` is the only message for a lost local host connection. It always offers Reload, because a host on a new address never answers the old page. A remote client shows the reconnect dialog of `RemoteConnectionBoundary` instead.
+- The local host channel keeps its subscriptions during a lost connection. They receive the stream warning, and the reconnect event after recovery. A live attachment that lost the connection attaches again after the reconnect.
+- A request that the channel could not carry fails with `HostUnreachableError`. Classify a failure with `isConnectionFailure` from `packages/frontend-core/src/lib/command-outcome.ts`, or with `toHostFeedbackFailure` from `packages/frontend-core/src/lib/host-failure.ts`. Do not read the error message to find the cause.
+- Background work that fails because of a lost connection waits quietly. Keep its data. Show its failure with `failureText` or `hostFailureText`, which show the quiet waiting text for a lost connection.
+- A user action reports its failure in its usual place. A remote `outcome_unknown` failure keeps its own message, because the action can have run.
+- A local host reads its active queries again each time its connection returns to `connected`, through `refetchHostQueriesOnRecovery` in `packages/frontend-core/src/recovery/state-recovery.ts`. A remote host does this in its own synchronization. Do not add a recovery for a query read.
+
 ## Forms and control flow
 
 - Disable the full form during an async submission.

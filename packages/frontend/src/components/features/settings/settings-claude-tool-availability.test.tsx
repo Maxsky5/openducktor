@@ -7,7 +7,13 @@ import {
 } from "@openducktor/contracts";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { useState } from "react";
-import { ClaudeToolAvailabilityEditor } from "./settings-claude-tool-availability";
+import {
+  ClaudeToolAvailabilityEditor,
+  ClaudeToolAvailabilitySettings,
+} from "./settings-claude-tool-availability";
+import { HOST_UNREACHABLE_FAILURE } from "@openducktor/frontend-core/lib/host-failure";
+import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import { createHostRuntimeStatusContextValue } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 
 const catalog: ClaudeToolCatalog = {
   runtimeKind: "claude",
@@ -266,4 +272,24 @@ test("catalog failure retains explicit choices and the draft without claiming ne
   expect(
     screen.getByRole("switch", { name: "Default RetiredTool" }).getAttribute("aria-checked"),
   ).toBe("true");
+});
+
+test("waits quietly for the tool catalog while the host connection is lost", () => {
+  render(
+    <HostRuntimeStatusContext.Provider
+      value={createHostRuntimeStatusContextValue({
+        isCurrent: false,
+        streamError: HOST_UNREACHABLE_FAILURE,
+      })}
+    >
+      <ClaudeToolAvailabilitySettings
+        config={claudeRuntimeConfigSchema.parse({ enabled: true, executablePath: "" })}
+        disabled={false}
+        onChange={() => {}}
+      />
+    </HostRuntimeStatusContext.Provider>,
+  );
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Retry tool catalog" })).toBeNull();
+  expect(screen.getByRole("status").textContent).toBe("Loading Claude tools…");
 });

@@ -56,7 +56,7 @@ type UseAgentStudioPageModelsHook = typeof useAgentStudioPageModels;
 
 type HookArgs = Parameters<UseAgentStudioPageModelsHook>[0] & { sessions: AgentSessionSummary[] };
 const DEFAULT_SKILLS: HookArgs["modelSelection"]["skills"] = [];
-const reloadSessionReadModel = () => undefined;
+const reloadSessionReadModel = async (): Promise<void> => {};
 
 const draftScopeFixture = (taskId: string): AgentStudioChatDraftScope => ({
   taskId,

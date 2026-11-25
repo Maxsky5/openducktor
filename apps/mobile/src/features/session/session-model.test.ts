@@ -379,6 +379,7 @@ describe("deriveLiveTranscriptState", () => {
     workspaceRepoPath: "/repo",
     message: "Failed to load task session records.",
     source: "task-records",
+    failureKind: "other",
   };
   const live = (
     historyLoadState: "not_requested" | "loaded",
@@ -394,7 +395,9 @@ describe("deriveLiveTranscriptState", () => {
   test("names a read model failure instead of loading the history forever", () => {
     expect(
       deriveLiveTranscriptState({ ...live("not_requested"), readModelLoadState: failed }),
-    ).toEqual(expect.objectContaining({ kind: "failed", message: failed.message }));
+    ).toEqual(
+      expect.objectContaining({ kind: "failed", message: "Failed to load task session records." }),
+    );
     expect(
       deriveLiveTranscriptState({ ...live("not_requested"), readModelLoadState: LOADING }),
     ).toEqual({ kind: "session_loading", reason: "history" });

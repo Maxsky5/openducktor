@@ -1,16 +1,22 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { connectionOf } from "../connection/client-connection";
-import { errorMessage } from "../lib/errors";
+import {
+  HOST_UNREACHABLE_FAILURE,
+  type HostFeedbackFailure,
+  toHostFeedbackFailure,
+} from "../lib/host-failure";
 import { CONNECTION_STREAM_WARNING_EVENT_KIND } from "../recovery/connection-control-events";
 import { updateWorkspaceSessionQueries, workspaceSessionQueryKeys } from "./workspace-sessions";
 
-type StatusListener = (error: string | null) => void;
+type StatusListener = (failure: HostFeedbackFailure | null) => void;
 type Subscription = {
   listeners: Set<StatusListener>;
-  error: string | null;
+  error: HostFeedbackFailure | null;
   closed: boolean;
   starting: boolean;
   failed: boolean;
+  /** The stream reported a lost connection. Only its reconnect clears it. */
+  streamWarning: boolean;
   stop?: () => void;
 };
 
@@ -29,13 +35,14 @@ export const observeWorkspaceSessionRecords = (
       closed: false,
       starting: false,
       failed: true,
+      streamWarning: false,
     };
     subscriptions.set(queryClient, subscription);
   }
   const current = subscription;
   current.listeners.add(onStatus);
   onStatus(current.error);
-  const report = (error: string | null): void => {
+  const report = (error: HostFeedbackFailure | null): void => {
     if (current.closed) return;
     current.error = error;
     for (const listener of current.listeners) listener(error);
@@ -48,8 +55,11 @@ export const observeWorkspaceSessionRecords = (
         if (current.closed) return;
         if ("__openducktorConnectionControl" in event) {
           if (event.kind === CONNECTION_STREAM_WARNING_EVENT_KIND) {
-            report(event.message ?? "Workspace Session updates are unavailable.");
+            // The shared stream reports only a lost host connection.
+            current.streamWarning = true;
+            report(HOST_UNREACHABLE_FAILURE);
           } else {
+            current.streamWarning = false;
             report(null);
             if (event.missedEvents) {
               void queryClient.invalidateQueries({
@@ -71,13 +81,14 @@ export const observeWorkspaceSessionRecords = (
         if (current.closed) stop();
         else {
           current.stop = stop;
-          report(null);
+          // A warning that arrived while subscribing stays until the reconnect.
+          if (!current.streamWarning) report(null);
         }
       })
       .catch((cause: unknown) => {
         current.starting = false;
         current.failed = true;
-        report(errorMessage(cause));
+        report(toHostFeedbackFailure(cause));
       });
   }
   return () => {

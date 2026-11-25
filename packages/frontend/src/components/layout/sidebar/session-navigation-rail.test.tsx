@@ -2,6 +2,7 @@ import { SessionNavigationTestProvider } from "./session-navigation.test-provide
 import { afterEach, beforeEach, describe, expect, mock, setSystemTime, test } from "bun:test";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
+import { HOST_CONNECTION_WAITING_MESSAGE } from "@openducktor/frontend-core/lib/host-failure";
 import { SessionNavigationRail } from "./session-navigation-rail";
 import {
   betaWorkspace,
@@ -28,6 +29,13 @@ describe("SessionNavigationRail", () => {
   // Rows read the minute clock, so the sample times are relative to a fixed system time.
   beforeEach(() => setSystemTime(new Date(NOW)));
   afterEach(() => setSystemTime());
+
+  test("shows a quiet waiting status instead of a problem button while the host is lost", () => {
+    renderRail(navigationModel({}, { waitingWorkspaceIds: ["alpha"] }));
+    expect(screen.getByRole("status", { name: HOST_CONNECTION_WAITING_MESSAGE })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Session list is incomplete/ })).toBeNull();
+  });
+
   test("keeps the three groups with counts and one icon per session", () => {
     renderRail(
       navigationModel({

@@ -231,10 +231,10 @@ const buildRuntimeStatusNotice = (
   runtimeStatus: BuildDiagnosticsPanelModelInput["runtimeStatus"],
 ): string | null => {
   if (runtimeStatus.streamError !== null) {
-    return `Live runtime updates stopped: ${runtimeStatus.streamError} These states can be out of date. Select Refresh to read them again.`;
+    return `Live runtime updates stopped: ${runtimeStatus.streamError.message} These states can be out of date. Select Refresh to read them again.`;
   }
   if (runtimeStatus.readError !== null) {
-    return `Runtime status could not be read: ${runtimeStatus.readError} These states can be out of date. Select Refresh to try again.`;
+    return `Runtime status could not be read: ${runtimeStatus.readError.message} These states can be out of date. Select Refresh to try again.`;
   }
   return null;
 };

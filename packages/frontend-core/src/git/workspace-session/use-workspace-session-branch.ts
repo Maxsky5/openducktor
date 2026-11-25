@@ -1,5 +1,6 @@
 import type { GitCurrentBranch } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { isConnectionFailure } from "../../lib/command-outcome";
 import { useCallback, useEffect, useEffectEvent, useRef } from "react";
 import type { AppVisibility } from "../../platform/app-visibility";
 import { invalidateWorkspaceFileQueries } from "../../queries/filesystem";
@@ -40,7 +41,7 @@ export function useWorkspaceSessionBranch({
     staleTime: Infinity,
     refetchOnMount: false,
   });
-  const { currentBranch, previewBranch, branchKey, branchReady } = branchState(
+  const { currentBranch, previewBranch, branchKey, branchReady, branchFailed } = branchState(
     isWorktree,
     rootBranch,
     worktreeBranch,
@@ -103,6 +104,7 @@ export function useWorkspaceSessionBranch({
     previewBranch,
     branchKey,
     branchReady,
+    branchFailed,
     refreshBranch,
     readBranch,
   };
@@ -111,6 +113,7 @@ export function useWorkspaceSessionBranch({
 type BranchRead = {
   data: GitCurrentBranch | undefined;
   isError: boolean;
+  error: Error | null;
   isFetching: boolean;
 };
 
@@ -123,13 +126,24 @@ function branchState(
   const read = isWorktree ? worktree : root;
   const cached = isWorktree ? (worktree.data ?? null) : (root.data ?? active);
   const cachedKey = branchIdentity(cached);
+  const failed = branchReadFailed(read, cached !== null);
   return {
-    currentBranch: read.isError ? null : cached,
-    previewBranch: read.isError || read.isFetching ? null : cachedKey,
-    branchKey: read.isError ? "unknown" : branchKeyFor(cached, isWorktree),
-    branchReady: cachedKey !== null || read.isError,
+    currentBranch: failed ? null : cached,
+    previewBranch: failed || read.isFetching ? null : cachedKey,
+    branchKey: failed ? "unknown" : branchKeyFor(cached, isWorktree),
+    branchReady: cachedKey !== null || failed,
+    branchFailed: failed,
   };
 }
+
+/**
+ * True when a branch read failed. A read that lost the host keeps the last checkout, so the Git
+ * reads keep their keys and data.
+ */
+export const branchReadFailed = (
+  read: { isError: boolean; error: Error | null },
+  hasCheckout: boolean,
+): boolean => read.isError && !(isConnectionFailure(read.error) && hasCheckout);
 
 /** The checkout part of the Git read keys. A commit or a rebase step keeps it. */
 function branchKeyFor(branch: GitCurrentBranch | null, isWorktree: boolean): string {

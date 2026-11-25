@@ -1,5 +1,6 @@
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { SessionNavigationTestProvider } from "./session-navigation.test-provider";
+import { HOST_CONNECTION_WAITING_MESSAGE } from "@openducktor/frontend-core/lib/host-failure";
 import {
   afterEach,
   beforeEach,
@@ -353,6 +354,13 @@ describe("SessionNavigationList", () => {
     fireEvent.click(within(problems).getByRole("button", { name: "Retry fairnest" }));
     expect(onRetry).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: /Chat kept/ })).toBeTruthy();
+  });
+
+  test("waits quietly for the host instead of claiming an empty list", () => {
+    renderList(navigationModel({}, { waitingWorkspaceIds: ["alpha"] }));
+    expect(screen.getByRole("status").textContent).toBe(HOST_CONNECTION_WAITING_MESSAGE);
+    expect(screen.queryByText(/No sessions yet/)).toBeNull();
+    expect(screen.queryByText("Session list is incomplete.")).toBeNull();
   });
 
   test("tells loading apart from an empty list", () => {

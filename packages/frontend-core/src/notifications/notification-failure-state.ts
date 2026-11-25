@@ -23,7 +23,12 @@ export const recordNotificationFailure = (
     return { ...state, settings: failure };
   }
   if (failure.channel === "coordination") {
-    if (state.coordination) return state;
+    // A reportable failure replaces a quiet wait for the host connection.
+    if (
+      state.coordination &&
+      (!isQuietCoordination(state.coordination) || isQuietCoordination(failure))
+    )
+      return state;
     return { ...state, coordination: failure };
   }
   if (failure.channel === "os") {
@@ -55,8 +60,13 @@ export const selectNotificationFailure = (
   state: NotificationFailureState,
 ): NotificationDispatchFailure | null => {
   const osError = state.os?.osStatus === "denied" ? null : state.os;
-  return state.settings ?? state.coordination ?? osError ?? state.sound ?? state.os;
+  const coordination =
+    state.coordination && isQuietCoordination(state.coordination) ? null : state.coordination;
+  return state.settings ?? coordination ?? osError ?? state.sound ?? state.os;
 };
+
+const isQuietCoordination = (failure: NotificationDispatchFailure): boolean =>
+  failure.waitsForHost === true;
 
 export const clearSoundNotificationFailure = (
   state: NotificationFailureState,

@@ -173,6 +173,7 @@ export const navigationModel = (
     isLoading: false,
     loadingWorkspaceIds: [],
     issues: [],
+    waitingWorkspaceIds: [],
     taskBlocks: [],
     ...overrides,
   };

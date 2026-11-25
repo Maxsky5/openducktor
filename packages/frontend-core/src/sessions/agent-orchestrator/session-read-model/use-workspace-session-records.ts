@@ -1,5 +1,6 @@
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import type { HostFeedbackFailure } from "../../../lib/host-failure";
 import { workspaceSessionListQueryOptions } from "../../../queries/workspace-sessions";
 import { observeWorkspaceSessionRecords } from "../../../queries/workspace-session-updates";
 
@@ -15,7 +16,7 @@ export const useWorkspaceSessionRecords = (
     },
     queryClient,
   );
-  const [subscriptionError, setSubscriptionError] = useState<string | null>(null);
+  const [subscriptionError, setSubscriptionError] = useState<HostFeedbackFailure | null>(null);
   useEffect(() => {
     if (workspaceId === null) return;
     return observeWorkspaceSessionRecords(queryClient, setSubscriptionError);

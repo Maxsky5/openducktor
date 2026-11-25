@@ -20,6 +20,7 @@ import {
   createWorkspaceActivityObserverStub,
 } from "../../test-support/shared-test-fixtures";
 import { useSessionNavigationModel } from "./use-session-navigation-model";
+import { HostUnreachableError } from "@openducktor/host-client";
 
 const alpha: SessionNavigationWorkspace = {
   workspaceId: "alpha",
@@ -234,6 +235,39 @@ test("reports a failed batch session read and reads it again on retry", async ()
   await waitFor(() => expect(result.current.model.entryCount).toBe(1));
   expect(result.current.model.issues).toEqual([]);
   expect(batchReads).toBe(2);
+});
+
+test("reports a workspace whose refresh lost the host, also when the list stays empty", async () => {
+  let reachable = true;
+  const connection = createTestClientConnection({
+    client: {
+      tasksList: async () => [],
+      workspaceSessionListActive: async () => {
+        if (!reachable) throw new HostUnreachableError(new TypeError("Failed to fetch"));
+        return [];
+      },
+    },
+  });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <ClientConnectionProvider connection={connection}>
+      <WorkspaceActivityContext.Provider value={createWorkspaceActivityObserverStub()}>
+        {children}
+      </WorkspaceActivityContext.Provider>
+    </ClientConnectionProvider>
+  );
+  const workspaces = [alpha];
+  const { result } = renderHook(() => useSessionNavigationModel(workspaces, "none"), { wrapper });
+  await waitFor(() => expect(result.current.model.isLoading).toBe(false));
+  const refetchChats = () =>
+    act(() => connection.queryClient.refetchQueries({ queryKey: workspaceSessionQueryKeys.all }));
+
+  reachable = false;
+  await refetchChats();
+  await waitFor(() => expect(result.current.model.waitingWorkspaceIds).toEqual(["alpha"]));
+
+  reachable = true;
+  await refetchChats();
+  await waitFor(() => expect(result.current.model.waitingWorkspaceIds).toEqual([]));
 });
 
 test("reads the tasks, chats, and task sessions of the refreshed workspaces again", async () => {

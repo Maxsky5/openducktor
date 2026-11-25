@@ -175,7 +175,8 @@ const createHarness = ({ taskSession = false, unbound = false, noSessions = fals
                       ]
                     : [],
                 ),
-                refreshError: taskReadError,
+                refreshError:
+                  taskReadError === null ? null : { kind: "other", message: taskReadError },
               },
               taskSessions: new Map(
                 entries.flatMap((entry) =>

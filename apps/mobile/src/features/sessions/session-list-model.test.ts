@@ -225,7 +225,10 @@ describe("buildSessionListItems", () => {
       [
         {
           ...sources({ id: "alpha" }),
-          workspaceSessions: { status: "error", message: "Host timed out." },
+          workspaceSessions: {
+            status: "error",
+            failure: { kind: "other", message: "Host timed out." },
+          },
         },
       ],
       "task",

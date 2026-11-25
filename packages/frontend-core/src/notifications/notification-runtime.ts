@@ -24,6 +24,7 @@ import {
   type NotificationDispatchFailure,
   type NotificationDispatchContext,
 } from "./notification-policy";
+import { isConnectionFailure } from "../lib/command-outcome";
 
 type CoordinationFailurePhase = "stream" | "publication" | "external_delivery";
 
@@ -113,13 +114,15 @@ export const createNotificationRuntime = ({
   ): void => {
     activeCoordinationFailures.add(phase);
     const message = cause instanceof Error ? cause.message : String(cause);
-    onFailure({
+    const failure: NotificationDispatchFailure = {
       channel: "coordination",
       kind: occurrence.kind,
       occurrenceId: occurrence.occurrenceId,
       repoPath: occurrence.repoPath,
       message: message.slice(0, 500),
-    });
+    };
+    if (isConnectionFailure(cause)) failure.waitsForHost = true;
+    onFailure(failure);
   };
 
   const recoverCoordinationFailure = (phase: CoordinationFailurePhase): void => {

@@ -11,6 +11,7 @@ import {
   createHostRuntimeStatusFixture,
 } from "../test-support/shared-test-fixtures";
 import { createHostRuntimeStatusOwner } from "./host-runtime-status-owner";
+import { HOST_UNREACHABLE_FAILURE } from "../lib/host-failure";
 
 const snapshot = (
   hostInstanceId: string,
@@ -159,7 +160,7 @@ describe("createHostRuntimeStatusOwner", () => {
       message: "Connection lost.",
     });
     expect(harness.owner.getConnection()).toMatchObject({
-      streamError: "Connection lost.",
+      streamError: HOST_UNREACHABLE_FAILURE,
       hasBaseline: false,
     });
 
@@ -253,7 +254,7 @@ describe("createHostRuntimeStatusOwner", () => {
     owner.start();
 
     await waitForExpectation(() => expect(owner.getConnection().hasBaseline).toBe(true));
-    expect(owner.getConnection().streamError).toBe("Lost.");
+    expect(owner.getConnection().streamError).toEqual(HOST_UNREACHABLE_FAILURE);
     owner.stop();
   });
 
@@ -318,7 +319,10 @@ describe("createHostRuntimeStatusOwner", () => {
     });
     harness.owner.start();
     await waitForExpectation(() =>
-      expect(harness.owner.getConnection().streamError).toBe("Event stream unavailable."),
+      expect(harness.owner.getConnection().streamError).toEqual({
+        kind: "other",
+        message: "Event stream unavailable.",
+      }),
     );
     harness.lastBaseline().resolve(snapshot("host-1", []));
     await waitForExpectation(() => expect(harness.owner.getConnection().hasBaseline).toBe(true));
@@ -398,7 +402,7 @@ describe("createHostRuntimeStatusOwner", () => {
         ).toBeNull();
         expect(harness.owner.getConnection()).toMatchObject({
           hasBaseline: false,
-          readError: expect.stringContaining("Timed out"),
+          readError: { kind: "other", message: expect.stringContaining("Timed out") },
         });
         const recovered = harness.owner.refresh();
         await waitForExpectation(() =>
@@ -466,7 +470,7 @@ describe("createHostRuntimeStatusOwner", () => {
         clock.expire();
         if (when === "with timeout") registered.resolve(stopLateSubscription);
         await waitForExpectation(() =>
-          expect(harness.owner.getConnection().streamError).toContain("Timed out"),
+          expect(harness.owner.getConnection().streamError?.message).toContain("Timed out"),
         );
         await waitForExpectation(() => expect(harness.runtimeStatus).toHaveBeenCalledTimes(2));
         harness.lastBaseline().resolve(snapshot("host-1", []));
@@ -616,7 +620,7 @@ describe("createHostRuntimeStatusOwner", () => {
     expect(received).toEqual([
       "runtime_impact_changed",
       "runtime_changed",
-      "stream:Lost.:1",
+      `stream:${HOST_UNREACHABLE_FAILURE.message}:1`,
       "stream:live:2",
     ]);
     harness.owner.stop();

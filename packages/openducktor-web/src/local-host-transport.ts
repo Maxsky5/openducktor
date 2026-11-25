@@ -1,3 +1,4 @@
+import { HostSessionRefusedError } from "@openducktor/frontend-core/connection/local-host-channel";
 import { createLocalHostConnection } from "@openducktor/frontend-core/connection/local-host-connection";
 import { openWebSocket } from "@openducktor/host-client/remote/socket";
 import { Effect } from "effect";
@@ -94,7 +95,8 @@ const startSessionAttempt = (): SessionAttempt => {
 };
 
 /**
- * Sets the app session cookie once for this page. Callers share one request. When every caller
+ * Sets the app session cookie for this page. Callers share one request. Each host channel
+ * connection asks for it again. When every caller
  * that waits with a signal stops waiting, and no caller without a signal waits, the request aborts
  * and a later call starts a new one.
  */
@@ -159,11 +161,21 @@ export const hostSocketUrl = (backendUrl: string, route: string): string => {
   return url.href;
 };
 
+/** The host answered, but it does not accept the app token of this page. */
+const isRefusedSession = (cause: unknown): boolean =>
+  cause instanceof WebHostRequestError && (cause.status === 401 || cause.status === 403);
+
 /** The host channel of this tab. The session cookie authorizes its socket. */
 export const localHostConnection = createLocalHostConnection({
   // The channel setup deadline aborts `signal`, so a stalled session request ends with it.
   prepare: async (signal) => {
-    await ensureLocalHostSession(signal);
+    // Each connection asks for the session again, so a restarted host can refuse this page.
+    sessionReady = false;
+    try {
+      await ensureLocalHostSession(signal);
+    } catch (cause) {
+      throw isRefusedSession(cause) ? new HostSessionRefusedError(cause) : cause;
+    }
     return {
       url: hostSocketUrl(await runWebBoundary(getBrowserBackendUrlEffect()), HOST_CHANNEL_PATH),
       token: null,

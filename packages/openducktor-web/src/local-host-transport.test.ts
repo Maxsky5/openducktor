@@ -514,6 +514,71 @@ describe("local host event subscriptions", () => {
   });
 });
 
+describe("local host connection state", () => {
+  test("waits through a lost channel and attaches a live observation again", async () => {
+    const reconnects = runReconnectsAtOnce();
+    let attaches = 0;
+    const setup = setupHost({
+      invoke: (command, args) => {
+        if (command !== "agent_session_live_attach") return { result: null };
+        attaches += 1;
+        // The first attach gets no reply, because the channel closes before it answers.
+        return attaches === 1 ? "none" : { result: liveSnapshot(String(args.repoPath), 10) };
+      },
+    });
+    const { localHostConnection: host } = await loadLocalHostTransport();
+    const listener = mock((_envelope: AgentSessionLiveEnvelope) => {});
+    const observing = host.observeAgentSessionLive({ repoPath: "/repo" }, listener);
+    try {
+      await waitFor(() => attaches === 1, "the first attach");
+      setup.host().closeAll();
+      // The lost attach waits quietly. The connection state shows the loss.
+      await waitFor(
+        () => host.connectionState.getSnapshot() === "reconnecting",
+        "the reconnecting state",
+      );
+      const stop = await observing;
+      await waitFor(() => listener.mock.calls.length === 1, "the snapshot after the reconnect");
+      expect(host.connectionState.getSnapshot()).toBe("connected");
+      expect(attaches).toBe(2);
+      expect(listener.mock.calls[0]?.[0]).toMatchObject({ type: "snapshot", sequence: 10 });
+      stop();
+    } finally {
+      reconnects.mockRestore();
+    }
+  });
+
+  test("requires a reload when a restarted host refuses the session of the page", async () => {
+    const reconnects = runReconnectsAtOnce();
+    const setup = setupHost();
+    const { localHostConnection: host } = await loadLocalHostTransport();
+    const listener = mock<RuntimeChangeListener>(() => {});
+    const stop = await host.subscribeRuntimeChanges(listener);
+    try {
+      // The restarted host has a new app token, so it refuses the token of this page.
+      globalThis.fetch = createFetchFixture(
+        mock(
+          async () =>
+            new Response(JSON.stringify({ error: "Invalid OpenDucktor web host app token." }), {
+              status: 403,
+              headers: { "content-type": "application/json" },
+            }),
+        ),
+      );
+      const sockets = setup.host().sockets.length;
+      setup.host().closeAll();
+      await waitFor(
+        () => host.connectionState.getSnapshot() === "reload-required",
+        "the reload-required state",
+      );
+      expect(setup.host().sockets.length).toBe(sockets);
+    } finally {
+      stop();
+      reconnects.mockRestore();
+    }
+  });
+});
+
 describe("local host task and status streams", () => {
   const frame: TaskEventStreamFrame = {
     type: "snapshot_required",

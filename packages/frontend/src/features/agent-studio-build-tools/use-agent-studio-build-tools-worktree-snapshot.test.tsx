@@ -6,10 +6,11 @@ import { useWorkspaceRepositorySettings } from "@/state/queries/use-workspace-re
 import { type QueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { toLocalChanges } from "@openducktor/frontend-core/test-support/local-changes-fixture";
 import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
-import type { HostClient } from "@openducktor/host-client";
+import { HostUnreachableError, type HostClient } from "@openducktor/host-client";
 import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
 import { createFeedbackFake } from "@openducktor/frontend-core/test-support/feedback-fake";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { HOST_CONNECTION_WAITING_MESSAGE } from "@openducktor/frontend-core/lib/host-failure";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
@@ -455,6 +456,86 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       });
       await harness.waitFor((state) => state.diffData.comparisonReference === "refs/heads/next");
       expect(readStatus.mock.calls.some((call) => call[1] === "refs/heads/next")).toBe(true);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("waits quietly when the task branch read lost the host", async () => {
+    const client = createGitClient({
+      client: {
+        gitGetCurrentBranch: async () => {
+          throw new HostUnreachableError(new TypeError("Failed to fetch"));
+        },
+        gitGetComparisonTarget: async () => ({
+          kind: "available",
+          reference: "refs/remotes/origin/release",
+        }),
+      },
+    });
+    const harness = createSharedHookHarness(
+      useAgentStudioBuildToolsWorktreeSnapshot,
+      createBaseArgs({
+        selectedView: createSelectedView({
+          selectedTask: createTaskCardFixture({
+            id: "task-24",
+            targetBranch: { branch: "release", remote: "origin" },
+          }),
+        }),
+      }),
+      { connection: createTestClientConnection({ client }) },
+    );
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) => state.comparison?.unavailableReason === HOST_CONNECTION_WAITING_MESSAGE,
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps the checkout and comparison when a later branch read lost the host", async () => {
+    let reachable = true;
+    const client = createGitClient({
+      client: {
+        gitGetCurrentBranch: async () => {
+          if (!reachable) throw new HostUnreachableError(new TypeError("Failed to fetch"));
+          return { name: "feature/task-24", detached: false };
+        },
+        gitGetComparisonTarget: async () => ({
+          kind: "available",
+          reference: "refs/remotes/origin/release",
+        }),
+      },
+    });
+    const harness = createSharedHookHarness(
+      useAgentStudioBuildToolsWorktreeSnapshot,
+      createBaseArgs({
+        selectedView: createSelectedView({
+          selectedTask: createTaskCardFixture({
+            id: "task-24",
+            targetBranch: { branch: "release", remote: "origin" },
+          }),
+        }),
+      }),
+      { connection: createTestClientConnection({ client }) },
+    );
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) => state.comparison?.resolvedTarget === "refs/remotes/origin/release",
+      );
+      reachable = false;
+      await harness.run(async (state) => {
+        await state.refreshWorktree("hard");
+      });
+      // The manual Refresh reports the lost host in its own state. The panel keeps its context.
+      await harness.waitFor((state) => state.manualRefresh.refreshError !== null);
+      const state = harness.getLatest();
+      expect(state.comparison?.resolvedTarget).toBe("refs/remotes/origin/release");
+      expect(state.comparison?.unavailableReason).toBeNull();
+      expect(state.diffData.branch).toBe("feature/task-24");
     } finally {
       await harness.unmount();
     }

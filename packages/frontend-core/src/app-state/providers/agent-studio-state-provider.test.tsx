@@ -10,6 +10,7 @@ import { QueryClient, useQuery } from "@tanstack/react-query";
 import { type PropsWithChildren, useSyncExternalStore } from "react";
 import type { ClientConnection } from "../../connection/client-connection";
 import { ClientConnectionProvider } from "../../connection/client-connection-react";
+import { HostUnreachableError } from "@openducktor/host-client";
 import { createOpenCodeAgentEngineTestAdapter } from "../../sessions/agent-orchestrator/handlers/opencode-agent-engine.test-support";
 import { useSelectedSessionHistoryLoad } from "../../sessions/agent-orchestrator/history/use-selected-session-history-load";
 import { repoTaskDataQueryOptions } from "../../queries/tasks";
@@ -310,5 +311,45 @@ test("an unresolved live-stream failure wins over a workspace task-list failure"
   } finally {
     await state.unmount();
     client.clear();
+  }
+});
+
+test("waits quietly when the workspace task list lost the host", async () => {
+  const connection = createTestClientConnection({
+    host: createTestHostConnection({
+      observeAgentSessionLive: async ({ repoPath }, listener) => {
+        listener(createLiveSnapshotEnvelope({ repoPath, sequence: 1, sessions: [live(repoPath)] }));
+        return () => {};
+      },
+      client: {
+        tasksList: async () => {
+          throw new HostUnreachableError(new TypeError("Failed to fetch"));
+        },
+        workspaceSessionListActive: async () => [record("/a")],
+        agentSessionLiveAttach: async ({ repoPath }) =>
+          createLiveSnapshotEnvelope({ repoPath, sequence: 1, sessions: [live(repoPath)] }),
+        workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+      },
+    }),
+  });
+  const scope: WorkspaceScopeContextValue = {
+    workspaces: [workspaceA],
+    activeWorkspace: workspaceA,
+  };
+  const state = createHookHarness(() => useAgentSessionReadModelStateContext(), undefined, {
+    wrapper: createProviders(connection, () => scope),
+  });
+  try {
+    await state.mount();
+    await state.waitFor(
+      ({ sessionReadModelLoadState }) => sessionReadModelLoadState.kind === "failed",
+    );
+    expect(state.getLatest().sessionReadModelLoadState).toMatchObject({
+      source: "task-records",
+      failureKind: "host-unreachable",
+    });
+  } finally {
+    await state.unmount();
+    connection.queryClient.clear();
   }
 });

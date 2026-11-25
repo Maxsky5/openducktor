@@ -1,5 +1,6 @@
 import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
 import { errorMessage } from "../lib/errors";
+import { failureTextOf, type HostFeedbackFailure, sameHostFailure } from "../lib/host-failure";
 import {
   applyWorkspaceActivityEnvelope,
   emptyWorkspaceActivityProjection,
@@ -47,7 +48,7 @@ export type WorkspaceActivityArchivedSessionsPort = {
 export type WorkspaceActivityObserver = {
   syncWorkspaces(workspaces: readonly WorkspaceActivityWorkspace[]): void;
   /** Report the health of the shared workspace session record stream. */
-  setSessionRecordsError(message: string | null): void;
+  setSessionRecordsError(failure: HostFeedbackFailure | null): void;
   subscribe(listener: () => void): () => void;
   getWorkspaceActivity(workspaceId: string): WorkspaceActivityState;
   /** Live facts for session navigation. The object stays the same until an observed change. */
@@ -61,7 +62,7 @@ export type WorkspaceSessionLiveSnapshot = {
   /** Per-root live facts of each observed workspace. */
   statesByWorkspaceId: ReadonlyMap<string, WorkspaceSessionLiveState>;
   /** Health of the shared workspace session record stream. */
-  sessionRecordsError: string | null;
+  sessionRecordsError: HostFeedbackFailure | null;
 };
 
 type Observation = {
@@ -90,7 +91,7 @@ export const createWorkspaceActivityObserver = ({
   const observations = new Map<string, Observation>();
   const listeners = new Set<() => void>();
   const cache = new Map<string, { version: number; state: WorkspaceActivityState }>();
-  let sessionRecordsError: string | null = null;
+  let sessionRecordsError: HostFeedbackFailure | null = null;
   let stopArchivedSubscription: (() => void) | null = null;
   let version = 0;
   let liveSnapshot: { version: number; value: WorkspaceSessionLiveSnapshot } | null = null;
@@ -111,7 +112,7 @@ export const createWorkspaceActivityObserver = ({
     const reason =
       (archived.status === "error" ? archived.reason : null) ??
       observation.projection.unavailableReason ??
-      sessionRecordsError;
+      failureTextOf(sessionRecordsError);
     if (reason !== null) {
       return { kind: "unavailable", reason };
     }
@@ -221,11 +222,9 @@ export const createWorkspaceActivityObserver = ({
         emit();
       }
     },
-    setSessionRecordsError(message: string | null): void {
-      if (sessionRecordsError === message) {
-        return;
-      }
-      sessionRecordsError = message;
+    setSessionRecordsError(failure: HostFeedbackFailure | null): void {
+      if (sameHostFailure(sessionRecordsError, failure)) return;
+      sessionRecordsError = failure;
       emit();
     },
     subscribe(listener: () => void): () => void {

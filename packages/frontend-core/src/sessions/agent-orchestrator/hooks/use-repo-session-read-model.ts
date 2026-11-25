@@ -42,6 +42,7 @@ import {
   type AgentSessionReadModelLoadState,
   currentAgentSessionReadModelLoadState,
   failedAgentSessionReadModelLoadState,
+  failedLoadStateFor,
   failedTaskRecordsLoadState,
   loadingAgentSessionReadModelLoadState,
   readyAgentSessionReadModelLoadState,
@@ -79,6 +80,7 @@ import {
   reconcileWorkspaceSessionTargetFaults,
   workspaceSessionTargetFaultKey,
 } from "../session-read-model/workspace-session-records";
+import { type HostFeedbackFailure, toHostFeedbackFailure } from "../../../lib/host-failure";
 
 export type AgentSessionLiveFrontendPort = Pick<HostClient, "agentSessionLiveReplyApproval"> & {
   observeAgentSessionLive: (
@@ -110,7 +112,7 @@ type UseRepoSessionReadModelArgs = {
 
 export type RepoSessionReadModelState = {
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
-  workspaceSessionRecordsError: string | null;
+  workspaceSessionRecordsError: HostFeedbackFailure | null;
   reloadSessionReadModel: () => void;
   getSessionFault: (session: AgentSessionIdentity | null) => AgentSessionTransientFault | null;
 };
@@ -129,7 +131,7 @@ type TaskRecordApplyState =
       workspaceId: string;
       taskIdsKey: string;
       failedAt: "load" | "apply";
-      message: string;
+      failure: HostFeedbackFailure;
     };
 
 type RecordRetryKey = {
@@ -141,7 +143,7 @@ type RecordRetryKey = {
 };
 
 type RecordRetryResult = RecordRetryKey &
-  ({ kind: "loaded" } | { kind: "failed"; message: string });
+  ({ kind: "loaded" } | { kind: "failed"; failure: HostFeedbackFailure });
 
 const faultMessage = (envelope: Extract<AgentSessionLiveEnvelope, { type: "fault" }>): string => {
   if (
@@ -346,15 +348,18 @@ export const useRepoSessionReadModel = ({
     },
     [commitSessionCollection],
   );
-  const publishTaskRecordFailure = useCallback((repoPath: string, message: string): void => {
-    setSessionReadModelLoadState(
-      failedTaskRecordsLoadState({
-        workspaceRepoPath: repoPath,
-        message,
-        liveStreamFailure: liveStreamFailureOf(liveStreamFailureRef, repoPath),
-      }),
-    );
-  }, []);
+  const publishTaskRecordFailure = useCallback(
+    (repoPath: string, failure: HostFeedbackFailure): void => {
+      setSessionReadModelLoadState(
+        failedTaskRecordsLoadState({
+          workspaceRepoPath: repoPath,
+          failure,
+          liveStreamFailure: liveStreamFailureOf(liveStreamFailureRef, repoPath),
+        }),
+      );
+    },
+    [],
+  );
   const failTaskRecordApply = useCallback(
     ({
       repoPath,
@@ -367,16 +372,19 @@ export const useRepoSessionReadModel = ({
       taskIdsKey: string;
       cause: unknown;
     }): void => {
-      const message = `Failed to reconcile task session records for repo '${repoPath}': ${errorMessage(cause)}`;
+      const failure: HostFeedbackFailure = {
+        kind: "other",
+        message: `Failed to reconcile task session records for repo '${repoPath}': ${errorMessage(cause)}`,
+      };
       taskRecordApplyRef.current = {
         kind: "failed",
         workspaceId: recordsWorkspaceId,
         repoPath,
         taskIdsKey,
         failedAt: "apply",
-        message,
+        failure,
       };
-      publishTaskRecordFailure(repoPath, message);
+      publishTaskRecordFailure(repoPath, failure);
     },
     [publishTaskRecordFailure],
   );
@@ -434,8 +442,11 @@ export const useRepoSessionReadModel = ({
       retryIdRef.current === retryId &&
       currentWorkspaceRepoPathRef.current === repoPath &&
       repoEpochRef.current === repoEpoch;
-    const retryFailureMessage = (cause: unknown): string =>
-      `Failed to retry task session records for repo '${repoPath}': ${errorMessage(cause)}`;
+    const retryFailure = (cause: unknown): HostFeedbackFailure =>
+      toHostFeedbackFailure(
+        cause,
+        (message) => `Failed to retry task session records for repo '${repoPath}': ${message}`,
+      );
     // While the live stream is down, its failure stays public during the retry. A successful
     // retry restarts the observation, which opens the loading window.
     if (!liveStreamFailureOf(liveStreamFailureRef, repoPath)) {
@@ -476,7 +487,7 @@ export const useRepoSessionReadModel = ({
           setRecordRetryResult({
             kind: "failed",
             ...retryKey,
-            message: retryFailureMessage(cause),
+            failure: retryFailure(cause),
           });
         },
       );
@@ -500,7 +511,7 @@ export const useRepoSessionReadModel = ({
         if (!isCurrentRetry()) {
           return;
         }
-        publishTaskRecordFailure(repoPath, retryFailureMessage(cause));
+        publishTaskRecordFailure(repoPath, retryFailure(cause));
       },
     );
   }, [
@@ -579,18 +590,21 @@ export const useRepoSessionReadModel = ({
       return;
     }
     if (taskRecords.kind === "failed") {
-      const message = `Failed to load task session records for repo '${workspaceRepoPath}': ${errorMessage(
+      // A read that lost the host waits quietly. The reconnect reads it again.
+      const failure = toHostFeedbackFailure(
         taskRecords.error,
-      )}`;
+        (message) =>
+          `Failed to load task session records for repo '${workspaceRepoPath}': ${message}`,
+      );
       taskRecordApplyRef.current = {
         kind: "failed",
         repoPath: workspaceRepoPath,
         workspaceId,
         taskIdsKey: readCurrentTaskIdsKey(),
         failedAt: "load",
-        message,
+        failure,
       };
-      publishTaskRecordFailure(workspaceRepoPath, message);
+      publishTaskRecordFailure(workspaceRepoPath, failure);
       return;
     }
 
@@ -677,9 +691,9 @@ export const useRepoSessionReadModel = ({
         workspaceId: recordRetryResult.workspaceId,
         taskIdsKey: recordRetryResult.taskIdsKey,
         failedAt: "apply",
-        message: recordRetryResult.message,
+        failure: recordRetryResult.failure,
       };
-      publishTaskRecordFailure(recordRetryResult.repoPath, recordRetryResult.message);
+      publishTaskRecordFailure(recordRetryResult.repoPath, recordRetryResult.failure);
       return;
     }
     if (taskRecords.kind === "loading") {
@@ -917,7 +931,7 @@ export const useRepoSessionReadModel = ({
         appliedRecords.taskIdsKey === readCurrentTaskIdsKey()
       ) {
         setSessionReadModelLoadState(
-          failedAgentSessionReadModelLoadState(repoPath, appliedRecords.message, "task-records"),
+          failedLoadStateFor(repoPath, "task-records", appliedRecords.failure),
         );
         return;
       }
@@ -1208,7 +1222,10 @@ export const useRepoSessionReadModel = ({
       workspaceSessionRecordsError:
         workspaceId !== null && workspaceRepoPath
           ? workspaceRecords.records.error
-            ? `Failed to load workspace session records: ${errorMessage(workspaceRecords.records.error)}`
+            ? toHostFeedbackFailure(
+                workspaceRecords.records.error,
+                (message) => `Failed to load workspace session records: ${message}`,
+              )
             : workspaceRecords.subscriptionError
           : null,
       reloadSessionReadModel,

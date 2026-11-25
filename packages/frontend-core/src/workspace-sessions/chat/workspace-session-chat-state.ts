@@ -61,7 +61,7 @@ export const canInteractWithWorkspaceSession = ({
 }: {
   runtimeInteractionEnabled: boolean;
   observationReady: boolean;
-  recordsError: string | null;
+  recordsError: boolean;
   targetFault: AgentSessionTransientFault | null;
 }): boolean => runtimeInteractionEnabled && observationReady && !recordsError && !targetFault;
 

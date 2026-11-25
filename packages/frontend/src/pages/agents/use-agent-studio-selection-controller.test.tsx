@@ -224,7 +224,7 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
           <AgentSessionReadModelStateContext.Provider
             value={{
               sessionReadModelLoadState: sessionReadModelLoadStateRef.current,
-              reloadSessionReadModel: () => undefined,
+              reloadSessionReadModel: async () => {},
               getSessionFault: getSessionFaultRef.current,
               workspaceSessionRecordsError: null,
             }}

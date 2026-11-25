@@ -1,6 +1,7 @@
 import { useMinuteClockLabel } from "@openducktor/frontend-core/lib/relative-time";
 import { SessionPositionHint } from "@/features/shortcuts/position-hint";
 import { ChevronDown, LoaderCircle } from "lucide-react";
+import { HOST_CONNECTION_WAITING_MESSAGE } from "@openducktor/frontend-core/lib/host-failure";
 import { memo, type ReactElement, useId } from "react";
 import { Badge } from "@/components/ui/badge";
 import { statusBadgeClassName } from "@/lib/task-status-presentation";
@@ -94,7 +95,16 @@ export function SessionNavigationList({
             {model.entryCount === 0 ? "Loading sessions…" : "Loading more sessions…"}
           </p>
         ) : null}
-        {!model.isLoading && model.issues.length === 0 && model.entryCount === 0 ? (
+        {model.waitingWorkspaceIds.length > 0 ? (
+          <p className="px-1 text-xs text-sidebar-muted-foreground" role="status">
+            {HOST_CONNECTION_WAITING_MESSAGE}
+          </p>
+        ) : null}
+        {/* Only sources that answered can confirm an empty list. */}
+        {!model.isLoading &&
+        model.issues.length === 0 &&
+        model.waitingWorkspaceIds.length === 0 &&
+        model.entryCount === 0 ? (
           <p className="px-1 text-sm text-sidebar-muted-foreground">
             No sessions yet. Start with New task or New session.
           </p>

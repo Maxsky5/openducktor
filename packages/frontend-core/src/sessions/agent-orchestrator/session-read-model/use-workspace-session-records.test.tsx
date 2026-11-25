@@ -11,6 +11,7 @@ import {
   createTestHostConnection,
 } from "../../../test-support/test-client-connection";
 import { useWorkspaceSessionRecords } from "./use-workspace-session-records";
+import { HOST_UNREACHABLE_FAILURE } from "../../../lib/host-failure";
 
 const record = (name: string): WorkspaceSession => ({
   id: "session-1",
@@ -66,6 +67,42 @@ describe("Workspace Session metadata subscription", () => {
     expect(stops).toBe(1);
   });
 
+  test("keeps a stream warning that registration delivered until the stream recovers", async () => {
+    const client = new QueryClient();
+    let emit!: WorkspaceSessionUpdateListener;
+    createTestClientConnection({
+      queryClient: client,
+      host: createTestHostConnection({
+        client: { workspaceSessionListActive: async () => [] },
+        subscribeWorkspaceSessionUpdates: async (listener) => {
+          emit = listener;
+          // A subscriber that joins during an outage gets the current warning first.
+          listener({ __openducktorConnectionControl: true, kind: "stream-warning" });
+          return () => {};
+        },
+      }),
+    });
+    const harness = createHookHarness(() => useWorkspaceSessionRecords("A", client, 0), undefined);
+    try {
+      await harness.mount();
+      expect(harness.getLatest().subscriptionError).toEqual(HOST_UNREACHABLE_FAILURE);
+
+      await harness.run(() =>
+        emit({
+          __openducktorConnectionControl: true,
+          kind: "reconnected",
+          missedEvents: false,
+          hostChanged: false,
+          missedEventNames: [],
+        }),
+      );
+      expect(harness.getLatest().subscriptionError).toBeNull();
+    } finally {
+      await harness.unmount();
+      client.clear();
+    }
+  });
+
   test("clears an opening failure when Retry establishes a subscription without an initial event", async () => {
     const client = new QueryClient();
     let attempts = 0;
@@ -86,7 +123,10 @@ describe("Workspace Session metadata subscription", () => {
     );
     try {
       await harness.mount();
-      expect(harness.getLatest().subscriptionError).toBe("Subscription unavailable");
+      expect(harness.getLatest().subscriptionError).toEqual({
+        kind: "other",
+        message: "Subscription unavailable",
+      });
       await harness.update(1);
       expect(attempts).toBe(2);
       expect(harness.getLatest().subscriptionError).toBeNull();
@@ -163,7 +203,7 @@ describe("Workspace Session metadata subscription", () => {
           message: "Connection lost",
         }),
       );
-      expect(harness.getLatest().subscriptionError).toBe("Connection lost");
+      expect(harness.getLatest().subscriptionError).toEqual(HOST_UNREACHABLE_FAILURE);
       expect(harness.getLatest().records.data?.[0]?.manualTitle).toBe("read-1");
       // A complete replay already delivered every update.
       await harness.run(() =>

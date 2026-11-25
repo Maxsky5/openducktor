@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { HostUnreachableError } from "@openducktor/host-client";
 import { RemoteConnectionError, RemoteReplyTooLargeError } from "@openducktor/host-client/remote";
 import { isConnectionFailure, isOutcomeUnknown } from "./command-outcome";
 
@@ -28,6 +29,9 @@ describe("isConnectionFailure", () => {
       nextAction: "Reconnect.",
     });
     expect(isConnectionFailure(lost)).toBe(true);
+    expect(isConnectionFailure(new HostUnreachableError(new TypeError("Failed to fetch")))).toBe(
+      true,
+    );
     expect(isConnectionFailure(new RemoteReplyTooLargeError(32 * 1024 * 1024))).toBe(false);
     expect(isConnectionFailure(new Error("Task not found."))).toBe(false);
   });

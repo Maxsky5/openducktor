@@ -6,6 +6,7 @@ import {
   createMemoryClientStorage,
   createPrefixedClientStorage,
 } from "@openducktor/frontend-core/platform/client-storage";
+import { refetchHostQueriesOnRecovery } from "@openducktor/frontend-core/recovery/state-recovery";
 import type { QueryClient } from "@tanstack/react-query";
 import { createBrowserAttachmentStager } from "./local-attachment-files";
 import type { HostTarget } from "./host-location";
@@ -20,13 +21,20 @@ import { sonnerFeedback } from "./sonner-feedback";
  * A remote host keeps its drafts and recent items in page memory, so they cannot replace the
  * local-host data of this device. The reload clears them, so disposal does not save them. Its UI
  * layout stays on this device under its own key prefix for each host.
+ *
+ * A local host reads its queries again after its connection recovers. A remote host does this in
+ * its own synchronization.
  */
 export const createShellConnection = (
   bridge: ShellBridge,
   queryClient: QueryClient,
   target: Exclude<HostTarget, { kind: "picker" }>,
-): ClientConnection =>
-  createClientConnection({
+): ClientConnection => {
+  const stopRecovery =
+    target.kind === "local"
+      ? refetchHostQueriesOnRecovery(bridge.connectionState, queryClient)
+      : () => {};
+  return createClientConnection({
     host: bridge,
     queryClient,
     storage: target.kind === "remote" ? createMemoryClientStorage() : localStorage,
@@ -37,8 +45,12 @@ export const createShellConnection = (
     saveDraftsOnDispose: target.kind === "local",
     feedback: sonnerFeedback,
     stageAttachment: createBrowserAttachmentStager(bridge.client),
-    ...(bridge.dispose && { releaseHost: bridge.dispose }),
+    releaseHost: async () => {
+      stopRecovery();
+      await bridge.dispose?.();
+    },
   });
+};
 
 const remoteHostLayoutPrefix = (endpoint: string): string =>
   `${remoteHostStorageKey("remote-host", endpoint)}:`;

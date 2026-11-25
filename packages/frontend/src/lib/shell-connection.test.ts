@@ -3,9 +3,10 @@ import { describe, expect, mock, spyOn, test } from "bun:test";
 import { connectionHost } from "@openducktor/frontend-core/connection/client-connection";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
+import { createHostConnectionStore } from "@openducktor/frontend-core/connection/host-connection-state";
 import { repoTaskDataQueryOptions } from "@openducktor/frontend-core/queries/tasks";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import { useQuery } from "@tanstack/react-query";
+import { QueryObserver, useQuery } from "@tanstack/react-query";
 import { render, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
@@ -72,6 +73,37 @@ describe("createShellConnection", () => {
       localStorage.clear();
     }
   });
+
+  test.each([
+    { target: { kind: "local" } as const, reads: 2 },
+    { target: REMOTE_A, reads: 1 },
+  ])(
+    "a $target.kind host reads $reads time(s) after its connection recovers",
+    async ({ target, reads }) => {
+      const connectionState = createHostConnectionStore();
+      const queryClient = createClientQueryClient();
+      const connection = createShellConnection(
+        createShellBridgeFixture({ bridge: { connectionState } }),
+        queryClient,
+        target,
+      );
+      let count = 0;
+      const stop = new QueryObserver(queryClient, {
+        queryKey: ["host-read"],
+        queryFn: async () => ++count,
+      }).subscribe(() => {});
+      try {
+        await queryClient.refetchQueries();
+        connectionState.setState("reconnecting");
+        connectionState.setState("connected");
+        await queryClient.getQueryCache().find({ queryKey: ["host-read"] })?.promise;
+        expect(count).toBe(reads);
+      } finally {
+        stop();
+        await connection.dispose();
+      }
+    },
+  );
 
   test("rejects a device file that is not a browser file", async () => {
     const connection = createShellConnection(

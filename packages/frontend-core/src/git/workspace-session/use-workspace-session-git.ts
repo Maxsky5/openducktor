@@ -8,7 +8,7 @@ import {
 import { useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { useHostClient } from "../../connection/client-connection-react";
-import { errorMessage } from "../../lib/errors";
+import { hostFailureText } from "../../lib/host-failure";
 import type { AppVisibility } from "../../platform/app-visibility";
 import { repoConfigQueryOptions } from "../../queries/workspace";
 import { updateWorkspaceSessionQueries } from "../../queries/workspace-sessions";
@@ -77,7 +77,8 @@ export function useWorkspaceSessionGit({
     workingDirectory,
     isWorktree,
     hasRootBranch: branch.rootBranch.data !== undefined || activeBranch !== null,
-    branchError: branchRead.isError ? errorMessage(branchRead.error) : null,
+    // Without a known checkout, a read that lost the host shows the quiet waiting text.
+    branchError: branch.branchFailed ? hostFailureText(branchRead.error) : null,
     target,
     savedTarget: record.targetBranch,
     targetError,
@@ -94,7 +95,10 @@ function defaultTargetError(
 ): string | null {
   if (savedTarget) return null;
   if (repoConfig.isError)
-    return `Could not read the default target branch: ${errorMessage(repoConfig.error)}`;
+    return hostFailureText(
+      repoConfig.error,
+      (message) => `Could not read the default target branch: ${message}`,
+    );
   if (repoConfig.isSuccess && !target)
     return "The repository default target branch is Tracked upstream, which a worktree session cannot use. Choose a target branch.";
   return null;

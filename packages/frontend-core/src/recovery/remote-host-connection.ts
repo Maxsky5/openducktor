@@ -11,11 +11,13 @@ import {
 } from "@openducktor/contracts";
 import {
   createAgentSessionLiveAttachment,
+  HostUnreachableError,
   liveSessionStreamEventName,
 } from "@openducktor/host-client";
 import {
   createRemoteHostClient,
   isRemotePairingFailure,
+  RemoteConnectionError,
   type RemoteHostClient,
   type RemoteSynchronizationContext,
   type RemoteTransport,
@@ -30,6 +32,7 @@ import {
 } from "../connection/host-connection";
 import { connectionStreamWarningEvent } from "./connection-control-events";
 import { createNotificationFrameRelay } from "./notification-frame-relay";
+import { remoteConnectionState } from "./remote-connection-state";
 import { synchronizeConnectionState } from "./state-recovery";
 import { createRemoteTaskSubscriptions, waitForRemoteAdmission } from "./task-subscriptions";
 
@@ -196,7 +199,12 @@ export const createRemoteHostConnection = ({
     // pause of the same host keeps it.
     if (isRemotePairingFailure(state.failure?.code)) void clearUsageReports(queryClient);
     if (state.status === "disconnected" || state.status === "failed" || state.status === "idle") {
-      notifications.fail(new Error(state.failure?.message ?? "The remote connection was lost."));
+      // A typed cause lets notification coordination wait quietly for a lost connection.
+      notifications.fail(
+        state.failure
+          ? new RemoteConnectionError(state.failure)
+          : new HostUnreachableError(new Error("The remote connection was lost.")),
+      );
       taskOwners.invalidate();
       for (const owner of live) owner.attachment.suspend();
       for (const listener of controls)
@@ -229,6 +237,7 @@ export const createRemoteHostConnection = ({
   });
   return {
     client: remote.client,
+    connectionState: remoteConnectionState(remote),
     remote,
     waitForAdmission,
     subscribeRecovery: (recover) => {

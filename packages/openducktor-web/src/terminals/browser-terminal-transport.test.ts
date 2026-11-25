@@ -3,6 +3,7 @@ import type { TerminalFailure } from "@openducktor/contracts";
 import { configureBrowserRuntimeConfig } from "../browser-config";
 import { createFetchFixture } from "../test-support";
 import { createBrowserTerminalBridge } from "./browser-terminal-transport";
+import { HostUnreachableError } from "@openducktor/host-client";
 
 class FakeWebSocket extends EventTarget implements WebSocket {
   static readonly CONNECTING = 0;
@@ -154,7 +155,11 @@ describe("createBrowserTerminalBridge", () => {
     expect(states).toEqual(["connected", "disconnected"]);
   });
 
-  test("keeps a normal WebSocket close silent", async () => {
+  test.each([
+    { code: 1000, reason: "Terminal renderer disconnected." },
+    // A lost connection closes without a close frame. The connection indicator reports it.
+    { code: 1006, reason: "" },
+  ])("keeps a WebSocket close with code $code silent", async ({ code, reason }) => {
     const failures: TerminalFailure[] = [];
     const bridge = createBrowserTerminalBridge();
     const connecting = bridge.connect(
@@ -166,8 +171,21 @@ describe("createBrowserTerminalBridge", () => {
     socket.emitOpen();
     await connecting;
 
-    socket.emitClose(1000, "Terminal renderer disconnected.");
+    socket.emitClose(code, reason);
 
     expect(failures).toEqual([]);
+  });
+
+  test("rejects a socket that cannot reach the host as unreachable", async () => {
+    const bridge = createBrowserTerminalBridge();
+    const connecting = bridge.connect(
+      () => undefined,
+      () => undefined,
+      () => undefined,
+    );
+    const socket = await waitForSocket();
+    socket.dispatchEvent(new Event("error"));
+
+    await expect(connecting).rejects.toBeInstanceOf(HostUnreachableError);
   });
 });

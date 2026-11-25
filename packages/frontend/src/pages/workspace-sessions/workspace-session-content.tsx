@@ -17,6 +17,7 @@ import {
 import { useAgentSessionReadModelState, useWorkspaceBranchState } from "@/state/app-state-provider";
 import { windowReturnVisibility } from "@/lib/window-return-visibility";
 import type { ActiveWorkspace } from "@/types/state-slices";
+import { agentSessionReadModelFailure } from "@openducktor/frontend-core/types/agent-session-read-model";
 import type { WorkspaceConflictChatActions } from "./use-workspace-conflict-chat-actions";
 import {
   requestWorkspaceGitConflictAssistance,
@@ -31,6 +32,10 @@ import {
   WorkspaceSessionFilePreview,
   type WorkspaceSessionFilePreviewHandle,
 } from "./workspace-session-file-preview";
+import {
+  reportedFailureMessage,
+  selectHostFailure,
+} from "@openducktor/frontend-core/lib/host-failure";
 
 const TOOLS_PANEL_SPLIT_IDS: SessionPanelSplitIds = {
   group: "workspace-session-tools-layout",
@@ -237,10 +242,13 @@ export function WorkspaceSessionContent({
 export function WorkspaceSessionReadModelNotice(): ReactElement | null {
   const { sessionReadModelLoadState, workspaceSessionRecordsError, reloadSessionReadModel } =
     useAgentSessionReadModelState();
-  const error =
-    sessionReadModelLoadState.kind === "failed"
-      ? sessionReadModelLoadState.message
-      : workspaceSessionRecordsError;
+  // A quiet wait for the host must not hide a failure with another cause.
+  const error = reportedFailureMessage(
+    selectHostFailure(
+      agentSessionReadModelFailure(sessionReadModelLoadState),
+      workspaceSessionRecordsError,
+    ),
+  );
   if (!error) return null;
   return (
     <div role="alert" className="flex items-center gap-3 border-b border-border p-3 text-sm">

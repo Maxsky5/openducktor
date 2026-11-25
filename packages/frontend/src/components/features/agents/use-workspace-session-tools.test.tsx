@@ -1,4 +1,8 @@
-import type { HostClient } from "@openducktor/host-client";
+import {
+  type HostClient,
+  HOST_UNREACHABLE_MESSAGE,
+  HostUnreachableError,
+} from "@openducktor/host-client";
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import type {
   GitComparisonTarget,
@@ -17,7 +21,11 @@ import { SettingsModalProvider } from "@/components/features/settings/settings-m
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { ClientFeedback } from "@openducktor/frontend-core/platform/client-feedback";
 import { createFeedbackFake } from "@openducktor/frontend-core/test-support/feedback-fake";
-import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import {
+  createTestClientConnection,
+  createTestHostConnection,
+} from "@openducktor/frontend-core/test-support/test-client-connection";
+import { createHostConnectionStore } from "@openducktor/frontend-core/connection/host-connection-state";
 import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
@@ -1373,6 +1381,108 @@ test("returning to the app rechecks the target and file tree", async () => {
   } finally {
     view.unmount();
     queryClient.clear();
+  }
+});
+
+test("a focus refresh that lost the host keeps the panel without an error", async () => {
+  const report = spyOn(toast, "error").mockImplementation(() => "toast-id");
+  let reachable = true;
+  let lostReads = 0;
+  const unreachable = () => {
+    lostReads += 1;
+    return new HostUnreachableError(new TypeError("Failed to fetch"));
+  };
+  const toolsConnection = createToolsConnection(
+    withLocalChanges({
+      gitGetComparisonTarget: async () => {
+        if (!reachable) throw unreachable();
+        return { kind: "available", reference: targetReference };
+      },
+      gitFetchRemote: async () => {
+        if (!reachable) throw unreachable();
+        return { outcome: "skipped_no_remote", output: "" };
+      },
+      gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
+        if (!reachable) throw unreachable();
+        return worktreeStatus(targetBranch);
+      },
+      gitGetBranches: async () => [],
+    }),
+  );
+  const queryClient = toolsConnection.queryClient;
+  const view = render(
+    <ClientConnectionProvider connection={toolsConnection}>
+      <ThemeProvider>
+        <PanelHarness />
+      </ThemeProvider>
+    </ClientConnectionProvider>,
+  );
+  try {
+    await waitForTargetScope();
+    reachable = false;
+    await act(async () => {
+      globalThis.dispatchEvent(new Event("focus"));
+    });
+    await waitFor(() => expect(lostReads).toBeGreaterThan(0));
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    // The connection indicator explains the lost host.
+    expect(screen.queryByText(HOST_UNREACHABLE_MESSAGE, { exact: false })).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(report).not.toHaveBeenCalled();
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    report.mockRestore();
+  }
+});
+
+test("a manual refresh reports a lost host with the shared message, and the reconnect clears it", async () => {
+  const report = spyOn(toast, "error").mockImplementation(() => "toast-id");
+  const connectionState = createHostConnectionStore();
+  const toolsConnection = createTestClientConnection({
+    host: createTestHostConnection({
+      connectionState,
+      client: withLocalChanges({
+        gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
+        gitFetchRemote: async () => {
+          throw new HostUnreachableError(new TypeError("Failed to fetch"));
+        },
+        gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) =>
+          worktreeStatus(targetBranch),
+        gitGetBranches: async () => [],
+      }),
+    }),
+  });
+  toolsConnection.queryClient.setQueryData(
+    settingsSnapshotQueryOptions().queryKey,
+    createSettingsSnapshotFixture(),
+  );
+  const queryClient = toolsConnection.queryClient;
+  const view = render(
+    <ClientConnectionProvider connection={toolsConnection}>
+      <ThemeProvider>
+        <PanelHarness />
+      </ThemeProvider>
+    </ClientConnectionProvider>,
+  );
+  try {
+    await waitForTargetScope();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("agent-studio-git-refresh-button"));
+    });
+    const refreshError = await screen.findByTestId("agent-studio-git-refresh-error");
+    expect(refreshError.textContent).toContain(HOST_UNREACHABLE_MESSAGE);
+    expect(report).not.toHaveBeenCalled();
+
+    act(() => {
+      connectionState.setState("reconnecting");
+      connectionState.setState("connected");
+    });
+    expect(screen.queryByTestId("agent-studio-git-refresh-error")).toBeNull();
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    report.mockRestore();
   }
 });
 

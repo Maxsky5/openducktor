@@ -10,6 +10,7 @@ import type {
 } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import type { ConnectionControlEvent } from "../recovery/connection-control-events";
+import type { HostConnectionStateSource } from "./host-connection-state";
 
 /** Reconnect handlers return the recovery that must finish before remote work unlocks. */
 export type ConnectionControlListener = (payload: ConnectionControlEvent) => void | Promise<void>;
@@ -73,6 +74,8 @@ export type TaskStreamSubscription = {
 
 /** The typed commands and the event streams of one host. */
 export type HostConnection = {
+  /** Whether the host is reachable. A lost connection lets background work wait quietly. */
+  connectionState: HostConnectionStateSource;
   subscribeWorkspaceProviderSetupUpdates: (
     listener: WorkspaceProviderSetupUpdateListener,
   ) => Promise<() => void>;
