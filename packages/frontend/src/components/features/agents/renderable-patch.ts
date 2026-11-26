@@ -133,28 +133,21 @@ export function parseRenderablePatch(patch: string): FileDiffMetadata | null {
 
 export function selectRenderableDiff(rawDiff: string, filePath: string): string | null {
   const candidates = splitPatchCandidates(rawDiff);
-  if (candidates.length === 0) {
-    return null;
-  }
-
   const matchingCandidate = candidates.find((candidate) => patchMatchesFile(candidate, filePath));
   if (matchingCandidate) {
     return normalizePatchCandidate(matchingCandidate, filePath);
   }
 
-  const singularCandidate = candidates.find(
-    (candidate) => parseRenderablePatch(normalizePatchCandidate(candidate, filePath)) !== null,
-  );
-  if (singularCandidate) {
-    return normalizePatchCandidate(singularCandidate, filePath);
-  }
-
+  let fallbackPatch: string | null = null;
   for (const candidate of candidates) {
     const normalizedCandidate = normalizePatchCandidate(candidate, filePath);
-    if (normalizedCandidate.trim().length > 0) {
+    if (parseRenderablePatch(normalizedCandidate) !== null) {
       return normalizedCandidate;
+    }
+    if (fallbackPatch === null && normalizedCandidate.trim().length > 0) {
+      fallbackPatch = normalizedCandidate;
     }
   }
 
-  return null;
+  return fallbackPatch;
 }
