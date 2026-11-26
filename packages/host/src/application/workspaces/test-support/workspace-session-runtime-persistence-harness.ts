@@ -139,6 +139,7 @@ export const createPersistenceHarness = async (
   const beforeBind: Effect.Effect<void, HostOperationError> = Effect.void;
   const beforeControl: Effect.Effect<void, HostError> = Effect.void;
   const beforeTitle: Effect.Effect<void, HostError> = Effect.void;
+  const nativeStart: Effect.Effect<void, HostError> = Effect.void;
   const state = {
     ...titleState,
     failSend: false,
@@ -157,7 +158,7 @@ export const createPersistenceHarness = async (
     publishAcceptedMessageDuringSend: false,
     registered: true,
     beforeResolveParts: Effect.void,
-    nativeStart: Effect.void,
+    nativeStart,
     beforeNativeWork: Effect.void,
     afterNativeWork: Effect.void,
     beforeSnapshot: Effect.void,

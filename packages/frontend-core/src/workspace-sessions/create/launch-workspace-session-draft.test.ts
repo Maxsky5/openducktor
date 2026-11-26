@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type {
+  SessionStartupProgressEvent,
+  StartupInstruction,
   WorkspaceSession,
   WorkspaceSessionLaunchRequest,
   WorkspaceSessionLaunchResult,
@@ -8,7 +10,10 @@ import { draftToSerializedText } from "../../drafts/agent-chat-composer-draft";
 import { createAgentSessionsStore } from "../../sessions/agent-sessions-store";
 import { findDraftStartupAttempt } from "../../sessions/startup/startup-navigation";
 import { createStartupLiveSourceFake } from "../../test-support/startup-live-source-fake";
-import { createTestClientConnection } from "../../test-support/test-client-connection";
+import {
+  createTestClientConnection,
+  createTestHostConnection,
+} from "../../test-support/test-client-connection";
 import { launchWorkspaceSessionDraft } from "./launch-workspace-session-draft";
 
 const WORKSPACE_ID = "ws-1";
@@ -325,4 +330,73 @@ describe("launchWorkspaceSessionDraft", () => {
     expect(connection.drafts.newWorkspaceSessions.discard(draft.id)).toBe(true);
     expect(connection.startupAttempts.getAttempt(outcome.startupAttemptId)).toBeNull();
   });
+
+  test.each([
+    { state: "accepted", shouldRestore: false },
+    { state: "queued", shouldRestore: false },
+    { state: "submitting", shouldRestore: false },
+    { state: "unknown", shouldRestore: false },
+    { state: "not_sent", shouldRestore: true },
+  ] satisfies Array<{ state: StartupInstruction["state"]; shouldRestore: boolean }>)(
+    "lost launch reply after instruction state $state restores draft=$shouldRestore",
+    async ({ state, shouldRestore }) => {
+      const record = savedRecord();
+      let emitProgress: ((event: SessionStartupProgressEvent) => void) | null = null;
+      const connection = createTestClientConnection({
+        host: createTestHostConnection({
+          subscribeStartupProgress: async (onEvent) => {
+            emitProgress = (event) => onEvent(event);
+            return () => {
+              emitProgress = null;
+            };
+          },
+          client: {
+            workspaceSessionLaunch: async (request): Promise<WorkspaceSessionLaunchResult> => {
+              if (request.startup && emitProgress) {
+                emitProgress({
+                  channel: "openducktor://session-startup-progress",
+                  payload: {
+                    context: request.startup,
+                    hostInstanceId: "host-1",
+                    revision: 1,
+                    workspaceId: WORKSPACE_ID,
+                    repoPath: REPO_PATH,
+                    scope: { kind: "workspace", sessionId: record.id, draftId: request.draftId },
+                    phase: state === "not_sent" ? "failed" : "running",
+                    steps: [],
+                    ownership: {
+                      state: "saved",
+                      target: { kind: "workspace", record, runtimeSession },
+                    },
+                    instruction: { state },
+                  },
+                });
+              }
+              throw new Error("Connection lost before launch reply arrived.");
+            },
+          },
+        }),
+      });
+
+      const draft = connection.drafts.newWorkspaceSessions.createDraft(WORKSPACE_ID);
+      createStartupLiveSourceFake(connection.queryClient);
+      const submittedComposer = composerWithText("Only once");
+      connection.drafts.newWorkspaceSessions.updateComposer(draft.id, submittedComposer);
+
+      const outcome = await launchWorkspaceSessionDraft({
+        connection,
+        sessions: createAgentSessionsStore(),
+        draftId: draft.id,
+        submittedComposer,
+        request: launchRequest(draft.id),
+      });
+
+      expect(outcome.error?.message).toBe("Connection lost before launch reply arrived.");
+      const restored = connection.drafts.chat.hydrate(
+        { workspaceId: WORKSPACE_ID, workspaceSessionId: record.id },
+        null,
+      );
+      expect(draftToSerializedText(restored)).toBe(shouldRestore ? "Only once" : "");
+    },
+  );
 });

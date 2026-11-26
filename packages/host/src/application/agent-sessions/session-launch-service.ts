@@ -99,17 +99,9 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
         const ref = toControlSessionRef(repoPath, summary);
         attempt.session = { ref, summary, created: true };
         if (!hold) return Effect.void;
-        // Mark held before taking the hold so interruption during holdWorkflowLaunch still releases
-        // it in settlement; an explicit failure clears both fields.
+        // Settlement also releases a hold that failed after it was taken.
         attempt.held = true;
-        return deps.runtime.holdWorkflowLaunch(ref, true).pipe(
-          Effect.tapError(() =>
-            Effect.sync(() => {
-              delete attempt.session;
-              attempt.held = false;
-            }),
-          ),
-        );
+        return deps.runtime.holdWorkflowLaunch(ref, true);
       }),
     reusedSession: (repoPath, summary) => {
       attempt.session = { ref: toControlSessionRef(repoPath, summary), summary, created: false };

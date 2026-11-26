@@ -240,7 +240,9 @@ test("pre-save failure rolls back worktree resources and omits sessionId and rec
 test("post-save runtime start failure keeps saved record and returns unsentInstruction without rollback", async () => {
   const h = await createPersistenceHarness(database, "codex", true);
   h.ref.workingDirectory = database.repoPath;
-  h.state.failSnapshot = true;
+  h.state.nativeStart = Effect.fail(
+    new HostOperationError({ operation: "startSession", message: "runtime unavailable" }),
+  );
   const service = h.launchService();
   const request = launchRequest(h);
   const { result, snapshots } = await runWithProgress(service.launch(request), database.repoPath);
@@ -258,6 +260,28 @@ test("post-save runtime start failure keeps saved record and returns unsentInstr
     target: { kind: "workspace", record: { id: result.sessionId } },
   });
   expect(snapshots.at(-1)?.prepared).toBeUndefined();
+});
+
+test("post-bind launch hold snapshot failure keeps bound record and returns unsentInstruction", async () => {
+  const h = await createPersistenceHarness(database, "codex", true);
+  h.ref.workingDirectory = database.repoPath;
+  h.state.failSnapshot = true;
+  const service = h.launchService();
+  const request = launchRequest(h);
+  const { result, snapshots } = await runWithProgress(service.launch(request), database.repoPath);
+
+  expect(result.status).toBe("failed");
+  expect(result.sessionId).toBeDefined();
+  expect(result.record).toMatchObject({
+    id: result.sessionId,
+    externalSessionId: "native",
+  });
+  expect(result.session).toMatchObject({ externalSessionId: "native" });
+  expect(result.unsentInstruction).toEqual(request.parts);
+  expect(snapshots.at(-1)?.ownership).toMatchObject({
+    state: "saved",
+    target: { kind: "workspace", record: { id: result.sessionId, externalSessionId: "native" } },
+  });
 });
 
 test("post-save send failure returns saved bound record, prepared handoff, and unsentInstruction", async () => {

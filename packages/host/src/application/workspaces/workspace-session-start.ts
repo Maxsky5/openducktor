@@ -2,6 +2,7 @@ import type {
   AgentSessionControlStartInput,
   AgentSessionControlSummary,
   AgentSessionLiveRef,
+  WorkspaceSession,
   WorkspaceSessionRefInput,
   WorkspaceSessionStartResult,
 } from "@openducktor/contracts";
@@ -41,7 +42,10 @@ export type WorkspaceSessionStartDependencies = WorkspaceSessionRecordReaderDepe
 
 export type WorkspaceSessionBindOptions = {
   beforeBind?: () => Effect.Effect<void, HostError>;
-  onBound?: (session: AgentSessionControlSummary) => Effect.Effect<void, HostError>;
+  onBound?: (
+    record: WorkspaceSession,
+    session: AgentSessionControlSummary,
+  ) => Effect.Effect<void, HostError>;
   workStartGuard?: AgentWorkStartGuard;
 };
 
@@ -143,15 +147,15 @@ const runStartAndBind = (
             }),
           );
           if (Exit.isSuccess(saved)) {
-            if (options?.onBound) {
-              yield* options.onBound(runtimeSession);
-            }
             yield* updateStartup((progress) =>
               progress.ownership({
                 state: "saved",
                 target: { kind: "workspace", record: saved.value, runtimeSession },
               }),
             );
+            if (options?.onBound) {
+              yield* options.onBound(saved.value, runtimeSession);
+            }
             if (syncsTitleAfterTurn(session.runtimeKind))
               dependencies.markTitleSyncPending({
                 repoPath: ref.repoPath,

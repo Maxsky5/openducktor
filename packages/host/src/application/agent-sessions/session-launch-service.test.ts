@@ -42,6 +42,7 @@ const fixture = (accepted?: AcceptedAgentInput) => {
   let reportVisible = true;
   const stops: string[] = [];
   const holds: Array<[string, boolean]> = [];
+  let holdAcquireFailure = false;
   let holdFailure = false;
   let stopFailure = false;
   let sendGate: Effect.Effect<void, HostOperationError> = Effect.void;
@@ -78,11 +79,21 @@ const fixture = (accepted?: AcceptedAgentInput) => {
         ),
       ),
     holdWorkflowLaunch: (ref, held) =>
-      holdFailure && !held
-        ? Effect.fail(new HostOperationError({ operation: "hold", message: "Hold release failed" }))
-        : Effect.sync(() => {
-            holds.push([ref.externalSessionId, held]);
-          }),
+      Effect.suspend(() => {
+        if (held && holdAcquireFailure) {
+          holds.push([ref.externalSessionId, held]);
+          return Effect.fail(
+            new HostOperationError({ operation: "hold", message: "Hold acquire snapshot failed" }),
+          );
+        }
+        if (!held && holdFailure) {
+          return Effect.fail(
+            new HostOperationError({ operation: "hold", message: "Hold release failed" }),
+          );
+        }
+        holds.push([ref.externalSessionId, held]);
+        return Effect.void;
+      }),
     stopSession: (ref) =>
       Effect.suspend(() => {
         stops.push(ref.externalSessionId);
@@ -133,6 +144,9 @@ const fixture = (accepted?: AcceptedAgentInput) => {
     reported,
     stops,
     holds,
+    failHoldAcquire: () => {
+      holdAcquireFailure = true;
+    },
     failHoldRelease: () => {
       holdFailure = true;
     },
@@ -239,6 +253,20 @@ test("a failed hold release fails an accepted launch as cleanup and keeps the ac
     failure: { message: "Session launch cleanup failed.", cleanupErrors: ["Hold release failed"] },
   });
   expect(result.unsentInstruction).toBeUndefined();
+});
+
+test("a failed hold acquisition still releases the hold during settlement", async () => {
+  const h = fixture();
+  h.failHoldAcquire();
+  const result = await Effect.runPromise(h.service.launch({ key: "a", sessionId: "a-1" }));
+  expect(result).toMatchObject({
+    status: "failed",
+    failure: { message: "Hold acquire snapshot failed", cleanupErrors: [] },
+  });
+  expect(h.holds).toEqual([
+    ["a-1", true],
+    ["a-1", false],
+  ]);
 });
 
 test.each(["cancelSessionLaunches", "shutdown"] as const)(

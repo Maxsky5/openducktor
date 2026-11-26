@@ -287,13 +287,18 @@ export async function launchWorkspaceSessionDraft(
       });
     }
     const latest = startupAttempts.getAttempt(startupAttemptId);
-    if (latest && !["failed", "canceled"].includes(latest.status.phase)) {
+    if (latest && !["ready", "failed", "canceled"].includes(latest.status.phase)) {
       startupAttempts.fail(startupAttemptId, err.message, true);
     }
     const settled = startupAttempts.getAttempt(startupAttemptId);
     if (settled?.ownership.state === "saved" && settled.ownership.target.kind === "workspace") {
       const saved = settled.ownership.target.record;
-      if (request.parts.length > 0) {
+      const confirmedNotSent =
+        settled.instruction?.state === "not_sent" ||
+        (settled.instruction === undefined &&
+          settled.status.confirmation === "current" &&
+          (settled.status.phase === "failed" || settled.status.phase === "canceled"));
+      if (request.parts.length > 0 && confirmedNotSent) {
         preserveUnsentDraft(connection, request.workspaceId, saved.id, submittedComposer);
       }
       if (saved.externalSessionId === null) {

@@ -8,13 +8,25 @@ export const createWorkspaceSessionChatDraftPersistence = (
   workspaceSessionId: string,
 ): AgentChatDraftPersistence => {
   const identity = { workspaceId, workspaceSessionId };
+  let isLocalSet = false;
   return {
     targetKey: toAgentChatDraftStorageKey(identity),
     hydrate: () => drafts.hydrate(identity, null),
-    set: (draft) => drafts.set(identity, null, draft),
+    set: (draft) => {
+      isLocalSet = true;
+      try {
+        return drafts.set(identity, null, draft);
+      } finally {
+        isLocalSet = false;
+      }
+    },
     readVersion: () => drafts.readVersion(identity),
     clear: (options) => drafts.clear(identity, options),
     flush: () => drafts.flush(identity),
     subscribeCleared: (onClear) => drafts.subscribeCleared(identity, onClear),
+    subscribeExternalChange: (onChange) =>
+      drafts.subscribeChanged(identity, () => {
+        if (!isLocalSet) onChange();
+      }),
   };
 };

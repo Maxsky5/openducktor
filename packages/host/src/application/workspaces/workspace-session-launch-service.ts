@@ -277,17 +277,19 @@ export const createWorkspaceSessionLaunchService = (deps: WorkspaceSessionLaunch
           { workspaceId: request.workspaceId, sessionId: saved.id },
           {
             beforeBind: attempt.checkCanceled,
-            onBound: (summary) => attempt.createdSession(repoPath, summary, { hold: true }),
+            onBound: (boundRecord, summary) => {
+              attempt.setResultFields({ record: boundRecord });
+              if (boundRecord.selectedModel) {
+                attempt.setResultFields({ model: boundRecord.selectedModel });
+              }
+              return attempt.createdSession(repoPath, summary, { hold: true });
+            },
             workStartGuard: { assertCurrent: attempt.assertCurrent },
           },
         );
         const boundRecord = started.session;
         if (!boundRecord.externalSessionId) {
           return yield* invalid("The host did not save a runtime session identity.");
-        }
-        attempt.setResultFields({ record: boundRecord });
-        if (boundRecord.selectedModel) {
-          attempt.setResultFields({ model: boundRecord.selectedModel });
         }
         const ref = {
           repoPath,

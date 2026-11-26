@@ -140,7 +140,7 @@ export function useAgentChatComposerDraftState({
     };
   }, [visibility]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const subscribeExternalChange = nextPersistence?.subscribeExternalChange;
     if (!subscribeExternalChange) return;
     return subscribeExternalChange(() => {
