@@ -1,4 +1,5 @@
-import { Github, LoaderCircle, PencilLine, RefreshCcw } from "lucide-react";
+import { LoaderCircle, PencilLine, RefreshCcw } from "lucide-react";
+import { GithubIcon } from "./git-provider-icons";
 import { useState, type ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -140,7 +141,7 @@ function GithubProviderHeader({ model }: Pick<GithubGitProviderFormProps, "model
     <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-3">
       <div className="flex min-w-0 items-start gap-3">
         <div className="rounded-md border border-border bg-muted p-2 text-foreground">
-          <Github className="size-4" />
+          <GithubIcon className="size-4" />
         </div>
         <div className="min-w-0 space-y-1">
           <h3 className="text-sm font-semibold text-foreground">{providerLabel}</h3>

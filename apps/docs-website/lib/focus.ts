@@ -1,5 +1,9 @@
 import { withSlash } from "./slash";
 
+// The skip link of the Fumadocs layout opens `#nd-page`, the element around the page. The page title
+// gets focus for it.
+const PAGE_ID = "nd-page";
+
 type SectionListener = (id: string) => void;
 
 const listeners = new Set<SectionListener>();
@@ -27,7 +31,7 @@ export function sectionId(hash: string): string | null {
 
 /**
  * Opens the section of `href` when `href` is on the current page: the section, or the page title
- * when `href` has no hash, gets focus without a scroll jump, and each `onOpenSection` listener
+ * when `href` has no hash or opens the whole page, gets focus without a scroll jump, and each `onOpenSection` listener
  * gets the id of the section.
  *
  * Call it after each change of the address. The browser sends `hashchange` only when it changes the
@@ -39,7 +43,7 @@ export function openSection(href: string): void {
   const url = new URL(href, window.location.href);
   if (withSlash(url.pathname) !== withSlash(window.location.pathname)) return;
   const id = sectionId(url.hash);
-  const section = id ? document.getElementById(id) : null;
+  const section = id && id !== PAGE_ID ? document.getElementById(id) : null;
   const target = section ?? document.getElementById("docs-title");
   if (!target) return;
   if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");

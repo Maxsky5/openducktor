@@ -51,6 +51,15 @@ GlobalRegistrator.register();
 const designPixel = document.createElement("style");
 designPixel.textContent = "* { --u: 1px; }";
 document.head.append(designPixel);
+// happy-dom finds the stylesheets with a query of the whole document on each getComputedStyle
+// call, and GSAP calls it for each tweened property. The views render no stylesheet, so the query
+// gives the stylesheet of this test. This halves the time of the longest scene play.
+const STYLESHEET_QUERY = 'style,link[rel="stylesheet"]';
+const queryAll = document.querySelectorAll.bind(document);
+// SAFETY: happy-dom only iterates the stylesheet result, and an array of style elements iterates
+// as its node list does.
+document.querySelectorAll = ((selector: string) =>
+  selector === STYLESHEET_QUERY ? [designPixel] : queryAll(selector)) as typeof queryAll;
 // The document has no layout, so it gives no offset parent. The steps measure an element from
 // a positioned ancestor, so the parent element takes its place.
 const elementPrototype = HTMLElement.prototype;

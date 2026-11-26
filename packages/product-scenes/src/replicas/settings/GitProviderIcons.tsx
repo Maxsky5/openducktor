@@ -1,6 +1,5 @@
-// The marks of the Git providers: GitlabIcon and AzureDevOpsIcon of git-provider-icons.tsx in
-// packages/frontend/src/components/features/settings, and the Github icon of lucide-react 0.577,
-// which the app imports. lucide-react 1 has no brand marks, so the replica keeps its geometry.
+// The marks of the Git providers: GithubIcon, GitlabIcon, and AzureDevOpsIcon of
+// git-provider-icons.tsx in packages/frontend/src/components/features/settings.
 import type { ReactElement } from "react";
 
 type IconProps = { className?: string };
