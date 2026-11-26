@@ -21,7 +21,7 @@ import {
 export type ManualRefresh = {
   refresh: () => Promise<void>;
   isRefreshing: boolean;
-  /** The last failure of a manual Refresh in this context. A later success clears it. */
+  /** The last failure of a manual Refresh in this context. A later scheduled refresh that completes clears it. */
   refreshError: string | null;
 };
 

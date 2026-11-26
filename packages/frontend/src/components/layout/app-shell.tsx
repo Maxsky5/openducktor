@@ -43,6 +43,8 @@ import {
   useWorkspaceState,
 } from "@/state/app-state-provider";
 import { repoConfigQueryOptionsOrSkip } from "@openducktor/frontend-core/queries/workspace";
+import { useRefetchFailedRuntimeQueries } from "@openducktor/frontend-core/queries/use-refetch-failed-runtime-queries";
+import { windowReturnVisibility } from "@/lib/window-return-visibility";
 
 type AppShellSidebarPreference = "opened" | "collapsed";
 
@@ -94,6 +96,13 @@ function ActiveRepoConfigQuery(): null {
   return null;
 }
 
+// A runtime read that failed for a short time, such as during sleep, reads again when the user
+// returns to the app.
+function RefetchFailedRuntimeQueries(): null {
+  useRefetchFailedRuntimeQueries(windowReturnVisibility);
+  return null;
+}
+
 function OpenRepositoryModalWhenEmpty({ onEmpty }: { onEmpty: () => void }): null {
   const isEmpty = useWorkspaceState().workspaces.length === 0;
   const open = useEffectEvent(onEmpty);
@@ -139,6 +148,7 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
   return (
     <VisibleSessionTargetProvider>
       <ActiveRepoConfigQuery />
+      <RefetchFailedRuntimeQueries />
       <OpenRepositoryModalWhenEmpty onEmpty={openDefaultRepositoryModal} />
       <SessionReadStateProvider visibility={documentVisibility}>
         <WorkspaceDialogsProvider>

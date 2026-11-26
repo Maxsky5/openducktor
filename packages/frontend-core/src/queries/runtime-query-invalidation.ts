@@ -1,4 +1,4 @@
-import type { RuntimeKind } from "@openducktor/contracts";
+import { knownRuntimeKindValues, type RuntimeKind } from "@openducktor/contracts";
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { agentSessionContextQueryKeys } from "./agent-session-context";
 import { agentSessionHistoryQueryKeys } from "./agent-session-history";
@@ -35,3 +35,22 @@ export const invalidateRuntimeKindQueries = async (
     refetchType: state === "ready" ? "active" : "none",
   });
 };
+
+const isRuntimeQueryKey = (key: QueryKey): boolean =>
+  knownRuntimeKindValues.some((runtimeKind) =>
+    RUNTIME_KIND_MATCHERS.some((matches) => matches(key, runtimeKind)),
+  );
+
+/**
+ * Reads again each shown runtime read that failed and is not reading now. A runtime can fail a
+ * read for a short time, such as when the computer wakes from sleep, and no event reads it again.
+ * A read that fails again keeps its error.
+ */
+export const refetchFailedRuntimeQueries = (queryClient: QueryClient): Promise<void> =>
+  queryClient.refetchQueries({
+    type: "active",
+    predicate: (query) =>
+      query.state.status === "error" &&
+      query.state.fetchStatus === "idle" &&
+      isRuntimeQueryKey(query.queryKey),
+  });

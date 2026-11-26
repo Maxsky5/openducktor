@@ -470,6 +470,60 @@ describe("GitRefreshCoordinator", () => {
     expect(softOutcome).toBe("resolved");
   });
 
+  test("a scheduled refresh that fetches again ends the failure of a manual Refresh", async () => {
+    const log: Log = [];
+    let now = 0;
+    const fetch = mock(async () => {
+      log.push("fetch");
+    });
+    const view = createView(log, {
+      steps: { comparison: { fetchKey: "origin/main", fetch, check: async () => false } },
+    });
+    const { coordinator } = createCoordinator(() => now);
+    const notified = mock(() => {});
+    coordinator.subscribe(notified);
+    coordinator.publish(view);
+
+    await coordinator.refresh("scheduled");
+    now = 1;
+    fetch.mockImplementationOnce(async () => {
+      throw new Error("offline");
+    });
+    await coordinator.refresh("hard");
+    expect(coordinator.manualState(manualRefreshKey(view)).error).toBe("offline");
+    notified.mockClear();
+
+    // The failed fetch ends the cooldown of the earlier fetch, so this refresh fetches again.
+    now = 2;
+    await coordinator.refresh("scheduled");
+
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(coordinator.manualState(manualRefreshKey(view)).error).toBeNull();
+    expect(notified).toHaveBeenCalledTimes(1);
+  });
+
+  test("a scheduled refresh with a failed fetch keeps the failure of a manual Refresh", async () => {
+    const log: Log = [];
+    const view = createView(log, {
+      steps: {
+        comparison: {
+          fetchKey: "origin/main",
+          fetch: async () => {
+            throw new Error("offline");
+          },
+          check: async () => false,
+        },
+      },
+    });
+    const { coordinator } = createCoordinator();
+    coordinator.publish(view);
+
+    await coordinator.refresh("hard");
+    await coordinator.refresh("scheduled").catch(() => undefined);
+
+    expect(coordinator.manualState(manualRefreshKey(view)).error).toBe("offline");
+  });
+
   test("soft refreshes read without a fetch and leave History failures to History", async () => {
     const log: Log = [];
     const view = createView(log);
