@@ -502,6 +502,70 @@ describe("GitRefreshCoordinator", () => {
     expect(notified).toHaveBeenCalledTimes(1);
   });
 
+  test("a scheduled refresh in the fetch cooldown ends the read failure of a manual Refresh", async () => {
+    const log: Log = [];
+    let now = 0;
+    const fetch = mock(async (_force: boolean) => {});
+    const readComparison = mock(async (_historyFailure: "reject" | "show") => {});
+    const view = createView(log, {
+      steps: {
+        comparison: { fetchKey: "origin/main", fetch, check: async () => false },
+        readComparison,
+      },
+    });
+    const { coordinator } = createCoordinator(() => now);
+    coordinator.publish(view);
+
+    await coordinator.refresh("scheduled");
+    now = 1;
+    readComparison.mockImplementationOnce(async () => {
+      throw new Error("history unavailable");
+    });
+    await coordinator.refresh("hard");
+    expect(coordinator.manualState(manualRefreshKey(view)).error).toBe("history unavailable");
+
+    now = 2;
+    await coordinator.refresh("scheduled");
+
+    // The fetch passed, so the cooldown skips it. The branch read and the target check pass.
+    expect(fetch.mock.calls).toEqual([[false], [true]]);
+    expect(coordinator.manualState(manualRefreshKey(view)).error).toBeNull();
+  });
+
+  test("a scheduled refresh keeps a manual failure that is newer than its start", async () => {
+    const log: Log = [];
+    let offline = true;
+    let heldBranch: Promise<string> | null = null;
+    const branch = Promise.withResolvers<string>();
+    const view = createView(log, {
+      steps: {
+        // Only the branch read of the scheduled refresh waits.
+        readBranch: async () => heldBranch ?? "main",
+        comparison: {
+          fetchKey: "origin/main",
+          fetch: async () => {
+            if (offline) throw new Error("offline");
+          },
+          check: async () => false,
+        },
+      },
+    });
+    const { coordinator } = createCoordinator();
+    coordinator.publish(view);
+
+    await coordinator.refresh("hard");
+    heldBranch = branch.promise;
+    const scheduled = coordinator.refresh("scheduled");
+    await flush();
+    heldBranch = null;
+    await coordinator.refresh("hard");
+    offline = false;
+    branch.resolve("main");
+    await scheduled;
+
+    expect(coordinator.manualState(manualRefreshKey(view)).error).toBe("offline");
+  });
+
   test("a scheduled refresh with a failed fetch keeps the failure of a manual Refresh", async () => {
     const log: Log = [];
     const view = createView(log, {

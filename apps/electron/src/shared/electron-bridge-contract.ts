@@ -1,6 +1,7 @@
 export const ELECTRON_SHORTCUT_APPLY_CHANNEL = "openducktor:shortcuts:apply";
 export const ELECTRON_SHORTCUT_EVENT_CHANNEL = "openducktor:shortcuts:event";
 export const ELECTRON_SHORTCUT_RELEASE_CHANNEL = "openducktor:shortcuts:release";
+import type { SystemWake } from "@openducktor/frontend-core/platform/system-wake";
 import type {
   AppPlatform,
   ArtifactPreviewEnvironment,
@@ -188,8 +189,7 @@ export type OpenDucktorElectronApi = {
   editorClipboard: {
     readText(type?: EditorClipboardReadType): Promise<string>;
   };
-  /** Reports each wake of the computer from sleep and each unlock of the screen. */
-  systemWake: { subscribe(onWake: () => void): () => void };
+  systemWake: SystemWake;
 };
 
 export const ELECTRON_REMOTE_ACCESS_CHANNEL = "openducktor:remote-access";
