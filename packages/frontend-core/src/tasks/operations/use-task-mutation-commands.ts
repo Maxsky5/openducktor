@@ -31,32 +31,15 @@ import {
 import { useClientConnection } from "../../connection/client-connection-react";
 import type { HostClient } from "@openducktor/host-client";
 import type { CloseTaskOptions } from "../../types/task-close";
-import type { TaskCreateWorkspace } from "../../types/state-slices";
+import type { TaskCreateWorkspace, TaskMutationCommands } from "../../types/state-slices";
+
+export type { TaskMutationCommands } from "../../types/state-slices";
 
 type UseTaskMutationCommandsArgs = {
   activeRepoPath: string | null;
   activeWorkspaceId: string | null;
   runTaskMutation: TaskMutationRunner["runTaskMutation"];
   agentSessionReadPort: AgentSessionReadPort;
-};
-
-export type TaskMutationCommands = {
-  /** Creates the task in `workspace`, which can be a workspace other than the active one. */
-  createTask: (
-    workspace: TaskCreateWorkspace,
-    input: TaskCreateInput,
-    assets?: TaskAssetDescriptionMutation,
-  ) => Promise<void>;
-  updateTask: (
-    taskId: string,
-    patch: TaskUpdatePatch,
-    assets?: TaskAssetDescriptionMutation,
-  ) => Promise<void>;
-  setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
-  deleteTask: (taskId: string) => Promise<void>;
-  closeTask: (taskId: string, options: CloseTaskOptions) => Promise<TaskCard>;
-  /** Removes the worktree and local branches of a closed task. */
-  removeTaskWorktree: (taskId: string) => Promise<void>;
 };
 
 export type TaskMutationCommandHostPort = Pick<
