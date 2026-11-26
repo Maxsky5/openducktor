@@ -112,10 +112,10 @@ export const handleClaudeResultMessage = ({
   }
   if (!failed && !handledManualCompaction && lifecycleOutcome === "completed") {
     const hasCurrentFinalText =
-      session.lastAssistantTextFinal &&
+      session.lastAssistantTextFinal === true &&
       session.lastAssistantTextTurnIndex === completedUserTurnIndex;
     const hasCurrentAssistant =
-      session.lastAssistantNativeUuid &&
+      Boolean(session.lastAssistantNativeUuid) &&
       session.lastAssistantNativeUuidTurnIndex === completedUserTurnIndex;
     const hasResultTurnEvidence =
       message.num_turns > 0 || (message.subtype === "success" && message.stop_reason !== null);
@@ -123,8 +123,8 @@ export const handleClaudeResultMessage = ({
     // interrupted turn complete.
     const completedOwnTurn =
       resultText.length > 0 ||
-      Boolean(hasCurrentFinalText) ||
-      Boolean(hasCurrentAssistant) ||
+      hasCurrentFinalText ||
+      hasCurrentAssistant ||
       (isClaudeForegroundTurnActive(session) &&
         !session.sdkInitiatedTurnActive &&
         hasResultTurnEvidence);

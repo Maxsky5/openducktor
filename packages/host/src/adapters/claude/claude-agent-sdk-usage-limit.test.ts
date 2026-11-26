@@ -330,19 +330,7 @@ describe("Claude usage-limit recovery", () => {
   );
 
   test.each([
-    [
-      "task-notification wake turn",
-      () => [
-        claudeSdkMessageFixture({
-          type: "user",
-          uuid: claudeSdkMessageUuidFixture("wake-user"),
-          session_id: "session-1",
-          parent_tool_use_id: null,
-          origin: { kind: "task-notification" },
-          message: { role: "user", content: "<task-notification>finished</task-notification>" },
-        }),
-      ],
-    ],
+    ["task-notification wake turn", () => [taskNotificationWake("wake-user")]],
     [
       "scheduled meta wakeup",
       () => [

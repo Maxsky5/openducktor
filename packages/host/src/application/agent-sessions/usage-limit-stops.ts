@@ -32,8 +32,8 @@ export type UsageLimitStopPhase =
   /** The due time passed, and the checks before the resume run. Clients still see `scheduled`. */
   | "due"
   /**
-   * The due time passed during a Claude wake whose outcome is still unknown. Clients still see
-   * `scheduled`, and the stop re-enters `scheduled` when the session returns to idle.
+   * The due time passed while a foreground turn was active. Clients still see `scheduled`, and
+   * the stop re-enters `scheduled` when the session returns to idle.
    */
   | "waiting_for_idle"
   | "resuming"
@@ -120,13 +120,13 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
     changed(stop.ref);
   };
 
-  const countWork = (key: string): void => {
+  const invalidatePendingRestores = (key: string): void => {
     pendingRestores.delete(key);
   };
 
   /** New work in the session ends its stop. */
   const newWork = (key: string): void => {
-    countWork(key);
+    invalidatePendingRestores(key);
     end(key);
   };
 
@@ -214,7 +214,7 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
     // resolution at due time rather than cancelling the stop immediately.
     const stop = stops.get(key);
     if (stop?.turnEnded === false && stop.phase !== "resuming") {
-      countWork(key);
+      invalidatePendingRestores(key);
     }
   };
 
@@ -240,25 +240,25 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
             if (stop?.phase !== "resuming" && stop?.turnEnded !== false) newWork(key);
             return null;
           }
-          const stop = stops.get(key);
-          const hasPendingRestore = pendingRestores.has(key);
-          if (stop || hasPendingRestore) {
-            if (isAcceptedUserMessage(event)) {
-              newWork(key);
-            } else if (stop?.phase !== "resuming" && isNewTurnWorkEvent(event)) {
-              if (stop?.turnEnded === false) countWork(key);
-              else newWork(key);
-            }
+          if (event.type === "session_idle" || event.type === "session_turn_finished") {
+            if (event.type === "session_idle") noteIdle(key);
+            const stop = stops.get(key);
+            if (!stop || !event.turnOutcome) return null;
+            // Only the end of the failed turn counts here. Later work ends the stop elsewhere.
+            const signal: UsageLimitStopSignal = { kind: "turn_end", outcome: event.turnOutcome };
+            if (nextUsageLimitStop(stop, signal) !== "turn_ended") return null;
+            stop.turnEnded = true;
+            return toPlan(stop);
           }
-          if (event.type === "session_idle") noteIdle(key);
-          if (event.type !== "session_turn_finished" && event.type !== "session_idle") return null;
-          const currentStop = stops.get(key);
-          if (!currentStop || !event.turnOutcome) return null;
-          // Only the end of the failed turn counts here. Later work ends the stop elsewhere.
-          const signal: UsageLimitStopSignal = { kind: "turn_end", outcome: event.turnOutcome };
-          if (nextUsageLimitStop(currentStop, signal) !== "turn_ended") return null;
-          currentStop.turnEnded = true;
-          return toPlan(currentStop);
+          const stop = stops.get(key);
+          if (!stop && !pendingRestores.has(key)) return null;
+          if (isAcceptedUserMessage(event)) {
+            newWork(key);
+          } else if (stop?.phase !== "resuming" && isNewTurnWorkEvent(event)) {
+            if (stop?.turnEnded === false) invalidatePendingRestores(key);
+            else newWork(key);
+          }
+          return null;
         }
         case "session_upsert":
           observeSession(envelope.session);

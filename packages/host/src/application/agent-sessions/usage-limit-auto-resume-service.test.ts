@@ -1088,7 +1088,7 @@ describe("usage-limit auto-resume", () => {
   test.each([
     { name: "synthetic wake", wake: { isSynthetic: true } },
     { name: "non-query wake", wake: { shouldQuery: false } },
-    { name: "display-only result", wake: null },
+    { name: "display-only", wake: null },
   ] as const)(
     "dispatches and keeps live continuation eligible after an empty $name result",
     async ({ name, wake }) => {
