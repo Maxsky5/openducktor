@@ -10,6 +10,7 @@ import type {
 import { createHostClient } from "@openducktor/host-client";
 import type { HostConnection } from "@openducktor/frontend-core/connection/host-connection";
 import type { NotificationBridge } from "@openducktor/frontend-core/platform/notification-bridge";
+import type { SystemWake } from "@openducktor/frontend-core/platform/system-wake";
 import type { TerminalBridge } from "@openducktor/frontend-core/terminals/terminal-bridge";
 
 export type ShellCapabilities = {
@@ -101,6 +102,8 @@ export type ShellBridge = HostConnection & {
   editorClipboard?: {
     readText(type?: string): Promise<string> | string;
   };
+  /** Only the desktop shell reports a wake from sleep. */
+  systemWake?: SystemWake;
 };
 
 const DEFAULT_UNAVAILABLE_MESSAGE =

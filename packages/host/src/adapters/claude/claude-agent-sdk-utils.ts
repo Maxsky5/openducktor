@@ -76,17 +76,19 @@ export const fromSync = <A>(
 ): Effect.Effect<A, ClaudeAgentSdkServiceError> =>
   Effect.try({ try: run, catch: (cause) => toClaudeServiceError(operation, cause) });
 
+/** Rejects with the error that `toError` makes from `message` when `promise` takes too long. */
 export const withTimeout = async <A>(
   promise: Promise<A>,
   timeoutMs: number,
   message: string,
+  toError: (message: string) => Error = (text) => new Error(text),
 ): Promise<A> => {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       promise,
       new Promise<never>((_resolve, reject) => {
-        timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+        timeout = setTimeout(() => reject(toError(message)), timeoutMs);
       }),
     ]);
   } finally {

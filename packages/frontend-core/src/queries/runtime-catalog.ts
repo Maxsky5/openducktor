@@ -69,6 +69,12 @@ export type CachedRuntimeCatalog = Omit<AgentRuntimeCatalog, "models"> & {
   models?: CachedModelSurface | undefined;
 };
 
+/** True when a catalog read returned a surface that failed, such as models that did not load. */
+export const hasFailedCatalogSurface = (catalog: CachedRuntimeCatalog | undefined): boolean =>
+  [catalog?.models, catalog?.slashCommands, catalog?.skills, catalog?.subagents].some(
+    (surface) => surface?.status === "failed",
+  );
+
 /** Previews need a time limit because they have no workspace close event. */
 export const catalogQueryOptions = (
   queryKey: QueryKey,

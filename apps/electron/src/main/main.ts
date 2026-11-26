@@ -9,6 +9,7 @@ import {
 import { registerElectronRemoteAccessIpc } from "./electron-remote-access-ipc";
 import { registerElectronHostSelectionIpc } from "./electron-host-selection-ipc";
 import { registerElectronNativeThemeIpc } from "./electron-native-theme-ipc";
+import { createWindowEventSender, forwardSystemWake } from "./electron-window-events";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -133,6 +134,7 @@ const {
   nativeTheme,
   net,
   Notification,
+  powerMonitor,
   protocol,
   session,
   shell,
@@ -224,6 +226,13 @@ const browserRuntime = createElectronBrowserRuntime({
 /** OpenDucktor windows only. Browser popup windows show untrusted pages and get no app data. */
 const getMainWindows = (): ElectronBrowserWindow[] =>
   BrowserWindow.getAllWindows().filter((window) => browserRuntime.isMainWindow(window));
+const sendToMainWindows = createWindowEventSender(getMainWindows, (channel, cause) =>
+  runElectronMainTask(() =>
+    runElectronEffect(
+      electronMainLogger.error(`OpenDucktor window event '${channel}' forwarding failed`, cause),
+    ),
+  ),
+);
 const ipcMain = createMainWindowIpcRegistrar(nativeIpcMain, (sender) =>
   getMainWindows().some((window) => !window.isDestroyed() && window.webContents === sender),
 );
@@ -652,20 +661,7 @@ const registerAppUpdateStateForwarding = (appUpdateService: ElectronAppUpdateSer
       );
       return;
     }
-    for (const window of getMainWindows()) {
-      if (window.isDestroyed() || window.webContents.isDestroyed()) {
-        continue;
-      }
-      try {
-        window.webContents.send(ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL, parsedState);
-      } catch (cause) {
-        runElectronMainTask(() =>
-          runElectronEffect(
-            electronMainLogger.error("OpenDucktor update state forwarding failed", cause),
-          ),
-        );
-      }
-    }
+    sendToMainWindows(ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL, parsedState);
   });
 };
 
@@ -1110,6 +1106,7 @@ const configureElectronReadyRuntimeEffect = ({
       });
       registerIpcHandlers(hostCommandRouter, appUpdateService, hostChannelServer);
       registerAppUpdateStateForwarding(appUpdateService);
+      forwardSystemWake(powerMonitor, sendToMainWindows);
       configureElectronDockIcon();
       return { appUpdateService, hostCommandRouter, hostChannelServer, rendererSession };
     },

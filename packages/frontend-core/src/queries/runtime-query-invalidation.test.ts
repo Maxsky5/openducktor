@@ -1,7 +1,10 @@
 import { expect, mock, test } from "bun:test";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { waitForExpectation } from "../test-support/wait-for-expectation";
-import { invalidateRuntimeKindQueries } from "./runtime-query-invalidation";
+import {
+  invalidateRuntimeKindQueries,
+  refetchFailedRuntimeQueries,
+} from "./runtime-query-invalidation";
 
 const repoCatalogKey = ["runtime-catalog", "catalog", "/repo", "opencode", "/repo"];
 const otherWorkspaceCatalogKey = ["runtime-catalog", "catalog", "/other", "opencode", "/other/wt"];
@@ -76,4 +79,149 @@ test("a change of one kind leaves the reads of another kind untouched", async ()
   await invalidateRuntimeKindQueries(client, "opencode", "stopped");
 
   for (const key of otherKeys) expect(client.getQueryState(key)?.isInvalidated).toBe(false);
+});
+
+test("a return reads again only the shown runtime reads that failed", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const todosKey = sessionKeys[0]!;
+  const checksKey = ["checks", "task-store", "/repo"];
+  const reads = { catalog: 0, todos: 0, checks: 0, hidden: 0 };
+  const observe = (queryKey: unknown[], read: keyof typeof reads, fails: () => boolean) => {
+    const observer = new QueryObserver(client, {
+      queryKey,
+      queryFn: async () => {
+        reads[read] += 1;
+        if (fails()) throw new Error(`${read} unavailable`);
+        return [read];
+      },
+      staleTime: Infinity,
+    });
+    return observer.subscribe(() => {});
+  };
+  let failing = true;
+  const unsubscribes = [
+    observe(repoCatalogKey, "catalog", () => false),
+    observe(todosKey, "todos", () => failing),
+    observe(checksKey, "checks", () => failing),
+  ];
+  // A failed read without a view stays as it is.
+  await client
+    .fetchQuery({
+      queryKey: otherWorkspaceCatalogKey,
+      queryFn: async () => {
+        reads.hidden += 1;
+        throw new Error("hidden unavailable");
+      },
+    })
+    .catch(() => undefined);
+
+  try {
+    await waitForExpectation(() => expect(client.getQueryState(todosKey)?.status).toBe("error"));
+    await waitForExpectation(() => expect(client.getQueryState(checksKey)?.status).toBe("error"));
+    failing = false;
+
+    await refetchFailedRuntimeQueries(client);
+
+    expect(reads).toEqual({ catalog: 1, todos: 2, checks: 1, hidden: 1 });
+    expect(client.getQueryState(todosKey)?.error).toBeNull();
+    expect(client.getQueryData(todosKey)).toEqual(["todos"]);
+  } finally {
+    for (const unsubscribe of unsubscribes) unsubscribe();
+    client.clear();
+  }
+});
+
+test("a runtime read that runs at a return or a wake and then fails reads again", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const todosKey = sessionKeys[0]!;
+  const sleepingRead = Promise.withResolvers<string[]>();
+  let reads = 0;
+  const observer = new QueryObserver(client, {
+    queryKey: todosKey,
+    queryFn: () => {
+      reads += 1;
+      return reads === 1 ? sleepingRead.promise : Promise.resolve(["after wake"]);
+    },
+    staleTime: Infinity,
+  });
+  const unsubscribe = observer.subscribe(() => {});
+
+  try {
+    await waitForExpectation(() => expect(reads).toBe(1));
+    const wake = refetchFailedRuntimeQueries(client);
+    // The read that ran during sleep times out after the wake.
+    sleepingRead.reject(new Error("timed out"));
+    await wake;
+
+    expect(reads).toBe(2);
+    expect(client.getQueryState(todosKey)?.error).toBeNull();
+    expect(client.getQueryData(todosKey)).toEqual(["after wake"]);
+  } finally {
+    unsubscribe();
+    client.clear();
+  }
+});
+
+test("a slow running runtime read does not delay the re-read of another failed read", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const catalogRead = Promise.withResolvers<string[]>();
+  const todosKey = sessionKeys[0]!;
+  let todosReads = 0;
+  const unsubscribes = [
+    new QueryObserver(client, {
+      queryKey: repoCatalogKey,
+      queryFn: () => catalogRead.promise,
+    }).subscribe(() => {}),
+    new QueryObserver(client, {
+      queryKey: todosKey,
+      queryFn: async () => {
+        todosReads += 1;
+        if (todosReads === 1) throw new Error("todos unavailable");
+        return ["todos"];
+      },
+    }).subscribe(() => {}),
+  ];
+
+  try {
+    await waitForExpectation(() => expect(client.getQueryState(todosKey)?.status).toBe("error"));
+    const refetch = refetchFailedRuntimeQueries(client);
+
+    await waitForExpectation(() => expect(client.getQueryData(todosKey)).toEqual(["todos"]));
+    expect(client.getQueryState(repoCatalogKey)?.fetchStatus).toBe("fetching");
+    catalogRead.resolve(["catalog"]);
+    await refetch;
+  } finally {
+    for (const unsubscribe of unsubscribes) unsubscribe();
+    client.clear();
+  }
+});
+
+test("a catalog read that returned a failed surface reads again", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  let reads = 0;
+  const unsubscribe = new QueryObserver(client, {
+    queryKey: repoCatalogKey,
+    queryFn: async () => {
+      reads += 1;
+      return reads === 1
+        ? { models: { status: "failed", message: "Models did not load." } }
+        : { models: { status: "available", catalog: { models: [], defaultModelsByProvider: {} } } };
+    },
+    staleTime: Infinity,
+  }).subscribe(() => {});
+
+  try {
+    await waitForExpectation(() => expect(reads).toBe(1));
+    await waitForExpectation(() =>
+      expect(client.getQueryState(repoCatalogKey)?.fetchStatus).toBe("idle"),
+    );
+
+    await refetchFailedRuntimeQueries(client);
+
+    expect(reads).toBe(2);
+    expect(client.getQueryData(repoCatalogKey)).toMatchObject({ models: { status: "available" } });
+  } finally {
+    unsubscribe();
+    client.clear();
+  }
 });

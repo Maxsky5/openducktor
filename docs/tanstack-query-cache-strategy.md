@@ -26,6 +26,8 @@ Put a reusable server read behind TanStack Query. Keep mutations, process lifecy
 
 These values stop hidden retries and surprise traffic after focus or reconnect. Each query group can replace the default stale time.
 
+A runtime read can fail for a short time, such as when the computer wakes from sleep. No event starts a new read, so the error stays on screen. The runtime query keys that `RUNTIME_KIND_MATCHERS` lists are exempt from the defaults above. When the user returns to the desktop or web app window, the app reads each shown runtime query that failed again. A catalog read that returned a failed surface counts as a failed read. The desktop app also does this when the computer wakes from sleep or the screen unlocks. A runtime read that runs at that time can fail after it ends, so the app waits for it and reads it again if it fails. A read that fails again keeps its error. `refetchFailedRuntimeQueries` in `packages/frontend-core/src/queries/runtime-query-invalidation.ts` owns this rule.
+
 Host queries use `networkMode: "always"`. The host connection handles failures and recovery. Browser offline events must not pause IPC or a reachable host read. A failed host read must settle as an error so the UI can show it.
 
 Each host connection creates its own query client with `createClientQueryClient()`. A query function reads the host from its context with `connectionHost(client)`, so a cache and its reads always use the same host connection. Two hosts with identical repository paths therefore never share cache entries. Code outside a query function receives the query client or the host client as a parameter. A component or hook reads them with `useQueryClient`, `useHostClient`, or `useClientConnection`.

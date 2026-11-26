@@ -68,8 +68,11 @@ type GitRefreshDeps = {
 
 type ManualRun = { key: string; promise: Promise<void> | null; state: ManualRefreshState };
 type FetchRun = { force: boolean; promise: Promise<void> };
-/** A manual run has no visit, so a return to its context continues it. */
-type RefreshRun = { manual: ManualRun | null; visit: number | null };
+/**
+ * A manual run has no visit, so a return to its context continues it. `clears` is the failed manual
+ * Refresh that a scheduled refresh found when it started, and that it ends when its checks pass.
+ */
+type RefreshRun = { manual: ManualRun | null; visit: number | null; clears: ManualRun | null };
 type WaitDecision = "use" | "wait" | "end";
 
 const IDLE: ManualRefreshState = { isRefreshing: false, error: null };
@@ -95,6 +98,8 @@ export class GitRefreshCoordinator {
   readonly #manualRuns = new Map<string, ManualRun>();
   readonly #fetches = new Map<string, FetchRun>();
   readonly #fetchedAt = new Map<string, number>();
+  /** Fetch keys whose last fetch failed. Their next fetch is forced, so it cannot skip the remote. */
+  readonly #failedFetches = new Set<string>();
 
   constructor(deps: GitRefreshDeps) {
     this.#deps = deps;
@@ -137,7 +142,11 @@ export class GitRefreshCoordinator {
     if (!view.ready) return withFiles(mode, () => view.steps.markStale());
     // Another context ends this refresh, and the reads of this context become stale.
     const visit = this.#visit;
-    return withFiles(mode, () => this.#refreshCheckout(view, mode, { manual: null, visit }));
+    const failedManual = this.#manualRuns.get(manualRefreshKey(view));
+    const clears = mode === "scheduled" && failedManual?.state.error ? failedManual : null;
+    return withFiles(mode, () =>
+      this.#refreshCheckout(view, mode, { manual: null, visit, clears }),
+    );
   }
 
   #startManual(view: GitRefreshView, withFiles: GitFileRefresh): Promise<void> {
@@ -179,7 +188,7 @@ export class GitRefreshCoordinator {
       if (!current) return view.steps.markStale();
     }
     // A return to its context joins a manual Refresh, so it runs in any visit.
-    await this.#refreshCheckout(current, "hard", { manual: run, visit: null });
+    await this.#refreshCheckout(current, "hard", { manual: run, visit: null, clears: null });
   }
 
   async #prepare(
@@ -250,6 +259,7 @@ export class GitRefreshCoordinator {
     }
     if (!this.#isCurrent(current, run)) return current.steps.markStale();
     await this.#refreshGit(current, mode, run);
+    if (run.clears && this.#isCurrent(current, run)) this.#endManualFailure(current, run.clears);
   }
 
   async #refreshGit(
@@ -300,11 +310,14 @@ export class GitRefreshCoordinator {
     return Promise.all([readLocal(), steps.readComparison(historyFailure)]).then(() => undefined);
   }
 
-  /** A manual fetch always runs and forces the host fetch. A scheduled fetch waits for its cooldown. */
+  /**
+   * A manual fetch always runs and forces the host fetch. A scheduled fetch waits for its cooldown,
+   * but after a failed fetch it runs and forces the host fetch, so its success shows a reached remote.
+   */
   async #fetch(comparison: GitRefreshComparison, mode: GitDiffRefreshMode): Promise<void> {
     if (mode === "soft") return;
-    const force = mode === "hard";
     const { fetchKey } = comparison;
+    const force = mode === "hard" || this.#failedFetches.has(fetchKey);
     const fetchedAt = this.#fetchedAt.get(fetchKey);
     if (
       !force &&
@@ -324,6 +337,10 @@ export class GitRefreshCoordinator {
     try {
       await run.promise;
       this.#fetchedAt.set(fetchKey, this.#deps.now());
+      this.#failedFetches.delete(fetchKey);
+    } catch (error) {
+      this.#failedFetches.add(fetchKey);
+      throw error;
     } finally {
       if (this.#fetches.get(fetchKey) === run) this.#fetches.delete(fetchKey);
     }
@@ -349,6 +366,20 @@ export class GitRefreshCoordinator {
       this.#waiters.add(check);
       check(this.#view);
     });
+  }
+
+  /**
+   * A scheduled refresh that passes its branch read, fetch, and target check ends the failure of
+   * a manual Refresh that failed before it started, so the Refresh state stops showing it. Each
+   * click makes a new run, so a newer failure stays. The fetch can skip the remote during its
+   * cooldown, but not after a failed fetch. Each failed read stays in its own view. A soft refresh
+   * does not fetch, so it keeps the failure.
+   */
+  #endManualFailure(view: GitRefreshView, failed: ManualRun): void {
+    const key = manualRefreshKey(view);
+    if (this.#manualRuns.get(key) !== failed) return;
+    this.#manualRuns.delete(key);
+    this.#notify();
   }
 
   #move(run: ManualRun, key: string): void {

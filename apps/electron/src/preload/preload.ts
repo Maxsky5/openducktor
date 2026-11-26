@@ -4,6 +4,7 @@ import {
   ELECTRON_SHORTCUT_APPLY_CHANNEL,
   ELECTRON_SHORTCUT_EVENT_CHANNEL,
   ELECTRON_SHORTCUT_RELEASE_CHANNEL,
+  ELECTRON_SYSTEM_WAKE_CHANNEL,
 } from "../shared/electron-bridge-contract";
 import { chromiumArtifactPreviewSupport } from "@openducktor/frontend/lib/artifact-preview-environment";
 import {
@@ -317,6 +318,13 @@ const electronApi: OpenDucktorElectronApi = {
   editorClipboard: {
     readText(type) {
       return ipcRenderer.invoke(ELECTRON_EDITOR_CLIPBOARD_READ_CHANNEL, type);
+    },
+  },
+  systemWake: {
+    subscribe(onWake) {
+      const handleWake = () => onWake();
+      ipcRenderer.on(ELECTRON_SYSTEM_WAKE_CHANNEL, handleWake);
+      return () => ipcRenderer.off(ELECTRON_SYSTEM_WAKE_CHANNEL, handleWake);
     },
   },
 };

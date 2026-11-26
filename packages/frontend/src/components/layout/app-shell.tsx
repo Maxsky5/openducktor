@@ -43,6 +43,9 @@ import {
   useWorkspaceState,
 } from "@/state/app-state-provider";
 import { repoConfigQueryOptionsOrSkip } from "@openducktor/frontend-core/queries/workspace";
+import { useRefetchFailedRuntimeQueries } from "@openducktor/frontend-core/queries/use-refetch-failed-runtime-queries";
+import { windowReturnVisibility } from "@/lib/window-return-visibility";
+import { useShellPlatform } from "@/lib/shell-platform";
 
 type AppShellSidebarPreference = "opened" | "collapsed";
 
@@ -105,6 +108,8 @@ function OpenRepositoryModalWhenEmpty({ onEmpty }: { onEmpty: () => void }): nul
 
 const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
   const { run: guardWorkspaceChange } = useWorkspacePreviewTransitionGuard();
+  const { systemWake } = useShellPlatform();
+  useRefetchFailedRuntimeQueries(windowReturnVisibility, systemWake);
   const [repositoryModal, setRepositoryModal] = useState<RepositoryModalRequest>({
     open: false,
     view: undefined,

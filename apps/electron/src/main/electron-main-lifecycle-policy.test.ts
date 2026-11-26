@@ -130,14 +130,6 @@ describe("Electron main lifecycle policy", () => {
     expect(source).toContain("return disposeActiveElectronRuntimeEffect(reason)");
   });
 
-  test("app update state forwarding skips destroyed windows and logs send failures", () => {
-    const source = readRepoFile("apps/electron/src/main/main.ts");
-
-    expect(source).toContain("window.isDestroyed() || window.webContents.isDestroyed()");
-    expect(source).toContain("window.webContents.send(ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL");
-    expect(source).toContain("OpenDucktor update state forwarding failed");
-  });
-
   test("startup creates the window before initializing background host services", async () => {
     const calls: string[] = [];
 

@@ -1,6 +1,7 @@
 export const ELECTRON_SHORTCUT_APPLY_CHANNEL = "openducktor:shortcuts:apply";
 export const ELECTRON_SHORTCUT_EVENT_CHANNEL = "openducktor:shortcuts:event";
 export const ELECTRON_SHORTCUT_RELEASE_CHANNEL = "openducktor:shortcuts:release";
+import type { SystemWake } from "@openducktor/frontend-core/platform/system-wake";
 import type {
   AppPlatform,
   ArtifactPreviewEnvironment,
@@ -49,6 +50,7 @@ export const ELECTRON_APP_UPDATE_DOWNLOAD_CHANNEL = "openducktor:app-update:down
 export const ELECTRON_APP_UPDATE_INSTALL_CHANNEL = "openducktor:app-update:install";
 export const ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL = "openducktor:app-update:state-changed";
 export const ELECTRON_TERMINAL_SEND_CHANNEL = "openducktor:terminal:send";
+export const ELECTRON_SYSTEM_WAKE_CHANNEL = "openducktor:system-wake";
 export const PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE =
   "application/vnd.pierre.diffs-selections+json" as const;
 type EditorClipboardReadType = typeof PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE;
@@ -187,6 +189,7 @@ export type OpenDucktorElectronApi = {
   editorClipboard: {
     readText(type?: EditorClipboardReadType): Promise<string>;
   };
+  systemWake: SystemWake;
 };
 
 export const ELECTRON_REMOTE_ACCESS_CHANNEL = "openducktor:remote-access";

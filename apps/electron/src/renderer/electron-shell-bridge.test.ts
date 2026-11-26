@@ -145,6 +145,7 @@ const createElectronApi = () => {
     | undefined;
   const electronApi = {
     shortcuts: { apply: async () => {}, subscribe: () => () => {}, release: () => {} },
+    systemWake: { subscribe: () => () => {} },
     getArtifactPreviewEnvironment: mock(async () => ({
       bootstrapUrl: "odt-artifact-preview://bootstrap",
       scriptedHtml: { supported: true as const },

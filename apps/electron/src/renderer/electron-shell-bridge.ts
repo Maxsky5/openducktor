@@ -56,6 +56,7 @@ export const withElectronDesktopShell = (bridge: ShellBridge): ShellBridge => ({
   ...bridge,
   client: withElectronNativeTheme(bridge.client, (theme) => getElectronApi().setNativeTheme(theme)),
   shortcuts: getElectronApi().shortcuts,
+  systemWake: getElectronApi().systemWake,
   getArtifactPreviewEnvironment: () => getElectronApi().getArtifactPreviewEnvironment(),
 });
 
@@ -141,6 +142,7 @@ export const createElectronShellBridge = (): ShellBridge => {
       return { kind: "url", src: createElectronTaskAssetUrl(context) };
     },
     shortcuts: electronApi.shortcuts,
+    systemWake: electronApi.systemWake,
     editorClipboard: {
       readText(type) {
         if (type === undefined) return electronApi.editorClipboard.readText();
