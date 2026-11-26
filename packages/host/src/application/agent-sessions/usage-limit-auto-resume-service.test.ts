@@ -1,183 +1,27 @@
 import { describe, expect, test } from "bun:test";
 import {
-  type AgentSessionAuthorizedRoot,
-  type AgentSessionControlSummary,
   type AgentSessionLiveEnvelope,
-  type AgentSessionLiveReadResult,
   type AgentSessionLiveRef,
-  type AgentSessionResumeIntent,
   globalConfigSchema,
-  type UsageLimitAutoResume,
 } from "@openducktor/contracts";
+import type { UsageLimitStop } from "@openducktor/core";
 import { Deferred, Effect } from "effect";
-import { TestClock } from "effect/testing";
-import { type HostError, HostOperationError } from "../../effect/host-errors";
-import type { UsageLimitRecovery, UsageLimitStop } from "@openducktor/core";
+import { HostOperationError } from "../../effect/host-errors";
 import { runtimeQueryError } from "../../ports/runtime-query-error";
 import { SessionOperationError } from "../../ports/session-operation-error";
-import { createLiveWorkflowObservations } from "./live-workflow-observations";
+import { USAGE_LIMIT_RESUME_GRACE_MS } from "./usage-limit-auto-resume-service";
 import {
-  createUsageLimitAutoResumeService,
-  USAGE_LIMIT_RESUME_GRACE_MS,
-} from "./usage-limit-auto-resume-service";
-
-const BASE = Date.parse("2026-11-15T00:00:00.000Z");
-const RESET = BASE + 60 * 60_000;
-const DUE = RESET + USAGE_LIMIT_RESUME_GRACE_MS;
-
-const claudeRef: AgentSessionLiveRef = {
-  repoPath: "/repo",
-  runtimeKind: "claude",
-  workingDirectory: "/repo/worktree",
-  externalSessionId: "session-1",
-};
-const sessionScope = {
-  kind: "workflow",
-  workspaceId: "workspace-1",
-  taskId: "task-1",
-  role: "build",
-} as const;
-
-const eventBase = (ref: AgentSessionLiveRef) => ({
-  externalSessionId: ref.externalSessionId,
-  timestamp: new Date(BASE).toISOString(),
-  sessionRef: ref,
-});
-const limitError = (
-  messageId: string,
-  resetsAtEpochMs?: number,
-  ref = claudeRef,
-): AgentSessionLiveEnvelope => ({
-  type: "transcript_event",
-  event: {
-    ...eventBase(ref),
-    type: "turn_error",
-    messageId,
-    message: "Session limit reached.",
-    usageLimit: resetsAtEpochMs === undefined ? {} : { resetsAtEpochMs },
-  },
-});
-const turnFailed = (ref = claudeRef): AgentSessionLiveEnvelope => ({
-  type: "transcript_event",
-  event: {
-    ...eventBase(ref),
-    type: "session_turn_finished",
-    completionId: "result-1",
-    messageIds: [],
-    turnOutcome: "failed",
-  },
-});
-const userMessage = (messageId: string): AgentSessionLiveEnvelope => ({
-  type: "transcript_event",
-  event: {
-    ...eventBase(claudeRef),
-    type: "user_message",
-    messageId,
-    message: "Continue",
-    parts: [],
-    state: "read",
-  },
-});
-
-const flush = Effect.gen(function* () {
-  for (let index = 0; index < 20; index += 1)
-    yield* Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
-});
-
-/** The answers of the fakes, which each test can change. */
-type HarnessState = {
-  roots: AgentSessionAuthorizedRoot[];
-  live: AgentSessionLiveReadResult;
-  /** Runs before each live read answers. */
-  liveRead: Effect.Effect<void>;
-  resume: () => Effect.Effect<AgentSessionControlSummary, HostError>;
-  recovery: UsageLimitRecovery;
-};
-
-const createHarness = (
-  options: { enabled?: boolean; roots?: AgentSessionAuthorizedRoot[] } = {},
-) => {
-  const published: Array<UsageLimitAutoResume | null> = [];
-  const observations = createLiveWorkflowObservations();
-  const resumes: AgentSessionResumeIntent[] = [];
-  const failures: string[] = [];
-  const readFailures: string[] = [];
-  const summary: AgentSessionControlSummary = {
-    externalSessionId: claudeRef.externalSessionId,
-    runtimeKind: "claude",
-    workingDirectory: claudeRef.workingDirectory,
-    title: "Build",
-    startedAt: new Date(BASE).toISOString(),
-    status: "running",
-  };
-  const state: HarnessState = {
-    roots: options.roots ?? [{ ...claudeRef, sessionScope }],
-    live: { type: "missing", ref: claudeRef },
-    liveRead: Effect.void,
-    resume: () => Effect.succeed(summary),
-    recovery: { kind: "recovered" },
-  };
-  const service = createUsageLimitAutoResumeService({
-    live: {
-      // The live owner publishes only a changed entry.
-      publishUsageLimitAutoResume: (ref, entry) =>
-        Effect.sync(() => {
-          if (observations.autoResume(ref, entry)) published.push(entry);
-        }),
-      read: () => Effect.suspend(() => state.liveRead).pipe(Effect.as(state.live)),
-    },
-    resume: (input) =>
-      Effect.suspend(() => {
-        resumes.push(input);
-        return state.resume();
-      }),
-    readRoots: () => Effect.sync(() => state.roots),
-    listRepoPaths: () => Effect.succeed(["/repo"]),
-    readUsageLimitRecovery: () => Effect.sync(() => state.recovery),
-    settingsConfig: {
-      readConfig: () =>
-        Effect.succeed(
-          globalConfigSchema.parse({
-            version: 4,
-            chat: { autoResumeAfterUsageLimits: options.enabled ?? true },
-          }),
-        ),
-    },
-    onBackgroundFailure: (failure) => Effect.sync(() => failures.push(failure.message)),
-    logReadFailure: (message) => Effect.sync(() => readFailures.push(message)),
-  });
-  const run = (program: Effect.Effect<void, unknown>) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        yield* TestClock.setTime(BASE);
-        yield* service.initialize();
-        yield* program;
-      }).pipe(Effect.ensuring(service.dispose()), Effect.provide(TestClock.layer())),
-    );
-  const stop = (resetsAtEpochMs = RESET) =>
-    Effect.gen(function* () {
-      service.observe(limitError("limit-1", resetsAtEpochMs));
-      service.observe(turnFailed());
-      yield* flush;
-    });
-  const advanceTo = (time: number) =>
-    Effect.gen(function* () {
-      yield* TestClock.setTime(time);
-      yield* flush;
-    });
-  return {
-    advanceTo,
-    failures,
-    published,
-    readFailures,
-    resumeSummary: summary,
-    resumes,
-    run,
-    service,
-    state,
-    stop,
-  };
-};
+  BASE,
+  claudeRef,
+  createHarness,
+  DUE,
+  flush,
+  limitError,
+  RESET,
+  sessionScope,
+  turnFailed,
+  userMessage,
+} from "./usage-limit-auto-resume-service.test-support";
 
 describe("usage-limit auto-resume", () => {
   test("resumes the stopped turn after the reset, through the Resume command", async () => {
@@ -590,7 +434,34 @@ describe("usage-limit auto-resume", () => {
     );
   });
 
-  test("does not rebuild a stop when the user sends a message during the history read", async () => {
+  test.each([
+    {
+      name: "a new user message",
+      changes: [userMessage("user-2")],
+    },
+    {
+      name: "a Stop followed by session removal",
+      changes: [
+        {
+          type: "session_operation_updated",
+          observation: {
+            ref: claudeRef,
+            kind: "stop",
+            pending: true,
+            nativeOutcome: "not_issued",
+          },
+        } satisfies AgentSessionLiveEnvelope,
+        { type: "session_removed", ref: claudeRef } satisfies AgentSessionLiveEnvelope,
+      ],
+    },
+    {
+      name: "a new user message followed by session removal",
+      changes: [
+        userMessage("user-2"),
+        { type: "session_removed", ref: claudeRef } satisfies AgentSessionLiveEnvelope,
+      ],
+    },
+  ])("does not rebuild a stop after $name during the history read", async ({ changes }) => {
     const h = createHarness();
     const read = Deferred.makeUnsafe<UsageLimitStop | null>();
     const adapter = {
@@ -601,7 +472,7 @@ describe("usage-limit auto-resume", () => {
       Effect.gen(function* () {
         h.service.runtimeRegistered(adapter);
         yield* flush;
-        h.service.observe(userMessage("user-2"));
+        for (const change of changes) h.service.observe(change);
         yield* Deferred.succeed(read, {
           stopId: "limit-1",
           occurredAtEpochMs: BASE - 60_000,
@@ -682,6 +553,31 @@ describe("usage-limit auto-resume", () => {
         expect(h.published).toEqual([
           { ref: claudeRef, stopId: "limit-1", resumeAtEpochMs: DUE, state: "scheduled" },
         ]);
+      }),
+    );
+  });
+
+  test("does not resume a Claude session while a foreground turn is running at the reset", async () => {
+    const h = createHarness();
+    await h.run(
+      Effect.gen(function* () {
+        yield* h.stop();
+        h.state.live = {
+          type: "live",
+          session: {
+            ref: claudeRef,
+            activity: "running",
+            foregroundTurnActive: true,
+            title: "Build",
+            startedAt: new Date(BASE).toISOString(),
+            pendingApprovals: [],
+            pendingQuestions: [],
+            contextUsage: null,
+          },
+        };
+        yield* h.advanceTo(DUE);
+        expect(h.resumes).toEqual([]);
+        expect(h.published.at(-1)).toMatchObject({ state: "scheduled" });
       }),
     );
   });

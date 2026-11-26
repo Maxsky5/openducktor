@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { SDKRateLimitEvent, SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk";
+import type { SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import {
   decideClaudeLiveContinuation,
@@ -13,13 +13,23 @@ import {
   claudeSdkMessageFixture,
   claudeSdkMessageUuidFixture,
 } from "./claude-agent-sdk-test-messages";
+import {
+  claudeRateLimitEventFixture as rateLimitEvent,
+  claudeTaskNotificationWakeFixture as taskNotificationWake,
+} from "./claude-agent-sdk-usage-limit.test-support";
 
-const rateLimitEvent = (info: SDKRateLimitInfo): SDKRateLimitEvent => ({
-  type: "rate_limit_event",
-  session_id: "session-1",
-  uuid: "00000000-0000-4000-8000-000000000004",
-  rate_limit_info: info,
-});
+const createHandler = (session: ReturnType<typeof createClaudeSession>, timestamp: string) => {
+  const events: AgentEvent[] = [];
+  const handle = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"]) =>
+    handleClaudeSdkMessage({
+      session,
+      message,
+      timestamp,
+      emit: (event) => events.push(event),
+      modelSelection: (modelId) => ({ providerId: "claude", modelId, runtimeKind: "claude" }),
+    });
+  return { events, handle };
+};
 
 describe("Claude usage-limit recovery", () => {
   test.each([
@@ -301,4 +311,437 @@ describe("Claude usage-limit recovery", () => {
       expect(history.filter((message) => message.role === "system")).toHaveLength(1);
     },
   );
+
+  test.each([
+    ["task-notification wake turn", () => [taskNotificationWake("wake-user")]],
+    [
+      "scheduled meta wakeup",
+      () => [
+        claudeSdkMessageFixture({
+          type: "user",
+          uuid: claudeSdkMessageUuidFixture("meta-wake"),
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          isSynthetic: true,
+          message: { role: "user", content: "Continue scheduled check." },
+        }),
+      ],
+    ],
+  ] as const)(
+    "allows Resume when a %s hits a usage limit after a completed turn",
+    (_label, wakeMessages) => {
+      const timestamp = "2026-11-26T06:53:39.000Z";
+      const text = "You've hit your weekly limit · resets 6pm (Europe/Paris)";
+      const user = claudeSdkMessageFixture({
+        type: "user",
+        uuid: claudeSdkMessageUuidFixture("user-1"),
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        message: { role: "user", content: "Monitor the PR" },
+      });
+      const completedAssistant = claudeSdkMessageFixture({
+        type: "assistant",
+        uuid: claudeSdkMessageUuidFixture("assistant-1"),
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        message: {
+          id: "completed-response",
+          model: "claude-opus-5-5",
+          role: "assistant",
+          content: [{ type: "text", text: "Waiting for CI." }],
+          stop_reason: "end_turn",
+        },
+      });
+      const completedResult = claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        uuid: claudeSdkMessageUuidFixture("result-1"),
+        user_message_uuid: user.uuid,
+        session_id: "session-1",
+        is_error: false,
+        result: "Waiting for CI.",
+        stop_reason: "end_turn",
+        terminal_reason: "completed",
+      });
+      const limitAssistant = claudeSdkMessageFixture({
+        type: "assistant",
+        uuid: claudeSdkMessageUuidFixture("limit-assistant"),
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        error: "rate_limit",
+        message: {
+          id: "limit-response",
+          model: "<synthetic>",
+          role: "assistant",
+          content: [{ type: "text", text }],
+          stop_reason: "stop_sequence",
+        },
+      });
+      const limitResult = claudeSdkMessageFixture({
+        type: "result",
+        subtype: "error_during_execution",
+        uuid: claudeSdkMessageUuidFixture("limit-result"),
+        session_id: "session-1",
+        is_error: true,
+        errors: [text],
+      });
+      const session = createClaudeSession({
+        activity: "running",
+        acceptedUserMessages: [
+          { messageId: user.uuid, text: "Monitor the PR", parts: [], timestamp },
+        ],
+        pendingUserTurnCount: 1,
+        activeSdkUserTurnCount: 1,
+      });
+      const { events, handle } = createHandler(session, timestamp);
+
+      handle(completedAssistant);
+      handle(completedResult);
+      expect(decideClaudeLiveContinuation(session, "session-1")).toMatchObject({
+        kind: "reject",
+        error: { reason: "completed_turn" },
+      });
+
+      const wakes = wakeMessages();
+      for (const message of [
+        ...wakes,
+        rateLimitEvent({ status: "rejected", rateLimitType: "seven_day", resetsAt: 1795712400 }),
+        limitAssistant,
+        limitResult,
+      ]) {
+        handle(message);
+      }
+
+      expect(session.activity).toBe("idle");
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "turn_error",
+          messageId: "limit-response",
+          usageLimit: { resetsAtEpochMs: 1795712400000 },
+        }),
+      );
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "session_turn_finished",
+          turnOutcome: "failed",
+        }),
+      );
+      expect(decideClaudeLiveContinuation(session, "session-1")).toEqual({ kind: "allow" });
+
+      const history = toClaudeHistoryMessages(
+        claudeHistoryMessagesFixture([
+          user,
+          completedAssistant,
+          completedResult,
+          ...wakes,
+          limitAssistant,
+          limitResult,
+        ]),
+        () => timestamp,
+      );
+      expect(decideClaudePersistedContinuation(history, "session-1")).toEqual({ kind: "allow" });
+    },
+  );
+
+  test("rejects Resume after a wake turn completes successfully", () => {
+    const timestamp = "2026-11-26T06:53:39.000Z";
+    const session = createClaudeSession({
+      activity: "idle",
+      acceptedUserMessages: [
+        { messageId: claudeSdkMessageUuidFixture("user-1"), text: "Build", parts: [], timestamp },
+      ],
+      lastSuccessfulResultTurnIndex: 1,
+      lastAssistantTextFinal: true,
+      lastAssistantTextTurnIndex: 1,
+    });
+    const { handle } = createHandler(session, timestamp);
+
+    handle(taskNotificationWake("wake-user"));
+    handle(
+      claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        uuid: claudeSdkMessageUuidFixture("wake-result"),
+        session_id: "session-1",
+        is_error: false,
+        result: "All checks passed.",
+        stop_reason: "end_turn",
+        terminal_reason: "completed",
+      }),
+    );
+
+    expect(decideClaudeLiveContinuation(session, "session-1")).toMatchObject({
+      kind: "reject",
+      error: { reason: "completed_turn" },
+    });
+  });
+
+  test.each([
+    ["preserves Resume after a weekly-limit stop", false, "allow"],
+    ["keeps a completed turn settled", true, "reject"],
+  ] as const)(
+    "empty notification-only wake %s without emitting a final marker",
+    (_label, priorCompleted, expectedKind) => {
+      const timestamp = "2026-11-26T06:54:00.000Z";
+      const session = createClaudeSession({
+        activity: "idle",
+        acceptedUserMessages: [
+          {
+            messageId: claudeSdkMessageUuidFixture("user-1"),
+            text: "Monitor the PR",
+            parts: [],
+            timestamp,
+          },
+        ],
+      });
+      if (priorCompleted) {
+        session.lastSuccessfulResultTurnIndex = 1;
+        session.lastAssistantTextFinal = true;
+        session.lastAssistantTextTurnIndex = 1;
+      }
+      const { events, handle } = createHandler(session, timestamp);
+
+      handle(taskNotificationWake("empty-wake-user"));
+      handle(
+        claudeSdkMessageFixture({
+          type: "result",
+          subtype: "success",
+          uuid: claudeSdkMessageUuidFixture("empty-wake-result"),
+          session_id: "session-1",
+          is_error: false,
+          result: "",
+          stop_reason: "end_turn",
+          terminal_reason: "completed",
+          origin: { kind: "task-notification" },
+        }),
+      );
+
+      expect(events.some((event) => event.type === "assistant_message")).toBe(false);
+      expect(decideClaudeLiveContinuation(session, "session-1").kind).toBe(expectedKind);
+    },
+  );
+
+  test("settles both live host and transcript marker when a wake runs assistant work and finishes without text", () => {
+    const timestamp = "2026-11-26T06:54:00.000Z";
+    const session = createClaudeSession({
+      activity: "idle",
+      acceptedUserMessages: [
+        {
+          messageId: claudeSdkMessageUuidFixture("user-1"),
+          text: "Monitor the PR",
+          parts: [],
+          timestamp,
+        },
+      ],
+    });
+    const { events, handle } = createHandler(session, timestamp);
+
+    handle(taskNotificationWake("tool-wake-user"));
+    handle(
+      claudeSdkMessageFixture({
+        type: "assistant",
+        uuid: claudeSdkMessageUuidFixture("tool-wake-assistant"),
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        message: {
+          id: "tool-wake-msg",
+          role: "assistant",
+          content: [{ type: "tool_use", id: "tu-1", name: "Bash", input: { command: "echo ok" } }],
+          stop_reason: "tool_use",
+        },
+      }),
+    );
+    handle(
+      claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        uuid: claudeSdkMessageUuidFixture("tool-wake-result"),
+        session_id: "session-1",
+        is_error: false,
+        result: "",
+        stop_reason: "end_turn",
+        terminal_reason: "completed",
+      }),
+    );
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_message",
+        messageId: claudeSdkMessageUuidFixture("tool-wake-result"),
+        message: "",
+      }),
+    );
+    expect(decideClaudeLiveContinuation(session, "session-1")).toMatchObject({
+      kind: "reject",
+      error: { reason: "completed_turn" },
+    });
+  });
+
+  test.each([
+    { name: "a synthetic wake user frame", wake: { isSynthetic: true } },
+    { name: "a non-query wake user frame", wake: { shouldQuery: false } },
+    { name: "a display-only result with no user frame", wake: null },
+  ] as const)(
+    "does not mark an interrupted turn complete on an empty result from $name",
+    ({ name, wake }) => {
+      const timestamp = "2026-10-08T07:53:48.000Z";
+      const session = createClaudeSession({
+        activity: "running",
+        foregroundTurnActive: true,
+        pendingUserTurnCount: 1,
+        acceptedUserMessages: [
+          {
+            messageId: "user-1",
+            text: "Build",
+            parts: [],
+            timestamp,
+          },
+        ],
+      });
+      const { events, handle } = createHandler(session, timestamp);
+
+      // The interrupted turn ran a tool call before hitting the weekly limit.
+      handle(
+        claudeSdkMessageFixture({
+          type: "assistant",
+          uuid: claudeSdkMessageUuidFixture(`pre-limit-tool-${name}`),
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          message: {
+            id: `pre-limit-tool-${name}`,
+            role: "assistant",
+            content: [{ type: "tool_use", id: "tu-pre-1", name: "Bash", input: { command: "ls" } }],
+            stop_reason: "tool_use",
+          },
+        }),
+      );
+      handle(
+        claudeSdkMessageFixture({
+          type: "assistant",
+          uuid: claudeSdkMessageUuidFixture(`limit-err-${name}`),
+          session_id: "session-1",
+          error: "rate_limit",
+          message: {
+            id: `limit-err-${name}`,
+            content: [{ type: "text", text: "You've hit your weekly limit." }],
+            stop_reason: "end_turn",
+          },
+        }),
+      );
+      handle(
+        claudeSdkMessageFixture({
+          type: "result",
+          subtype: "error_during_execution",
+          uuid: claudeSdkMessageUuidFixture(`limit-res-${name}`),
+          session_id: "session-1",
+          user_message_uuid: "user-1",
+          errors: ["You've hit your weekly limit."],
+        }),
+      );
+      events.length = 0;
+
+      if (wake) handle(taskNotificationWake(`wake-${name}`, wake));
+      handle(
+        claudeSdkMessageFixture({
+          type: "result",
+          subtype: "success",
+          uuid: claudeSdkMessageUuidFixture(`empty-notif-res-${name}`),
+          session_id: "session-1",
+          is_error: false,
+          num_turns: 0,
+          result: "",
+          stop_reason: null,
+        }),
+      );
+
+      expect(session.lastSuccessfulResultTurnIndex).toBeUndefined();
+      expect(events.filter((event) => event.type === "assistant_message")).toEqual([]);
+      expect(decideClaudeLiveContinuation(session, "session-1")).toEqual({ kind: "allow" });
+    },
+  );
+
+  test("settles empty SDKResultSuccess turns for local slash commands", () => {
+    const timestamp = "2026-10-08T07:55:00.000Z";
+
+    // Silent local slash command (no local_command_output, empty result, num_turns: 0, stop_reason: null).
+    const silentSession = createClaudeSession({
+      activity: "running",
+      foregroundTurnActive: true,
+      pendingUserTurnCount: 1,
+      acceptedUserMessages: [{ messageId: "cmd-1", text: "/cost", parts: [], timestamp }],
+    });
+    const silent = createHandler(silentSession, timestamp);
+    silent.handle(
+      claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        uuid: claudeSdkMessageUuidFixture("silent-local-cmd-res"),
+        session_id: "session-1",
+        user_message_uuid: "cmd-1",
+        local_command: "/cost",
+        is_error: false,
+        num_turns: 0,
+        result: "",
+        stop_reason: null,
+      }),
+    );
+
+    expect(silentSession.lastSuccessfulResultTurnIndex).toBe(1);
+    expect(silent.events).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_message",
+        messageId: claudeSdkMessageUuidFixture("silent-local-cmd-res"),
+        message: "",
+      }),
+    );
+    expect(decideClaudeLiveContinuation(silentSession, "session-1")).toMatchObject({
+      kind: "reject",
+      error: { reason: "completed_turn" },
+    });
+
+    // Output-bearing local slash command: local_command_output already emits the final assistant message.
+    const outputSession = createClaudeSession({
+      activity: "running",
+      foregroundTurnActive: true,
+      pendingUserTurnCount: 1,
+      acceptedUserMessages: [{ messageId: "cmd-2", text: "/cost", parts: [], timestamp }],
+    });
+    const withOutput = createHandler(outputSession, timestamp);
+    withOutput.handle(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "local_command_output",
+        uuid: claudeSdkMessageUuidFixture("local-cmd-out"),
+        session_id: "session-1",
+        content: "Total cost: $0.12",
+      }),
+    );
+    withOutput.handle(
+      claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        uuid: claudeSdkMessageUuidFixture("output-local-cmd-res"),
+        session_id: "session-1",
+        user_message_uuid: "cmd-2",
+        local_command: "/cost",
+        is_error: false,
+        num_turns: 0,
+        result: "",
+        stop_reason: null,
+      }),
+    );
+
+    expect(outputSession.lastSuccessfulResultTurnIndex).toBe(1);
+    expect(withOutput.events.filter((event) => event.type === "assistant_message")).toEqual([
+      expect.objectContaining({
+        type: "assistant_message",
+        messageId: claudeSdkMessageUuidFixture("local-cmd-out"),
+        message: "Total cost: $0.12",
+      }),
+    ]);
+    expect(decideClaudeLiveContinuation(outputSession, "session-1")).toMatchObject({
+      kind: "reject",
+      error: { reason: "completed_turn" },
+    });
+  });
 });

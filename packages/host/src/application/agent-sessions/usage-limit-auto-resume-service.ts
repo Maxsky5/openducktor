@@ -26,7 +26,7 @@ import type { SettingsConfigPort, SettingsConfigView } from "../../ports/setting
 import { SessionOperationError } from "../../ports/session-operation-error";
 import { sessionLiveRef } from "./agent-session-continuation-errors";
 import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
-import { hasBlockingInput } from "./session-foreground-readiness";
+import { hasBlockingInput, hasForegroundTurn } from "./session-foreground-readiness";
 import { resolveOwnedSessionRoot } from "./session-owner-resolution";
 import {
   createUsageLimitStops,
@@ -160,12 +160,19 @@ export const createUsageLimitAutoResumeService = (
         stops.cancel(stop.ref, stop.stopId);
         return;
       }
-      const [live, recovery] = yield* Effect.all(
-        [deps.live.read(stop.ref), deps.readUsageLimitRecovery(stop.ref)],
-        { concurrency: 2 },
-      );
+      const live = yield* deps.live.read(stop.ref);
+      if (!stops.isDue(stop)) return;
+      if (live.type === "live" && hasBlockingInput(live.session)) {
+        stops.startResume(stop, { kind: "blocked_on_input" });
+        return;
+      }
+      if (live.type === "live" && hasForegroundTurn(live.session)) {
+        stops.startResume(stop, { kind: "active_turn" });
+        return;
+      }
+      const recovery = yield* deps.readUsageLimitRecovery(stop.ref);
       const started = stops.startResume(stop, {
-        blockedOnInput: live.type === "live" && hasBlockingInput(live.session),
+        kind: "ready",
         now: yield* Clock.currentTimeMillis,
         recovery,
       });
@@ -205,15 +212,17 @@ export const createUsageLimitAutoResumeService = (
     Effect.gen(function* () {
       const ref = sessionLiveRef(root);
       if (stops.hasStop(ref)) return;
-      const workCountBefore = stops.workCount(ref);
-      const read = yield* Effect.result(adapter.queries.readLatestUsageLimitStop(root));
-      if (read._tag === "Failure")
-        return yield* deps.logReadFailure(
-          `Auto-resume cannot read the usage limit of session '${root.externalSessionId}': ${causeChainMessage(read.failure)}`,
-        );
-      const now = yield* Clock.currentTimeMillis;
-      const stop = stops.restore(ref, read.success, workCountBefore, now);
-      if (stop) stops.planned(stop, true);
+      const pending = stops.beginRestore(ref);
+      yield* Effect.gen(function* () {
+        const read = yield* Effect.result(adapter.queries.readLatestUsageLimitStop(root));
+        if (read._tag === "Failure")
+          return yield* deps.logReadFailure(
+            `Auto-resume cannot read the usage limit of session '${root.externalSessionId}': ${causeChainMessage(read.failure)}`,
+          );
+        const now = yield* Clock.currentTimeMillis;
+        const stop = pending.restore(read.success, now);
+        if (stop) stops.planned(stop, true);
+      }).pipe(Effect.ensuring(Effect.sync(pending.release)));
     });
 
   /** Plans the stops that runtime history reports for the roots of one runtime. */

@@ -14,7 +14,11 @@ import {
   type UsageLimitStop,
 } from "@openducktor/core";
 import { hasForegroundTurn } from "./session-foreground-readiness";
-import { nextUsageLimitStop, type UsageLimitStopSignal } from "./usage-limit-stop-signal";
+import {
+  isNewTurnWorkEvent,
+  nextUsageLimitStop,
+  type UsageLimitStopSignal,
+} from "./usage-limit-stop-signal";
 
 /** The resume waits this long after the reset, so a clock difference cannot use the one attempt. */
 export const USAGE_LIMIT_RESUME_GRACE_MS = 30_000;
@@ -43,17 +47,18 @@ export type TrackedUsageLimitStop = {
 
 type MutableStop = {
   -readonly [Field in keyof TrackedUsageLimitStop]: TrackedUsageLimitStop[Field];
+} & {
+  sawIdleWhileDue: boolean;
 };
 
 /** The stops whose due time passed, and the next due time of the others. */
 export type DueStops = { due: TrackedUsageLimitStop[]; nextDueAt: number | undefined };
 
 /** What the due-time checks found. `recovery` is the answer of the runtime for the account. */
-export type DueCheck = {
-  blockedOnInput: boolean;
-  now: number;
-  recovery: UsageLimitRecovery;
-};
+export type DueCheck =
+  | { readonly kind: "blocked_on_input" }
+  | { readonly kind: "active_turn" }
+  | { readonly kind: "ready"; readonly now: number; readonly recovery: UsageLimitRecovery };
 
 export const supportsUsageLimitAutoResume = (runtimeKind: RuntimeKind): boolean =>
   RUNTIME_DESCRIPTORS_BY_KIND[runtimeKind].capabilities.sessionLifecycle
@@ -69,6 +74,14 @@ const hasEligibleReset = (stop: MutableStop): boolean =>
 const dueAtOf = (stop: MutableStop): number =>
   (stop.resetsAtEpochMs ?? 0) + USAGE_LIMIT_RESUME_GRACE_MS;
 
+/** Single-use handle for an in-flight history restore. */
+export type PendingUsageLimitRestore = {
+  /** Applies the history result if no live work invalidated the read. */
+  readonly restore: (found: UsageLimitStop | null, now: number) => TrackedUsageLimitStop | null;
+  /** Releases the guard when the read finishes, fails, or is cancelled. */
+  readonly release: () => void;
+};
+
 /**
  * Owns every rule of the usage-limit stops of the host process: which stop is the latest of each
  * session, when it is planned, when new work ends it, and which stops never come back. It does
@@ -81,8 +94,10 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
   const stops = new Map<string, MutableStop>();
   /** Stops that ended in this process. A history rebuild never plans them again. */
   const ended = new Set<string>();
-  /** Counts new work of each session, so a history read can tell that the session moved on. */
-  const workCounts = new Map<string, number>();
+  /** Tokens for in-flight history reads. Membership is cleared on live work or release. */
+  const pendingRestores = new Map<string, Set<symbol>>();
+  /** Supported sessions with an active foreground turn, mapped to their repoPath for snapshot reconciliation. */
+  const activeForegroundRepoByKey = new Map<string, string>();
 
   const isCurrent = (stop: TrackedUsageLimitStop): boolean =>
     stops.get(agentSessionRefKey(stop.ref)) === stop;
@@ -100,14 +115,22 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
     changed(stop.ref);
   };
 
-  const countWork = (key: string): void => {
-    workCounts.set(key, (workCounts.get(key) ?? 0) + 1);
+  const invalidatePendingRestores = (key: string): void => {
+    pendingRestores.delete(key);
   };
 
   /** New work in the session ends its stop. */
   const newWork = (key: string): void => {
-    countWork(key);
+    invalidatePendingRestores(key);
     end(key);
+  };
+
+  const noteIdle = (key: string): void => {
+    const wasActive = activeForegroundRepoByKey.delete(key);
+    const stop = stops.get(key);
+    if (!stop) return;
+    if (stop.phase === "due") stop.sawIdleWhileDue = true;
+    else if (wasActive && stop.phase === "scheduled") changed(stop.ref);
   };
 
   /** Moves an eligible stop to the root check. The caller runs the check. */
@@ -138,7 +161,8 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
       !stop ||
       nextUsageLimitStop(stop, { kind: "limit_error", stopId: event.messageId }) !== "same_stop"
     ) {
-      // A new stop replaces the previous one, also while its resume runs.
+      // A new stop supersedes any in-flight history read and replaces the previous stop.
+      invalidatePendingRestores(key);
       end(key);
       stops.set(key, {
         ref: event.sessionRef,
@@ -148,6 +172,7 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
         turnEnded: false,
         phase: "observed",
         failure: undefined,
+        sawIdleWhileDue: false,
       });
       return null;
     }
@@ -169,45 +194,95 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
   };
 
   const observeSession = (session: AgentSessionLiveSnapshot): void => {
-    if (!hasForegroundTurn(session)) return;
+    if (!supportsUsageLimitAutoResume(session.ref.runtimeKind)) return;
     const key = agentSessionRefKey(session.ref);
-    const stop = stops.get(key);
-    // The resume of the owner shows foreground work too. The resume result ends that stop.
-    if (stop?.phase === "resuming") return;
-    // Foreground work during the failed turn is that turn. Only later work ends the stop.
-    if (stop?.turnEnded === false) countWork(key);
-    else newWork(key);
+    if (!hasForegroundTurn(session)) {
+      noteIdle(key);
+      return;
+    }
+    activeForegroundRepoByKey.set(key, session.ref.repoPath);
+  };
+
+  const observeTranscriptEvent = (
+    event: Extract<AgentSessionLiveEnvelope, { type: "transcript_event" }>["event"],
+  ): TrackedUsageLimitStop | null => {
+    if (!supportsUsageLimitAutoResume(event.sessionRef.runtimeKind)) return null;
+    switch (event.type) {
+      case "turn_error": {
+        const key = agentSessionRefKey(event.sessionRef);
+        if (event.usageLimit && event.messageId) return observeLimitError(key, event);
+        const stop = stops.get(key);
+        if (stop?.phase !== "resuming" && stop?.turnEnded !== false) newWork(key);
+        return null;
+      }
+      case "session_error": {
+        if (stops.size === 0 && pendingRestores.size === 0) return null;
+        const key = agentSessionRefKey(event.sessionRef);
+        const stop = stops.get(key);
+        if (stop?.phase !== "resuming" && stop?.turnEnded !== false) newWork(key);
+        return null;
+      }
+      case "session_idle":
+      case "session_turn_finished": {
+        const key = agentSessionRefKey(event.sessionRef);
+        if (event.type === "session_idle") noteIdle(key);
+        const stop = stops.get(key);
+        if (!stop || !event.turnOutcome) return null;
+        // Only the end of the failed turn counts here. Later work ends the stop elsewhere.
+        const signal: UsageLimitStopSignal = { kind: "turn_end", outcome: event.turnOutcome };
+        if (nextUsageLimitStop(stop, signal) !== "turn_ended") return null;
+        stop.turnEnded = true;
+        return toPlan(stop);
+      }
+      default: {
+        if (stops.size === 0 && pendingRestores.size === 0) return null;
+        const key = agentSessionRefKey(event.sessionRef);
+        const stop = stops.get(key);
+        if (!stop && !pendingRestores.has(key)) return null;
+        if (isAcceptedUserMessage(event)) {
+          newWork(key);
+        } else if (
+          stop?.phase !== "resuming" &&
+          stop?.turnEnded !== false &&
+          isNewTurnWorkEvent(event)
+        ) {
+          newWork(key);
+        }
+        return null;
+      }
+    }
   };
 
   return {
     /** Applies one live change. Returns the stop that needs a root check before its plan. */
     observe: (envelope: AgentSessionLiveEnvelope): TrackedUsageLimitStop | null => {
       switch (envelope.type) {
-        case "transcript_event": {
-          const { event } = envelope;
-          if (event.type === "turn_error")
-            return observeLimitError(agentSessionRefKey(event.sessionRef), event);
-          if (isAcceptedUserMessage(event)) {
-            newWork(agentSessionRefKey(event.sessionRef));
-          }
-          if (event.type !== "session_turn_finished" && event.type !== "session_idle") return null;
-          const key = agentSessionRefKey(event.sessionRef);
-          const stop = stops.get(key);
-          if (!stop || !event.turnOutcome) return null;
-          // Only the end of the failed turn counts here. Later work ends the stop elsewhere.
-          const signal: UsageLimitStopSignal = { kind: "turn_end", outcome: event.turnOutcome };
-          if (nextUsageLimitStop(stop, signal) !== "turn_ended") return null;
-          stop.turnEnded = true;
-          return toPlan(stop);
-        }
+        case "transcript_event":
+          return observeTranscriptEvent(envelope.event);
         case "session_upsert":
           observeSession(envelope.session);
           return null;
-        case "snapshot":
-          for (const session of envelope.sessions) observeSession(session);
+        case "session_removed": {
+          if (!supportsUsageLimitAutoResume(envelope.ref.runtimeKind)) return null;
+          noteIdle(agentSessionRefKey(envelope.ref));
           return null;
+        }
+        case "snapshot": {
+          const seen = new Set<string>();
+          for (const session of envelope.sessions) {
+            if (supportsUsageLimitAutoResume(session.ref.runtimeKind)) {
+              seen.add(agentSessionRefKey(session.ref));
+            }
+            observeSession(session);
+          }
+          for (const [key, repoPath] of activeForegroundRepoByKey) {
+            if (repoPath === envelope.repoPath && !seen.has(key)) noteIdle(key);
+          }
+          return null;
+        }
         case "session_operation_updated": {
           const { observation } = envelope;
+          if (!supportsUsageLimitAutoResume(observation.ref.runtimeKind)) return null;
           const key = agentSessionRefKey(observation.ref);
           if (!observation.pending) return null;
           // A Stop, or a Resume that the owner did not start, ends the planned auto-resume.
@@ -240,11 +315,12 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
       let nextDueAt: number | undefined;
       // The setting is off. The stops become due again when it turns on.
       if (!enabled) return { due, nextDueAt };
-      for (const stop of stops.values()) {
-        if (stop.phase !== "scheduled") continue;
+      for (const [key, stop] of stops) {
+        if (stop.phase !== "scheduled" || activeForegroundRepoByKey.has(key)) continue;
         const dueAt = dueAtOf(stop);
         if (dueAt <= now) {
           stop.phase = "due";
+          stop.sawIdleWhileDue = false;
           due.push(stop);
         } else nextDueAt = Math.min(nextDueAt ?? dueAt, dueAt);
       }
@@ -257,8 +333,17 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
       const key = agentSessionRefKey(stop.ref);
       const current = stops.get(key);
       if (current !== stop || current.phase !== "due") return false;
-      if (check.blockedOnInput || !hasEligibleReset(current)) {
+      if (!hasEligibleReset(current) || check.kind === "blocked_on_input") {
         end(key);
+        return false;
+      }
+      if (check.kind === "active_turn") {
+        if (!current.sawIdleWhileDue) activeForegroundRepoByKey.set(key, stop.ref.repoPath);
+        setPhase(current, "scheduled");
+        return false;
+      }
+      if (activeForegroundRepoByKey.has(key)) {
+        setPhase(current, "scheduled");
         return false;
       }
       if (check.now < dueAtOf(current)) {
@@ -311,39 +396,53 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
     },
     /** True when a history read for the session can add nothing. */
     hasStop: (ref: AgentSessionLiveRef): boolean => stops.has(agentSessionRefKey(ref)),
-    /** The work count before a history read, to compare after it. */
-    workCount: (ref: AgentSessionLiveRef): number => workCounts.get(agentSessionRefKey(ref)) ?? 0,
     /**
-     * Adds a stop that runtime history reports after a host start. A passed reset waits for a
-     * manual Resume. New work or a live stop during the read is newer than the history.
+     * Registers an in-flight history restore so live work invalidates it even across removal.
+     * A passed reset waits for a manual Resume.
      */
-    restore: (
-      ref: AgentSessionLiveRef,
-      found: UsageLimitStop | null,
-      workCountBefore: number,
-      now: number,
-    ): TrackedUsageLimitStop | null => {
+    beginRestore: (ref: AgentSessionLiveRef): PendingUsageLimitRestore => {
       const key = agentSessionRefKey(ref);
-      if (
-        !found ||
-        found.resetsAtEpochMs === undefined ||
-        found.resetsAtEpochMs <= now ||
-        stops.has(key) ||
-        (workCounts.get(key) ?? 0) !== workCountBefore
-      )
-        return null;
-      const stop: MutableStop = {
-        ref,
-        stopId: found.stopId,
-        occurredAtEpochMs: found.occurredAtEpochMs,
-        resetsAtEpochMs: found.resetsAtEpochMs,
-        turnEnded: true,
-        phase: "observed",
-        failure: undefined,
+      const token = Symbol();
+      let tokens = pendingRestores.get(key);
+      if (!tokens) {
+        tokens = new Set();
+        pendingRestores.set(key, tokens);
+      }
+      tokens.add(token);
+      const release = (): void => {
+        const current = pendingRestores.get(key);
+        if (!current) return;
+        current.delete(token);
+        if (current.size === 0) pendingRestores.delete(key);
       };
-      if (ended.has(stopKey(stop))) return null;
-      stops.set(key, stop);
-      return toPlan(stop);
+      return {
+        release,
+        restore: (found, now) => {
+          const valid = pendingRestores.get(key)?.has(token) === true;
+          release();
+          if (
+            !valid ||
+            !found ||
+            found.resetsAtEpochMs === undefined ||
+            found.resetsAtEpochMs <= now ||
+            stops.has(key)
+          )
+            return null;
+          const stop: MutableStop = {
+            ref,
+            stopId: found.stopId,
+            occurredAtEpochMs: found.occurredAtEpochMs,
+            resetsAtEpochMs: found.resetsAtEpochMs,
+            turnEnded: true,
+            phase: "observed",
+            failure: undefined,
+            sawIdleWhileDue: false,
+          };
+          if (ended.has(stopKey(stop))) return null;
+          stops.set(key, stop);
+          return toPlan(stop);
+        },
+      };
     },
     /** The published entry of a session, or null. Clients see a due stop as scheduled. */
     entry: (ref: AgentSessionLiveRef): UsageLimitAutoResume | null => {
@@ -366,7 +465,8 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
     clear: (): void => {
       stops.clear();
       ended.clear();
-      workCounts.clear();
+      pendingRestores.clear();
+      activeForegroundRepoByKey.clear();
     },
   };
 };

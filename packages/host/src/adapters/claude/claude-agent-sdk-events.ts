@@ -19,7 +19,11 @@ import {
 } from "./claude-agent-sdk-forwarded-subagent-events";
 import { applyClaudeLifecycleEvent, publishClaudeActivity } from "./claude-agent-sdk-lifecycle";
 import { claudeReplyDurationMs } from "./claude-agent-sdk-message-timestamp";
-import { updateBackgroundTasks, acceptTaskEvent } from "./claude-agent-sdk-activity";
+import {
+  acceptTaskEvent,
+  isClaudeForegroundTurnActive,
+  updateBackgroundTasks,
+} from "./claude-agent-sdk-activity";
 import {
   isClaudeMetaStreamMessage,
   isClaudeSyntheticAssistantMessage,
@@ -36,6 +40,7 @@ import {
 import { handleClaudeStreamEvent } from "./claude-agent-sdk-stream-events";
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import { handleClaudeSubagentSystemMessage } from "./claude-agent-sdk-subagents";
+import { clearClaudePreviousAssistantTracking } from "./claude-agent-sdk-turn-completion";
 import { parseClaudeUserToolResultIngress } from "./claude-agent-sdk-ingress-schemas";
 import {
   clearClaudeStreamToolInputs,
@@ -135,7 +140,7 @@ export const handleClaudeSdkMessage = ({
       return;
     }
     if (isRootSession && message.parent_tool_use_id === null) {
-      applyClaudeLifecycleEvent({ emit, session, timestamp, event: { kind: "sdk_turn_started" } });
+      startRootSdkTurn({ emit, session, timestamp });
     }
     handleAssistantMessage({
       emit,
@@ -150,14 +155,7 @@ export const handleClaudeSdkMessage = ({
     const userToolResultMessage = parseClaudeUserToolResultIngress(message);
     if (isRootSession && isClaudeWakeUserMessage(message, userToolResultMessage)) {
       session.replyStartedAt ??= timestamp;
-      delete session.lastAssistantNativeUuid;
-      delete session.lastAssistantNativeUuidTurnIndex;
-      delete session.lastAssistantTextMessageId;
-      delete session.lastAssistantText;
-      delete session.lastAssistantTextFinal;
-      delete session.lastAssistantTextModel;
-      delete session.lastAssistantTextDurationMs;
-      delete session.lastAssistantTextTurnIndex;
+      clearClaudePreviousAssistantTracking(session);
       session.sdkInitiatedTurnActive = true;
       applyClaudeLifecycleEvent({ emit, session, timestamp, event: { kind: "sdk_turn_started" } });
     }
@@ -167,7 +165,7 @@ export const handleClaudeSdkMessage = ({
   }
   if (message.type === "stream_event") {
     if (isRootSession && message.parent_tool_use_id === null) {
-      applyClaudeLifecycleEvent({ emit, session, timestamp, event: { kind: "sdk_turn_started" } });
+      startRootSdkTurn({ emit, session, timestamp });
     }
     handleClaudeStreamEvent({ emit, message, session, timestamp });
     return;
@@ -279,6 +277,21 @@ export const handleClaudeSdkMessage = ({
   if (message.type === "system" && message.subtype === "permission_denied") {
     handleClaudePermissionDeniedMessage({ emit, message, session, timestamp });
   }
+};
+
+const startRootSdkTurn = ({
+  emit,
+  session,
+  timestamp,
+}: Pick<SdkMessageHandlerInput, "emit" | "session" | "timestamp">): void => {
+  if (!isClaudeForegroundTurnActive(session)) {
+    clearClaudePreviousAssistantTracking(session);
+    delete session.lastSuccessfulResultTurnIndex;
+  } else if (session.sdkInitiatedTurnActive === true) {
+    // A wake turn that begins model or stream output supersedes any prior completed result.
+    delete session.lastSuccessfulResultTurnIndex;
+  }
+  applyClaudeLifecycleEvent({ emit, session, timestamp, event: { kind: "sdk_turn_started" } });
 };
 
 const handleSessionStateChanged = ({

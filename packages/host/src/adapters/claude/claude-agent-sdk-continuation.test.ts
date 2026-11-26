@@ -6,7 +6,13 @@ import {
   decideClaudeLiveContinuation,
   decideClaudePersistedContinuation,
 } from "./claude-agent-sdk-continuation";
+import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
+import {
+  claudeHistoryMessagesFixture,
+  claudeSdkMessageFixture,
+  claudeSdkMessageUuidFixture,
+} from "./claude-agent-sdk-test-messages";
 
 const userMessage = (messageId: string): AgentSessionHistoryMessage => ({
   messageId,
@@ -209,6 +215,141 @@ describe("decideClaudePersistedContinuation", () => {
         reason: "completed_turn",
         message: "Claude session 'session-1' has a final assistant result.",
       },
+    });
+  });
+
+  test.each([
+    [
+      "assistant work after an earlier final reply",
+      [userMessage("user-1"), assistantMessage("assistant-1", "stop"), assistantMessage("wake-1")],
+    ],
+    [
+      "a session error after an earlier final reply",
+      [
+        userMessage("user-1"),
+        assistantMessage("assistant-1", "stop"),
+        {
+          messageId: "limit-1",
+          role: "system",
+          timestamp: "2026-07-17T10:02:00.000Z",
+          text: "Weekly limit reached.",
+          notice: {
+            tone: "error",
+            reason: "session_error",
+            title: "Error",
+            usageLimit: { resetsAtEpochMs: 1795712400000 },
+          },
+          parts: [],
+        },
+      ],
+    ],
+  ] satisfies Array<[string, AgentSessionHistoryMessage[]]>)(
+    "allows a persisted transcript with %s",
+    (_label, history) => {
+      expect(decideClaudePersistedContinuation(history, "session-1")).toEqual({ kind: "allow" });
+    },
+  );
+
+  test.each([
+    [
+      "a completed wake turn after an earlier final reply",
+      [
+        userMessage("user-1"),
+        assistantMessage("assistant-1", "stop"),
+        assistantMessage("wake-1"),
+        assistantMessage("wake-final", "stop"),
+      ],
+    ],
+    [
+      "a non-error system notice after a final reply",
+      [
+        userMessage("user-1"),
+        assistantMessage("assistant-1", "stop"),
+        {
+          messageId: "compact-1",
+          role: "system",
+          timestamp: "2026-07-17T10:02:00.000Z",
+          text: "Session compacted.",
+          notice: {
+            tone: "info",
+            reason: "session_compacted",
+            title: "Compacted",
+          },
+          parts: [],
+        },
+      ],
+    ],
+    [
+      "a subagent-only status row after a final reply",
+      [
+        userMessage("user-1"),
+        assistantMessage("assistant-1", "stop"),
+        {
+          messageId: "claude-subagent:task-1",
+          role: "assistant",
+          timestamp: "2026-07-17T10:02:00.000Z",
+          text: "",
+          parts: [
+            {
+              kind: "subagent",
+              messageId: "claude-subagent:task-1",
+              partId: "claude-subagent:task-1:part",
+              correlationKey: "subagent:task-1",
+              status: "completed",
+              description: "Background review",
+            },
+          ],
+        },
+      ],
+    ],
+  ] satisfies Array<[string, AgentSessionHistoryMessage[]]>)(
+    "rejects a persisted transcript with %s",
+    (_label, history) => {
+      expect(decideClaudePersistedContinuation(history, "session-1")).toMatchObject({
+        kind: "reject",
+        error: { reason: "completed_turn" },
+      });
+    },
+  );
+
+  test("rejects a completed transcript followed by a late task_notification projection", () => {
+    const timestamp = "2026-07-17T10:02:00.000Z";
+    const history = toClaudeHistoryMessages(
+      claudeHistoryMessagesFixture([
+        claudeSdkMessageFixture({
+          type: "user",
+          uuid: claudeSdkMessageUuidFixture("user-1"),
+          message: { role: "user", content: "Ship the change" },
+        }),
+        claudeSdkMessageFixture({
+          type: "assistant",
+          uuid: claudeSdkMessageUuidFixture("assistant-1"),
+          message: {
+            id: "reply-1",
+            role: "assistant",
+            content: [{ type: "text", text: "Done." }],
+            stop_reason: "end_turn",
+          },
+        }),
+        claudeSdkMessageFixture({
+          type: "system",
+          subtype: "task_notification",
+          uuid: claudeSdkMessageUuidFixture("notif-1"),
+          task_id: "bg-task-1",
+          status: "completed",
+          output_file: "/tmp/bg.log",
+          summary: "Background check finished.",
+        }),
+      ]),
+      () => timestamp,
+    );
+
+    expect(history.at(-1)?.role).toBe("assistant");
+    expect(history.at(-1)?.text).toBe("");
+    expect(history.at(-1)?.parts.map((part) => part.kind)).toEqual(["subagent"]);
+    expect(decideClaudePersistedContinuation(history, "session-1")).toMatchObject({
+      kind: "reject",
+      error: { reason: "completed_turn" },
     });
   });
 });

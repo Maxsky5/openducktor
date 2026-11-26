@@ -1,4 +1,46 @@
-import type { AgentTurnOutcome } from "@openducktor/contracts";
+import type { AgentSessionTranscriptEvent, AgentTurnOutcome } from "@openducktor/contracts";
+import { z } from "zod";
+
+const toolProgressMetadataSchema = z.union([
+  z.object({ backgroundTaskId: z.string().min(1) }),
+  z.object({ elapsedTimeSeconds: z.number() }),
+]);
+
+/**
+ * Assistant output that proves a turn ran new model work. Background subagent updates,
+ * background tool updates (`backgroundTaskId`), and `tool_progress` heartbeats
+ * (`elapsedTimeSeconds`) can arrive after a failed turn without starting a new reply.
+ */
+export const isNewTurnWorkEvent = (event: AgentSessionTranscriptEvent): boolean => {
+  switch (event.type) {
+    case "assistant_delta":
+    case "assistant_message":
+      return true;
+    case "assistant_part":
+      switch (event.part.kind) {
+        case "image_generation":
+        case "text":
+        case "reasoning":
+        case "step":
+          return true;
+        case "tool": {
+          if (event.part.status !== "pending" && event.part.status !== "running") return false;
+          const { metadata } = event.part;
+          if (
+            !metadata ||
+            (!("backgroundTaskId" in metadata) && !("elapsedTimeSeconds" in metadata))
+          ) {
+            return true;
+          }
+          return !toolProgressMetadataSchema.safeParse(metadata).success;
+        }
+        case "subagent":
+          return false;
+      }
+    default:
+      return false;
+  }
+};
 
 /** The part of a usage-limit stop that decides what a later live signal means. */
 export type UsageLimitStopProgress = {

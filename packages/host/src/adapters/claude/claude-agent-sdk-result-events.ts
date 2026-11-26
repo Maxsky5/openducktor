@@ -34,6 +34,10 @@ import {
   recordClaudeToolDenial,
 } from "./claude-agent-sdk-tool-denials";
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
+import {
+  clearClaudeTurnCompletionForFailedTurn,
+  evaluateClaudeCompletedResult,
+} from "./claude-agent-sdk-turn-completion";
 
 type ClaudeResultEventSession = ClaudeBackgroundWorkSession &
   ErrorState & {
@@ -111,25 +115,24 @@ export const handleClaudeResultMessage = ({
     emitSuccessfulResultText({ emit, message, session, timestamp, completedUserTurnIndex });
   }
   if (!failed && !handledManualCompaction && lifecycleOutcome === "completed") {
-    // A tool-only result carries no assistant text, so the turn index is the only
-    // record that the latest accepted turn finished.
-    session.lastSuccessfulResultTurnIndex = completedUserTurnIndex;
-    const hasCurrentFinalText =
-      session.lastAssistantTextFinal &&
-      session.lastAssistantTextTurnIndex === completedUserTurnIndex;
-    const hasCurrentAssistant =
-      session.lastAssistantNativeUuid &&
-      session.lastAssistantNativeUuidTurnIndex === completedUserTurnIndex;
+    const { completedOwnTurn, hasCurrentFinalText, hasCurrentLocalCommandOutput } =
+      evaluateClaudeCompletedResult(session, message, completedUserTurnIndex, resultText);
+    if (completedOwnTurn) {
+      // A tool-only result carries no assistant text, so the turn index is the only
+      // record that the latest accepted turn finished.
+      session.lastSuccessfulResultTurnIndex = completedUserTurnIndex;
+    }
     if (resultText.length === 0 && hasCurrentFinalText) {
       emitClaudeDeferredReplyForkPoint({ emit, session, timestamp });
     }
     // On resume, Claude Code sends an empty result for notifications that it writes only to the
     // transcript.
     const endsOwnTurnWithoutText =
+      completedOwnTurn &&
       resultText.length === 0 &&
       isClaudeForegroundTurnActive(session) &&
       !hasCurrentFinalText &&
-      (!session.sdkInitiatedTurnActive || hasCurrentAssistant);
+      !hasCurrentLocalCommandOutput;
     if (endsOwnTurnWithoutText) {
       emitFinalAssistantMarker({ emit, message, session, timestamp });
     }
@@ -157,6 +160,7 @@ export const handleClaudeResultMessage = ({
   const consumedMessageCount = messageIds.filter((messageId) => acceptedIds.has(messageId)).length;
   if (failed) {
     clearClaudeManualCompaction(session);
+    clearClaudeTurnCompletionForFailedTurn(session, completedUserTurnIndex);
     const errors = message.subtype === "success" ? [] : message.errors;
     const terminalReason = message.subtype === "success" ? undefined : message.terminal_reason;
     const lastError =
