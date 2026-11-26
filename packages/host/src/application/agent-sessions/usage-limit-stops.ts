@@ -69,13 +69,6 @@ export const supportsUsageLimitAutoResume = (runtimeKind: RuntimeKind): boolean 
   RUNTIME_DESCRIPTORS_BY_KIND[runtimeKind].capabilities.sessionLifecycle
     .supportsUsageLimitAutoResume;
 
-/**
- * Claude briefly flips foreground active for an empty notification-only wake, so live foreground
- * pulses alone do not cancel a pending Claude stop and due checks defer until the wake ends.
- */
-const allowsTransientForegroundWake = (runtimeKind: RuntimeKind): boolean =>
-  runtimeKind === "claude";
-
 const stopKey = (stop: Pick<MutableStop, "ref" | "stopId">): string =>
   `${agentSessionRefKey(stop.ref)}\u0000${stop.stopId}`;
 
@@ -106,8 +99,8 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
   const stops = new Map<string, MutableStop>();
   /** Stops that ended in this process. A history rebuild never plans them again. */
   const ended = new Set<string>();
-  /** Guards for in-flight history reads, so live work invalidates them even across removal. */
-  const pendingRestores = new Map<string, Set<{ invalidated: boolean }>>();
+  /** Tokens for in-flight history reads. Membership is cleared on live work or release. */
+  const pendingRestores = new Map<string, Set<symbol>>();
   /** Supported sessions whose latest observed live snapshot has an active foreground turn. */
   const activeForegroundKeys = new Set<string>();
 
@@ -128,9 +121,7 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
   };
 
   const countWork = (key: string): void => {
-    const guards = pendingRestores.get(key);
-    if (!guards) return;
-    for (const guard of guards) guard.invalidated = true;
+    pendingRestores.delete(key);
   };
 
   /** New work in the session ends its stop. */
@@ -218,18 +209,13 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
       return;
     }
     activeForegroundKeys.add(key);
+    // Foreground work during the failed turn counts as activity on the session. Later transient
+    // foreground pulses wait for real turn output, a user message, a host operation, or idle
+    // resolution at due time rather than cancelling the stop immediately.
     const stop = stops.get(key);
-    // The resume of the owner shows foreground work too. The resume result ends that stop.
-    if (stop?.phase === "resuming") return;
-    // Foreground work during the failed turn is that turn.
-    if (stop?.turnEnded === false) {
+    if (stop?.turnEnded === false && stop.phase !== "resuming") {
       countWork(key);
-      return;
     }
-    // Claude briefly flips foreground active for an empty notification-only wake. Wait for real
-    // turn output, a user message, a host operation, or the wake ending before deciding.
-    if (allowsTransientForegroundWake(session.ref.runtimeKind)) return;
-    newWork(key);
   };
 
   return {
@@ -239,6 +225,14 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
         case "transcript_event": {
           const { event } = envelope;
           if (!supportsUsageLimitAutoResume(event.sessionRef.runtimeKind)) return null;
+          if (
+            event.type !== "turn_error" &&
+            event.type !== "session_idle" &&
+            stops.size === 0 &&
+            pendingRestores.size === 0
+          ) {
+            return null;
+          }
           const key = agentSessionRefKey(event.sessionRef);
           if (event.type === "turn_error") {
             if (event.usageLimit && event.messageId) return observeLimitError(key, event);
@@ -246,24 +240,25 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
             if (stop?.phase !== "resuming" && stop?.turnEnded !== false) newWork(key);
             return null;
           }
-          if (isAcceptedUserMessage(event)) {
-            newWork(key);
-          } else if (isNewTurnWorkEvent(event)) {
-            const stop = stops.get(key);
-            if (stop?.phase !== "resuming") {
+          const stop = stops.get(key);
+          const hasPendingRestore = pendingRestores.has(key);
+          if (stop || hasPendingRestore) {
+            if (isAcceptedUserMessage(event)) {
+              newWork(key);
+            } else if (stop?.phase !== "resuming" && isNewTurnWorkEvent(event)) {
               if (stop?.turnEnded === false) countWork(key);
               else newWork(key);
             }
           }
           if (event.type === "session_idle") noteIdle(key);
           if (event.type !== "session_turn_finished" && event.type !== "session_idle") return null;
-          const stop = stops.get(key);
-          if (!stop || !event.turnOutcome) return null;
+          const currentStop = stops.get(key);
+          if (!currentStop || !event.turnOutcome) return null;
           // Only the end of the failed turn counts here. Later work ends the stop elsewhere.
           const signal: UsageLimitStopSignal = { kind: "turn_end", outcome: event.turnOutcome };
-          if (nextUsageLimitStop(stop, signal) !== "turn_ended") return null;
-          stop.turnEnded = true;
-          return toPlan(stop);
+          if (nextUsageLimitStop(currentStop, signal) !== "turn_ended") return null;
+          currentStop.turnEnded = true;
+          return toPlan(currentStop);
         }
         case "session_upsert":
           observeSession(envelope.session);
@@ -334,14 +329,9 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
         end(key);
         return false;
       }
-      const becameIdleDuringCheck = check.kind === "active_turn" && current.sawIdleWhileDue;
       const stillActive =
-        activeForegroundKeys.has(key) || (check.kind === "active_turn" && !becameIdleDuringCheck);
+        activeForegroundKeys.has(key) || (check.kind === "active_turn" && !current.sawIdleWhileDue);
       if (stillActive) {
-        if (!allowsTransientForegroundWake(current.ref.runtimeKind)) {
-          end(key);
-          return false;
-        }
         setPhase(current, "waiting_for_idle");
         return false;
       }
@@ -405,29 +395,26 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
      */
     beginRestore: (ref: AgentSessionLiveRef): PendingUsageLimitRestore => {
       const key = agentSessionRefKey(ref);
-      const entry = { invalidated: false };
-      let released = false;
-      let guards = pendingRestores.get(key);
-      if (!guards) {
-        guards = new Set();
-        pendingRestores.set(key, guards);
+      const token = Symbol();
+      let tokens = pendingRestores.get(key);
+      if (!tokens) {
+        tokens = new Set();
+        pendingRestores.set(key, tokens);
       }
-      guards.add(entry);
+      tokens.add(token);
       const release = (): void => {
-        if (released) return;
-        released = true;
         const current = pendingRestores.get(key);
         if (!current) return;
-        current.delete(entry);
+        current.delete(token);
         if (current.size === 0) pendingRestores.delete(key);
       };
       return {
         release,
         restore: (found, now) => {
-          if (released) return null;
+          const valid = pendingRestores.get(key)?.has(token) === true;
           release();
           if (
-            entry.invalidated ||
+            !valid ||
             !found ||
             found.resetsAtEpochMs === undefined ||
             found.resetsAtEpochMs <= now ||
@@ -472,9 +459,6 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
     clear: (): void => {
       stops.clear();
       ended.clear();
-      for (const guards of pendingRestores.values()) {
-        for (const guard of guards) guard.invalidated = true;
-      }
       pendingRestores.clear();
       activeForegroundKeys.clear();
     },

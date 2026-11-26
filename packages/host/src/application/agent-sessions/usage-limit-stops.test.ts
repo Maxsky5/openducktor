@@ -105,23 +105,54 @@ describe("usage-limit stops", () => {
     });
   });
 
+  const sessionUpsert = (
+    activity: "idle" | "running",
+    foregroundTurnActive: boolean,
+  ): AgentSessionLiveEnvelope => ({
+    type: "session_upsert",
+    session: {
+      ref,
+      activity,
+      foregroundTurnActive,
+      title: "Build",
+      startedAt: new Date(BASE).toISOString(),
+      pendingApprovals: [],
+      pendingQuestions: [],
+      contextUsage: null,
+    },
+  });
+
+  type ToolPart = Extract<
+    Extract<
+      Extract<AgentSessionLiveEnvelope, { type: "transcript_event" }>["event"],
+      { type: "assistant_part" }
+    >["part"],
+    { kind: "tool" }
+  >;
+
+  const toolPartEvent = (overrides: Partial<ToolPart>): AgentSessionLiveEnvelope => ({
+    type: "transcript_event",
+    event: {
+      ...eventBase,
+      type: "assistant_part",
+      part: {
+        kind: "tool",
+        messageId: "turn-1",
+        partId: "tool-1",
+        tool: "Bash",
+        toolType: "bash",
+        callId: "call-1",
+        status: "running",
+        ...overrides,
+      },
+    },
+  });
+
   test("ignores a Claude foreground-active pulse and background part updates until real turn work arrives", () => {
     const { stops, stop } = planningStop();
     stops.planned(stop, true);
 
-    stops.observe({
-      type: "session_upsert",
-      session: {
-        ref,
-        activity: "running",
-        foregroundTurnActive: true,
-        title: "Build",
-        startedAt: new Date(BASE).toISOString(),
-        pendingApprovals: [],
-        pendingQuestions: [],
-        contextUsage: null,
-      },
-    });
+    stops.observe(sessionUpsert("running", true));
     stops.observe({
       type: "transcript_event",
       event: {
@@ -136,22 +167,14 @@ describe("usage-limit stops", () => {
         },
       },
     });
-    stops.observe({
-      type: "transcript_event",
-      event: {
-        ...eventBase,
-        type: "assistant_part",
-        part: {
-          kind: "tool",
-          messageId: "bg-2",
-          partId: "tool-bg-1",
-          tool: "Bash",
-          toolType: "bash",
-          callId: "call-bash-1",
-          status: "completed",
-        },
-      },
-    });
+    stops.observe(
+      toolPartEvent({
+        messageId: "bg-2",
+        partId: "tool-bg-1",
+        callId: "call-bash-1",
+        status: "completed",
+      }),
+    );
     stops.observe({
       type: "transcript_event",
       event: {
@@ -176,22 +199,16 @@ describe("usage-limit stops", () => {
       resumeAtEpochMs: RESET + USAGE_LIMIT_RESUME_GRACE_MS,
     });
 
-    stops.observe({
-      type: "transcript_event",
-      event: {
-        ...eventBase,
-        type: "assistant_part",
-        part: {
-          kind: "tool",
-          messageId: "wake-reply-1",
-          partId: "tool-new-1",
-          tool: "Read",
-          toolType: "read",
-          callId: "call-read-1",
-          status: "running",
-        },
-      },
-    });
+    stops.observe(
+      toolPartEvent({
+        messageId: "wake-reply-1",
+        partId: "tool-new-1",
+        tool: "Read",
+        toolType: "read",
+        callId: "call-read-1",
+        status: "running",
+      }),
+    );
 
     expect(stops.entry(ref)).toBeNull();
   });
@@ -199,19 +216,7 @@ describe("usage-limit stops", () => {
   test("defers a due Claude stop while foreground work is active and re-schedules it when idle", () => {
     const { stops, stop } = planningStop();
     stops.planned(stop, true);
-    stops.observe({
-      type: "session_upsert",
-      session: {
-        ref,
-        activity: "running",
-        foregroundTurnActive: true,
-        title: "Build",
-        startedAt: new Date(BASE).toISOString(),
-        pendingApprovals: [],
-        pendingQuestions: [],
-        contextUsage: null,
-      },
-    });
+    stops.observe(sessionUpsert("running", true));
     stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS);
 
     expect(stops.startResume(stop, { kind: "active_turn" })).toBe(false);
@@ -221,19 +226,7 @@ describe("usage-limit stops", () => {
     });
     expect(stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS + 1_000).due).toEqual([]);
 
-    stops.observe({
-      type: "session_upsert",
-      session: {
-        ref,
-        activity: "idle",
-        foregroundTurnActive: false,
-        title: "Build",
-        startedAt: new Date(BASE).toISOString(),
-        pendingApprovals: [],
-        pendingQuestions: [],
-        contextUsage: null,
-      },
-    });
+    stops.observe(sessionUpsert("idle", false));
 
     const due = stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS + 1_000).due;
     expect(due).toEqual([stop]);
@@ -249,35 +242,11 @@ describe("usage-limit stops", () => {
   test("re-schedules immediately if a Claude wake went idle during the due-time check", () => {
     const { stops, stop } = planningStop();
     stops.planned(stop, true);
-    stops.observe({
-      type: "session_upsert",
-      session: {
-        ref,
-        activity: "running",
-        foregroundTurnActive: true,
-        title: "Build",
-        startedAt: new Date(BASE).toISOString(),
-        pendingApprovals: [],
-        pendingQuestions: [],
-        contextUsage: null,
-      },
-    });
+    stops.observe(sessionUpsert("running", true));
     stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS);
 
     // Wake finishes before startResume runs.
-    stops.observe({
-      type: "session_upsert",
-      session: {
-        ref,
-        activity: "idle",
-        foregroundTurnActive: false,
-        title: "Build",
-        startedAt: new Date(BASE).toISOString(),
-        pendingApprovals: [],
-        pendingQuestions: [],
-        contextUsage: null,
-      },
-    });
+    stops.observe(sessionUpsert("idle", false));
 
     expect(stops.startResume(stop, { kind: "active_turn" })).toBe(false);
     expect(stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS).due).toEqual([stop]);
@@ -288,63 +257,37 @@ describe("usage-limit stops", () => {
     stops.planned(stop, true);
 
     // Elapsed tool_progress heartbeat without background metadata.
-    stops.observe({
-      type: "transcript_event",
-      event: {
-        ...eventBase,
-        type: "assistant_part",
-        part: {
-          kind: "tool",
-          messageId: "turn-1",
-          partId: "call-existing-1",
-          tool: "Bash",
-          toolType: "bash",
-          callId: "call-existing-1",
-          status: "running",
-          metadata: { elapsedTimeSeconds: 12, durationMs: 12_000 },
-        },
-      },
-    });
+    stops.observe(
+      toolPartEvent({
+        partId: "call-existing-1",
+        callId: "call-existing-1",
+        metadata: { elapsedTimeSeconds: 12, durationMs: 12_000 },
+      }),
+    );
     // Background task progress update.
-    stops.observe({
-      type: "transcript_event",
-      event: {
-        ...eventBase,
-        type: "assistant_part",
-        part: {
-          kind: "tool",
-          messageId: "turn-0",
-          partId: "call-restored-bg",
-          tool: "Bash",
-          toolType: "bash",
-          callId: "call-restored-bg",
-          status: "running",
-          metadata: { backgroundTaskId: "task-bg-1", backgroundTaskStatus: "running" },
-        },
-      },
-    });
+    stops.observe(
+      toolPartEvent({
+        messageId: "turn-0",
+        partId: "call-restored-bg",
+        callId: "call-restored-bg",
+        metadata: { backgroundTaskId: "task-bg-1", backgroundTaskStatus: "running" },
+      }),
+    );
     expect(stops.entry(ref)).toMatchObject({
       state: "scheduled",
       resumeAtEpochMs: RESET + USAGE_LIMIT_RESUME_GRACE_MS,
     });
 
     // A genuinely new tool call cancels the scheduled stop.
-    stops.observe({
-      type: "transcript_event",
-      event: {
-        ...eventBase,
-        type: "assistant_part",
-        part: {
-          kind: "tool",
-          messageId: "turn-2",
-          partId: "call-new-2",
-          tool: "Read",
-          toolType: "read",
-          callId: "call-new-2",
-          status: "running",
-        },
-      },
-    });
+    stops.observe(
+      toolPartEvent({
+        messageId: "turn-2",
+        partId: "call-new-2",
+        tool: "Read",
+        toolType: "read",
+        callId: "call-new-2",
+      }),
+    );
     expect(stops.entry(ref)).toBeNull();
   });
 

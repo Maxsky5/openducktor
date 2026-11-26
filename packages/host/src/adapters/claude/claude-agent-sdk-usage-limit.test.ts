@@ -14,6 +14,33 @@ import {
   claudeSdkMessageUuidFixture,
 } from "./claude-agent-sdk-test-messages";
 
+const createHandler = (session: ReturnType<typeof createClaudeSession>, timestamp: string) => {
+  const events: AgentEvent[] = [];
+  const handle = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"]) =>
+    handleClaudeSdkMessage({
+      session,
+      message,
+      timestamp,
+      emit: (event) => events.push(event),
+      modelSelection: (modelId) => ({ providerId: "claude", modelId, runtimeKind: "claude" }),
+    });
+  return { events, handle };
+};
+
+const taskNotificationWake = (
+  id: string,
+  overrides: { isSynthetic?: boolean; shouldQuery?: boolean } = {},
+) =>
+  claudeSdkMessageFixture({
+    type: "user",
+    uuid: claudeSdkMessageUuidFixture(id),
+    session_id: "session-1",
+    parent_tool_use_id: null,
+    origin: { kind: "task-notification" },
+    message: { role: "user", content: "<task-notification>done</task-notification>" },
+    ...overrides,
+  });
+
 const rateLimitEvent = (info: SDKRateLimitInfo): SDKRateLimitEvent => ({
   type: "rate_limit_event",
   session_id: "session-1",
@@ -395,15 +422,7 @@ describe("Claude usage-limit recovery", () => {
         pendingUserTurnCount: 1,
         activeSdkUserTurnCount: 1,
       });
-      const events: AgentEvent[] = [];
-      const handle = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"]) =>
-        handleClaudeSdkMessage({
-          session,
-          message,
-          timestamp,
-          emit: (event) => events.push(event),
-          modelSelection: (modelId) => ({ providerId: "claude", modelId, runtimeKind: "claude" }),
-        });
+      const { events, handle } = createHandler(session, timestamp);
 
       handle(completedAssistant);
       handle(completedResult);
@@ -464,25 +483,9 @@ describe("Claude usage-limit recovery", () => {
       lastAssistantTextFinal: true,
       lastAssistantTextTurnIndex: 1,
     });
-    const handle = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"]) =>
-      handleClaudeSdkMessage({
-        session,
-        message,
-        timestamp,
-        emit: () => {},
-        modelSelection: (modelId) => ({ providerId: "claude", modelId, runtimeKind: "claude" }),
-      });
+    const { handle } = createHandler(session, timestamp);
 
-    handle(
-      claudeSdkMessageFixture({
-        type: "user",
-        uuid: claudeSdkMessageUuidFixture("wake-user"),
-        session_id: "session-1",
-        parent_tool_use_id: null,
-        origin: { kind: "task-notification" },
-        message: { role: "user", content: "<task-notification>finished</task-notification>" },
-      }),
-    );
+    handle(taskNotificationWake("wake-user"));
     handle(
       claudeSdkMessageFixture({
         type: "result",
@@ -525,26 +528,9 @@ describe("Claude usage-limit recovery", () => {
         session.lastAssistantTextFinal = true;
         session.lastAssistantTextTurnIndex = 1;
       }
-      const events: AgentEvent[] = [];
-      const handle = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"]) =>
-        handleClaudeSdkMessage({
-          session,
-          message,
-          timestamp,
-          emit: (event) => events.push(event),
-          modelSelection: (modelId) => ({ providerId: "claude", modelId, runtimeKind: "claude" }),
-        });
+      const { events, handle } = createHandler(session, timestamp);
 
-      handle(
-        claudeSdkMessageFixture({
-          type: "user",
-          uuid: claudeSdkMessageUuidFixture("empty-wake-user"),
-          session_id: "session-1",
-          parent_tool_use_id: null,
-          origin: { kind: "task-notification" },
-          message: { role: "user", content: "<task-notification>done</task-notification>" },
-        }),
-      );
+      handle(taskNotificationWake("empty-wake-user"));
       handle(
         claudeSdkMessageFixture({
           type: "result",
@@ -577,26 +563,9 @@ describe("Claude usage-limit recovery", () => {
         },
       ],
     });
-    const events: AgentEvent[] = [];
-    const handle = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"]) =>
-      handleClaudeSdkMessage({
-        session,
-        message,
-        timestamp,
-        emit: (event) => events.push(event),
-        modelSelection: (modelId) => ({ providerId: "claude", modelId, runtimeKind: "claude" }),
-      });
+    const { events, handle } = createHandler(session, timestamp);
 
-    handle(
-      claudeSdkMessageFixture({
-        type: "user",
-        uuid: claudeSdkMessageUuidFixture("tool-wake-user"),
-        session_id: "session-1",
-        parent_tool_use_id: null,
-        origin: { kind: "task-notification" },
-        message: { role: "user", content: "<task-notification>done</task-notification>" },
-      }),
-    );
+    handle(taskNotificationWake("tool-wake-user"));
     handle(
       claudeSdkMessageFixture({
         type: "assistant",
@@ -638,12 +607,12 @@ describe("Claude usage-limit recovery", () => {
   });
 
   test.each([
-    { name: "a synthetic wake user frame", kind: "synthetic" },
-    { name: "a non-query wake user frame", kind: "non_query" },
-    { name: "a display-only result with no user frame", kind: "display_only" },
+    { name: "a synthetic wake user frame", wake: { isSynthetic: true } },
+    { name: "a non-query wake user frame", wake: { shouldQuery: false } },
+    { name: "a display-only result with no user frame", wake: null },
   ] as const)(
     "does not mark an interrupted turn complete on an empty result from $name",
-    ({ kind }) => {
+    ({ name, wake }) => {
       const timestamp = "2026-10-08T07:53:48.000Z";
       const session = createClaudeSession({
         activity: "running",
@@ -658,25 +627,17 @@ describe("Claude usage-limit recovery", () => {
           },
         ],
       });
-      const events: AgentEvent[] = [];
-      const handle = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"]) =>
-        handleClaudeSdkMessage({
-          session,
-          message,
-          timestamp,
-          emit: (event) => events.push(event),
-          modelSelection: (modelId) => ({ providerId: "claude", modelId, runtimeKind: "claude" }),
-        });
+      const { events, handle } = createHandler(session, timestamp);
 
       // The interrupted turn ran a tool call before hitting the weekly limit.
       handle(
         claudeSdkMessageFixture({
           type: "assistant",
-          uuid: claudeSdkMessageUuidFixture(`pre-limit-tool-${kind}`),
+          uuid: claudeSdkMessageUuidFixture(`pre-limit-tool-${name}`),
           session_id: "session-1",
           parent_tool_use_id: null,
           message: {
-            id: `pre-limit-tool-${kind}`,
+            id: `pre-limit-tool-${name}`,
             role: "assistant",
             content: [{ type: "tool_use", id: "tu-pre-1", name: "Bash", input: { command: "ls" } }],
             stop_reason: "tool_use",
@@ -686,11 +647,11 @@ describe("Claude usage-limit recovery", () => {
       handle(
         claudeSdkMessageFixture({
           type: "assistant",
-          uuid: claudeSdkMessageUuidFixture(`limit-err-${kind}`),
+          uuid: claudeSdkMessageUuidFixture(`limit-err-${name}`),
           session_id: "session-1",
           error: "rate_limit",
           message: {
-            id: `limit-err-${kind}`,
+            id: `limit-err-${name}`,
             content: [{ type: "text", text: "You've hit your weekly limit." }],
             stop_reason: "end_turn",
           },
@@ -700,7 +661,7 @@ describe("Claude usage-limit recovery", () => {
         claudeSdkMessageFixture({
           type: "result",
           subtype: "error_during_execution",
-          uuid: claudeSdkMessageUuidFixture(`limit-res-${kind}`),
+          uuid: claudeSdkMessageUuidFixture(`limit-res-${name}`),
           session_id: "session-1",
           user_message_uuid: "user-1",
           errors: ["You've hit your weekly limit."],
@@ -708,35 +669,12 @@ describe("Claude usage-limit recovery", () => {
       );
       events.length = 0;
 
-      if (kind === "synthetic") {
-        handle(
-          claudeSdkMessageFixture({
-            type: "user",
-            uuid: claudeSdkMessageUuidFixture("synthetic-wake"),
-            session_id: "session-1",
-            isSynthetic: true,
-            origin: { kind: "task-notification" },
-            message: { role: "user", content: "<task-notification>done</task-notification>" },
-          }),
-        );
-      } else if (kind === "non_query") {
-        handle(
-          claudeSdkMessageFixture({
-            type: "user",
-            uuid: claudeSdkMessageUuidFixture("non-query-wake"),
-            session_id: "session-1",
-            shouldQuery: false,
-            origin: { kind: "task-notification" },
-            message: { role: "user", content: "<task-notification>done</task-notification>" },
-          }),
-        );
-      }
-
+      if (wake) handle(taskNotificationWake(`wake-${name}`, wake));
       handle(
         claudeSdkMessageFixture({
           type: "result",
           subtype: "success",
-          uuid: claudeSdkMessageUuidFixture(`empty-notif-res-${kind}`),
+          uuid: claudeSdkMessageUuidFixture(`empty-notif-res-${name}`),
           session_id: "session-1",
           is_error: false,
           num_turns: 0,

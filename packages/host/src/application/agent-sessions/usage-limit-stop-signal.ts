@@ -1,7 +1,5 @@
-import type { AgentSessionLiveEnvelope, AgentTurnOutcome } from "@openducktor/contracts";
+import type { AgentSessionTranscriptEvent, AgentTurnOutcome } from "@openducktor/contracts";
 import { z } from "zod";
-
-type TranscriptEvent = Extract<AgentSessionLiveEnvelope, { type: "transcript_event" }>["event"];
 
 const toolProgressMetadataSchema = z.union([
   z.object({ backgroundTaskId: z.string().min(1) }),
@@ -13,7 +11,7 @@ const toolProgressMetadataSchema = z.union([
  * background tool updates (`backgroundTaskId`), and `tool_progress` heartbeats
  * (`elapsedTimeSeconds`) can arrive after a failed turn without starting a new reply.
  */
-export const isNewTurnWorkEvent = (event: TranscriptEvent): boolean => {
+export const isNewTurnWorkEvent = (event: AgentSessionTranscriptEvent): boolean => {
   switch (event.type) {
     case "assistant_delta":
     case "assistant_message":
@@ -25,9 +23,17 @@ export const isNewTurnWorkEvent = (event: TranscriptEvent): boolean => {
         case "reasoning":
         case "step":
           return true;
-        case "tool":
+        case "tool": {
           if (event.part.status !== "pending" && event.part.status !== "running") return false;
-          return !toolProgressMetadataSchema.safeParse(event.part.metadata).success;
+          const { metadata } = event.part;
+          if (
+            !metadata ||
+            (!("backgroundTaskId" in metadata) && !("elapsedTimeSeconds" in metadata))
+          ) {
+            return true;
+          }
+          return !toolProgressMetadataSchema.safeParse(metadata).success;
+        }
         case "subagent":
           return false;
       }

@@ -19,7 +19,11 @@ import {
 } from "./claude-agent-sdk-forwarded-subagent-events";
 import { applyClaudeLifecycleEvent, publishClaudeActivity } from "./claude-agent-sdk-lifecycle";
 import { claudeReplyDurationMs } from "./claude-agent-sdk-message-timestamp";
-import { updateBackgroundTasks, acceptTaskEvent } from "./claude-agent-sdk-activity";
+import {
+  acceptTaskEvent,
+  isClaudeForegroundTurnActive,
+  updateBackgroundTasks,
+} from "./claude-agent-sdk-activity";
 import {
   isClaudeMetaStreamMessage,
   isClaudeSyntheticAssistantMessage,
@@ -290,11 +294,7 @@ const startRootSdkTurn = ({
   session,
   timestamp,
 }: Pick<SdkMessageHandlerInput, "emit" | "session" | "timestamp">): void => {
-  if (
-    session.foregroundTurnActive !== true &&
-    (session.activeSdkUserTurnCount ?? 0) === 0 &&
-    (session.pendingUserTurnCount ?? 0) === 0
-  ) {
+  if (!isClaudeForegroundTurnActive(session)) {
     clearClaudePreviousAssistantTracking(session);
     delete session.lastSuccessfulResultTurnIndex;
   } else if (session.sdkInitiatedTurnActive === true) {

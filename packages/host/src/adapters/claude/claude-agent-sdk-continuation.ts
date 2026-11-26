@@ -101,16 +101,20 @@ export const decideClaudePersistedContinuation = (
       `Claude session '${externalSessionId}' has no unfinished user turn to continue.`,
     );
   }
-  const latestTurn = history.slice(latestUserIndex + 1);
-  const lastFinalIndex = latestTurn.findLastIndex(hasFinalAssistantHistory);
-  if (
-    lastFinalIndex >= 0 &&
-    !latestTurn.slice(lastFinalIndex + 1).some(hasUnfinishedHistoryAfterFinal)
-  ) {
-    return reject(
-      "completed_turn",
-      `Claude session '${externalSessionId}' has a final assistant result.`,
-    );
+  let hasUnfinishedAfterFinal = false;
+  for (let index = history.length - 1; index > latestUserIndex; index -= 1) {
+    const message = history[index];
+    if (!message) continue;
+    if (hasFinalAssistantHistory(message)) {
+      if (hasUnfinishedAfterFinal) return { kind: "allow" };
+      return reject(
+        "completed_turn",
+        `Claude session '${externalSessionId}' has a final assistant result.`,
+      );
+    }
+    if (hasUnfinishedHistoryAfterFinal(message)) {
+      hasUnfinishedAfterFinal = true;
+    }
   }
   return { kind: "allow" };
 };
