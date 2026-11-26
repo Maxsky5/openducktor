@@ -45,6 +45,7 @@ import {
 import { repoConfigQueryOptionsOrSkip } from "@openducktor/frontend-core/queries/workspace";
 import { useRefetchFailedRuntimeQueries } from "@openducktor/frontend-core/queries/use-refetch-failed-runtime-queries";
 import { windowReturnVisibility } from "@/lib/window-return-visibility";
+import { useShellPlatform } from "@/lib/shell-platform";
 
 type AppShellSidebarPreference = "opened" | "collapsed";
 
@@ -97,9 +98,9 @@ function ActiveRepoConfigQuery(): null {
 }
 
 // A runtime read that failed for a short time, such as during sleep, reads again when the user
-// returns to the app.
+// returns to the app or the computer wakes.
 function RefetchFailedRuntimeQueries(): null {
-  useRefetchFailedRuntimeQueries(windowReturnVisibility);
+  useRefetchFailedRuntimeQueries(windowReturnVisibility, useShellPlatform().systemWake);
   return null;
 }
 

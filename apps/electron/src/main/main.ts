@@ -9,6 +9,7 @@ import {
 import { registerElectronRemoteAccessIpc } from "./electron-remote-access-ipc";
 import { registerElectronHostSelectionIpc } from "./electron-host-selection-ipc";
 import { registerElectronNativeThemeIpc } from "./electron-native-theme-ipc";
+import { forwardElectronSystemWake } from "./electron-system-wake";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -133,6 +134,7 @@ const {
   nativeTheme,
   net,
   Notification,
+  powerMonitor,
   protocol,
   session,
   shell,
@@ -1110,6 +1112,7 @@ const configureElectronReadyRuntimeEffect = ({
       });
       registerIpcHandlers(hostCommandRouter, appUpdateService, hostChannelServer);
       registerAppUpdateStateForwarding(appUpdateService);
+      forwardElectronSystemWake(powerMonitor, getMainWindows);
       configureElectronDockIcon();
       return { appUpdateService, hostCommandRouter, hostChannelServer, rendererSession };
     },

@@ -54,3 +54,20 @@ export const refetchFailedRuntimeQueries = (queryClient: QueryClient): Promise<v
       query.state.fetchStatus === "idle" &&
       isRuntimeQueryKey(query.queryKey),
   });
+
+/**
+ * A read that ran during sleep can fail at wake, when its timeout ends or its request breaks. This
+ * waits for the shown runtime reads that are running, and then reads again each one that failed.
+ */
+export const refetchRuntimeQueriesAfterWake = async (queryClient: QueryClient): Promise<void> => {
+  // Without `cancelRefetch`, a refetch of a running read joins it instead of starting another.
+  await queryClient.refetchQueries(
+    {
+      type: "active",
+      predicate: (query) =>
+        query.state.fetchStatus === "fetching" && isRuntimeQueryKey(query.queryKey),
+    },
+    { cancelRefetch: false },
+  );
+  await refetchFailedRuntimeQueries(queryClient);
+};

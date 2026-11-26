@@ -26,7 +26,7 @@ Put a reusable server read behind TanStack Query. Keep mutations, process lifecy
 
 These values stop hidden retries and surprise traffic after focus or reconnect. Each query group can replace the default stale time.
 
-A runtime read can fail for a short time, such as when the computer wakes from sleep. No event reads it again, so its error would stay. Each return to the desktop or web app window reads again the shown runtime reads that failed: session history, todos, context, runtime catalog, and external sessions. A read that fails again keeps its error. Other reads keep the defaults above. `useRefetchFailedRuntimeQueries` in `packages/frontend-core/src/queries` owns this rule.
+A runtime read can fail for a short time, such as when the computer wakes from sleep. No event reads it again, so its error would stay. Each return to the desktop or web app window reads again the shown runtime reads that failed: session history, todos, context, runtime catalog, and external sessions. In the desktop app, a wake of the computer from sleep and a screen unlock do the same, also when the window kept its focus. A wake first waits for the shown runtime reads that are running, because a read that ran during sleep can fail at wake. A read that fails again keeps its error. Other reads keep the defaults above. `useRefetchFailedRuntimeQueries` in `packages/frontend-core/src/queries` owns this rule.
 
 Host queries use `networkMode: "always"`. The host connection handles failures and recovery. Browser offline events must not pause IPC or a reachable host read. A failed host read must settle as an error so the UI can show it.
 

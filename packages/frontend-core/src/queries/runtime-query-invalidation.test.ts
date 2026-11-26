@@ -4,6 +4,7 @@ import { waitForExpectation } from "../test-support/wait-for-expectation";
 import {
   invalidateRuntimeKindQueries,
   refetchFailedRuntimeQueries,
+  refetchRuntimeQueriesAfterWake,
 } from "./runtime-query-invalidation";
 
 const repoCatalogKey = ["runtime-catalog", "catalog", "/repo", "opencode", "/repo"];
@@ -127,6 +128,37 @@ test("a return reads again only the shown runtime reads that failed", async () =
     expect(client.getQueryData(todosKey)).toEqual(["todos"]);
   } finally {
     for (const unsubscribe of unsubscribes) unsubscribe();
+    client.clear();
+  }
+});
+
+test("after a wake, a runtime read that ran during sleep and then fails reads again", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const todosKey = sessionKeys[0]!;
+  const sleepingRead = Promise.withResolvers<string[]>();
+  let reads = 0;
+  const observer = new QueryObserver(client, {
+    queryKey: todosKey,
+    queryFn: () => {
+      reads += 1;
+      return reads === 1 ? sleepingRead.promise : Promise.resolve(["after wake"]);
+    },
+    staleTime: Infinity,
+  });
+  const unsubscribe = observer.subscribe(() => {});
+
+  try {
+    await waitForExpectation(() => expect(reads).toBe(1));
+    const wake = refetchRuntimeQueriesAfterWake(client);
+    // The read that ran during sleep times out after the wake.
+    sleepingRead.reject(new Error("timed out"));
+    await wake;
+
+    expect(reads).toBe(2);
+    expect(client.getQueryState(todosKey)?.error).toBeNull();
+    expect(client.getQueryData(todosKey)).toEqual(["after wake"]);
+  } finally {
+    unsubscribe();
     client.clear();
   }
 });

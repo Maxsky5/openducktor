@@ -17,6 +17,7 @@ import {
 } from "@openducktor/contracts";
 import {
   type AgentEvent,
+  AgentRuntimeQueryError,
   type AgentModelCatalog,
   type AgentModelDescriptor,
   type AgentRuntimeCatalogRead,
@@ -49,6 +50,13 @@ type ClaudeCatalogSession = {
   speedAvailability: AgentSpeedAvailability | undefined;
 };
 
+/**
+ * A catalog timeout is a known query failure. Its message names no connection details, so the
+ * client can show it instead of a generic failure.
+ */
+const catalogTimeout = (message: string): AgentRuntimeQueryError =>
+  new AgentRuntimeQueryError("request_failed", message);
+
 export const loadClaudeModelCatalog = async (
   repoPath: string,
   processEnv: NodeJS.ProcessEnv | undefined,
@@ -66,6 +74,7 @@ export const loadClaudeModelCatalog = async (
       session.sdkQuery.supportedModels(),
       INIT_TIMEOUT_MS,
       "Claude did not return its model catalog. Check Claude authentication and retry.",
+      catalogTimeout,
     );
     return toClaudeModelCatalog(models, session.speedAvailability);
   } finally {
@@ -120,6 +129,7 @@ const openClaudeCatalogSession = async (
       sdkQuery.initializationResult(),
       INIT_TIMEOUT_MS,
       "Claude Agent SDK catalog initialization timed out. Check Claude authentication and network connectivity.",
+      catalogTimeout,
     );
     return {
       queue,

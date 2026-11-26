@@ -473,7 +473,7 @@ describe("GitRefreshCoordinator", () => {
   test("a scheduled refresh that fetches again ends the failure of a manual Refresh", async () => {
     const log: Log = [];
     let now = 0;
-    const fetch = mock(async () => {
+    const fetch = mock(async (_force: boolean) => {
       log.push("fetch");
     });
     const view = createView(log, {
@@ -493,11 +493,11 @@ describe("GitRefreshCoordinator", () => {
     expect(coordinator.manualState(manualRefreshKey(view)).error).toBe("offline");
     notified.mockClear();
 
-    // The failed fetch ends the cooldown of the earlier fetch, so this refresh fetches again.
+    // After the failed fetch, this refresh forces its fetch, so the host cannot skip the remote.
     now = 2;
     await coordinator.refresh("scheduled");
 
-    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch.mock.calls).toEqual([[false], [true], [true]]);
     expect(coordinator.manualState(manualRefreshKey(view)).error).toBeNull();
     expect(notified).toHaveBeenCalledTimes(1);
   });

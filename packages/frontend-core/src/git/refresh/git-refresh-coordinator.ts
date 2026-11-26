@@ -95,6 +95,8 @@ export class GitRefreshCoordinator {
   readonly #manualRuns = new Map<string, ManualRun>();
   readonly #fetches = new Map<string, FetchRun>();
   readonly #fetchedAt = new Map<string, number>();
+  /** Fetch keys whose last fetch failed. Their next fetch is forced, so it cannot skip the remote. */
+  readonly #failedFetches = new Set<string>();
 
   constructor(deps: GitRefreshDeps) {
     this.#deps = deps;
@@ -306,11 +308,14 @@ export class GitRefreshCoordinator {
     return Promise.all([readLocal(), steps.readComparison(historyFailure)]).then(() => undefined);
   }
 
-  /** A manual fetch always runs and forces the host fetch. A scheduled fetch waits for its cooldown. */
+  /**
+   * A manual fetch always runs and forces the host fetch. A scheduled fetch waits for its cooldown,
+   * but after a failed fetch it runs and forces the host fetch, so its success shows a reached remote.
+   */
   async #fetch(comparison: GitRefreshComparison, mode: GitDiffRefreshMode): Promise<void> {
     if (mode === "soft") return;
-    const force = mode === "hard";
     const { fetchKey } = comparison;
+    const force = mode === "hard" || this.#failedFetches.has(fetchKey);
     const fetchedAt = this.#fetchedAt.get(fetchKey);
     if (
       !force &&
@@ -330,9 +335,9 @@ export class GitRefreshCoordinator {
     try {
       await run.promise;
       this.#fetchedAt.set(fetchKey, this.#deps.now());
+      this.#failedFetches.delete(fetchKey);
     } catch (error) {
-      // The remote is not known to be current, so the next scheduled refresh fetches again.
-      this.#fetchedAt.delete(fetchKey);
+      this.#failedFetches.add(fetchKey);
       throw error;
     } finally {
       if (this.#fetches.get(fetchKey) === run) this.#fetches.delete(fetchKey);
