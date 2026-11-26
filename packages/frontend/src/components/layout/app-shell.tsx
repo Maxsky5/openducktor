@@ -97,13 +97,6 @@ function ActiveRepoConfigQuery(): null {
   return null;
 }
 
-// A runtime read that failed for a short time, such as during sleep, reads again when the user
-// returns to the app or the computer wakes.
-function RefetchFailedRuntimeQueries(): null {
-  useRefetchFailedRuntimeQueries(windowReturnVisibility, useShellPlatform().systemWake);
-  return null;
-}
-
 function OpenRepositoryModalWhenEmpty({ onEmpty }: { onEmpty: () => void }): null {
   const isEmpty = useWorkspaceState().workspaces.length === 0;
   const open = useEffectEvent(onEmpty);
@@ -115,6 +108,9 @@ function OpenRepositoryModalWhenEmpty({ onEmpty }: { onEmpty: () => void }): nul
 
 const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
   const { run: guardWorkspaceChange } = useWorkspacePreviewTransitionGuard();
+  // A runtime read that failed for a short time, such as during sleep, reads again when the user
+  // returns to the app or the computer wakes.
+  useRefetchFailedRuntimeQueries(windowReturnVisibility, useShellPlatform().systemWake);
   const [repositoryModal, setRepositoryModal] = useState<RepositoryModalRequest>({
     open: false,
     view: undefined,
@@ -149,7 +145,6 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
   return (
     <VisibleSessionTargetProvider>
       <ActiveRepoConfigQuery />
-      <RefetchFailedRuntimeQueries />
       <OpenRepositoryModalWhenEmpty onEmpty={openDefaultRepositoryModal} />
       <SessionReadStateProvider visibility={documentVisibility}>
         <WorkspaceDialogsProvider>
