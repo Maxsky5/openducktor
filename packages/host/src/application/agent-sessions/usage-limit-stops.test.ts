@@ -63,7 +63,7 @@ describe("usage-limit stops", () => {
     stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS);
     expect(
       stops.startResume(stop, {
-        blockedOnInput: false,
+        kind: "ready",
         now: RESET + 60_000,
         recovery: { kind: "recovered" },
       }),
@@ -214,14 +214,7 @@ describe("usage-limit stops", () => {
     });
     stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS);
 
-    expect(
-      stops.startResume(stop, {
-        blockedOnInput: false,
-        hasActiveTurn: true,
-        now: RESET + USAGE_LIMIT_RESUME_GRACE_MS,
-        recovery: { kind: "recovered" },
-      }),
-    ).toBe(false);
+    expect(stops.startResume(stop, { kind: "active_turn" })).toBe(false);
     expect(stops.entry(ref)).toMatchObject({
       state: "scheduled",
       resumeAtEpochMs: RESET + USAGE_LIMIT_RESUME_GRACE_MS,
@@ -246,8 +239,7 @@ describe("usage-limit stops", () => {
     expect(due).toEqual([stop]);
     expect(
       stops.startResume(stop, {
-        blockedOnInput: false,
-        hasActiveTurn: false,
+        kind: "ready",
         now: RESET + USAGE_LIMIT_RESUME_GRACE_MS + 1_000,
         recovery: { kind: "recovered" },
       }),
@@ -287,14 +279,7 @@ describe("usage-limit stops", () => {
       },
     });
 
-    expect(
-      stops.startResume(stop, {
-        blockedOnInput: false,
-        hasActiveTurn: true,
-        now: RESET + USAGE_LIMIT_RESUME_GRACE_MS,
-        recovery: { kind: "unknown" },
-      }),
-    ).toBe(false);
+    expect(stops.startResume(stop, { kind: "active_turn" })).toBe(false);
     expect(stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS).due).toEqual([stop]);
   });
 
@@ -390,21 +375,30 @@ describe("usage-limit stops", () => {
     for (const invalidation of invalidations) {
       const stops = createUsageLimitStops(() => {});
       stops.setEnabled(true);
-      const guard = stops.beginRestore(ref);
+      const pending = stops.beginRestore(ref);
       stops.observe(invalidation);
       stops.observe({ type: "session_removed", ref });
 
-      expect(stops.restore(ref, found, guard, BASE)).toBeNull();
+      expect(pending.restore(found, BASE)).toBeNull();
       expect(stops.entry(ref)).toBeNull();
     }
 
     // Without invalidating work, session removal does not block a legitimate restore.
     const stops = createUsageLimitStops(() => {});
     stops.setEnabled(true);
-    const guard = stops.beginRestore(ref);
+    const pending = stops.beginRestore(ref);
     stops.observe({ type: "session_removed", ref });
-    const restored = stops.restore(ref, found, guard, BASE);
+    const restored = pending.restore(found, BASE);
     expect(restored).not.toBeNull();
+    // A pending restore handle is single-use.
+    expect(pending.restore(found, BASE)).toBeNull();
+
+    // Releasing a pending restore handle prevents a later restore call from applying.
+    const releasedStops = createUsageLimitStops(() => {});
+    releasedStops.setEnabled(true);
+    const releasedPending = releasedStops.beginRestore(ref);
+    releasedPending.release();
+    expect(releasedPending.restore(found, BASE)).toBeNull();
   });
 
   test("ends a scheduled Claude stop on assistant output or a non-limit turn error", () => {

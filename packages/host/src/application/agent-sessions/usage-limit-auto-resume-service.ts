@@ -162,21 +162,17 @@ export const createUsageLimitAutoResumeService = (
       }
       const live = yield* deps.live.read(stop.ref);
       if (!stops.isDue(stop)) return;
-      const blockedOnInput = live.type === "live" && hasBlockingInput(live.session);
-      const hasActiveTurn = live.type === "live" && hasForegroundTurn(live.session);
-      if (blockedOnInput || hasActiveTurn) {
-        stops.startResume(stop, {
-          blockedOnInput,
-          hasActiveTurn,
-          now: yield* Clock.currentTimeMillis,
-          recovery: { kind: "unknown" },
-        });
+      if (live.type === "live" && hasBlockingInput(live.session)) {
+        stops.startResume(stop, { kind: "blocked_on_input" });
+        return;
+      }
+      if (live.type === "live" && hasForegroundTurn(live.session)) {
+        stops.startResume(stop, { kind: "active_turn" });
         return;
       }
       const recovery = yield* deps.readUsageLimitRecovery(stop.ref);
       const started = stops.startResume(stop, {
-        blockedOnInput: false,
-        hasActiveTurn: false,
+        kind: "ready",
         now: yield* Clock.currentTimeMillis,
         recovery,
       });
@@ -216,7 +212,7 @@ export const createUsageLimitAutoResumeService = (
     Effect.gen(function* () {
       const ref = sessionLiveRef(root);
       if (stops.hasStop(ref)) return;
-      const guard = stops.beginRestore(ref);
+      const pending = stops.beginRestore(ref);
       yield* Effect.gen(function* () {
         const read = yield* Effect.result(adapter.queries.readLatestUsageLimitStop(root));
         if (read._tag === "Failure")
@@ -224,9 +220,9 @@ export const createUsageLimitAutoResumeService = (
             `Auto-resume cannot read the usage limit of session '${root.externalSessionId}': ${causeChainMessage(read.failure)}`,
           );
         const now = yield* Clock.currentTimeMillis;
-        const stop = stops.restore(ref, read.success, guard, now);
+        const stop = pending.restore(read.success, now);
         if (stop) stops.planned(stop, true);
-      }).pipe(Effect.ensuring(Effect.sync(() => stops.releaseRestore(guard))));
+      }).pipe(Effect.ensuring(Effect.sync(pending.release)));
     });
 
   /** Plans the stops that runtime history reports for the roots of one runtime. */

@@ -178,6 +178,22 @@ describe("hasUnfinishedLatestTurn", () => {
     ).toBe(true);
     expect(hasUnfinishedLatestTurn([userMessage, assistantFinal, sendFailureError])).toBe(false);
     expect(
+      hasUnfinishedLatestTurn([
+        userMessage,
+        assistantFinal,
+        message({
+          role: "assistant",
+          content: "",
+          meta: {
+            kind: "subagent",
+            partId: "subagent-1",
+            correlationKey: "call-bg-1",
+            status: "completed",
+          },
+        }),
+      ]),
+    ).toBe(false);
+    expect(
       hasUnfinishedLatestTurn([userMessage, assistantFinal, usageLimitError, assistantFinal]),
     ).toBe(false);
   });

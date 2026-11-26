@@ -60,16 +60,21 @@ type MutableStop = {
 export type DueStops = { due: TrackedUsageLimitStop[]; nextDueAt: number | undefined };
 
 /** What the due-time checks found. `recovery` is the answer of the runtime for the account. */
-export type DueCheck = {
-  blockedOnInput: boolean;
-  hasActiveTurn?: boolean;
-  now: number;
-  recovery: UsageLimitRecovery;
-};
+export type DueCheck =
+  | { readonly kind: "blocked_on_input" }
+  | { readonly kind: "active_turn" }
+  | { readonly kind: "ready"; readonly now: number; readonly recovery: UsageLimitRecovery };
 
 export const supportsUsageLimitAutoResume = (runtimeKind: RuntimeKind): boolean =>
   RUNTIME_DESCRIPTORS_BY_KIND[runtimeKind].capabilities.sessionLifecycle
     .supportsUsageLimitAutoResume;
+
+/**
+ * Claude briefly flips foreground active for an empty notification-only wake, so live foreground
+ * pulses alone do not cancel a pending Claude stop and due checks defer until the wake ends.
+ */
+const allowsTransientForegroundWake = (runtimeKind: RuntimeKind): boolean =>
+  runtimeKind === "claude";
 
 const stopKey = (stop: Pick<MutableStop, "ref" | "stopId">): string =>
   `${agentSessionRefKey(stop.ref)}\u0000${stop.stopId}`;
@@ -81,10 +86,12 @@ const hasEligibleReset = (stop: MutableStop): boolean =>
 const dueAtOf = (stop: MutableStop): number =>
   (stop.resetsAtEpochMs ?? 0) + USAGE_LIMIT_RESUME_GRACE_MS;
 
-/** Tracks whether live work invalidated one in-flight history restore before it completed. */
-export type UsageLimitRestoreGuard = {
-  readonly key: string;
-  invalidated: boolean;
+/** Single-use handle for an in-flight history restore. */
+export type PendingUsageLimitRestore = {
+  /** Applies the history result if no live work invalidated the read. */
+  readonly restore: (found: UsageLimitStop | null, now: number) => TrackedUsageLimitStop | null;
+  /** Releases the guard when the read finishes, fails, or is cancelled. */
+  readonly release: () => void;
 };
 
 /**
@@ -100,7 +107,7 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
   /** Stops that ended in this process. A history rebuild never plans them again. */
   const ended = new Set<string>();
   /** Guards for in-flight history reads, so live work invalidates them even across removal. */
-  const pendingRestores = new Map<string, Set<UsageLimitRestoreGuard>>();
+  const pendingRestores = new Map<string, Set<{ invalidated: boolean }>>();
   /** Supported sessions whose latest observed live snapshot has an active foreground turn. */
   const activeForegroundKeys = new Set<string>();
 
@@ -124,13 +131,6 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
     const guards = pendingRestores.get(key);
     if (!guards) return;
     for (const guard of guards) guard.invalidated = true;
-  };
-
-  const releaseRestore = (guard: UsageLimitRestoreGuard): void => {
-    const guards = pendingRestores.get(guard.key);
-    if (!guards) return;
-    guards.delete(guard);
-    if (guards.size === 0) pendingRestores.delete(guard.key);
   };
 
   /** New work in the session ends its stop. */
@@ -228,7 +228,7 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
     }
     // Claude briefly flips foreground active for an empty notification-only wake. Wait for real
     // turn output, a user message, a host operation, or the wake ending before deciding.
-    if (session.ref.runtimeKind === "claude") return;
+    if (allowsTransientForegroundWake(session.ref.runtimeKind)) return;
     newWork(key);
   };
 
@@ -330,22 +330,22 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
       const key = agentSessionRefKey(stop.ref);
       const current = stops.get(key);
       if (current !== stop || current.phase !== "due") return false;
-      if (check.blockedOnInput || !hasEligibleReset(current)) {
+      if (!hasEligibleReset(current) || check.kind === "blocked_on_input") {
         end(key);
         return false;
       }
-      const becameIdleDuringCheck = check.hasActiveTurn === true && current.sawIdleWhileDue;
+      const becameIdleDuringCheck = check.kind === "active_turn" && current.sawIdleWhileDue;
       const stillActive =
-        activeForegroundKeys.has(key) || (check.hasActiveTurn === true && !becameIdleDuringCheck);
+        activeForegroundKeys.has(key) || (check.kind === "active_turn" && !becameIdleDuringCheck);
       if (stillActive) {
-        if (current.ref.runtimeKind !== "claude") {
+        if (!allowsTransientForegroundWake(current.ref.runtimeKind)) {
           end(key);
           return false;
         }
         setPhase(current, "waiting_for_idle");
         return false;
       }
-      if (becameIdleDuringCheck) {
+      if (check.kind === "active_turn") {
         setPhase(current, "scheduled");
         return false;
       }
@@ -399,53 +399,56 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
     },
     /** True when a history read for the session can add nothing. */
     hasStop: (ref: AgentSessionLiveRef): boolean => stops.has(agentSessionRefKey(ref)),
-    /** Registers a guard before a history read so live work invalidates it even across removal. */
-    beginRestore: (ref: AgentSessionLiveRef): UsageLimitRestoreGuard => {
+    /**
+     * Registers an in-flight history restore so live work invalidates it even across removal.
+     * A passed reset waits for a manual Resume.
+     */
+    beginRestore: (ref: AgentSessionLiveRef): PendingUsageLimitRestore => {
       const key = agentSessionRefKey(ref);
-      const guard: UsageLimitRestoreGuard = { key, invalidated: false };
+      const entry = { invalidated: false };
+      let released = false;
       let guards = pendingRestores.get(key);
       if (!guards) {
         guards = new Set();
         pendingRestores.set(key, guards);
       }
-      guards.add(guard);
-      return guard;
-    },
-    /** Releases a restore guard when its read fails, cancels, or completes. */
-    releaseRestore,
-    /**
-     * Adds a stop that runtime history reports after a host start. A passed reset waits for a
-     * manual Resume. New work or a live stop during the read is newer than the history.
-     */
-    restore: (
-      ref: AgentSessionLiveRef,
-      found: UsageLimitStop | null,
-      guard: UsageLimitRestoreGuard,
-      now: number,
-    ): TrackedUsageLimitStop | null => {
-      releaseRestore(guard);
-      const key = agentSessionRefKey(ref);
-      if (
-        guard.invalidated ||
-        !found ||
-        found.resetsAtEpochMs === undefined ||
-        found.resetsAtEpochMs <= now ||
-        stops.has(key)
-      )
-        return null;
-      const stop: MutableStop = {
-        ref,
-        stopId: found.stopId,
-        occurredAtEpochMs: found.occurredAtEpochMs,
-        resetsAtEpochMs: found.resetsAtEpochMs,
-        turnEnded: true,
-        phase: "observed",
-        failure: undefined,
-        sawIdleWhileDue: false,
+      guards.add(entry);
+      const release = (): void => {
+        if (released) return;
+        released = true;
+        const current = pendingRestores.get(key);
+        if (!current) return;
+        current.delete(entry);
+        if (current.size === 0) pendingRestores.delete(key);
       };
-      if (ended.has(stopKey(stop))) return null;
-      stops.set(key, stop);
-      return toPlan(stop);
+      return {
+        release,
+        restore: (found, now) => {
+          if (released) return null;
+          release();
+          if (
+            entry.invalidated ||
+            !found ||
+            found.resetsAtEpochMs === undefined ||
+            found.resetsAtEpochMs <= now ||
+            stops.has(key)
+          )
+            return null;
+          const stop: MutableStop = {
+            ref,
+            stopId: found.stopId,
+            occurredAtEpochMs: found.occurredAtEpochMs,
+            resetsAtEpochMs: found.resetsAtEpochMs,
+            turnEnded: true,
+            phase: "observed",
+            failure: undefined,
+            sawIdleWhileDue: false,
+          };
+          if (ended.has(stopKey(stop))) return null;
+          stops.set(key, stop);
+          return toPlan(stop);
+        },
+      };
     },
     /** The published entry of a session, or null. Clients see a due stop as scheduled. */
     entry: (ref: AgentSessionLiveRef): UsageLimitAutoResume | null => {
