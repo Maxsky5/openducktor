@@ -72,11 +72,13 @@ export const loadLiveApprovalPreparation = (
       sourceBranch,
       targetRef,
     );
+    const uncommittedFileCount = worktreeStatus.fileStatusCounts.total;
     return {
       sourceBranch,
       targetBranch,
       publishTarget,
-      worktreeStatus,
+      hasUncommittedChanges: uncommittedFileCount > 0,
+      uncommittedFileCount,
       suggestedSquashCommitMessage,
     };
   });
@@ -116,7 +118,8 @@ export const loadOpenApprovalContext = (
       sourceBranch,
       targetBranch,
       publishTarget,
-      worktreeStatus,
+      hasUncommittedChanges,
+      uncommittedFileCount,
       suggestedSquashCommitMessage,
     } = yield* loadLiveApprovalPreparation(
       dependencies,
@@ -132,8 +135,8 @@ export const loadOpenApprovalContext = (
       targetBranch,
       publishTarget,
       defaultMergeMethod,
-      hasUncommittedChanges: worktreeStatus.fileStatusCounts.total > 0,
-      uncommittedFileCount: worktreeStatus.fileStatusCounts.total,
+      hasUncommittedChanges,
+      uncommittedFileCount,
       pullRequest: metadata.pullRequest,
       suggestedSquashCommitMessage,
     };

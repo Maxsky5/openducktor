@@ -108,7 +108,8 @@ export const createTaskApprovalContextUseCase = ({
         sourceBranch,
         targetBranch,
         publishTarget,
-        worktreeStatus,
+        hasUncommittedChanges,
+        uncommittedFileCount,
         suggestedSquashCommitMessage,
       } = yield* loadLiveApprovalPreparation(
         dependencies,
@@ -125,8 +126,8 @@ export const createTaskApprovalContextUseCase = ({
         targetBranch,
         publishTarget,
         defaultMergeMethod,
-        hasUncommittedChanges: worktreeStatus.fileStatusCounts.total > 0,
-        uncommittedFileCount: worktreeStatus.fileStatusCounts.total,
+        hasUncommittedChanges,
+        uncommittedFileCount,
       };
       if (metadata.pullRequest !== undefined) {
         approvalContext.pullRequest = metadata.pullRequest;
