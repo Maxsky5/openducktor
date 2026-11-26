@@ -1,0 +1,20 @@
+---
+// The head of a section with a full-width product view: the heading on one side and the copy on the
+// other. On a narrow screen, the copy goes under the heading.
+import SectionHead from "./SectionHead.astro";
+import "./WideHead.css";
+
+interface Props {
+  eyebrow: string;
+  /** The id of the title, so the section can name itself with aria-labelledby. */
+  id: string;
+}
+const { eyebrow, id } = Astro.props;
+---
+
+<div class="wide-head">
+  <SectionHead eyebrow={eyebrow} id={id}>
+    <Fragment slot="title"><slot name="title" /></Fragment>
+  </SectionHead>
+  <p class="wide-copy"><slot /></p>
+</div>

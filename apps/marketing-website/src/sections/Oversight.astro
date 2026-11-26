@@ -1,0 +1,43 @@
+---
+import Scene from "@openducktor/product-scenes/astro";
+import FeatureGrid from "../ui/FeatureGrid.astro";
+import FeatureTile from "../ui/FeatureTile.astro";
+import SectionHead from "../ui/SectionHead.astro";
+---
+
+<section id="oversight" class="section oversight" aria-labelledby="oversight-title">
+  <div class="wrap-wide">
+    <SectionHead eyebrow="Usage and processes" id="oversight-title">
+      <Fragment slot="title">See what your agents use, and what they leave running.</Fragment>
+      <p>
+        Usage shows the tokens and the estimated cost of your agents. Processes shows the commands
+        that they leave running. Open Usage from the sidebar, and Processes from the workspace rail.
+      </p>
+    </SectionHead>
+    <FeatureGrid>
+      <FeatureTile
+        id="oversight-usage"
+        label="Usage"
+        title="The tokens and the estimated cost of every agent, in one place."
+        size="full"
+      >
+        The Usage page reads the history of Claude Code, Codex, OpenCode, and Antigravity on your
+        computer. It also counts the sessions that you started outside OpenDucktor. Compare the
+        runtimes, the models, and the projects of a range, and switch from tokens to cost. The cost
+        is an estimate at API rates, not a bill.
+        <Scene name="usage" slot="view" />
+      </FeatureTile>
+      <FeatureTile
+        id="oversight-processes"
+        label="Processes"
+        title="Find the dev server that an agent left running, and stop it."
+        size="full"
+      >
+        The Processes button of the rail counts the commands that run in your checkouts. The list
+        shows the folder, the command, and its ports. Stop ends a command and each process that it
+        started. Detach the list into a window that stays open on every page.
+        <Scene name="processes" slot="view" />
+      </FeatureTile>
+    </FeatureGrid>
+  </div>
+</section>
