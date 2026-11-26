@@ -176,8 +176,9 @@ export function useSessionPanelVisibility({
   useEffect(() => {
     if (!owner) return;
     if (nextBottomCheck !== bottomCheck) store.writeBottomCheck(owner, nextBottomCheck);
-    store.setBottomState(owner, nextBottomState);
-  }, [bottomCheck, nextBottomCheck, nextBottomState, owner, store]);
+    // Only a decision of the shown view changes the state, so a kept view never saves its snapshot.
+    if (nextBottomState !== panels.bottom) store.setBottomState(owner, nextBottomState);
+  }, [bottomCheck, nextBottomCheck, nextBottomState, owner, panels.bottom, store]);
 
   const ownerRef = useRef(owner);
   const factsRef = useRef(facts);

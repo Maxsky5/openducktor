@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { act } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
+import { useEffect } from "react";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { SessionViewContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
+import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
+import { createTerminalSessionsFixture } from "@/test-utils/session-panel-fixtures";
+import { type SessionPanelOwner, sessionPanelOwnerKey } from "./session-panel-layout";
+import { type SessionPanelsModel, useSessionPanels } from "./use-session-panels";
 import type { TerminalSessionsModel } from "@openducktor/frontend-core/terminals/use-terminals";
 import { withMockedToast } from "@/test-utils/mock-toast";
 
@@ -20,11 +27,84 @@ import {
   TAB_1,
   TAB_2,
   terminalTab,
+  testConnection,
+  WITHOUT_CI_CHECKS,
 } from "./session-panels-test-harness";
 
 beforeEach(startTestConnection);
 
+/** The panels model of the shown view in its last render. */
+type ShownModel = { shown: SessionPanelsModel | null };
+
+/** One session view of an owner. It reports its panels model on each render. */
+const PanelsView = ({
+  owner,
+  tabs,
+  isActive,
+  onModel,
+}: {
+  owner: SessionPanelOwner;
+  tabs: TerminalTab[];
+  isActive: boolean;
+  onModel: (model: SessionPanelsModel) => void;
+}) => (
+  <SessionViewContext value={{ id: isActive ? "shown" : "kept", isActive }}>
+    <PanelsModel owner={owner} tabs={tabs} onModel={onModel} />
+  </SessionViewContext>
+);
+
+const PanelsModel = ({
+  owner,
+  tabs,
+  onModel,
+}: {
+  owner: SessionPanelOwner;
+  tabs: TerminalTab[];
+  onModel: (model: SessionPanelsModel) => void;
+}) => {
+  const terminals = createTerminalSessionsFixture({ scopeKey: sessionPanelOwnerKey(owner), tabs });
+  const model = useSessionPanels({
+    owner,
+    selectionKey: "build",
+    unavailableKinds: WITHOUT_CI_CHECKS,
+    terminals,
+  });
+  useEffect(() => {
+    onModel(model);
+  }, [model, onModel]);
+  return null;
+};
+
 describe("useSessionPanels open state", () => {
+  test("a kept view that renders in the same commit never saves over the shown view", () => {
+    const owner = newTaskOwner();
+    placeOpenTerminal(owner);
+    const latest: ShownModel = { shown: null };
+    // The shown view comes first, so the kept view runs its effects after it.
+    const tree = (tabs: TerminalTab[]) => (
+      <ClientConnectionProvider connection={testConnection()}>
+        <PanelsView
+          owner={owner}
+          tabs={tabs}
+          isActive
+          onModel={(model) => (latest.shown = model)}
+        />
+        <PanelsView owner={owner} tabs={tabs} isActive={false} onModel={() => {}} />
+      </ClientConnectionProvider>
+    );
+    const view = render(tree([terminalTab("terminal-1")]));
+    try {
+      // The shown view saves its check without a notice, so the kept view can hold an older one.
+      layoutStore().writeBottomCheck(owner, { tabCount: 2, wasOpen: true });
+      view.rerender(tree([]));
+
+      expect(latest.shown?.bottomToggle.isOpen).toBe(false);
+      expect(savedBottom(owner)).toBe(false);
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("each task keeps its own panel state, and the views of one task share it", () => {
     const owner = newTaskOwner();
     // The views of one task show the same terminal list.
