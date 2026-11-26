@@ -67,10 +67,14 @@ afterAll((): void => {
   // Windows keeps handles on the temp tree while the worker runs, so a failure here is a leak, not a defect.
   removeWorkerDirectoryAfterFile(workerTmpDir ?? configDir);
   tempDirectoryRemoved = true;
+}, 5_000);
+
+// Bun runs a preload's afterAll once at the end of the run, so a theme class must go after each test.
+afterEach((): void => {
   if (globalThis.document !== undefined) {
     globalThis.document.documentElement.classList.remove("light", "dark");
   }
-}, 5_000);
+});
 
 if (testRoot === frontendRoot) {
   const frontendRequire = createRequire(
