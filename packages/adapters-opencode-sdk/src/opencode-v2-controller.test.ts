@@ -94,7 +94,7 @@ describe("OpenCode V2 conversation identity and history", () => {
     }
   });
 
-  test("reads installed workflow instructions separately from later native updates", async () => {
+  test("reads installed workflow instructions without the later instructions of OpenCode", async () => {
     const installedPrompt =
       "You are the OpenDucktor Builder for task-1. Use odt_apply_workflow_event.";
     const messages: SessionMessageInfo[] = [
@@ -132,11 +132,10 @@ describe("OpenCode V2 conversation identity and history", () => {
       timestamp: new Date(current.time.created).toISOString(),
     });
     expect(history.filter((item) => item.text.startsWith("System prompt:\n\n"))).toHaveLength(1);
-    expect(history[1]?.messageId).toBe("msg_user");
-    expect(history[2]).toMatchObject({
-      messageId: "msg_catalog",
-      text: "Instructions update:\n\nThe Code Mode tool catalog has changed.",
-    });
+    expect(history.map((item) => item.messageId)).toEqual([
+      `history:system-prompt:${current.id}`,
+      "msg_user",
+    ]);
     expect(requests.every(({ method }) => method === "GET")).toBe(true);
   });
 

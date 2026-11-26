@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX } from "@openducktor/core";
 import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import { resolveAgentChatRuntimePresentation } from "@openducktor/frontend-core/sessions/send/agent-chat-runtime-presentation";
 import {
@@ -215,12 +214,10 @@ describe("transcript rows", () => {
         id: "r1",
       },
     );
-    const update = buildMessage("system", `${AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX}New rules.`, {
-      id: "i1",
-    });
+    const prompt = buildMessage("system", "System prompt:\n\nRules.", { id: "p1" });
     expect(foldsSystemText(reminder, "opencode")).toBe(true);
     expect(foldsSystemText(reminder, "codex")).toBe(false);
-    expect(foldsSystemText(update, "opencode")).toBe(false);
+    expect(foldsSystemText(prompt, "opencode")).toBe(false);
     expect(foldsSystemText(user("u1", "Build it"), "opencode")).toBe(false);
   });
 

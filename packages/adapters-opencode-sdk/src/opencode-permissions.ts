@@ -290,7 +290,7 @@ export const putOpenCodeInstructions = async (input: {
       "Restore the workflow prompt in settings, then retry.",
     );
   if (systemPrompt.trim())
-    await client.session.instructions.entry.put({
+    await client.experimental.session.instructions.entry.put({
       sessionID,
       key: OPENCODE_WORKFLOW_INSTRUCTION_KEY,
       value: systemPrompt,

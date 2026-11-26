@@ -57,30 +57,24 @@ const nativeCatalog = (variants: ModelInfo["variants"] = []) =>
   );
 
 describe("OpenCode catalog", () => {
-  test("waits for cold location plugins before reading their catalogs", async () => {
+  test("reads every catalog at once, because no OpenCode list waits for plugins", async () => {
     const data = nativeCatalog();
-    const modelStarted = Promise.withResolvers<void>();
-    const activatePlugins = Promise.withResolvers<void>();
-    let pluginsReady = false;
+    const lists = ["/api/model", "/api/command", "/api/agent", "/api/skill"];
+    const listed = new Set<string>();
+    const allListed = Promise.withResolvers<void>();
     const { controller, requests } = createController(async ({ url }) => {
       const path = url.pathname;
-      if (path === "/api/model") {
-        modelStarted.resolve();
-        await activatePlugins.promise;
-        pluginsReady = true;
-      } else if (path === "/api/model/default") {
-        await activatePlugins.promise;
-      } else if (!pluginsReady) {
-        return response([]);
-      }
+      listed.add(path);
+      if (lists.every((list) => listed.has(list))) allListed.resolve();
+      if (path === "/api/model") await allListed.promise;
       if (!data.has(path)) throw new Error(`Unexpected catalog request ${path}`);
       return response(data.get(path));
     });
 
-    const pending = controller.loadRuntimeCatalog({ ...ref, workingDirectory: "/repo/worktree" });
-    await modelStarted.promise;
-    activatePlugins.resolve();
-    const catalog = await pending;
+    const catalog = await controller.loadRuntimeCatalog({
+      ...ref,
+      workingDirectory: "/repo/worktree",
+    });
 
     expect(catalog.models).toMatchObject({
       status: "available",
@@ -125,26 +119,23 @@ describe("OpenCode catalog", () => {
     ).toBe(true);
   });
 
-  test("reports a model readiness failure for every dependent catalog", async () => {
-    const { controller, requests } = createController(({ url }) => {
+  test("keeps other catalogs available when the model list fails", async () => {
+    const data = nativeCatalog();
+    const { controller } = createController(({ url }) => {
       if (url.pathname === "/api/model")
-        return Response.json(
-          { message: "Location plugins did not finish activating" },
-          { status: 503 },
-        );
-      return response([]);
+        return Response.json({ message: "Model list failed" }, { status: 503 });
+      return response(data.get(url.pathname));
     });
 
     const catalog = await controller.loadRuntimeCatalog(ref);
 
     expect(catalog.models?.status).toBe("failed");
-    expect(catalog.slashCommands?.status).toBe("failed");
-    expect(catalog.subagents?.status).toBe("failed");
-    expect(catalog.skills?.status).toBe("failed");
-    expect(requests.map(({ url }) => url.pathname)).toEqual(["/api/model"]);
+    expect(catalog.slashCommands?.status).toBe("available");
+    expect(catalog.subagents?.status).toBe("available");
+    expect(catalog.skills?.status).toBe("available");
   });
 
-  test("keeps other catalogs available when provider metadata fails after plugin activation", async () => {
+  test("keeps other catalogs available when provider metadata fails", async () => {
     const data = nativeCatalog();
     const { controller } = createController(({ url }) => {
       if (url.pathname === "/api/provider")

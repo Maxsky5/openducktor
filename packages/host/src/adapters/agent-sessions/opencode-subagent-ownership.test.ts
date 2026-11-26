@@ -105,6 +105,7 @@ describe("OpenCode subagent ownership", () => {
       const prepareRuntime = createPrepareOpencodeSessionRuntime({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+        globalConfigDirectory: "/home/user/.config/opencode",
         resolveMcpServerConfig: async () => ({ command: ["test-bridge"], environment: {} }),
         readDirectory: async (_directory, read) => read(),
       });

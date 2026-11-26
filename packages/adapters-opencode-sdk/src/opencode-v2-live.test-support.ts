@@ -19,6 +19,8 @@ import {
   testWorkflowRolePolicy,
 } from "./opencode-v2.test-support";
 
+export const OPENCODE_GLOBAL_CONFIG_DIRECTORY = "/home/user/.config/opencode";
+
 export const prepareFixture = (
   override?: (request: NativeRequest) => Response | Promise<Response> | undefined,
   resolveMcpServerConfig: ManagedMcpServerResolver = async () => ({
@@ -50,6 +52,14 @@ export const prepareFixture = (
       installed.add(directory);
       return noContent();
     }
+    if (
+      url.pathname === "/api/model" &&
+      url.searchParams.get("location[directory]") === OPENCODE_GLOBAL_CONFIG_DIRECTORY
+    )
+      return Response.json({
+        location: { ...location, directory: OPENCODE_GLOBAL_CONFIG_DIRECTORY },
+        data: [{ ...model, enabled: true }],
+      });
     if (url.pathname === "/api/location") return Response.json(location);
     if (url.pathname === "/api/session/active") return response({});
     if (url.pathname === "/api/session") return cursorPage([]);
@@ -69,6 +79,7 @@ export const prepareFixture = (
     resolveCreationSettings: async () => ({ defaults: [], role: [] }),
     resolveWorkflowRolePolicy: testWorkflowRolePolicy,
     resolveMcpServerConfig,
+    globalConfigDirectory: OPENCODE_GLOBAL_CONFIG_DIRECTORY,
     readDirectory: async (_directory, read) => read(),
   });
   return {

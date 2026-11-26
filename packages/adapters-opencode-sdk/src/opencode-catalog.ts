@@ -24,13 +24,11 @@ export const readCatalog = async (
   client: OpenCodeClient,
   directory: string,
 ): Promise<AgentRuntimeCatalogRead> => {
-  // model.list waits for plugin activation; the other catalog list APIs can return empty before it.
-  const nativeModels = client.model.list({ location: { directory } });
-  const readySurface = <Value>(read: (models: ModelInfo[]) => Promise<Value>) =>
-    surface(async () => read((await nativeModels).data));
+  // A location that just started can list only part of what its plugins load. OpenCode then sends
+  // `*.updated` events, and the adapter invalidates the catalog for them.
   const [models, slashCommands, subagents, skills] = await Promise.all([
-    readySurface((models) => readModelCatalogFromModels(client, directory, models)),
-    readySurface(async () => ({
+    surface(() => readModelCatalog(client, directory)),
+    surface(async () => ({
       commands: [
         ...(await client.command.list({ location: { directory } })).data
           .filter((command) => command.name !== "compact")
@@ -48,7 +46,7 @@ export const readCatalog = async (
         MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
       ],
     })),
-    readySurface(async () => ({
+    surface(async () => ({
       subagents: (await client.agent.list({ location: { directory } })).data
         .filter((agent) => !agent.hidden && agent.mode !== "primary")
         .map((agent) => {
@@ -60,7 +58,7 @@ export const readCatalog = async (
           return entry;
         }),
     })),
-    readySurface(async () =>
+    surface(async () =>
       skillCatalogSchema.parse({
         skills: (await client.skill.list({ location: { directory } })).data.map((skill) => {
           const entry: AgentSkillCatalog["skills"][number] = {

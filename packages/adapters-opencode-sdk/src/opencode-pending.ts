@@ -23,11 +23,13 @@ export const projectApproval = (
       command,
       toolName: tool,
     }),
-    rejectsAllPendingApprovals: true,
     supportedReplyOutcomes: request.save?.length
       ? ["approve_once", "approve_always", "reject"]
       : ["approve_once", "reject"],
   };
+  // OpenCode 2.3.1 and later reject the other pending requests of the same session and step
+  // (`packages/core/src/permission.ts`). A request with no step groups with the others with none.
+  approval.rejectGroupId = `${request.sessionID}:${request.source?.messageID ?? "no-step"}`;
   if (command) approval.command = { command };
   if (tool) approval.tool = { name: tool };
   if (request.save?.length)

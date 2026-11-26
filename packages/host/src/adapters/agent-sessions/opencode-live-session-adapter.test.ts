@@ -567,7 +567,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
             title: "Run check",
             action: { name: "shell" },
             supportedReplyOutcomes: ["approve_once", "approve_always", "reject"],
-            rejectsAllPendingApprovals: true,
+            rejectGroupId: "ses_native:msg_step",
             persistentGrant: {
               scope: "project" as const,
               projectDirectory: "/repo",
@@ -586,7 +586,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       const approval = (await Effect.runPromise(prepared.adapter.listSnapshots()))[0]
         ?.pendingApprovals[0];
       expect(approval).toMatchObject({
-        rejectsAllPendingApprovals: true,
+        rejectGroupId: "ses_native:msg_step",
         supportedReplyOutcomes: ["approve_once", "approve_always", "reject"],
         persistentGrant: {
           scope: "project",

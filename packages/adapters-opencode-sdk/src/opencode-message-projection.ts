@@ -5,6 +5,8 @@ import type {
   SessionInboxUser,
   SessionMessageInfo,
   SessionMessageAssistant,
+  SessionMessageSynthetic,
+  SessionMessageUser,
 } from "@opencode/client";
 import {
   isOpenCodeContinuationInput,
@@ -24,10 +26,12 @@ import {
   type AgentNativeFileReference,
   type AgentToolDenial,
   type AgentToolResultContent,
+  type AgentUserMessageOrigin,
 } from "@openducktor/contracts";
 import { readOpenCodeGoalKickoffObjective } from "./opencode-goals";
+import { jobContext, updateJobTool, type JobContext } from "./opencode-job-projection";
+import { resultEndedAt } from "./opencode-kept-result";
 import {
-  AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX,
   type AcceptedAgentUserMessage,
   type AgentEvent,
   detectAgentFileReferenceKind,
@@ -207,18 +211,37 @@ const userDisplay = (
   ),
 ];
 
+// Mirrors the prompt metadata of `packages/core/src/automation.ts` of OpenCode 2.4.1.
+// OpenCode accepts any name with one character, so a blank name gives no origin.
+const automationMetadataSchema = z.object({
+  automation: z.object({ name: z.string().trim().min(1) }),
+});
+
+/** Who sent a prompt that the user did not type: an OpenCode automation. */
+const userOrigin = (
+  input: Pick<SessionMessageUser, "metadata">,
+): AgentUserMessageOrigin | undefined => {
+  const name = automationMetadataSchema.safeParse(input.metadata).data?.automation.name;
+  return name === undefined ? undefined : { kind: "automation", name };
+};
+
 export const projectInboxUser = (
   item: Pick<SessionInboxUser, "id" | "sessionID" | "time" | "payload">,
   state: "queued" | "read" = "queued",
-): AcceptedAgentUserMessage => ({
-  type: "user_message",
-  externalSessionId: item.sessionID,
-  messageId: item.id,
-  timestamp: iso(item.time.created),
-  message: item.payload.text,
-  parts: userDisplay(item.payload, item.id),
-  state,
-});
+): AcceptedAgentUserMessage => {
+  const accepted: AcceptedAgentUserMessage = {
+    type: "user_message",
+    externalSessionId: item.sessionID,
+    messageId: item.id,
+    timestamp: iso(item.time.created),
+    message: item.payload.text,
+    parts: userDisplay(item.payload, item.id),
+    state,
+  };
+  const origin = userOrigin(item.payload);
+  if (origin) accepted.origin = origin;
+  return accepted;
+};
 
 /** The user message of an inbox item. A continuation has none. */
 export const projectVisibleInboxUser = (
@@ -259,8 +282,16 @@ const subagentCompletions = (
       (state !== "completed" && state !== "error" && state !== "cancelled")
     )
       continue;
+    // A child that goes idle with background work left reports `state="running"` in the text
+    // only, and reports again when that work ends (`SubagentCompletion.deliver` of OpenCode 2.4.1).
+    if (
+      message.text.startsWith(
+        `<background-result kind="subagent" sessionID="${childID}" state="running"`,
+      )
+    )
+      continue;
     for (const callID of openCalls.get(childID) ?? [])
-      completions.set(callID, { state, created: message.time.created });
+      completions.set(callID, { state, created: resultEndedAt(message) });
     openCalls.delete(childID);
   }
   return completions;
@@ -286,6 +317,9 @@ export type OpenCodeMessageProjectionContext = {
   readonly durations: ReadonlyMap<string, number>;
   readonly completedReplies: ReadonlySet<string>;
   readonly shells: ShellContext;
+  readonly jobs: JobContext;
+  /** The idle records of failed turns whose reply already shows the error. */
+  readonly shownFailures: ReadonlySet<string>;
   /** The automatic denials of the calls that failed while the projector observed them live. */
   readonly denials?: ReadonlyMap<string, AgentToolDenial>;
 };
@@ -306,15 +340,76 @@ export const completedOpenCodeReplies = (messages: Iterable<SessionMessageInfo>)
   return completed;
 };
 
+/** The idle records of failed turns whose reply already shows the error. */
+const shownFailures = (messages: Iterable<SessionMessageInfo>): Set<string> => {
+  const shown = new Set<string>();
+  let replyFailed = false;
+  for (const message of messages) {
+    if (message.type === "assistant" && message.error) replyFailed = true;
+    if (message.type !== "idle") continue;
+    if (message.outcome === "failed" && replyFailed) shown.add(message.id);
+    replyFailed = false;
+  }
+  return shown;
+};
+
+// Mirrors `packages/core/src/plugin/fork-notice.ts` of OpenCode 2.4.1. The transcript shows its own
+// fork notice, and this one only tells the model that it works in a fork.
+const isForkNotice = (message: SessionMessageInfo): boolean =>
+  message.type === "synthetic" && message.id.startsWith("msg_fork_notice_");
+
+/**
+ * A synthetic message that only the model reads, as the OpenCode timeline decides
+ * (`isNotice` of `packages/session-ui/src/timeline/projection.ts`): it has no description and
+ * reports no error.
+ */
+const isModelOnlySynthetic = (message: SessionMessageInfo): boolean =>
+  message.type === "synthetic" &&
+  !message.description?.trim() &&
+  message.metadata?.state !== "error";
+
+/**
+ * The instructions that OpenCode gives the model: a change of its instruction entries
+ * (`session.instructions.updated`), or the instruction files that it loads for a path
+ * (`packages/core/src/session/instructions.ts`). The transcript shows the OpenDucktor system prompt
+ * of the session in their place.
+ */
+const isInstructionNotice = (message: SessionMessageInfo): boolean =>
+  (message.type === "system" && message.metadata?.notice === "instructions") ||
+  (message.type === "synthetic" &&
+    instructionPathsSchema.safeParse(message.metadata?.instruction).success);
+
+/** A notice that waits in the inbox, in the shape of the message that its delivery records. */
+export const waitingNotice = (
+  item: Extract<SessionInboxInfo, { type: "synthetic" }>,
+): SessionMessageSynthetic => ({
+  id: item.id,
+  type: "synthetic",
+  time: { created: item.time.created },
+  ...item.payload,
+});
+
+const waitingNotices = (inbox: Iterable<SessionInboxInfo>): SessionMessageSynthetic[] =>
+  [...inbox].flatMap((item) => (item.type === "synthetic" ? [waitingNotice(item)] : []));
+
+/**
+ * The context of a projection. A call card shows the result of its task from the notice of
+ * OpenCode, also while the notice waits in the inbox for delivery. Stop session leaves the notice
+ * of a stopped task waiting, so the next input of the session delivers it.
+ */
 export const messageProjectionContext = (
   messages: Iterable<SessionMessageInfo>,
+  inbox: Iterable<SessionInboxInfo> = [],
 ): OpenCodeMessageProjectionContext => {
   const retained = [...messages];
+  const results = [...retained, ...waitingNotices(inbox)];
   return {
-    completions: subagentCompletions(retained),
+    completions: subagentCompletions(results),
     durations: nativeTurnDurations(retained),
     completedReplies: completedOpenCodeReplies(retained),
-    shells: shellContext(retained),
+    shells: shellContext(results),
+    jobs: jobContext(results),
+    shownFailures: shownFailures(retained),
   };
 };
 
@@ -332,12 +427,27 @@ const settledToolInput = (text: string) => {
   }
 };
 
-const isVisibleNativeMessage = (message: SessionMessageInfo, shells?: ShellContext): boolean =>
+/**
+ * OpenCode records that the transcript shows elsewhere or that only the model reads. A switch of
+ * agent, model, or location shows on each reply and in the session header. Shell, job, and subagent
+ * results show on the card of their call. Instructions only set the context of the model.
+ */
+const isVisibleNativeMessage = (
+  message: SessionMessageInfo,
+  context?: Pick<OpenCodeMessageProjectionContext, "shells" | "jobs" | "shownFailures">,
+): boolean =>
   message.type !== "agent-switched" &&
+  message.type !== "model-switched" &&
+  message.type !== "location-switched" &&
   !(message.type === "idle" && message.outcome === "succeeded") &&
+  !context?.shownFailures.has(message.id) &&
   !(message.type === "synthetic" && message.metadata?.source === "subagent") &&
+  !isForkNotice(message) &&
+  !isModelOnlySynthetic(message) &&
+  !isInstructionNotice(message) &&
   !isOpenCodeContinuationMessage(message) &&
-  !shells?.hidden.has(message.id);
+  !context?.shells.hidden.has(message.id) &&
+  !context?.jobs.hidden.has(message.id);
 
 export const projectMessages = (
   messages: SessionMessageInfo[],
@@ -354,7 +464,7 @@ export const projectMessages = (
       runningModel = { ...modelSelection(message.model), profileId: message.agent };
   }
   return messages
-    .filter((message) => isVisibleNativeMessage(message, context.shells))
+    .filter((message) => isVisibleNativeMessage(message, context))
     .map((message) => {
       const projected = projectMessage(message, context, settledToolInputs);
       return projected.role === "user" && projected.messageId === latestUserId && runningModel
@@ -473,6 +583,7 @@ const projectAssistantContent = (
   }
   if (content.time.completed !== undefined) tool.endedAtMs = content.time.completed;
   updateShellTool(content, tool, context?.shells);
+  updateJobTool(content, tool, context?.jobs);
   if (content.name !== "subagent") return [tool];
   const input = z.record(z.string(), z.json()).safeParse(tool.input).data;
   // Native progress confirms ownership; tool input can name an unrelated session.
@@ -527,15 +638,19 @@ export const projectMessage = (
       parts: [],
     });
   }
-  if (message.type === "user")
-    return agentSessionHistoryMessageSchema.parse({
+  if (message.type === "user") {
+    const user: Extract<AgentSessionHistoryMessage, { role: "user" }> = {
       ...base,
       role: "user",
       text: message.text,
       displayParts: userDisplay(message, message.id),
       state: "read",
       parts: [],
-    });
+    };
+    const origin = userOrigin(message);
+    if (origin) user.origin = origin;
+    return agentSessionHistoryMessageSchema.parse(user);
+  }
   if (message.type === "assistant") {
     let textOrdinal = 0;
     let reasoningOrdinal = 0;
@@ -605,15 +720,8 @@ export const projectMessage = (
   let text: string;
   switch (message.type) {
     case "system":
-      text =
-        message.metadata?.notice === "instructions"
-          ? `${AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX}${message.text}`
-          : message.text;
-      break;
     case "synthetic":
-      text = instructionPathsSchema.safeParse(message.metadata?.instruction).success
-        ? `${AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX}${message.text}`
-        : message.text;
+      text = message.text;
       break;
     case "compaction":
       text =
@@ -628,7 +736,7 @@ export const projectMessage = (
         message.outcome === "interrupted"
           ? "Turn interrupted."
           : message.outcome === "failed"
-            ? "Turn failed."
+            ? (message.error?.message ?? "The turn failed.")
             : "Turn completed.";
       break;
     case "agent-switched":
@@ -645,12 +753,18 @@ export const projectMessage = (
         `Unsupported native message type: ${z.object({ type: z.string() }).parse(message).type}. Update OpenDucktor before opening this history.`,
       );
   }
-  const history: AgentSessionHistoryMessage = {
+  const history: Extract<AgentSessionHistoryMessage, { role: "system" }> = {
     ...base,
     role: "system",
     text,
     parts: [],
   };
+  // OpenCode gives a notice a short description, which its timeline shows in place of the text.
+  const title =
+    message.type === "synthetic" || message.type === "system"
+      ? message.description?.trim()
+      : undefined;
+  if (title) history.title = title;
   if (message.type === "compaction") {
     const summary = message.status === "completed" ? text.trim() : "";
     if (message.status === "failed") {
@@ -670,6 +784,8 @@ export const projectMessage = (
   }
   if (message.type === "idle" && message.outcome === "interrupted")
     history.notice = { tone: "cancelled", reason: "session_interrupted", title: "Interrupted" };
+  if (message.type === "idle" && message.outcome === "failed")
+    history.notice = { tone: "error", reason: "session_error", title: "Turn failed" };
   return agentSessionHistoryMessageSchema.parse(history);
 };
 
@@ -705,7 +821,7 @@ export const messageEvents = (
   context?: OpenCodeMessageProjectionContext,
   settledToolInputs?: ReadonlySet<string>,
 ): AgentEvent[] => {
-  if (!isVisibleNativeMessage(message, context?.shells)) return [];
+  if (!isVisibleNativeMessage(message, context)) return [];
   const projected = projectMessage(message, context, settledToolInputs);
   const base = { externalSessionId, timestamp: projected.timestamp };
   if (message.type === "idle" && message.outcome === "interrupted")
@@ -716,17 +832,23 @@ export const messageEvents = (
         interruption: { messageId: projected.messageId, message: projected.text },
       },
     ];
-  if (projected.role === "user")
+  // The error of a failed turn that no reply shows, live and in a baseline after a reconnect.
+  if (message.type === "idle" && message.outcome === "failed")
     return [
-      {
-        ...base,
-        type: "user_message",
-        messageId: projected.messageId,
-        message: projected.text,
-        parts: projected.displayParts,
-        state: projected.state,
-      },
+      { ...base, type: "turn_error", messageId: projected.messageId, message: projected.text },
     ];
+  if (projected.role === "user") {
+    const user: Extract<AgentEvent, { type: "user_message" }> = {
+      ...base,
+      type: "user_message",
+      messageId: projected.messageId,
+      message: projected.text,
+      parts: projected.displayParts,
+      state: projected.state,
+    };
+    if (projected.origin) user.origin = projected.origin;
+    return [user];
+  }
   if (message.type === "compaction") {
     if (message.status === "running") {
       return [
@@ -763,15 +885,16 @@ export const messageEvents = (
       },
     ];
   }
-  if (projected.role === "system")
-    return [
-      {
-        ...base,
-        type: "session_policy_notice",
-        messageId: projected.messageId,
-        message: projected.text,
-      },
-    ];
+  if (projected.role === "system") {
+    const notice: Extract<AgentEvent, { type: "session_policy_notice" }> = {
+      ...base,
+      type: "session_policy_notice",
+      messageId: projected.messageId,
+      message: projected.text,
+    };
+    if (projected.title) notice.title = projected.title;
+    return [notice];
+  }
   const events = projected.parts.map((part): AgentEvent => ({
     ...base,
     type: "assistant_part",

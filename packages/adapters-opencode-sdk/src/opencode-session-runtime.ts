@@ -1,6 +1,5 @@
 import type {
   AgentSessionBackgroundTaskStopInput,
-  AgentSessionScope,
   AgentToolDenialSource,
 } from "@openducktor/contracts";
 import {
@@ -34,6 +33,8 @@ import {
   readMigration,
   type OpenCodeRequestDraft,
 } from "./opencode-client";
+import { createOpenCodeGenerationModels } from "./opencode-generation-model";
+import { createOpenCodeMcpBridge } from "./opencode-mcp-bridge";
 import {
   OpencodeSdkAdapter,
   type OpenCodeGoalControlInput,
@@ -145,11 +146,21 @@ export type PrepareOpencodeSessionRuntime = (
   input: PrepareOpencodeSessionRuntimeInput,
 ) => Promise<PreparedOpencodeSessionRuntime>;
 
+/** The conversation that a native event belongs to. */
+const eventSessionId = (event: V2Event): string | undefined =>
+  event.type === "form.created"
+    ? event.data.form.sessionID
+    : "sessionID" in event.data
+      ? event.data.sessionID
+      : undefined;
+
 export const createPrepareOpencodeSessionRuntime =
   (
     options: OpencodeSdkAdapterOptions & {
       readDirectory: ReadOpencodeDirectory;
       resolveMcpServerConfig: ManagedMcpServerResolver;
+      /** OpenCode runs `generate.*` in the location of its global config directory. */
+      globalConfigDirectory: string;
     },
   ): PrepareOpencodeSessionRuntime =>
   async (input) => {
@@ -183,13 +194,6 @@ export const createPrepareOpencodeSessionRuntime =
       consumedInboxIds: Set<string>;
     };
     const awaitingTurns = new Map<string, Set<AwaitingTurn>>();
-    const installedMcp = new Map<
-      string,
-      { repoPath: string; workingDirectory: string; sessionScope?: AgentSessionScope | undefined }
-    >();
-    const mcpInstallations = new Map<string, Promise<void>>();
-    const mcpChanges = new Set<() => void>();
-    let mcpVersion = 0;
     let failure: Error | undefined;
     const emit = (signal: OpencodeSessionRuntimeSignal) => {
       if (released) return;
@@ -255,156 +259,38 @@ export const createPrepareOpencodeSessionRuntime =
           : fault,
       );
     };
-    const wakeMcp = () => {
-      mcpVersion++;
-      for (const wake of mcpChanges) wake();
-      mcpChanges.clear();
-    };
-    abort.signal.addEventListener("abort", wakeMcp);
-    const waitMcpChange = (version: number) =>
-      version !== mcpVersion
-        ? Promise.resolve()
-        : new Promise<void>((resolve, reject) => {
-            const timer = setTimeout(() => {
-              mcpChanges.delete(wake);
-              reject(
-                operationError(
-                  runtimeIdentity,
-                  "connect the OpenDucktor MCP bridge",
-                  "runtime_unavailable",
-                  "The native MCP connection remained pending.",
-                  "Check the workspace MCP bridge command, then restart the selected runtime.",
-                ),
-              );
-            }, 30_000);
-            const wake = () => {
-              clearTimeout(timer);
-              resolve();
-            };
-            mcpChanges.add(wake);
-          });
+    /** The conversations whose live events stopped applying, until a read seeds them again. */
+    const faulted = new Set<string>();
     let controller: OpencodeSdkAdapter;
-    const connectMcp = async (
-      identity: {
-        repoPath: string;
-        workingDirectory: string;
-        sessionScope?: AgentSessionScope | undefined;
-      },
-      owner: {
-        repoPath: string;
-        workingDirectory: string;
-        sessionScope?: AgentSessionScope | undefined;
-      },
-    ) => {
-      const directory = identity.workingDirectory;
-      const requireCurrent = () => {
-        if (installedMcp.get(directory) !== owner || released || abort.signal.aborted)
-          throw operationError(
-            identity,
-            "bind the OpenDucktor MCP bridge",
-            "runtime_unavailable",
-            "The native MCP binding changed during setup. Restart OpenCode from Diagnostics.",
-          );
-      };
-      if (!mcpConfigured.has(directory)) {
-        const existing = await controller.client.mcp.list({ location: { directory } });
-        if (existing.data.some((server) => server.name === "openducktor"))
-          throw operationError(
-            identity,
-            "install the OpenDucktor MCP bridge",
-            "policy_failed",
-            "The native configuration already contains an MCP server named 'openducktor'.",
-            "Rename or remove the conflicting user MCP server, then restart the selected runtime.",
-          );
-        const config = await options.resolveMcpServerConfig(
-          identity.repoPath,
-          identity.sessionScope?.workspaceId,
-        );
-        requireCurrent();
-        await controller.client.mcp.add({
-          server: "openducktor",
-          location: { directory },
-          config: {
-            type: "local",
-            command: [...config.command],
-            environment: { ...config.environment },
-            codemode: false,
-          },
-        });
-        requireCurrent();
-        mcpConfigured.add(directory);
-      }
-      while (!released && !abort.signal.aborted) {
-        const version = mcpVersion;
-        const list = await controller.client.mcp.list({ location: { directory } });
-        requireCurrent();
-        const server = list.data.find((item) => item.name === "openducktor");
-        if (!server)
-          throw operationError(
-            identity,
-            "connect the OpenDucktor MCP bridge",
-            "policy_failed",
-            "The installed native MCP override is missing.",
-            "Restart the selected runtime and retry.",
-          );
-        if (server.status.status === "connected") return;
-        if (server.status.status !== "pending")
-          throw operationError(
-            identity,
-            "connect the OpenDucktor MCP bridge",
-            "policy_failed",
-            "error" in server.status
-              ? server.status.error
-              : `Native MCP status: ${server.status.status}.`,
-            "Check the workspace MCP bridge command, then restart the selected runtime.",
-          );
-        await waitMcpChange(version);
-      }
-      throw operationError(
-        identity,
-        "connect the OpenDucktor MCP bridge",
-        "runtime_unavailable",
-        "The owned runtime connection closed.",
-      );
-    };
-    const mcpConfigured = new Set<string>();
-    const ensureMcp = (ref: {
-      repoPath: string;
-      workingDirectory: string;
-      sessionScope?: AgentSessionScope | undefined;
-    }): Promise<void> => {
-      const directory = ref.workingDirectory;
-      let owner = installedMcp.get(directory);
-      if (
-        owner &&
-        (owner.repoPath !== ref.repoPath ||
-          owner.sessionScope?.workspaceId !== ref.sessionScope?.workspaceId)
-      )
-        return Promise.reject(
-          operationError(
-            ref,
-            "bind the OpenDucktor MCP bridge",
-            "identity_mismatch",
-            `The directory belongs to repository '${owner.repoPath}'. Open it from its owning workspace, or restart OpenCode after its sessions end.`,
-          ),
-        );
-      if (!owner) {
-        owner = { ...ref };
-        installedMcp.set(directory, owner);
-      }
-      const existing = mcpInstallations.get(directory);
-      if (existing) return existing;
-      const installation = connectMcp(ref, owner).finally(() => mcpInstallations.delete(directory));
-      mcpInstallations.set(directory, installation);
-      return installation;
-    };
+    const isClosed = () => released || abort.signal.aborted;
+    const mcpBridge = createOpenCodeMcpBridge({
+      client: () => controller.client,
+      resolveMcpServerConfig: options.resolveMcpServerConfig,
+      runtimeIdentity,
+      isClosed,
+    });
+    const generationModels = createOpenCodeGenerationModels({
+      client: () => controller.client,
+      globalConfigDirectory: options.globalConfigDirectory,
+      isClosed,
+    });
+    abort.signal.addEventListener("abort", () => {
+      mcpBridge.close();
+      generationModels.close();
+    });
     controller = new OpencodeSdkAdapter(input.connection, options, {
       readDirectory: options.readDirectory,
-      ensureMcp,
-      projectHistory: (sessionID, messages) =>
-        (projectors.get(sessionID) ?? new OpenCodeLiveMessageProjector()).projectHistory(messages),
+      ensureMcp: mcpBridge.ensure,
+      restoreMcp: mcpBridge.restore,
+      awaitGenerationModel: generationModels.awaitModel,
+      projectHistory: (sessionID, messages, inbox) =>
+        (projectors.get(sessionID) ?? new OpenCodeLiveMessageProjector()).projectHistory(
+          messages,
+          inbox,
+        ),
       admitted: (binding) => {
-        if (!projectors.has(binding.detail.id))
+        // The events of a faulted conversation apply again only after a read of it.
+        if (!faulted.has(binding.detail.id) && !projectors.has(binding.detail.id))
           projectors.set(binding.detail.id, new OpenCodeLiveMessageProjector());
       },
     });
@@ -414,6 +300,30 @@ export const createPrepareOpencodeSessionRuntime =
       emit,
       isReplying: (sessionID) => nativeRunning.has(sessionID) || awaitingTurns.has(sessionID),
     });
+    /**
+     * An event that the adapter cannot apply to one conversation stops the observation of that
+     * conversation only. The other conversations of the runtime keep their live updates, and a
+     * read of the conversation, such as a reload, observes it again.
+     */
+    const faultSession = (sessionID: string, cause: unknown) => {
+      const lost = cause instanceof Error ? cause : new Error(String(cause));
+      faulted.add(sessionID);
+      projectors.delete(sessionID);
+      nativeRunning.delete(sessionID);
+      background.lose(sessionID, lost);
+      const fault = {
+        type: "session_fault" as const,
+        externalSessionId: sessionID,
+        message: lost.message,
+        statusUnavailable: true as const,
+        backgroundTrackingLost: true as const,
+      };
+      emit(
+        cause instanceof OpenCodeOperationError
+          ? { ...fault, runtimeOperationFailure: cause.failure.runtimeOperationFailure }
+          : fault,
+      );
+    };
     abort.signal.addEventListener("abort", () => controller.close(), { once: true });
     if (abort.signal.aborted) controller.close();
     const client = controller.client;
@@ -432,6 +342,24 @@ export const createPrepareOpencodeSessionRuntime =
     const goals = resolveRuntimeGoalAvailability(OPENCODE_RUNTIME_DESCRIPTOR, info.version);
 
     const source = (
+      binding: OpenCodeSessionBinding,
+      parentExternalSessionId?: string,
+    ): Promise<OpencodeRuntimeSnapshotSource> => {
+      const sessionID = binding.detail.id;
+      // A read observes a faulted conversation again from a new projector, as its first read does.
+      // The events during the read apply to that projector, and a failed read faults it again.
+      const refault = faulted.delete(sessionID);
+      if (refault) projectors.set(sessionID, new OpenCodeLiveMessageProjector());
+      const read = readSource(binding, parentExternalSessionId);
+      return refault
+        ? read.catch((cause: unknown) => {
+            faulted.add(sessionID);
+            projectors.delete(sessionID);
+            throw cause;
+          })
+        : read;
+    };
+    const readSource = (
       binding: OpenCodeSessionBinding,
       parentExternalSessionId?: string,
     ): Promise<OpencodeRuntimeSnapshotSource> =>
@@ -472,6 +400,7 @@ export const createPrepareOpencodeSessionRuntime =
             );
           projector.inbox.set(item.id, item);
         }
+        projector.updateProjectionContext();
         const queuedIds = new Set(inbox.map((item) => item.id));
         for (const item of projector.inbox.values())
           if (item.type === "user" && !queuedIds.has(item.id) && !projector.messages.has(item.id))
@@ -680,12 +609,10 @@ export const createPrepareOpencodeSessionRuntime =
         initialConnected = true;
         return;
       }
-      const externalSessionId =
-        event.type === "form.created"
-          ? event.data.form.sessionID
-          : "sessionID" in event.data
-            ? event.data.sessionID
-            : undefined;
+      const externalSessionId = eventSessionId(event);
+      // A faulted conversation takes no event until a read, except its removal.
+      if (externalSessionId && faulted.has(externalSessionId) && event.type !== "session.deleted")
+        return;
       const parent =
         event.type === "session.created" && event.data.parentID
           ? controller.bindings.get(event.data.parentID)
@@ -745,6 +672,18 @@ export const createPrepareOpencodeSessionRuntime =
               type: "runtime_notice",
               message: `OpenCode plugin '${plugin.id}' failed: ${plugin.state.error}`,
             });
+        return;
+      }
+      // A cancelled Code Mode job sends no notice, only this update of the job.
+      if (event.type === "experimental.job.updated") {
+        const { info } = event.data;
+        if (
+          info.kind === "codemode" &&
+          info.status === "cancelled" &&
+          controller.bindings.has(info.sessionID) &&
+          !faulted.has(info.sessionID)
+        )
+          background.jobCancelled(info.sessionID, info.id, iso(event.created));
         return;
       }
       if (!externalSessionId) return;
@@ -824,6 +763,7 @@ export const createPrepareOpencodeSessionRuntime =
         const reportRemoval = background.removeSession(externalSessionId, base.timestamp);
         controller.bindings.delete(externalSessionId);
         projectors.delete(externalSessionId);
+        faulted.delete(externalSessionId);
         awaitingTurns.delete(externalSessionId);
         nativeRunning.delete(externalSessionId);
         sequence.delete(externalSessionId);
@@ -942,8 +882,40 @@ export const createPrepareOpencodeSessionRuntime =
       )
         background.executionEnded(externalSessionId);
       try {
-        // Only a call whose result says that its job still runs can start a background task.
-        if (event.type === "session.tool.success" && event.data.metadata?.status === "running") {
+        const parentID = binding.detail.parentID;
+        if (parentID) {
+          if (event.type === "session.execution.started")
+            background.childExecutionStarted(
+              externalSessionId,
+              parentID,
+              event.id,
+              { agent: binding.detail.agent ?? "subagent", title: binding.detail.title },
+              base.timestamp,
+            );
+          if (event.type === "session.step.started") background.childStepStarted(externalSessionId);
+          if (event.type === "session.execution.succeeded")
+            background.childExecutionEnded(
+              externalSessionId,
+              parentID,
+              "succeeded",
+              base.timestamp,
+            );
+          if (event.type === "session.execution.failed")
+            background.childExecutionEnded(externalSessionId, parentID, "failed", base.timestamp);
+          if (event.type === "session.execution.interrupted")
+            background.childExecutionEnded(
+              externalSessionId,
+              parentID,
+              event.data.reason === "shutdown" ? "shutdown" : "interrupted",
+              base.timestamp,
+            );
+        }
+        // Only a call whose result says that its job still runs, or a media call, which always
+        // starts a job, can start a background task.
+        if (
+          event.type === "session.tool.success" &&
+          (event.data.metadata?.status === "running" || event.data.metadata?.jobID !== undefined)
+        ) {
           const message = projector.messages.get(event.data.assistantMessageID);
           const part =
             message?.type === "assistant"
@@ -999,18 +971,31 @@ export const createPrepareOpencodeSessionRuntime =
     const stream = (async () => {
       try {
         for await (const event of client.event.subscribe({ signal: abort.signal })) {
-          if (event.type === "mcp.status.changed") wakeMcp();
+          if (event.type === "mcp.status.changed") mcpBridge.statusChanged();
+          if (event.type === "location.shutdown" && event.location)
+            mcpBridge.locationShutdown(event.location.directory);
+          if (event.type === "model.updated" && event.location)
+            generationModels.modelsChanged(event.location.directory);
           if (event.type === "server.connected" && !initialConnected) readyResolve();
-          processing = processing.then(() => handleEvent(event));
-          processing.catch((cause) => {
-            fail(cause);
-            abort.abort();
-          });
+          processing = processing
+            .then(() => handleEvent(event))
+            .catch((cause: unknown) => {
+              const sessionID = eventSessionId(event);
+              if (sessionID !== undefined && controller.bindings.has(sessionID)) {
+                faultSession(sessionID, cause);
+                return;
+              }
+              fail(cause);
+              abort.abort();
+            });
         }
         if (!abort.signal.aborted) throw new Error("The native event stream ended.");
       } catch (cause) {
         readyReject(cause);
-        if (!abort.signal.aborted) fail(cause);
+        if (abort.signal.aborted) return;
+        fail(cause);
+        // The abort ends the waits of the MCP bridge and of generation models at once.
+        abort.abort();
       }
     })();
     const rejectOnAbort = () =>
@@ -1135,9 +1120,18 @@ export const createPrepareOpencodeSessionRuntime =
         });
         const sending = (attachTails.get(messageInput.repoPath) ?? Promise.resolve()).then(() => {
           signal.throwIfAborted();
+          const sessionID = messageInput.externalSessionId;
+          // An input to an idle session joins a waiting steer, such as a kept task result.
+          const joinWaitingSteer =
+            !nativeRunning.has(sessionID) &&
+            [...(awaitingTurns.get(sessionID) ?? [])].every((pending) => pending === turn) &&
+            [...(projectors.get(sessionID)?.inbox.values() ?? [])].some(
+              (item) => item.type === "synthetic" && item.delivery === "steer",
+            );
           return controller.sendUserMessage(messageInput, {
             signal,
             assertCommandIdle,
+            joinWaitingSteer,
             onSent: () => {
               turn.submitted = true;
               clearPending();
@@ -1457,7 +1451,7 @@ export const createPrepareOpencodeSessionRuntime =
         projectors.clear();
         seenEvents.clear();
         sequence.clear();
-        installedMcp.clear();
+        mcpBridge.close();
         admittedRoots.clear();
         authorizedByRepo.clear();
       },

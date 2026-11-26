@@ -5,6 +5,8 @@ import {
   type StdioPipe,
 } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { Readable, Writable } from "node:stream";
 import {
   assertOpenCodeV2Connection,
@@ -67,6 +69,14 @@ export const toOpenCodePathError = <Failure>(
     : cause;
 
 const OPENCODE_SERVE_ARGUMENTS = ["serve", "--stdio", "--port", "0", "--hostname", "127.0.0.1"];
+
+/**
+ * The global config directory of an OpenCode process with `env`, by the rule of OpenCode
+ * `packages/util/src/global.ts` and `global-roots.ts`.
+ */
+// OpenCode applies `OPENCODE_CONFIG_DIR` only when it is not empty (`packages/cli/src/server-process.ts`).
+export const resolveOpenCodeGlobalConfigDirectory = (env: NodeJS.ProcessEnv): string =>
+  env.OPENCODE_CONFIG_DIR || join(env.XDG_CONFIG_HOME || join(homedir(), ".config"), "opencode");
 
 type StandaloneChild = ChildProcessByStdio<Writable, Readable, Readable>;
 export type OpenCodeStandaloneOptions = {

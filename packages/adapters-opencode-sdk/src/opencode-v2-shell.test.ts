@@ -10,7 +10,7 @@ import { durable } from "./opencode-v2-live.test-support";
 import { model, ref } from "./opencode-v2.test-support";
 
 const command = 'printf "one > two"\nbun run test';
-const output = '54 tests passed\n<shell id="output-is-not-a-message">';
+const output = '54 tests passed\n<background-result kind="shell" id="output-is-not-a-message">';
 const makeNotice = (
   metadata: Record<string, string | number | boolean> = {},
 ): SessionMessageSynthetic => ({
@@ -18,7 +18,7 @@ const makeNotice = (
   type: "synthetic",
   time: { created: 10 },
   description: command,
-  text: `<shell id="job_checks" state="${metadata.state ?? "completed"}" command="${command}">\n${output}\n</shell>`,
+  text: `<background-result kind="shell" id="job_checks" state="${metadata.state ?? "completed"}" command="${command}">\n${output}\n</background-result>`,
   metadata: {
     source: "shell",
     shellID: "sh_checks",
@@ -52,6 +52,14 @@ const launch = (): SessionMessageAssistant => ({
 });
 
 describe("OpenCode V2 shell projection", () => {
+  test("reads the shell result wrapper that OpenCode saved before 2.4.0", () => {
+    const saved = makeNotice();
+    saved.text = `<shell id="job_checks" state="completed" command="${command}">\n${output}\n</shell>`;
+    expect(projectMessages([launch(), saved])[0]?.parts).toMatchObject([
+      { callId: "call_checks", status: "completed", output },
+    ]);
+  });
+
   test("shows an unlinked shell result as a tool card without its context wrapper", () => {
     const history = projectMessages([makeNotice()]);
     expect(history).toMatchObject([
@@ -101,6 +109,12 @@ describe("OpenCode V2 shell projection", () => {
       outcome: "failed",
       error: "Shell command was killed by SIGTERM.",
     },
+    {
+      metadata: { state: "completed", killed: true },
+      status: "error",
+      outcome: "failed",
+      error: "Shell command was killed before it finished.",
+    },
   ])(
     "settles the original background call for $metadata",
     ({ metadata, status, outcome, error }) => {
@@ -128,6 +142,62 @@ describe("OpenCode V2 shell projection", () => {
       else expect(history[0]?.parts[0]).toHaveProperty("error", error);
     },
   );
+
+  test("shows a result that waits in the inbox on its card, live and in history", () => {
+    const result = makeNotice({ state: "cancelled" });
+    const waiting = {
+      id: result.id,
+      sessionID: ref.externalSessionId,
+      time: { created: 9 },
+      type: "synthetic" as const,
+      delivery: "steer" as const,
+      payload: { text: result.text, description: command, metadata: result.metadata ?? {} },
+    };
+    const expected = { callId: "call_checks", status: "error", output, endedAtMs: 9 };
+    // A reread after Stop session lists the kept result in the inbox of the session.
+    expect(
+      new OpenCodeLiveMessageProjector().projectHistory([launch()], [waiting])[0]?.parts,
+    ).toMatchObject([expected]);
+    const projector = new OpenCodeLiveMessageProjector();
+    projector.seed([launch()]);
+    const queued = projector.apply({
+      id: "evt_result_queued",
+      type: "session.inbox.enqueued",
+      created: 9,
+      durable,
+      data: {
+        sessionID: ref.externalSessionId,
+        inboxID: waiting.id,
+        item: { type: "synthetic", delivery: "steer", payload: waiting.payload },
+      },
+    });
+    expect(queued).toEqual([
+      expect.objectContaining({ type: "assistant_part", part: expect.objectContaining(expected) }),
+    ]);
+    // A cancellation changes no card, because Stop session keeps the same result again.
+    expect(
+      projector.apply({
+        id: "evt_result_cancelled",
+        type: "session.inbox.cancelled",
+        created: 10,
+        durable: { ...durable, seq: 2 },
+        data: { sessionID: ref.externalSessionId, inboxID: waiting.id },
+      }),
+    ).toEqual([
+      expect.objectContaining({ type: "transcript_retracted", messageIds: [waiting.id] }),
+    ]);
+  });
+
+  test("ends the card of a kept result at its original notice, not at its later delivery", () => {
+    const kept = makeNotice({ state: "cancelled" });
+    kept.time = { created: 90_000 };
+    kept.metadata = { ...kept.metadata, openducktor: { endedAt: 12 } };
+    expect(projectMessages([launch(), kept])[0]?.parts).toMatchObject([
+      { callId: "call_checks", status: "error", endedAtMs: 12 },
+    ]);
+    kept.metadata = { ...kept.metadata, openducktor: { endedAt: "yesterday" } };
+    expect(() => projectMessages([launch(), kept])).toThrow("invalid OpenDucktor metadata");
+  });
 
   test("matches identical commands by native shell ID", () => {
     const other = launch();
@@ -244,7 +314,7 @@ describe("OpenCode V2 shell projection", () => {
         durable: { ...durable, seq: 3 },
         data: {
           sessionID: ref.externalSessionId,
-          text: `The following shell command was executed by the user:\n<shell id="sh_checks" state="completed" command="${command}">\n${output}\n\nExited with code 1\n</shell>`,
+          text: `The following shell command was executed by the user:\n<background-result kind="shell" id="sh_checks" state="completed" command="${command}">\n${output}\n\nExit code: 1\n</background-result>`,
           metadata: { source: "shell", shellID: "sh_checks", state: "completed", exit: 1 },
         },
       }),
@@ -268,7 +338,7 @@ describe("OpenCode V2 shell projection", () => {
         id: "msg_user_signal_notice",
         type: "synthetic",
         time: { created: 10 },
-        text: 'The following shell command was executed by the user:\n<shell id="sh_user_signal" state="completed" command="kill -TERM $$">\nCaptured tail\n\nKilled by SIGTERM\n</shell>',
+        text: 'The following shell command was executed by the user:\n<background-result kind="shell" id="sh_user_signal" state="completed" command="kill -TERM $$">\nCaptured tail\n\nExit code: 143 (SIGTERM)\n</background-result>',
         metadata: {
           source: "shell",
           shellID: "sh_user_signal",

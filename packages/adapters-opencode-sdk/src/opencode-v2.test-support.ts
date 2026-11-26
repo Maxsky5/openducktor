@@ -99,6 +99,9 @@ export const createController = (
   const requests: NativeRequest[] = [];
   const client = nativeClient((request) => {
     requests.push(request);
+    // A history read lists the inbox with the messages. These conversations wait for nothing.
+    if (request.method === "GET" && /^\/api\/session\/[^/]+\/inbox$/.test(request.url.pathname))
+      return response([]);
     return handle(request);
   });
   const controller = new OpencodeSdkAdapter(
@@ -111,6 +114,8 @@ export const createController = (
     {
       readDirectory: async (_directory, read) => read(),
       ensureMcp: async () => {},
+      restoreMcp: async () => {},
+      awaitGenerationModel: async () => {},
       admitted: () => {},
       projectHistory: (_sessionID, messages) => projectMessages(messages),
     },
@@ -120,9 +125,15 @@ export const createController = (
 export const eventChannel = () => {
   const events: V2Event[] = [{ id: "connected-1", type: "server.connected", data: {} }];
   let wake: (() => void) | undefined;
+  let ended = false;
   return {
     push: (event: V2Event) => {
       events.push(event);
+      wake?.();
+    },
+    /** Ends the native event stream, as when the OpenCode server stops. */
+    end: () => {
+      ended = true;
       wake?.();
     },
     // SAFETY: The test channel yields every event. The client type narrows the
@@ -132,7 +143,7 @@ export const eventChannel = () => {
         const onAbort = () => wake?.();
         signal?.addEventListener("abort", onAbort);
         try {
-          while (!signal?.aborted) {
+          while (!signal?.aborted && !ended) {
             const event = events.shift();
             if (event) yield event;
             else

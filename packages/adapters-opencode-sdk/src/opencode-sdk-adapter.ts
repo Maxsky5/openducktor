@@ -7,6 +7,7 @@ import {
   type OpenCodeClient,
   type SessionInfo,
   type ModelRef,
+  type SessionInboxInfo,
   type SessionMessageInfo,
 } from "@opencode/client";
 import {
@@ -99,10 +100,24 @@ export type OpenCodeControlHooks = {
     workingDirectory: string;
     sessionScope?: AgentSessionScope | undefined;
   }) => Promise<void>;
+  /** Installs the bridge again after OpenCode shut down the services of its directory. */
+  restoreMcp: (ref: {
+    repoPath: string;
+    workingDirectory: string;
+    sessionScope?: AgentSessionScope | undefined;
+  }) => Promise<void>;
+  /** Waits until the location of `generate.*` has loaded `model`. */
+  awaitGenerationModel: (
+    identity: OperationIdentity,
+    model: ModelRef,
+    signal: AbortSignal,
+  ) => Promise<void>;
   admitted: (binding: OpenCodeSessionBinding) => void;
+  /** Projects the history with the result notices that still wait in the inbox. */
   projectHistory: (
     sessionID: string,
     messages: SessionMessageInfo[],
+    inbox: SessionInboxInfo[],
   ) => AgentSessionHistoryMessage[];
 };
 
@@ -444,6 +459,7 @@ export class OpencodeSdkAdapter {
             : `OpenCode session '${input.externalSessionId}' has no turn to continue.`,
       });
     await nativeRequest(input, "continue the interrupted turn", async () => {
+      await this.hooks.restoreMcp(input);
       await this.putRootInstructions(input, binding);
       this.assertCurrent(input, generation);
       assertAgentWorkStartCurrent(input);
@@ -591,10 +607,21 @@ export class OpencodeSdkAdapter {
     return binding;
   }
 
+  /**
+   * Sends user input. `joinWaitingSteer` sends it as a steer: OpenCode delivers all waiting steers
+   * in one step, but a queued input after them in a step of its own (`SessionInbox.promote`), so
+   * the agent reads a waiting notice, such as a task result that Stop session kept, with the input.
+   */
   async sendUserMessage(
     input: SendAgentUserMessageInput,
-    options?: { signal?: AbortSignal; onSent?: () => void; assertCommandIdle?: () => void },
+    options?: {
+      signal?: AbortSignal;
+      onSent?: () => void;
+      assertCommandIdle?: () => void;
+      joinWaitingSteer?: boolean;
+    },
   ): Promise<AcceptedAgentInput> {
+    const delivery = options?.joinWaitingSteer ? "steer" : nativeDelivery(input);
     let submitted = false;
     const onSent = () => {
       submitted = true;
@@ -636,6 +663,7 @@ export class OpencodeSdkAdapter {
           );
         return { type: "command_accepted", commandName: "compact", inputId: item.id };
       }
+      await this.hooks.restoreMcp(input);
       if (input.delivery !== "steer") await this.putRootInstructions(input, binding);
       this.assertCurrent(input, generation);
       const encoded = buildOpenCodePromptText(
@@ -692,7 +720,7 @@ export class OpencodeSdkAdapter {
         const sending = this.client.session.command({
           ...payload,
           name: commands[0].command.trigger,
-          delivery: nativeDelivery(input),
+          delivery,
         });
         onSent();
         await sending;
@@ -707,7 +735,7 @@ export class OpencodeSdkAdapter {
       const sending = this.client.session.prompt({
         ...payload,
         id: messageId,
-        delivery: nativeDelivery(input),
+        delivery,
       });
       onSent();
       const unknownResult = (cause: unknown) =>
@@ -751,17 +779,16 @@ export class OpencodeSdkAdapter {
    */
   async generateText(input: AgentTextGenerationInput, signal: AbortSignal): Promise<string> {
     const model = nativeModelSelection(input.model);
-    return nativeRequest(
-      { repoPath: input.repoPath },
-      "generate text",
-      async () =>
-        (
-          await this.client.generate.text(
-            { prompt: `${input.instructions}\n\n${input.prompt}`, model },
-            { signal },
-          )
-        ).text,
-    );
+    const identity = { repoPath: input.repoPath };
+    return nativeRequest(identity, "generate text", async () => {
+      await this.hooks.awaitGenerationModel(identity, model, signal);
+      return (
+        await this.client.experimental.generate.text(
+          { prompt: `${input.instructions}\n\n${input.prompt}`, model },
+          { signal },
+        )
+      ).text;
+    });
   }
 
   /**
@@ -772,7 +799,7 @@ export class OpencodeSdkAdapter {
     input: AgentJsonGenerationInput<Answer>,
     signal: AbortSignal,
   ): Promise<Answer> {
-    // `generate.text` has no output schema option (`@opencode/client` 2.2.5 to 2.3.2).
+    // `generate.text` has no output schema option (`@opencode/client` 2.2.5 to 2.4.1).
     const text = await this.generateText(
       { ...input, instructions: agentJsonSchemaInstructions(input) },
       signal,
@@ -792,6 +819,7 @@ export class OpencodeSdkAdapter {
     const generation = this.generation(input.externalSessionId);
     await nativeRequest(input, goalOperation(input.command), async () => {
       const binding = this.requirePreparedBinding(input);
+      await this.hooks.restoreMcp(input);
       // A new goal starts a turn, which needs the current instructions, as a new message does.
       if (input.command.kind === "set" && options.delivery === "queue")
         await this.putRootInstructions(input, binding);
@@ -911,10 +939,11 @@ export class OpencodeSdkAdapter {
   async loadSessionHistory(input: LoadAgentSessionHistoryInput) {
     const detail = await this.readNativeSession(input, "read history");
     return nativeRequest(input, "read history", async () => {
-      const history = this.hooks.projectHistory(
-        detail.id,
-        await readOpenCodeTranscript(this.client, detail),
-      );
+      const [messages, inbox] = await Promise.all([
+        readOpenCodeTranscript(this.client, detail),
+        this.client.session.inbox.list({ sessionID: detail.id }),
+      ]);
+      const history = this.hooks.projectHistory(detail.id, messages, inbox);
       if (detail.fork)
         history.unshift({
           role: "system",

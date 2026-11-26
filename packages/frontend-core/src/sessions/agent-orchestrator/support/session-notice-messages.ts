@@ -146,6 +146,7 @@ export const buildSessionPolicyNoticeMessage = (
   message: string,
   id: string,
   runtimeKind: RuntimeKind,
+  title?: string,
 ): AgentChatMessage => {
   const notice: AgentChatMessage = {
     id,
@@ -160,6 +161,8 @@ export const buildSessionPolicyNoticeMessage = (
       reason: "runtime_policy",
       title: "Claude permission mode mismatch",
     };
+  } else if (title) {
+    notice.meta = { kind: "system", title };
   }
   return notice;
 };

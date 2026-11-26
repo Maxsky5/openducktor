@@ -1,4 +1,5 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
+import { pendingInputIdentity } from "../../lib/pending-input-identity";
 import type { AgentApprovalRequest } from "../../types/agent-orchestrator";
 
 export const resolveApprovalReplyOutcomes = ({
@@ -95,3 +96,23 @@ export const approvalRequestDescription = (request: AgentApprovalRequest): strin
 /** The tool input of a request without a command, as indented JSON, or null. */
 export const approvalToolInputText = (request: AgentApprovalRequest): string | null =>
   request.tool?.input && !request.command ? JSON.stringify(request.tool.input, null, 2) : null;
+
+/**
+ * Tells which other pending approvals a reject of `request` also cancels, or null when it cancels
+ * none of them.
+ */
+export const approvalRejectScope = (
+  request: AgentApprovalRequest,
+  pendingApprovals: readonly AgentApprovalRequest[],
+): string | null => {
+  if (request.rejectGroupId === undefined) return null;
+  const identity = pendingInputIdentity(request);
+  const others = pendingApprovals.filter(
+    (other) =>
+      other.rejectGroupId === request.rejectGroupId && pendingInputIdentity(other) !== identity,
+  ).length;
+  if (others === 0) return null;
+  return others === 1
+    ? "Reject also cancels the other pending approval of this step."
+    : `Reject also cancels the ${others} other pending approvals of this step.`;
+};

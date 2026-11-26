@@ -370,7 +370,7 @@ describe("agent session live projection", () => {
         projectDirectory: "/repo",
         rules: [{ action: "shell", resource: "bun test*" }],
       },
-      rejectsAllPendingApprovals: true,
+      rejectGroupId: "child:msg_step_1",
     };
     const form: AgentSessionLivePendingQuestionRequest = {
       requestId: "form-native",
@@ -395,7 +395,7 @@ describe("agent session live projection", () => {
       type: "session_upsert",
       session: {
         ...child,
-        pendingApprovals: [{ ...child.pendingApprovals[0]!, rejectsAllPendingApprovals: false }],
+        pendingApprovals: [{ ...child.pendingApprovals[0]!, rejectGroupId: "child:msg_step_2" }],
         pendingQuestions: [
           { ...form, canCancel: false, unsupportedReason: "The native form constraints changed." },
         ],
@@ -404,7 +404,7 @@ describe("agent session live projection", () => {
     for (const id of ["root", "child"]) {
       expect(getAgentSession(updated, identity(id))?.pendingApprovals[0]).toMatchObject({
         ...request,
-        rejectsAllPendingApprovals: false,
+        rejectGroupId: "child:msg_step_2",
       });
       expect(getAgentSession(updated, identity(id))?.pendingQuestions[0]).toMatchObject({
         ...form,

@@ -154,10 +154,15 @@ describe("agent session transcript event consumer", () => {
         message: "Continue",
         parts: [{ kind: "text", text: "Continue" }],
         state: "read",
+        origin: { kind: "automation", name: "Nightly check" },
       });
       expect(getSessionMessages(sessionsRef)).toEqual([
         expect.objectContaining({ role: "assistant", content: "Hello world" }),
-        expect.objectContaining({ role: "user", content: "Continue" }),
+        expect.objectContaining({
+          role: "user",
+          content: "Continue",
+          meta: expect.objectContaining({ origin: { kind: "automation", name: "Nightly check" } }),
+        }),
       ]);
     } finally {
       consumer.close();
@@ -378,6 +383,34 @@ describe("agent session transcript event consumer", () => {
       expect(notice).toMatchObject({ role: "system", content: "Agent selected: build" });
       expect(notice?.meta).toBeUndefined();
       expect(getSession(sessionsRef).status).toBe(before);
+    } finally {
+      consumer.close();
+    }
+  });
+
+  test("folds a titled OpenCode notice under its title", () => {
+    const liveRef = { ...sessionRef, runtimeKind: "opencode" as const };
+    const { consumer, sessionsRef } = createConsumerHarness(
+      60_000,
+      buildSession({ runtimeKind: "opencode" }),
+    );
+    try {
+      consumer.handle({
+        type: "session_policy_notice",
+        externalSessionId: liveRef.externalSessionId,
+        sessionRef: liveRef,
+        timestamp: "2026-10-08T10:00:00Z",
+        messageId: "notice-titled",
+        message: "The plugin reloaded its tools.",
+        title: "Plugin reloaded",
+      });
+      expect(
+        getSessionMessages(sessionsRef).find((message) => message.id === "notice-titled"),
+      ).toMatchObject({
+        role: "system",
+        content: "The plugin reloaded its tools.",
+        meta: { kind: "system", title: "Plugin reloaded" },
+      });
     } finally {
       consumer.close();
     }

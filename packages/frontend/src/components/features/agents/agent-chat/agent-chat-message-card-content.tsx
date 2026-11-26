@@ -24,7 +24,10 @@ import { BrowserToolMessage } from "./agent-chat-browser-tool";
 import { ComputerUseToolMessage } from "./agent-chat-computer-use";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 import { roleLabel } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model";
-import { resolveInstructionsMessage } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-kind";
+import {
+  resolveInstructionsMessage,
+  systemMessageLabel,
+} from "@openducktor/frontend-core/sessions/messages/agent-chat-message-kind";
 import type {
   SubagentMeta,
   ToolMeta,
@@ -276,17 +279,22 @@ type UserMessageDisplay = {
   annotations: ReactElement | null;
   attachments: UserAttachmentPart[];
   isUnread: boolean;
+  originLabel: string | null;
 };
 
 const readUserMessageDisplay = (message: AgentChatMessage): UserMessageDisplay => {
   // Pending browser annotations go after the user text. The chat shows them as chips.
   const sent = readSentBrowserAnnotations(readUserMessageText(message));
-  const { nodes, attachments, isUnread } = buildUserMessageContent(message, sent?.textEnd ?? null);
+  const { nodes, attachments, isUnread, originLabel } = buildUserMessageContent(
+    message,
+    sent?.textEnd ?? null,
+  );
   return {
     inline: renderUserMessageInlineContent(nodes),
     annotations: sent ? <BrowserAnnotationMessageChips annotations={sent.annotations} /> : null,
     attachments,
     isUnread,
+    originLabel,
   };
 };
 
@@ -355,12 +363,17 @@ const UserMessageBubble = ({
 
 const UserMessageMeta = ({
   isUnread,
+  originLabel,
   timeLabel,
 }: {
   isUnread: boolean;
+  originLabel: string | null;
   timeLabel: string;
 }): ReactElement => (
   <div className="mt-1 flex items-center justify-end gap-2 px-1">
+    {originLabel ? (
+      <p className="text-right text-[11px] font-medium text-muted-foreground">{originLabel}</p>
+    ) : null}
     {isUnread ? (
       <span
         className="rounded-full border border-pending-border bg-pending-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-pending-surface-foreground"
@@ -383,7 +396,7 @@ const UserMessage = ({
   timeLabel: string;
 }): ReactElement => {
   const display = readUserMessageDisplay(message);
-  const { isUnread } = display;
+  const { isUnread, originLabel } = display;
 
   return (
     <>
@@ -392,7 +405,9 @@ const UserMessage = ({
           <UserMessageDisplayContent display={display} />
         </UserMessageBubble>
       ) : null}
-      {isUnread || timeLabel ? <UserMessageMeta isUnread={isUnread} timeLabel={timeLabel} /> : null}
+      {isUnread || originLabel || timeLabel ? (
+        <UserMessageMeta isUnread={isUnread} originLabel={originLabel} timeLabel={timeLabel} />
+      ) : null}
     </>
   );
 };
@@ -566,7 +581,7 @@ const renderSystemMessage = (
   }
   if (message.role !== "system" || sessionRuntimeKind !== "opencode") return null;
   return (
-    <SystemMessageDisclosure label="Show system message" text={message.content}>
+    <SystemMessageDisclosure label={systemMessageLabel(message)} text={message.content}>
       <AgentChatTranscriptProse className="leading-6 text-foreground">
         {message.content}
       </AgentChatTranscriptProse>

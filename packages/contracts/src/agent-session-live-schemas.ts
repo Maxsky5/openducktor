@@ -91,7 +91,8 @@ export const agentSessionLivePendingApprovalRequestSchema = z
     mutation: z.enum(["mutating", "read_only", "unknown"]).optional(),
     supportedReplyOutcomes: z.array(runtimeApprovalReplyOutcomeSchema).optional(),
     persistentGrant: projectApprovalGrantSchema.optional(),
-    rejectsAllPendingApprovals: z.boolean().optional(),
+    /** A reject also cancels the other pending requests of the same group. */
+    rejectGroupId: z.string().trim().min(1).optional(),
   })
   .strict();
 export type AgentSessionLivePendingApprovalRequest = z.infer<

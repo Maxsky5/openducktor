@@ -205,6 +205,10 @@ describe("Claude source snapshot reuse", () => {
       expect((await read()).messages.map((message) => message.uuid)).toEqual(["first", "second"]);
       const size = (await fs.stat(transcript)).size;
       await write([row("first", "Replaced message"), second]);
+      // A file system can keep one write time for writes within one clock tick, as NTFS does.
+      // A rewrite by Claude comes later than the read, so it gets a later time.
+      const later = new Date(Date.now() + 2_000);
+      await fs.utimes(transcript, later, later);
       expect((await fs.stat(transcript)).size).toBe(size);
       expect((await read()).messages[0]?.message).toMatchObject({ content: "Replaced message" });
     });

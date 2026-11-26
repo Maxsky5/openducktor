@@ -157,6 +157,19 @@ describe("OpenCode V2 pending input", () => {
     );
     expect(request.supportedReplyOutcomes).toEqual(["approve_once", "reject"]);
     expect(request.persistentGrant).toBeUndefined();
-    expect(request.rejectsAllPendingApprovals).toBe(true);
+    expect(request.rejectGroupId).toBe("ses_saved:no-step");
+  });
+  test("groups the requests that one reject cancels by session and step", () => {
+    const request = projectApproval(
+      {
+        id: "permission_step",
+        sessionID: "ses_saved",
+        action: "shell",
+        resources: ["git status"],
+        source: { type: "tool", messageID: "msg_step", id: "call_1" },
+      },
+      "/repo",
+    );
+    expect(request.rejectGroupId).toBe("ses_saved:msg_step");
   });
 });

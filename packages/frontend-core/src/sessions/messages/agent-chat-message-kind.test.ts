@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX } from "@openducktor/core";
 import { buildMessage } from "../../test-support/agent-chat-transcript-fixtures";
 import {
   canCopyAssistantMessage,
@@ -72,20 +71,10 @@ describe("canCopyAssistantMessage", () => {
 });
 
 describe("resolveInstructionsMessage", () => {
-  test("reads system prompts and instruction updates", () => {
+  test("reads the system prompt", () => {
     expect(
       resolveInstructionsMessage(buildMessage("system", "System prompt:\n\nBody"), "Body"),
-    ).toEqual({ kind: "system_prompt", toggleLabel: "Show system prompt", markdown: "Body" });
-    expect(
-      resolveInstructionsMessage(
-        buildMessage("system", `${AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX}New rules`),
-        "",
-      ),
-    ).toEqual({
-      kind: "instruction_update",
-      toggleLabel: "Show instruction update",
-      markdown: "New rules",
-    });
+    ).toEqual({ toggleLabel: "Show system prompt", markdown: "Body" });
     expect(resolveInstructionsMessage(buildMessage("system", "Other"), "")).toBeNull();
   });
 });

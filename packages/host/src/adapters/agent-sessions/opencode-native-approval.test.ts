@@ -93,6 +93,7 @@ test("projects native V2 approvals through the host and replies to the native re
   const prepareRuntime = createPrepareOpencodeSessionRuntime({
     resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
     resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    globalConfigDirectory: "/home/user/.config/opencode",
     resolveMcpServerConfig: async () => ({ command: ["test-bridge"], environment: {} }),
     readDirectory: async (_directory, read) => read(),
   });
@@ -128,8 +129,8 @@ test("projects native V2 approvals through the host and replies to the native re
           projectDirectory: "/repo",
           rules: [{ action: "shell", resource: "bun test*" }],
         },
-        rejectsAllPendingApprovals: true,
       });
+      expect(approval.rejectGroupId).toBe(`${ref.externalSessionId}:no-step`);
       expect(approval.requestId).not.toBe("permission_native");
       await Effect.runPromise(
         prepared.adapter.replyApproval({

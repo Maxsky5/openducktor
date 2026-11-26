@@ -54,8 +54,8 @@ describe("AgentSessionApprovalCard", () => {
             projectDirectory: "/repo",
             rules: [{ action: "shell", resource: "git status*" }],
           },
-          rejectsAllPendingApprovals: true,
         },
+        rejectScope: "Reject also cancels the other pending approval of this step.",
         runtimeSupportedReplyOutcomes: ["approve_once", "approve_always", "reject"],
         onReply,
       }),
@@ -64,7 +64,7 @@ describe("AgentSessionApprovalCard", () => {
       expect(view.getByText(/future sessions in/).textContent).toContain("/repo");
       expect(view.getByText("shell: git status*")).toBeTruthy();
       expect(
-        view.getByText("Reject cancels all pending approvals in this conversation."),
+        view.getByText("Reject also cancels the other pending approval of this step."),
       ).toBeTruthy();
       expect(onReply).not.toHaveBeenCalled();
       await act(async () => {
@@ -80,6 +80,7 @@ describe("AgentSessionApprovalCard", () => {
     const onReply = mock(async () => {});
     const props = {
       request: approvalRequest,
+      rejectScope: null,
       runtimeSupportedReplyOutcomes: null,
       errorMessage: "Retry approval",
       disabled: true,
@@ -138,6 +139,7 @@ describe("AgentSessionApprovalCard", () => {
   test("renders only outcomes supported by the active runtime", () => {
     const html = renderToStaticMarkup(
       createElement(AgentSessionApprovalCard, {
+        rejectScope: null,
         request: approvalRequest,
         runtimeSupportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
         onReply: async () => {},
@@ -152,6 +154,7 @@ describe("AgentSessionApprovalCard", () => {
   test("renders persistent approval outcomes advertised by the request and runtime", () => {
     const html = renderToStaticMarkup(
       createElement(AgentSessionApprovalCard, {
+        rejectScope: null,
         request: {
           ...approvalRequest,
           supportedReplyOutcomes: ["approve_once", "approve_session", "approve_always", "reject"],
@@ -175,6 +178,7 @@ describe("AgentSessionApprovalCard", () => {
   test("renders affected paths in a scrollable code list", () => {
     const html = renderToStaticMarkup(
       createElement(AgentSessionApprovalCard, {
+        rejectScope: null,
         request: approvalRequest,
         runtimeSupportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
         onReply: async () => {},
@@ -194,6 +198,7 @@ describe("AgentSessionApprovalCard", () => {
   test("renders non-command tool input for approval context", () => {
     const html = renderToStaticMarkup(
       createElement(AgentSessionApprovalCard, {
+        rejectScope: null,
         request: {
           ...approvalRequest,
           requestType: "file_change" as const,
@@ -221,6 +226,7 @@ describe("AgentSessionApprovalCard", () => {
   test("does not duplicate command tool input when command details are already rendered", () => {
     const html = renderToStaticMarkup(
       createElement(AgentSessionApprovalCard, {
+        rejectScope: null,
         request: {
           ...approvalRequest,
           requestType: "command_execution" as const,
@@ -248,6 +254,7 @@ describe("AgentSessionApprovalCard", () => {
   test("labels subagent approval requests", () => {
     const html = renderToStaticMarkup(
       createElement(AgentSessionApprovalCard, {
+        rejectScope: null,
         request: {
           ...approvalRequest,
           source: {
@@ -267,6 +274,7 @@ describe("AgentSessionApprovalCard", () => {
   test("keeps reply controls disabled when runtime capabilities are unavailable", () => {
     const html = renderToStaticMarkup(
       createElement(AgentSessionApprovalCard, {
+        rejectScope: null,
         request: approvalRequest,
         runtimeSupportedReplyOutcomes: null,
         onReply: async () => {},

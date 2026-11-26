@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { pendingInputIdentity } from "@openducktor/frontend-core/lib/pending-input-identity";
+import { approvalRejectScope } from "@openducktor/frontend-core/sessions/pending-input/agent-session-approval-card-model";
 import { AgentChatInterruptedTurnResume } from "./agent-chat-interrupted-turn-resume";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import type { AgentChatUserMessageAnchor } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
@@ -550,6 +551,7 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
         >
           <AgentSessionApprovalCard
             request={request}
+            rejectScope={approvalRejectScope(request, pendingApprovals)}
             collapseResetKey={collapseResetKey}
             runtimeSupportedReplyOutcomes={runtimeSupportedApprovalReplyOutcomes ?? null}
             disabled={!canReplyToApprovals}

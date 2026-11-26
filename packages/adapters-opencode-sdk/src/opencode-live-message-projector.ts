@@ -2,6 +2,7 @@ import type {
   SessionMessageAssistant,
   SessionMessageInfo,
   SessionMessageCompaction,
+  SessionMessageSynthetic,
   SessionInboxInfo,
   SessionMessageToolStateCompleted,
   SessionMessageToolStateError,
@@ -23,7 +24,9 @@ import {
   projectInboxUser,
   projectVisibleInboxUser,
   projectMessages,
+  waitingNotice,
 } from "./opencode-message-projection";
+import { isJobNotice } from "./opencode-job-projection";
 import { isShellNotice } from "./opencode-shell-projection";
 
 export class OpenCodeLiveMessageProjector {
@@ -55,7 +58,10 @@ export class OpenCodeLiveMessageProjector {
    * History can lag live events and omit tool progress.
    * Keep live updates and drop reverted calls without changing the live transcript.
    */
-  projectHistory(messages: SessionMessageInfo[]): AgentSessionHistoryMessage[] {
+  projectHistory(
+    messages: SessionMessageInfo[],
+    inbox: readonly SessionInboxInfo[] = [],
+  ): AgentSessionHistoryMessage[] {
     const history = messages.filter((message) => !this.retractedIds.has(message.id));
     const settledInput = new Set(this.settledInput);
     for (const message of history) {
@@ -77,11 +83,14 @@ export class OpenCodeLiveMessageProjector {
       if (
         (message.type === "assistant" && message.content.some((part) => part.type === "tool")) ||
         message.type === "shell" ||
-        isShellNotice(message)
+        isShellNotice(message) ||
+        isJobNotice(message)
       )
         merged.push(message);
     }
-    const context = messageProjectionContext(merged);
+    const waiting = new Map(inbox.map((item) => [item.id, item] as const));
+    for (const item of this.inbox.values()) waiting.set(item.id, item);
+    const context = messageProjectionContext(merged, waiting.values());
     const completions = new Map(context.completions);
     for (const [callID, completion] of this.projectionContext.completions) {
       const saved = completions.get(callID);
@@ -201,11 +210,19 @@ export class OpenCodeLiveMessageProjector {
       const startsTurn = idle && this.inbox.size === 0;
       this.inbox.set(item.id, item);
       if (startsTurn) this.startedTurns.add(item.id);
-      return projectVisibleInboxUser(item, startsTurn ? "read" : "queued");
+      if (item.type !== "synthetic")
+        return projectVisibleInboxUser(item, startsTurn ? "read" : "queued");
+      // A result notice shows on the card of its call while it waits for delivery.
+      this.updateProjectionContext();
+      return this.resultCardEvents(sessionID, waitingNotice(item));
     }
     if (event.type === "session.inbox.cancelled") {
+      const cancelled = this.inbox.get(event.data.inboxID);
       this.inbox.delete(event.data.inboxID);
       this.startedTurns.delete(event.data.inboxID);
+      // The card keeps the result of a cancelled notice until it shows again: Stop session queues
+      // the same result again with no wake, so its card does not flicker.
+      if (cancelled?.type === "synthetic") this.updateProjectionContext();
       return [{ ...base, type: "transcript_retracted", messageIds: [event.data.inboxID] }];
     }
     if (event.type === "session.inbox.delivered") {
@@ -547,24 +564,25 @@ export class OpenCodeLiveMessageProjector {
       case "session.execution.failed":
       case "session.execution.succeeded":
       case "session.execution.interrupted": {
+        // OpenCode keeps an execution that a shutdown interrupted, to continue it when it starts again,
+        // so the turn stays unfinished with no notice. OpenCode 2.4.1 also ends a step whose
+        // permission the user declined this way (`terminal` of `packages/core/src/session/execution.ts`).
         if (event.type === "session.execution.interrupted" && event.data.reason === "shutdown")
-          return [];
+          return [{ ...base, type: "session_status", status: { type: "idle" } }];
         const outcome =
           event.type === "session.execution.succeeded"
             ? "succeeded"
             : event.type === "session.execution.failed"
               ? "failed"
               : "interrupted";
-        const events: AgentEvent[] =
-          event.type === "session.execution.failed"
-            ? [{ ...base, type: "turn_error", message: event.data.error.message }]
-            : [];
+        // The record of a failed turn gives its `turn_error`, with the ID of the record.
         system = {
           id: event.id.replace(/^evt_/, "msg_"),
           type: "idle",
           outcome,
           time: { created },
         };
+        if (event.type === "session.execution.failed") system.error = event.data.error;
         if (event.metadata !== undefined) system.metadata = event.metadata;
         const recorded = this.recordMessage(sessionID, system);
         // The interruption notice is the idle event of an interrupted turn.
@@ -574,12 +592,14 @@ export class OpenCodeLiveMessageProjector {
               ? { ...recordedEvent, turnOutcome: "interrupted" }
               : recordedEvent,
           );
-        events.push(...recorded, {
-          ...base,
-          type: "session_idle",
-          turnOutcome: outcome === "succeeded" ? "completed" : "failed",
-        });
-        return events;
+        return [
+          ...recorded,
+          {
+            ...base,
+            type: "session_idle",
+            turnOutcome: outcome === "succeeded" ? "completed" : "failed",
+          },
+        ];
       }
       case "session.execution.started":
         return [{ ...base, type: "session_status", status: { type: "busy", message: null } }];
@@ -622,12 +642,13 @@ export class OpenCodeLiveMessageProjector {
     return system ? this.recordMessage(sessionID, system) : [];
   }
 
-  private updateProjectionContext() {
+  /** Updates the results of the call cards after a change of the messages or of the inbox. */
+  updateProjectionContext(): void {
     this.projectionContext = this.createProjectionContext(this.messages.values());
   }
 
   private createProjectionContext(messages: Iterable<SessionMessageInfo>) {
-    return { ...messageProjectionContext(messages), denials: this.denials };
+    return { ...messageProjectionContext(messages, this.inbox.values()), denials: this.denials };
   }
 
   /**
@@ -645,24 +666,10 @@ export class OpenCodeLiveMessageProjector {
     this.denials.set(callId, denial);
   }
 
-  private recordMessage(sessionID: string, message: SessionMessageInfo): AgentEvent[] {
-    const completedReplies = this.projectionContext.completedReplies;
-    this.messages.set(message.id, message);
-    if (message.type === "synthetic" || message.type === "idle") this.updateProjectionContext();
-    const events = messageEvents(sessionID, message, this.projectionContext, this.settledInput);
-    if (message.type === "idle" && message.outcome === "succeeded") {
-      for (const id of this.projectionContext.completedReplies) {
-        if (completedReplies.has(id)) continue;
-        const reply = this.messages.get(id);
-        if (reply)
-          events.push(
-            ...messageEvents(sessionID, reply, this.projectionContext, this.settledInput).filter(
-              (event) => event.type === "assistant_message",
-            ),
-          );
-      }
-    }
-    if (message.type === "synthetic" && message.metadata?.source === "subagent") {
+  /** The events of the call cards whose result is the notice `message`. */
+  private resultCardEvents(sessionID: string, message: SessionMessageSynthetic): AgentEvent[] {
+    const events: AgentEvent[] = [];
+    if (message.metadata?.source === "subagent") {
       for (const assistant of this.messages.values()) {
         if (
           assistant.type !== "assistant" ||
@@ -680,6 +687,25 @@ export class OpenCodeLiveMessageProjector {
             (event) => event.type === "assistant_part" && event.part.kind === "subagent",
           ),
         );
+      }
+    }
+    if (isJobNotice(message)) {
+      for (const owner of this.messages.values()) {
+        if (owner.type !== "assistant") continue;
+        for (const part of owner.content)
+          if (
+            part.type === "tool" &&
+            this.projectionContext.jobs.results.get(part.id)?.noticeId === message.id
+          )
+            events.push(
+              ...assistantPartEvents(
+                sessionID,
+                owner,
+                { type: "tool", id: part.id },
+                this.projectionContext,
+                this.settledInput,
+              ),
+            );
       }
     }
     if (isShellNotice(message)) {
@@ -711,6 +737,27 @@ export class OpenCodeLiveMessageProjector {
         }
       }
     }
+    return events;
+  }
+
+  private recordMessage(sessionID: string, message: SessionMessageInfo): AgentEvent[] {
+    const completedReplies = this.projectionContext.completedReplies;
+    this.messages.set(message.id, message);
+    if (message.type === "synthetic" || message.type === "idle") this.updateProjectionContext();
+    const events = messageEvents(sessionID, message, this.projectionContext, this.settledInput);
+    if (message.type === "idle" && message.outcome === "succeeded") {
+      for (const id of this.projectionContext.completedReplies) {
+        if (completedReplies.has(id)) continue;
+        const reply = this.messages.get(id);
+        if (reply)
+          events.push(
+            ...messageEvents(sessionID, reply, this.projectionContext, this.settledInput).filter(
+              (event) => event.type === "assistant_message",
+            ),
+          );
+      }
+    }
+    if (message.type === "synthetic") events.push(...this.resultCardEvents(sessionID, message));
     return events;
   }
 }

@@ -1,6 +1,7 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import { useRuntimeAvailabilityContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { pendingInputIdentity } from "@openducktor/frontend-core/lib/pending-input-identity";
+import { approvalRejectScope } from "@openducktor/frontend-core/sessions/pending-input/agent-session-approval-card-model";
 import { buildQuestionCardKey } from "@openducktor/frontend-core/sessions/pending-input/agent-session-question-keys";
 import { useAgentSessionApprovalActions } from "@openducktor/frontend-core/sessions/pending-input/use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "@openducktor/frontend-core/sessions/pending-input/use-agent-session-question-actions";
@@ -145,6 +146,7 @@ function PendingInputList({ focus, scrollRef }: PendingInputProps): ReactElement
         <PermissionPromptCard
           key={JSON.stringify([sessionKey, "permission", pendingInputIdentity(request)])}
           request={request}
+          rejectScope={approvalRejectScope(request, pendingApprovals)}
           runtimeSupportedReplyOutcomes={runtimeSupportedReplyOutcomes}
           disabled={!canReply}
           blockedReason={blockedReason}

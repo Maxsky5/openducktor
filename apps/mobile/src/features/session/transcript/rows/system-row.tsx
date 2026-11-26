@@ -1,4 +1,7 @@
-import { resolveInstructionsMessage } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-kind";
+import {
+  resolveInstructionsMessage,
+  systemMessageLabel,
+} from "@openducktor/frontend-core/sessions/messages/agent-chat-message-kind";
 import { roleLabel } from "@openducktor/frontend-core/sessions/messages/message-formatting";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { memo, type ReactElement } from "react";
@@ -77,7 +80,7 @@ export const SystemRow = memo(function SystemRow({
         </DetailsBox>
       ) : folded ? (
         <DetailsBox
-          label="Show system message"
+          label={systemMessageLabel(message)}
           resetKey={`${rowKey}:system`}
           frameStyle={styles.promptFrame}
           textColor={theme.desktop.foreground}

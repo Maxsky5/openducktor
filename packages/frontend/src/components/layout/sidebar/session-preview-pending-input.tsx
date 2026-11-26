@@ -10,6 +10,7 @@ import { useRuntimeTranscriptInteractions } from "@openducktor/frontend-core/ses
 import type { SessionPreviewPendingInput } from "@/features/session-navigation/session-preview-model";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { pendingInputIdentity } from "@openducktor/frontend-core/lib/pending-input-identity";
+import { approvalRejectScope } from "@openducktor/frontend-core/sessions/pending-input/agent-session-approval-card-model";
 import { useRequiredContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { WorkspaceActivityContext } from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
@@ -121,6 +122,7 @@ export function SessionPreviewPendingRequests({
           <AgentSessionApprovalCard
             key={pendingInputIdentity(request)}
             request={request}
+            rejectScope={approvalRejectScope(request, input.approvals)}
             runtimeSupportedReplyOutcomes={
               definition?.capabilities.approvals.supportedReplyOutcomes ?? null
             }
