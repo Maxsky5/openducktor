@@ -1,10 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import type { AppVisibility, SystemWake } from "../platform/app-visibility";
-import {
-  refetchFailedRuntimeQueries,
-  refetchRuntimeQueriesAfterWake,
-} from "./runtime-query-invalidation";
+import { refetchFailedRuntimeQueries } from "./runtime-query-invalidation";
 
 /**
  * Reads the failed runtime reads of the shown views again each time the user returns to the app,
@@ -23,7 +20,7 @@ export function useRefetchFailedRuntimeQueries(
     [queryClient, visibility],
   );
   useEffect(
-    () => systemWake?.subscribe(() => void refetchRuntimeQueriesAfterWake(queryClient)),
+    () => systemWake?.subscribe(() => void refetchFailedRuntimeQueries(queryClient)),
     [queryClient, systemWake],
   );
 }

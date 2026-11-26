@@ -4,7 +4,6 @@ import { waitForExpectation } from "../test-support/wait-for-expectation";
 import {
   invalidateRuntimeKindQueries,
   refetchFailedRuntimeQueries,
-  refetchRuntimeQueriesAfterWake,
 } from "./runtime-query-invalidation";
 
 const repoCatalogKey = ["runtime-catalog", "catalog", "/repo", "opencode", "/repo"];
@@ -132,7 +131,7 @@ test("a return reads again only the shown runtime reads that failed", async () =
   }
 });
 
-test("after a wake, a runtime read that ran during sleep and then fails reads again", async () => {
+test("a runtime read that runs at a return or a wake and then fails reads again", async () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const todosKey = sessionKeys[0]!;
   const sleepingRead = Promise.withResolvers<string[]>();
@@ -149,7 +148,7 @@ test("after a wake, a runtime read that ran during sleep and then fails reads ag
 
   try {
     await waitForExpectation(() => expect(reads).toBe(1));
-    const wake = refetchRuntimeQueriesAfterWake(client);
+    const wake = refetchFailedRuntimeQueries(client);
     // The read that ran during sleep times out after the wake.
     sleepingRead.reject(new Error("timed out"));
     await wake;

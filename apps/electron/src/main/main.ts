@@ -9,7 +9,6 @@ import {
 import { registerElectronRemoteAccessIpc } from "./electron-remote-access-ipc";
 import { registerElectronHostSelectionIpc } from "./electron-host-selection-ipc";
 import { registerElectronNativeThemeIpc } from "./electron-native-theme-ipc";
-import { forwardElectronSystemWake } from "./electron-system-wake";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -62,6 +61,7 @@ import {
   ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
+  ELECTRON_SYSTEM_WAKE_CHANNEL,
   type ElectronAppUpdateCheckInput,
 } from "../shared/electron-bridge-contract";
 import { ELECTRON_TASK_ASSET_PROTOCOL } from "../shared/electron-task-asset-url";
@@ -641,6 +641,27 @@ const createMainWindowEffect = (
 const createMainWindow = (rendererSession: ElectronSession): Promise<ElectronBrowserWindow> =>
   runElectronEffect(createMainWindowEffect(rendererSession));
 
+/** Sends an event to each open OpenDucktor window, and logs a window that cannot take it. */
+const sendToMainWindows = (channel: string, ...args: unknown[]): void => {
+  for (const window of getMainWindows()) {
+    if (window.isDestroyed() || window.webContents.isDestroyed()) {
+      continue;
+    }
+    try {
+      window.webContents.send(channel, ...args);
+    } catch (cause) {
+      runElectronMainTask(() =>
+        runElectronEffect(
+          electronMainLogger.error(
+            `OpenDucktor window event '${channel}' forwarding failed`,
+            cause,
+          ),
+        ),
+      );
+    }
+  }
+};
+
 const registerAppUpdateStateForwarding = (appUpdateService: ElectronAppUpdateService): void => {
   appUpdateService.subscribe((state) => {
     let parsedState: AppUpdateState;
@@ -654,21 +675,15 @@ const registerAppUpdateStateForwarding = (appUpdateService: ElectronAppUpdateSer
       );
       return;
     }
-    for (const window of getMainWindows()) {
-      if (window.isDestroyed() || window.webContents.isDestroyed()) {
-        continue;
-      }
-      try {
-        window.webContents.send(ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL, parsedState);
-      } catch (cause) {
-        runElectronMainTask(() =>
-          runElectronEffect(
-            electronMainLogger.error("OpenDucktor update state forwarding failed", cause),
-          ),
-        );
-      }
-    }
+    sendToMainWindows(ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL, parsedState);
   });
+};
+
+/** Tells each OpenDucktor window when the computer wakes from sleep or the screen unlocks. */
+const registerSystemWakeForwarding = (): void => {
+  const notify = () => sendToMainWindows(ELECTRON_SYSTEM_WAKE_CHANNEL);
+  powerMonitor.on("resume", notify);
+  powerMonitor.on("unlock-screen", notify);
 };
 
 const resolveLocalAttachmentPathForPreviewEffect = (
@@ -1112,7 +1127,7 @@ const configureElectronReadyRuntimeEffect = ({
       });
       registerIpcHandlers(hostCommandRouter, appUpdateService, hostChannelServer);
       registerAppUpdateStateForwarding(appUpdateService);
-      forwardElectronSystemWake(powerMonitor, getMainWindows);
+      registerSystemWakeForwarding();
       configureElectronDockIcon();
       return { appUpdateService, hostCommandRouter, hostChannelServer, rendererSession };
     },

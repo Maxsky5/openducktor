@@ -252,6 +252,7 @@ export class GitRefreshCoordinator {
     }
     if (!this.#isCurrent(current, run)) return current.steps.markStale();
     await this.#refreshGit(current, mode, run);
+    if (mode === "scheduled" && this.#isCurrent(current, run)) this.#endManualFailure(current);
   }
 
   async #refreshGit(
@@ -274,7 +275,6 @@ export class GitRefreshCoordinator {
         if (this.#isCurrent(view, run) && (await steps.comparison.check())) {
           // The new target starts its own reads. Local changes keep their keys, so they read here.
           await (mode === "scheduled" ? steps.readInBackground() : readLocal());
-          this.#endManualFailure(view, mode, run);
           return;
         }
       } catch (error) {
@@ -283,15 +283,10 @@ export class GitRefreshCoordinator {
           this.#deps.onFailedCheck(errorMessage(error));
       }
     }
-    const isCurrent = this.#isCurrent(view, run);
-    const reads = isCurrent
+    const reads = this.#isCurrent(view, run)
       ? this.#reads(steps, mode, readLocal)
       : Promise.all([earlyLocal?.(), steps.markStale()]).then(() => undefined);
-    if (!checkFailure) {
-      await reads;
-      if (isCurrent) this.#endManualFailure(view, mode, run);
-      return;
-    }
+    if (!checkFailure) return reads;
     // The failed check is the result. Each view keeps its own failed read until a retry.
     await Promise.allSettled([reads]);
     throw checkFailure.error;
@@ -367,15 +362,13 @@ export class GitRefreshCoordinator {
   }
 
   /**
-   * A later scheduled refresh of the context checks the branch, the remote, and the target again.
-   * When it completes, the failure of an earlier manual Refresh has ended, so the Refresh state
-   * stops showing it. A soft refresh does not fetch, so it keeps the failure.
+   * A scheduled refresh checks the branch, the remote, and the target again. When it completes,
+   * the failure of an earlier manual Refresh has ended, so the Refresh state stops showing it. A
+   * soft refresh does not fetch, so it keeps the failure.
    */
-  #endManualFailure(view: GitRefreshView, mode: GitDiffRefreshMode, run: RefreshRun): void {
-    if (mode !== "scheduled" || run.manual) return;
+  #endManualFailure(view: GitRefreshView): void {
     const key = manualRefreshKey(view);
-    const manual = this.#manualRuns.get(key);
-    if (!manual || manual.promise || manual.state.error === null) return;
+    if (!this.#manualRuns.get(key)?.state.error) return;
     this.#manualRuns.delete(key);
     this.#notify();
   }
