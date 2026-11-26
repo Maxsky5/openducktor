@@ -35,7 +35,7 @@ export const sessionScope = {
   role: "build",
 } as const;
 
-export const eventBase = (ref: AgentSessionLiveRef) => ({
+const eventBase = (ref: AgentSessionLiveRef) => ({
   externalSessionId: ref.externalSessionId,
   timestamp: new Date(BASE).toISOString(),
   sessionRef: ref,
@@ -85,7 +85,7 @@ export const flush = Effect.gen(function* () {
 });
 
 /** The answers of the fakes, which each test can change. */
-export type HarnessState = {
+type HarnessState = {
   roots: AgentSessionAuthorizedRoot[];
   live: AgentSessionLiveReadResult;
   /** Runs before each live read answers. */
