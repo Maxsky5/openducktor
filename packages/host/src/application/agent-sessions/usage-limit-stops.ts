@@ -14,7 +14,11 @@ import {
   type UsageLimitStop,
 } from "@openducktor/core";
 import { hasForegroundTurn } from "./session-foreground-readiness";
-import { nextUsageLimitStop, type UsageLimitStopSignal } from "./usage-limit-stop-signal";
+import {
+  isNewTurnWorkEvent,
+  nextUsageLimitStop,
+  type UsageLimitStopSignal,
+} from "./usage-limit-stop-signal";
 
 /** The resume waits this long after the reset, so a clock difference cannot use the one attempt. */
 export const USAGE_LIMIT_RESUME_GRACE_MS = 30_000;
@@ -27,6 +31,11 @@ export type UsageLimitStopPhase =
   | "scheduled"
   /** The due time passed, and the checks before the resume run. Clients still see `scheduled`. */
   | "due"
+  /**
+   * The due time passed during a Claude wake whose outcome is still unknown. Clients still see
+   * `scheduled`, and the stop re-enters `scheduled` when the session returns to idle.
+   */
+  | "waiting_for_idle"
   | "resuming"
   | "failed";
 
@@ -52,36 +61,9 @@ export type DueStops = { due: TrackedUsageLimitStop[]; nextDueAt: number | undef
 export type DueCheck = {
   blockedOnInput: boolean;
   hasActiveTurn?: boolean;
+  idleCountBefore?: number;
   now: number;
   recovery: UsageLimitRecovery;
-};
-
-type TranscriptEvent = Extract<AgentSessionLiveEnvelope, { type: "transcript_event" }>["event"];
-
-/**
- * Assistant output that proves a turn ran new model work. Background subagent updates and
- * completed background tool updates can arrive after a failed turn without starting a new reply.
- */
-const isNewTurnWorkEvent = (event: TranscriptEvent): boolean => {
-  switch (event.type) {
-    case "assistant_delta":
-    case "assistant_message":
-      return true;
-    case "assistant_part":
-      switch (event.part.kind) {
-        case "image_generation":
-        case "text":
-        case "reasoning":
-        case "step":
-          return true;
-        case "tool":
-          return event.part.status === "pending" || event.part.status === "running";
-        case "subagent":
-          return false;
-      }
-    default:
-      return false;
-  }
 };
 
 export const supportsUsageLimitAutoResume = (runtimeKind: RuntimeKind): boolean =>
@@ -112,6 +94,12 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
   const ended = new Set<string>();
   /** Counts new work of each session, so a history read can tell that the session moved on. */
   const workCounts = new Map<string, number>();
+  /** Sessions whose latest observed live snapshot has an active foreground turn. */
+  const activeForegroundKeys = new Set<string>();
+  /** Counts transitions to idle so an in-flight due check can tell that a wake already ended. */
+  const idleCounts = new Map<string, number>();
+  /** Tool call IDs already observed per session, so later progress updates do not count as new work. */
+  const knownToolCallIds = new Map<string, Set<string>>();
 
   const isCurrent = (stop: TrackedUsageLimitStop): boolean =>
     stops.get(agentSessionRefKey(stop.ref)) === stop;
@@ -137,6 +125,22 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
   const newWork = (key: string): void => {
     countWork(key);
     end(key);
+  };
+
+  const recordToolCallId = (key: string, callId: string): void => {
+    let calls = knownToolCallIds.get(key);
+    if (!calls) {
+      calls = new Set();
+      knownToolCallIds.set(key, calls);
+    }
+    calls.add(callId);
+  };
+
+  const noteIdle = (key: string): void => {
+    activeForegroundKeys.delete(key);
+    idleCounts.set(key, (idleCounts.get(key) ?? 0) + 1);
+    const stop = stops.get(key);
+    if (stop?.phase === "waiting_for_idle") setPhase(stop, "scheduled");
   };
 
   /** Moves an eligible stop to the root check. The caller runs the check. */
@@ -192,14 +196,22 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
         // A due stop waits again for the new time. Its running checks then stop.
         else setPhase(stop, "scheduled");
         return null;
+      case "waiting_for_idle":
+        if (!hasEligibleReset(stop)) end(key);
+        else changed(stop.ref);
+        return null;
       default:
         return null;
     }
   };
 
   const observeSession = (session: AgentSessionLiveSnapshot): void => {
-    if (!hasForegroundTurn(session)) return;
     const key = agentSessionRefKey(session.ref);
+    if (!hasForegroundTurn(session)) {
+      noteIdle(key);
+      return;
+    }
+    activeForegroundKeys.add(key);
     const stop = stops.get(key);
     // The resume of the owner shows foreground work too. The resume result ends that stop.
     if (stop?.phase === "resuming") return;
@@ -209,8 +221,7 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
       return;
     }
     // Claude briefly flips foreground active for an empty notification-only wake. Wait for real
-    // turn output, a user message, a host operation, or an active turn at due time before ending
-    // a pending Claude stop.
+    // turn output, a user message, a host operation, or the wake ending before deciding.
     if (session.ref.runtimeKind === "claude") return;
     newWork(key);
   };
@@ -230,13 +241,20 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
           }
           if (isAcceptedUserMessage(event)) {
             newWork(key);
-          } else if (isNewTurnWorkEvent(event)) {
-            const stop = stops.get(key);
-            if (stop?.phase !== "resuming") {
-              if (stop?.turnEnded === false) countWork(key);
-              else newWork(key);
+          } else {
+            const isNewWork = isNewTurnWorkEvent(event, knownToolCallIds.get(key));
+            if (event.type === "assistant_part" && event.part.kind === "tool") {
+              recordToolCallId(key, event.part.callId);
+            }
+            if (isNewWork) {
+              const stop = stops.get(key);
+              if (stop?.phase !== "resuming") {
+                if (stop?.turnEnded === false) countWork(key);
+                else newWork(key);
+              }
             }
           }
+          if (event.type === "session_idle") noteIdle(key);
           if (event.type !== "session_turn_finished" && event.type !== "session_idle") return null;
           const stop = stops.get(key);
           if (!stop || !event.turnOutcome) return null;
@@ -249,6 +267,12 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
         case "session_upsert":
           observeSession(envelope.session);
           return null;
+        case "session_removed": {
+          const key = agentSessionRefKey(envelope.ref);
+          knownToolCallIds.delete(key);
+          noteIdle(key);
+          return null;
+        }
         case "snapshot":
           for (const session of envelope.sessions) observeSession(session);
           return null;
@@ -279,6 +303,7 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
       // A due stop waits again, so its running checks stop. Clients see no plan while it is off.
       for (const stop of stops.values())
         if (stop.phase === "scheduled" || stop.phase === "due") setPhase(stop, "scheduled");
+        else if (stop.phase === "waiting_for_idle") changed(stop.ref);
     },
     /** Marks the scheduled stops whose due time passed. Returns them and the next due time. */
     takeDue: (now: number): DueStops => {
@@ -303,8 +328,26 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
       const key = agentSessionRefKey(stop.ref);
       const current = stops.get(key);
       if (current !== stop || current.phase !== "due") return false;
-      if (check.blockedOnInput || check.hasActiveTurn || !hasEligibleReset(current)) {
+      if (check.blockedOnInput || !hasEligibleReset(current)) {
         end(key);
+        return false;
+      }
+      const becameIdleDuringCheck =
+        check.hasActiveTurn === true &&
+        check.idleCountBefore !== undefined &&
+        (idleCounts.get(key) ?? 0) !== check.idleCountBefore;
+      const stillActive =
+        activeForegroundKeys.has(key) || (check.hasActiveTurn === true && !becameIdleDuringCheck);
+      if (stillActive) {
+        if (current.ref.runtimeKind !== "claude") {
+          end(key);
+          return false;
+        }
+        setPhase(current, "waiting_for_idle");
+        return false;
+      }
+      if (becameIdleDuringCheck) {
+        setPhase(current, "scheduled");
         return false;
       }
       if (check.now < dueAtOf(current)) {
@@ -359,6 +402,8 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
     hasStop: (ref: AgentSessionLiveRef): boolean => stops.has(agentSessionRefKey(ref)),
     /** The work count before a history read, to compare after it. */
     workCount: (ref: AgentSessionLiveRef): number => workCounts.get(agentSessionRefKey(ref)) ?? 0,
+    /** The idle count before a due check, to detect a wake that finished while the check ran. */
+    idleCount: (ref: AgentSessionLiveRef): number => idleCounts.get(agentSessionRefKey(ref)) ?? 0,
     /**
      * Adds a stop that runtime history reports after a host start. A passed reset waits for a
      * manual Resume. New work or a live stop during the read is newer than the history.
@@ -399,6 +444,7 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
       switch (stop.phase) {
         case "scheduled":
         case "due":
+        case "waiting_for_idle":
           return enabled ? { ...base, state: "scheduled" } : null;
         case "resuming":
           return { ...base, state: "resuming" };
@@ -413,6 +459,9 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
       stops.clear();
       ended.clear();
       workCounts.clear();
+      activeForegroundKeys.clear();
+      idleCounts.clear();
+      knownToolCallIds.clear();
     },
   };
 };

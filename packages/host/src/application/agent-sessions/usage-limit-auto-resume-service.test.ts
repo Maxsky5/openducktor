@@ -695,8 +695,7 @@ describe("usage-limit auto-resume", () => {
     );
   });
 
-  test("keeps a Claude weekly-limit auto-resume scheduled across an empty notification wake and background completion", async () => {
-    const h = createHarness();
+  const createClaudeReplay = (h: ReturnType<typeof createHarness>) => {
     const liveState = createClaudeLiveSessionState();
     const timestamp = new Date(BASE).toISOString();
     const session = createClaudeSession({
@@ -740,50 +739,57 @@ describe("usage-limit auto-resume", () => {
         emit,
         modelSelection: (modelId) => ({ providerId: "claude", modelId, runtimeKind: "claude" }),
       });
-    const rateLimit: SDKRateLimitEvent = {
-      type: "rate_limit_event",
-      session_id: claudeRef.externalSessionId,
-      uuid: claudeSdkMessageUuidFixture("rate-limit-1"),
-      rate_limit_info: {
-        status: "rejected",
-        rateLimitType: "seven_day",
-        resetsAt: Math.floor(RESET / 1000),
-      },
+    const stopOnWeeklyLimit = (stopId: string): void => {
+      const rateLimit: SDKRateLimitEvent = {
+        type: "rate_limit_event",
+        session_id: claudeRef.externalSessionId,
+        uuid: claudeSdkMessageUuidFixture(`rate-limit-${stopId}`),
+        rate_limit_info: {
+          status: "rejected",
+          rateLimitType: "seven_day",
+          resetsAt: Math.floor(RESET / 1000),
+        },
+      };
+      handle(rateLimit);
+      handle(
+        claudeSdkMessageFixture({
+          type: "assistant",
+          session_id: claudeRef.externalSessionId,
+          uuid: claudeSdkMessageUuidFixture(stopId),
+          error: "rate_limit",
+          message: {
+            id: stopId,
+            content: [{ type: "text", text: "You've hit your weekly limit." }],
+            stop_reason: "end_turn",
+          },
+        }),
+      );
+      handle(
+        claudeSdkMessageFixture({
+          type: "result",
+          subtype: "error_during_execution",
+          session_id: claudeRef.externalSessionId,
+          uuid: claudeSdkMessageUuidFixture(`result-${stopId}`),
+          user_message_uuid: "user-1",
+          errors: ["You've hit your weekly limit."],
+        }),
+      );
     };
+    return { session, handle, stopOnWeeklyLimit };
+  };
+
+  test("keeps a Claude weekly-limit auto-resume scheduled across an empty notification wake and background completion", async () => {
+    const h = createHarness();
+    const { session, handle, stopOnWeeklyLimit } = createClaudeReplay(h);
 
     await h.run(
       Effect.gen(function* () {
-        handle(rateLimit);
-        handle(
-          claudeSdkMessageFixture({
-            type: "assistant",
-            session_id: claudeRef.externalSessionId,
-            uuid: claudeSdkMessageUuidFixture("limit-response"),
-            error: "rate_limit",
-            message: {
-              id: "limit-response",
-              content: [{ type: "text", text: "You've hit your weekly limit." }],
-              stop_reason: "end_turn",
-            },
-          }),
-        );
-        handle(
-          claudeSdkMessageFixture({
-            type: "result",
-            subtype: "error_during_execution",
-            session_id: claudeRef.externalSessionId,
-            uuid: claudeSdkMessageUuidFixture("limit-result"),
-            user_message_uuid: "user-1",
-            errors: ["You've hit your weekly limit."],
-          }),
-        );
+        stopOnWeeklyLimit("limit-response");
         yield* flush;
-
         expect(h.published).toEqual([
           { ref: claudeRef, stopId: "limit-response", resumeAtEpochMs: DUE, state: "scheduled" },
         ]);
 
-        // Empty background task-notification wake and late system task_notification.
         handle(
           claudeSdkMessageFixture({
             type: "user",
@@ -837,85 +843,11 @@ describe("usage-limit auto-resume", () => {
 
   test("cancels a Claude auto-resume when a later notification wake produces real assistant output", async () => {
     const h = createHarness();
-    const liveState = createClaudeLiveSessionState();
-    const timestamp = new Date(BASE).toISOString();
-    const session = createClaudeSession({
-      activity: "running",
-      foregroundTurnActive: true,
-      input: {
-        repoPath: claudeRef.repoPath,
-        runtimeKind: "claude",
-        workingDirectory: claudeRef.workingDirectory,
-        runtimePolicy: { kind: "claude" },
-        sessionScope,
-        systemPrompt: "Build",
-      },
-      summary: {
-        externalSessionId: claudeRef.externalSessionId,
-        runtimeKind: "claude",
-        workingDirectory: claudeRef.workingDirectory,
-        title: "Build",
-        startedAt: timestamp,
-        status: "running",
-        sessionAssociation: sessionScope,
-      },
-      acceptedUserMessages: [{ messageId: "user-1", text: "Build", parts: [], timestamp }],
-      pendingUserTurnCount: 1,
-    });
-    const emit = (event: AgentEvent): void => {
-      for (const change of liveState.applyEvent(session, event)) {
-        if (change.type === "session_upsert") {
-          h.state.live = { type: "live", session: change.snapshot };
-          h.service.observe({ type: "session_upsert", session: change.snapshot });
-        } else if (change.type === "transcript_event") {
-          h.service.observe({ type: "transcript_event", event: change.event });
-        }
-      }
-    };
-    const handle = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"]) =>
-      handleClaudeSdkMessage({
-        session,
-        message,
-        timestamp,
-        emit,
-        modelSelection: (modelId) => ({ providerId: "claude", modelId, runtimeKind: "claude" }),
-      });
+    const { handle, stopOnWeeklyLimit } = createClaudeReplay(h);
 
     await h.run(
       Effect.gen(function* () {
-        handle({
-          type: "rate_limit_event",
-          session_id: claudeRef.externalSessionId,
-          uuid: claudeSdkMessageUuidFixture("rate-limit-2"),
-          rate_limit_info: {
-            status: "rejected",
-            rateLimitType: "seven_day",
-            resetsAt: Math.floor(RESET / 1000),
-          },
-        });
-        handle(
-          claudeSdkMessageFixture({
-            type: "assistant",
-            session_id: claudeRef.externalSessionId,
-            uuid: claudeSdkMessageUuidFixture("limit-response-2"),
-            error: "rate_limit",
-            message: {
-              id: "limit-response-2",
-              content: [{ type: "text", text: "You've hit your weekly limit." }],
-              stop_reason: "end_turn",
-            },
-          }),
-        );
-        handle(
-          claudeSdkMessageFixture({
-            type: "result",
-            subtype: "error_during_execution",
-            session_id: claudeRef.externalSessionId,
-            uuid: claudeSdkMessageUuidFixture("limit-result-2"),
-            user_message_uuid: "user-1",
-            errors: ["You've hit your weekly limit."],
-          }),
-        );
+        stopOnWeeklyLimit("limit-response-2");
         yield* flush;
         expect(h.published.at(-1)).toMatchObject({ state: "scheduled" });
 
@@ -960,7 +892,218 @@ describe("usage-limit auto-resume", () => {
     );
   });
 
-  test("does not resume a Claude session when a foreground turn is still running at the reset", async () => {
+  test("keeps a Claude auto-resume pending while an empty notification spans the deadline and dispatches when it ends", async () => {
+    const h = createHarness();
+    const { session, handle, stopOnWeeklyLimit } = createClaudeReplay(h);
+
+    await h.run(
+      Effect.gen(function* () {
+        stopOnWeeklyLimit("limit-response-span");
+        yield* flush;
+        expect(h.published.at(-1)).toMatchObject({ state: "scheduled" });
+
+        yield* h.advanceTo(DUE - 1_000);
+        handle(
+          claudeSdkMessageFixture({
+            type: "user",
+            session_id: claudeRef.externalSessionId,
+            uuid: claudeSdkMessageUuidFixture("span-wake-user"),
+            origin: { kind: "task-notification" },
+            message: {
+              role: "user",
+              content: "<task-notification><status>completed</status></task-notification>",
+            },
+          }),
+        );
+        yield* flush;
+
+        yield* h.advanceTo(DUE);
+        expect(h.resumes).toEqual([]);
+        expect(h.published.at(-1)).toMatchObject({
+          stopId: "limit-response-span",
+          state: "scheduled",
+        });
+
+        yield* h.advanceTo(DUE + 1_000);
+        handle(
+          claudeSdkMessageFixture({
+            type: "result",
+            subtype: "success",
+            session_id: claudeRef.externalSessionId,
+            uuid: claudeSdkMessageUuidFixture("span-wake-result"),
+            result: "",
+          }),
+        );
+        yield* flush;
+
+        expect(decideClaudeLiveContinuation(session, claudeRef.externalSessionId)).toEqual({
+          kind: "allow",
+        });
+        expect(h.resumes).toEqual([
+          { ...claudeRef, sessionScope, resumeMode: "continue_interrupted_turn" },
+        ]);
+        expect(h.published.at(-1)).toBeNull();
+      }),
+    );
+  });
+
+  test("cancels a Claude auto-resume when a wake spanning the deadline produces real assistant output", async () => {
+    const h = createHarness();
+    const { handle, stopOnWeeklyLimit } = createClaudeReplay(h);
+
+    await h.run(
+      Effect.gen(function* () {
+        stopOnWeeklyLimit("limit-response-span-real");
+        yield* flush;
+
+        yield* h.advanceTo(DUE - 1_000);
+        handle(
+          claudeSdkMessageFixture({
+            type: "user",
+            session_id: claudeRef.externalSessionId,
+            uuid: claudeSdkMessageUuidFixture("span-real-wake-user"),
+            origin: { kind: "task-notification" },
+            message: {
+              role: "user",
+              content: "<task-notification><status>completed</status></task-notification>",
+            },
+          }),
+        );
+        yield* h.advanceTo(DUE);
+        expect(h.resumes).toEqual([]);
+
+        yield* h.advanceTo(DUE + 1_000);
+        handle(
+          claudeSdkMessageFixture({
+            type: "assistant",
+            session_id: claudeRef.externalSessionId,
+            uuid: claudeSdkMessageUuidFixture("span-real-wake-assistant"),
+            message: {
+              id: "span-real-wake-assistant",
+              content: [{ type: "text", text: "Handled the background result." }],
+              stop_reason: "end_turn",
+            },
+          }),
+        );
+        handle(
+          claudeSdkMessageFixture({
+            type: "result",
+            subtype: "success",
+            session_id: claudeRef.externalSessionId,
+            uuid: claudeSdkMessageUuidFixture("span-real-wake-result"),
+            result: "Handled the background result.",
+          }),
+        );
+        yield* flush;
+
+        expect(h.published.at(-1)).toBeNull();
+        expect(h.resumes).toEqual([]);
+      }),
+    );
+  });
+
+  test("keeps a Claude auto-resume scheduled when an existing background shell tool reports progress", async () => {
+    const h = createHarness();
+    const { session, handle, stopOnWeeklyLimit } = createClaudeReplay(h);
+
+    await h.run(
+      Effect.gen(function* () {
+        handle(
+          claudeSdkMessageFixture({
+            type: "assistant",
+            session_id: claudeRef.externalSessionId,
+            uuid: claudeSdkMessageUuidFixture("bg-launch-assistant"),
+            message: {
+              id: "bg-launch-assistant",
+              content: [
+                {
+                  type: "tool_use",
+                  id: "call-bg-shell",
+                  name: "Bash",
+                  input: { command: "bun test", run_in_background: true },
+                },
+              ],
+              stop_reason: "tool_use",
+            },
+          }),
+        );
+        handle(
+          claudeSdkMessageFixture({
+            type: "user",
+            session_id: claudeRef.externalSessionId,
+            uuid: claudeSdkMessageUuidFixture("bg-launch-result"),
+            tool_use_result: { backgroundTaskId: "task-bg-shell" },
+            message: {
+              role: "user",
+              content: [
+                {
+                  type: "tool_result",
+                  tool_use_id: "call-bg-shell",
+                  content: "Command running in background with ID: task-bg-shell",
+                },
+              ],
+            },
+          }),
+        );
+        stopOnWeeklyLimit("limit-response-bg");
+        yield* flush;
+        expect(h.published).toEqual([
+          {
+            ref: claudeRef,
+            stopId: "limit-response-bg",
+            resumeAtEpochMs: DUE,
+            state: "scheduled",
+          },
+        ]);
+
+        handle(
+          claudeSdkMessageFixture({
+            type: "system",
+            subtype: "task_progress",
+            session_id: claudeRef.externalSessionId,
+            uuid: claudeSdkMessageUuidFixture("bg-shell-progress"),
+            task_id: "task-bg-shell",
+            tool_use_id: "call-bg-shell",
+            description: "Running bun test",
+            summary: "50% complete",
+          }),
+        );
+        handle(
+          claudeSdkMessageFixture({
+            type: "system",
+            subtype: "task_notification",
+            session_id: claudeRef.externalSessionId,
+            uuid: claudeSdkMessageUuidFixture("bg-shell-done"),
+            task_id: "task-bg-shell",
+            tool_use_id: "call-bg-shell",
+            status: "completed",
+            output_file: "/tmp/bg-shell.out",
+            summary: "bun test passed",
+          }),
+        );
+        yield* flush;
+
+        expect(h.published).toEqual([
+          {
+            ref: claudeRef,
+            stopId: "limit-response-bg",
+            resumeAtEpochMs: DUE,
+            state: "scheduled",
+          },
+        ]);
+        expect(decideClaudeLiveContinuation(session, claudeRef.externalSessionId)).toEqual({
+          kind: "allow",
+        });
+
+        yield* h.advanceTo(DUE);
+        expect(h.resumes).toEqual([
+          { ...claudeRef, sessionScope, resumeMode: "continue_interrupted_turn" },
+        ]);
+      }),
+    );
+  });
+
+  test("does not resume a Claude session while a foreground turn is running at the reset", async () => {
     const h = createHarness();
     await h.run(
       Effect.gen(function* () {
@@ -980,7 +1123,7 @@ describe("usage-limit auto-resume", () => {
         };
         yield* h.advanceTo(DUE);
         expect(h.resumes).toEqual([]);
-        expect(h.published.at(-1)).toBeNull();
+        expect(h.published.at(-1)).toMatchObject({ state: "scheduled" });
       }),
     );
   });

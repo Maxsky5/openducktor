@@ -196,19 +196,195 @@ describe("usage-limit stops", () => {
     expect(stops.entry(ref)).toBeNull();
   });
 
-  test("ends a due Claude stop when a foreground turn is still active at due time", () => {
+  test("defers a due Claude stop while foreground work is active and re-schedules it when idle", () => {
     const { stops, stop } = planningStop();
     stops.planned(stop, true);
+    stops.observe({
+      type: "session_upsert",
+      session: {
+        ref,
+        activity: "running",
+        foregroundTurnActive: true,
+        title: "Build",
+        startedAt: new Date(BASE).toISOString(),
+        pendingApprovals: [],
+        pendingQuestions: [],
+        contextUsage: null,
+      },
+    });
+    const idleCountBefore = stops.idleCount(ref);
     stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS);
 
     expect(
       stops.startResume(stop, {
         blockedOnInput: false,
         hasActiveTurn: true,
+        idleCountBefore,
         now: RESET + USAGE_LIMIT_RESUME_GRACE_MS,
         recovery: { kind: "recovered" },
       }),
     ).toBe(false);
+    expect(stops.entry(ref)).toMatchObject({
+      state: "scheduled",
+      resumeAtEpochMs: RESET + USAGE_LIMIT_RESUME_GRACE_MS,
+    });
+    expect(stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS + 1_000).due).toEqual([]);
+
+    stops.observe({
+      type: "session_upsert",
+      session: {
+        ref,
+        activity: "idle",
+        foregroundTurnActive: false,
+        title: "Build",
+        startedAt: new Date(BASE).toISOString(),
+        pendingApprovals: [],
+        pendingQuestions: [],
+        contextUsage: null,
+      },
+    });
+
+    const due = stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS + 1_000).due;
+    expect(due).toEqual([stop]);
+    expect(
+      stops.startResume(stop, {
+        blockedOnInput: false,
+        hasActiveTurn: false,
+        idleCountBefore: stops.idleCount(ref),
+        now: RESET + USAGE_LIMIT_RESUME_GRACE_MS + 1_000,
+        recovery: { kind: "recovered" },
+      }),
+    ).toBe(true);
+  });
+
+  test("re-schedules immediately if a Claude wake went idle during the due-time check", () => {
+    const { stops, stop } = planningStop();
+    stops.planned(stop, true);
+    stops.observe({
+      type: "session_upsert",
+      session: {
+        ref,
+        activity: "running",
+        foregroundTurnActive: true,
+        title: "Build",
+        startedAt: new Date(BASE).toISOString(),
+        pendingApprovals: [],
+        pendingQuestions: [],
+        contextUsage: null,
+      },
+    });
+    const idleCountBefore = stops.idleCount(ref);
+    stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS);
+
+    // Wake finishes before startResume runs.
+    stops.observe({
+      type: "session_upsert",
+      session: {
+        ref,
+        activity: "idle",
+        foregroundTurnActive: false,
+        title: "Build",
+        startedAt: new Date(BASE).toISOString(),
+        pendingApprovals: [],
+        pendingQuestions: [],
+        contextUsage: null,
+      },
+    });
+
+    expect(
+      stops.startResume(stop, {
+        blockedOnInput: false,
+        hasActiveTurn: true,
+        idleCountBefore,
+        now: RESET + USAGE_LIMIT_RESUME_GRACE_MS,
+        recovery: { kind: "unknown" },
+      }),
+    ).toBe(false);
+    expect(stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS).due).toEqual([stop]);
+  });
+
+  test("ignores running progress for background or existing tool calls while cancelling on new tool calls", () => {
+    const stops = createUsageLimitStops(() => {});
+    stops.setEnabled(true);
+    stops.observe({
+      type: "transcript_event",
+      event: {
+        ...eventBase,
+        type: "assistant_part",
+        part: {
+          kind: "tool",
+          messageId: "turn-1",
+          partId: "call-existing-1",
+          tool: "Bash",
+          toolType: "bash",
+          callId: "call-existing-1",
+          status: "running",
+        },
+      },
+    });
+    stops.observe(limitError(RESET));
+    const stop = stops.observe(turnFailed);
+    if (!stop) throw new Error("Expected a stop to plan.");
+    stops.planned(stop, true);
+
+    // Existing call progress without background metadata.
+    stops.observe({
+      type: "transcript_event",
+      event: {
+        ...eventBase,
+        type: "assistant_part",
+        part: {
+          kind: "tool",
+          messageId: "turn-1",
+          partId: "call-existing-1",
+          tool: "Bash",
+          toolType: "bash",
+          callId: "call-existing-1",
+          status: "running",
+          metadata: { elapsedTimeSeconds: 12, durationMs: 12_000 },
+        },
+      },
+    });
+    // Background task progress even if the original call predated this process.
+    stops.observe({
+      type: "transcript_event",
+      event: {
+        ...eventBase,
+        type: "assistant_part",
+        part: {
+          kind: "tool",
+          messageId: "turn-0",
+          partId: "call-restored-bg",
+          tool: "Bash",
+          toolType: "bash",
+          callId: "call-restored-bg",
+          status: "running",
+          metadata: { backgroundTaskId: "task-bg-1", backgroundTaskStatus: "running" },
+        },
+      },
+    });
+    expect(stops.entry(ref)).toMatchObject({
+      state: "scheduled",
+      resumeAtEpochMs: RESET + USAGE_LIMIT_RESUME_GRACE_MS,
+    });
+
+    // A genuinely new tool call cancels the scheduled stop.
+    stops.observe({
+      type: "transcript_event",
+      event: {
+        ...eventBase,
+        type: "assistant_part",
+        part: {
+          kind: "tool",
+          messageId: "turn-2",
+          partId: "call-new-2",
+          tool: "Read",
+          toolType: "read",
+          callId: "call-new-2",
+          status: "running",
+        },
+      },
+    });
     expect(stops.entry(ref)).toBeNull();
   });
 

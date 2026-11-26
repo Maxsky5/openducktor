@@ -160,13 +160,26 @@ export const createUsageLimitAutoResumeService = (
         stops.cancel(stop.ref, stop.stopId);
         return;
       }
-      const [live, recovery] = yield* Effect.all(
-        [deps.live.read(stop.ref), deps.readUsageLimitRecovery(stop.ref)],
-        { concurrency: 2 },
-      );
+      const idleCountBefore = stops.idleCount(stop.ref);
+      const live = yield* deps.live.read(stop.ref);
+      if (!stops.isDue(stop)) return;
+      const blockedOnInput = live.type === "live" && hasBlockingInput(live.session);
+      const hasActiveTurn = live.type === "live" && hasForegroundTurn(live.session);
+      if (blockedOnInput || hasActiveTurn) {
+        stops.startResume(stop, {
+          blockedOnInput,
+          hasActiveTurn,
+          idleCountBefore,
+          now: yield* Clock.currentTimeMillis,
+          recovery: { kind: "unknown" },
+        });
+        return;
+      }
+      const recovery = yield* deps.readUsageLimitRecovery(stop.ref);
       const started = stops.startResume(stop, {
-        blockedOnInput: live.type === "live" && hasBlockingInput(live.session),
-        hasActiveTurn: live.type === "live" && hasForegroundTurn(live.session),
+        blockedOnInput: false,
+        hasActiveTurn: false,
+        idleCountBefore,
         now: yield* Clock.currentTimeMillis,
         recovery,
       });
