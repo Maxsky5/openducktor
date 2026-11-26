@@ -29,9 +29,10 @@
       min-height: 0;
       isolation: isolate;
     }
-    /* The keys show in the empty middle of the bottom bar of the composer, between the effort and
-       the context meter, so they cover no message, no goal row, and no draft. Their middle is on
-       the middle of the bar: 40 points over the bottom, less half the 62 pixels of the keys. */
+    /* The keys show in the empty middle of the bottom bar of the composer, between the model
+       trigger and the context meter, so they cover no message, no goal row, and no draft. Their
+       middle is on the middle of the bar: 40 points over the bottom, less half the 62 pixels of
+       the keys. */
     .gcm-panel ~ .key-hud {
       top: auto;
       bottom: calc(40 * var(--u) - 31px);

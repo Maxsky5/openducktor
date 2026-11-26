@@ -1,0 +1,65 @@
+@layer replica {
+  :where(.stage) {
+    /* flex shrink-0 flex-col gap-1 border-t border-border bg-muted/25 px-3.5 pt-1.5 pb-2.5. */
+    .mo {
+      display: flex;
+      flex-direction: column;
+      gap: calc(4 * var(--u));
+      padding: calc(6 * var(--u)) calc(14 * var(--u)) calc(10 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--border);
+      background: color-mix(in oklab, var(--muted) 25%, transparent);
+    }
+    /* grid grid-cols-1 items-start gap-x-6 gap-y-2. A wide picker puts the profile next to the
+       effort: @[28rem]:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]. */
+    .mo-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-items: start;
+      gap: calc(8 * var(--u)) calc(24 * var(--u));
+    }
+    .mo-grid[data-columns] {
+      grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    }
+    /* The label of a section: flex h-7 shrink-0 items-center text-xs font-medium. */
+    .mo-label {
+      display: flex;
+      flex: none;
+      align-items: center;
+      height: calc(28 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+    }
+    .mo-effort {
+      display: flex;
+      align-items: flex-end;
+      gap: calc(10 * var(--u));
+      min-width: 0;
+    }
+    /* Next to the slider, the profile row sits on the track: pt-[20px]. */
+    .mo-profile {
+      display: flex;
+      align-items: center;
+      gap: calc(10 * var(--u));
+      min-width: 0;
+      padding-top: calc(20 * var(--u));
+    }
+    /* The profile combobox: h-7 rounded-lg border-border/80 bg-card px-2.5 text-xs font-medium
+       shadow-2xs. */
+    .mo-profile > .mo-combobox {
+      flex: 1;
+      height: calc(28 * var(--u));
+      padding: 0 calc(10 * var(--u));
+      border-color: color-mix(in oklab, var(--border) 80%, transparent);
+      border-radius: calc(12 * var(--u));
+      box-shadow: 0 calc(1 * var(--u)) 0 rgb(0 0 0 / 0.05);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+    }
+    @container stage (width <= 560px) {
+      .mo-grid[data-columns] {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+  }
+}

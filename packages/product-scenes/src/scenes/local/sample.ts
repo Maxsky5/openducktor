@@ -11,13 +11,16 @@ const AVAILABLE: DiagStatusData = { health: "ok", label: "Available" };
 export const STARTING: DiagStatusData = { health: "busy", label: "Starting" };
 export const CHECKING: DiagStatusData = { health: "loading", label: "Checking" };
 
-/** The runtimes of the host. One shared runtime of each kind serves every workspace. */
+/**
+ * The runtimes of the host. One shared runtime of each kind serves every workspace. The user
+ * turned on Antigravity in the settings, so it starts as the other runtimes do.
+ */
 export const RUNTIMES: readonly DiagCheck[] = [
   {
     id: "opencode",
     runtime: "opencode",
     title: "OpenCode",
-    value: "opencode v2.0.31",
+    value: "opencode v2.4.6",
     details: [{ value: "/Users/sam/.opencode/bin/opencode", path: true }],
     status: READY,
     restart: true,
@@ -26,7 +29,7 @@ export const RUNTIMES: readonly DiagCheck[] = [
     id: "codex",
     runtime: "codex",
     title: "Codex",
-    value: "codex-cli 0.163.0",
+    value: "codex-cli 0.172.0",
     details: [{ value: "/opt/homebrew/bin/codex", path: true }],
     status: READY,
     restart: true,
@@ -37,6 +40,15 @@ export const RUNTIMES: readonly DiagCheck[] = [
     title: "Claude",
     value: "2.1.316 (Claude Code)",
     details: [{ value: "/Users/sam/.local/bin/claude", path: true }],
+    status: READY,
+    restart: true,
+  },
+  {
+    id: "antigravity",
+    runtime: "antigravity",
+    title: "Antigravity",
+    value: "1.5.21",
+    details: [{ value: "/Users/sam/.local/bin/agy", path: true }],
     status: READY,
     restart: true,
   },
@@ -78,7 +90,7 @@ export const WORKSPACE_CHECKS: readonly DiagCheck[] = [
     details: [
       {
         label: "Database",
-        value: `${CONFIG_PATH}/task-stores/${WORKSPACE}/database.sqlite`,
+        value: `${CONFIG_PATH}/database.sqlite`,
         path: true,
       },
     ],
@@ -95,5 +107,5 @@ export const RUNNING: DiagOverviewData = {
 export const HEALTHY: DiagOverviewData = {
   tone: "healthy",
   title: "Everything is working",
-  description: "3 runtimes are ready. The workspace checks passed.",
+  description: "4 runtimes are ready. The workspace checks passed.",
 };

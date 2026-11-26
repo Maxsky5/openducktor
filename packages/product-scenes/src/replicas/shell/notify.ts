@@ -39,6 +39,15 @@ function restack(scene: Scene, stack: HTMLElement, change: () => void): void {
   }
 }
 
+/** The entry of a Sonner toast: it slides up from its own height below its place and fades in. */
+export function toastIn(toast: HTMLElement): gsap.core.Tween {
+  return gsap.fromTo(
+    toast,
+    { autoAlpha: 0, yPercent: 100 },
+    { autoAlpha: 1, yPercent: 0, duration: MOVE, ease: SONNER_EASE },
+  );
+}
+
 /** Slides the notification of template `name` into `stack`, then out after `hold` seconds. */
 export function notify<Template extends string>(
   scene: Scene<Template>,
@@ -50,13 +59,7 @@ export function notify<Template extends string>(
   const toast = scene.template(name);
   scene.at(at, () => {
     restack(scene, stack, () => stack.append(toast));
-    scene.run(
-      gsap.fromTo(
-        toast,
-        { autoAlpha: 0, yPercent: 100 },
-        { autoAlpha: 1, yPercent: 0, duration: MOVE, ease: SONNER_EASE },
-      ),
-    );
+    scene.run(toastIn(toast));
   });
   scene.at(at + hold, () => {
     scene.run(gsap.to(toast, { autoAlpha: 0, yPercent: 100, duration: MOVE, ease: SONNER_EASE }));

@@ -1,0 +1,39 @@
+@layer replica {
+  :where(.stage) {
+    /* ToneField: flex flex-wrap gap-1.5 of size-6 round swatches, each with a size-4 dot. The
+       chosen one has ring-2 ring-foreground/60 with ring-offset-2 on the sidebar colour. */
+    .wfe-swatches {
+      display: flex;
+      flex-wrap: wrap;
+      gap: calc(6 * var(--u));
+    }
+    .wfe-swatch {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: calc(24 * var(--u));
+      height: calc(24 * var(--u));
+      border-radius: 50%;
+    }
+    .wfe-swatch[data-checked] {
+      box-shadow:
+        0 0 0 calc(2 * var(--u)) var(--sidebar),
+        0 0 0 calc(4 * var(--u)) color-mix(in oklab, var(--foreground) 60%, transparent);
+    }
+    .wfe-swatch > i {
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+      border-radius: 50%;
+    }
+    /* A grey swatch: bg-muted-foreground/45. */
+    .wfe-swatch > i[data-tone="neutral"] {
+      background: color-mix(in oklab, var(--muted-foreground) 45%, transparent);
+    }
+    /* The empty text of a transition list: text-xs leading-5 text-muted-foreground. */
+    .wfe-ins-empty {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+  }
+}

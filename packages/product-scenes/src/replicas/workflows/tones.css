@@ -1,0 +1,44 @@
+@layer replica {
+  :where(.stage) {
+    /* Dot of outline-group.tsx: a size-3.5 slot with a size-2 dot in the accent of a state tone. */
+    .wfe-dot {
+      display: flex;
+      flex: none;
+      align-items: center;
+      justify-content: center;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    .wfe-dot > i {
+      width: calc(8 * var(--u));
+      height: calc(8 * var(--u));
+      border-radius: 50%;
+    }
+    /* The accent of a state tone: toneAccentClass of state-tone.ts, the headerAccentClass of each
+       lane theme, and bg-muted-foreground/35 for a neutral state. */
+    .wfe-accent {
+      background: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
+    }
+    .wfe-accent[data-tone="pending"] {
+      background: var(--violet-500);
+    }
+    .wfe-accent[data-tone="info"] {
+      background: var(--sky-500);
+    }
+    .wfe-accent[data-tone="warning"] {
+      background: var(--amber-500);
+    }
+    .wfe-accent[data-tone="destructive"] {
+      background: var(--rose-500);
+    }
+    .wfe-accent[data-tone="review"] {
+      background: var(--indigo-500);
+    }
+    .wfe-accent[data-tone="approval"] {
+      background: var(--cyan-500);
+    }
+    .wfe-accent[data-tone="success"] {
+      background: var(--emerald-500);
+    }
+  }
+}

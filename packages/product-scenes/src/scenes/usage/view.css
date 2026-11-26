@@ -1,0 +1,40 @@
+@layer views {
+  :where(.stage) {
+    /*
+     * Usage: the app window with the rail and the open sidebar. The main area of 1062 keeps the wide
+     * layout of the page, as the app shows it in a window of 1440. The window ends where Tokens by
+     * type starts, 48 pixels under the Highlights.
+     */
+    .usage-window {
+      --design-width: 1440;
+      height: calc(760 * var(--u));
+    }
+    /* The page area scrolls in the app; the window shows the top of the page. */
+    .usage-window .app-main {
+      background: var(--sidebar);
+    }
+    .usage-board {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+      background: var(--card);
+    }
+    /*
+     * A phone stage shows one pane under the title bar: the sidebar, then the page. The page area
+     * of 458 keeps the narrow layout of the app: one column, and two columns of Highlights. The
+     * window ends under the first row of tiles.
+     */
+    @container stage (width <= 500px) {
+      .usage-window {
+        --design-width: 460;
+        height: calc(1140 * var(--u));
+      }
+      /* The app changes the route at once, so the sidebar and the page do not cross fade. */
+      .usage-window .sidebar,
+      .usage-window .app-main {
+        transition: none;
+      }
+    }
+  }
+}

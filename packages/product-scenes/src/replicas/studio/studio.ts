@@ -5,7 +5,6 @@ import { all, data, must } from "../../motion/dom";
 import { fadeIn } from "../../motion/effects";
 import type { Scene } from "../../motion/scene";
 import { EASE } from "../../motion/tokens";
-import { modelName } from "../../sample/models";
 import { contextUse, type Session } from "../../sample/sessions";
 import type { Focus, RailTones, StudioFrame } from "./model";
 import { composerActivity, contextMeter } from "../shell/composer";
@@ -14,6 +13,7 @@ import { pointer } from "../shell/cursor";
 import { sessionList } from "../shell/nav-list";
 import { notify } from "../shell/notify";
 import { follow, transcript } from "../transcript/rows";
+import { modelTrigger } from "../models/model-trigger";
 import { studioPanels } from "./panels";
 import { studioRequests } from "./requests";
 
@@ -25,6 +25,7 @@ export function studioWindow<Template extends string>(scene: Scene<Template>) {
   const root = must(scene.stage, "[data-studio]");
   const track = must(root, "[data-track]");
   const split = must(root, "[data-split]");
+  const trigger = modelTrigger(must(root, "[data-composer] [data-model-trigger]"));
   const actionLabel = must(root, "[data-action]");
   const steps = all(root, "[data-step]");
   const setComposer = composerActivity(root);
@@ -54,10 +55,7 @@ export function studioWindow<Template extends string>(scene: Scene<Template>) {
     setComposer(activity);
     split.toggleAttribute("data-disabled", activity !== "idle");
   };
-  const setSession = (session: Session): void => {
-    must(root, "[data-model]").textContent = modelName(session);
-    must(root, "[data-effort]").textContent = session.effort;
-  };
+  const setSession = (session: Session): void => trigger.set(session);
   const setFocus = (focus: Focus): void => {
     root.dataset.focus = focus;
   };

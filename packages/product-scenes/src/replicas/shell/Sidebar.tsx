@@ -1,8 +1,11 @@
 // The open sidebar of workspace-sidebar.tsx in the macOS window: the hide button in the title bar,
 // the brand with the command palette button, the Kanban link, the New task split button, the scope
-// and grouping controls, the session list, and the footer with Settings and Diagnostics.
+// and grouping controls, the session list, and the footer: the icon buttons Settings, Usage, and
+// Workflows, and Diagnostics at the end. The Kanban link of the current page has `aria-current`,
+// and the Usage link of the current page has `data-current`.
 import {
   Activity,
+  ChartSpline,
   ChevronDown,
   CircleAlert,
   Clock,
@@ -13,6 +16,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactElement } from "react";
@@ -27,13 +31,19 @@ import "./Sidebar.css";
 
 type SidebarProps = {
   nav: NavData;
-  /** The Kanban link is the only page link. It is current on the Kanban page. */
-  kanban?: boolean;
   /** The keys of the command palette button. */
   keys: KeyLabels;
   /** The version of the app under its name, such as the latest release. Null shows no version. */
   version: string | null;
+  /** The current page when the sidebar has a link to it, such as the Kanban board. */
+  page?: SidebarPage | undefined;
 };
+
+/**
+ * The pages of the sidebar links that the scenes show as current: Kanban of SidebarNavigation, and
+ * Usage of SidebarFooterLinks in sidebar-navigation.tsx.
+ */
+export type SidebarPage = "kanban" | "usage";
 
 const ICONS = {
   needs_you: CircleAlert,
@@ -41,7 +51,7 @@ const ICONS = {
   recent: Clock,
 } as const satisfies Record<NavGroupId, LucideIcon>;
 
-export function Sidebar({ nav, kanban = false, keys, version }: SidebarProps): ReactElement {
+export function Sidebar({ nav, keys, version, page }: SidebarProps): ReactElement {
   const groups = navGroupViews(nav.entries);
   const collapsed = nav.collapsed ?? [];
   const omitted = nav.omitted ?? [];
@@ -70,7 +80,11 @@ export function Sidebar({ nav, kanban = false, keys, version }: SidebarProps): R
           </div>
         </div>
         <div className="sb-actions">
-          <span className="sb-kanban" aria-current={kanban ? "true" : undefined} data-kanban="">
+          <span
+            className="sb-kanban"
+            aria-current={page === "kanban" ? "true" : undefined}
+            data-kanban=""
+          >
             <Columns3 />
             Kanban
           </span>
@@ -124,9 +138,20 @@ export function Sidebar({ nav, kanban = false, keys, version }: SidebarProps): R
         })}
       </div>
       <div className="sb-footer" data-nav-footer="">
-        <span className="sb-settings">
+        <span className="sb-foot-button">
           <Settings />
-          Settings
+        </span>
+        <span className="sb-foot-links">
+          <span
+            className="sb-foot-button"
+            data-footer-link="usage"
+            data-current={flag(page === "usage")}
+          >
+            <ChartSpline />
+          </span>
+          <span className="sb-foot-button">
+            <Workflow />
+          </span>
         </span>
         <span className="sb-diagnostics">
           <ShieldCheck />

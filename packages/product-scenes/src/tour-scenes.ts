@@ -8,4 +8,8 @@ export const TOUR_SCENES = {
     size: { width: 1440, height: 740 },
     timeline: async () => (await import("./scenes/palette/timeline")).build,
   },
+  "workflow-editor": {
+    size: { width: 1440, height: 780 },
+    timeline: async () => (await import("./scenes/workflow-editor/timeline")).build,
+  },
 } as const;

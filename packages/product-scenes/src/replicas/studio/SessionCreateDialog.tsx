@@ -1,8 +1,8 @@
 // The New session dialog of workspace-session-create-dialog.tsx and
-// workspace-session-model-fields.tsx: Name, the runtime and model with the effort and the speed,
-// Custom role, Work location, Target branch, and the worktree fields of New worktree. The header
-// and the footer stay while the body scrolls, as the dialog does in a short window. After Create
-// session, the dialog shows the startup progress in the `progress` slot: the box gets
+// workspace-session-model-fields.tsx: Name, the Runtime and model trigger with the effort and the
+// speed, Custom role, Work location, Target branch, and the worktree fields of New worktree. The
+// header and the footer stay while the body scrolls, as the dialog does in a short window. After
+// Create session, the dialog shows the startup progress in the `progress` slot: the box gets
 // `data-progress`, it narrows, and the description, the form, and the footer hide.
 import { LoaderCircle, MessageSquarePlus, Settings, X } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
@@ -17,7 +17,7 @@ import "./StartDialog.css";
 import "./SessionCreateDialog.css";
 
 type SessionCreateDialogProps = {
-  /** The Default Model of the repository. A model with more than one speed shows Speed. */
+  /** The Default Model of the repository, which the Runtime and model trigger sums up. */
   session: Session;
   /** The selected target branch. */
   target: string;

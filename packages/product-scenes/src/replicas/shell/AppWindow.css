@@ -64,6 +64,17 @@
         background: var(--card);
       }
     }
+    /* A window with the collapsed sidebar shows only its page on a phone stage, under a title bar
+       for the window controls. */
+    @container stage (width <= 500px) {
+      .app-window[data-sidebar="collapsed"] :is(.rail, .sb-collapsed) {
+        display: none;
+      }
+      .app-window[data-sidebar="collapsed"] > .app-body {
+        padding-top: calc(34 * var(--u));
+        background: var(--card);
+      }
+    }
     /*
      * A phone stage shows one pane of a window with data-pane: the sidebar or the page. The panes
      * fade, and they keep their place, because a scene measures the pointer targets in them.

@@ -87,8 +87,8 @@ afterAll(async () => {
   await GlobalRegistrator.unregister();
 });
 
-/** Renders the static view of the scene `name` and returns its root, out of the document. */
-async function renderView<Name extends SceneName>(name: Name): Promise<HTMLElement> {
+/** Renders the static view of the scene `name` to markup. */
+async function renderMarkup<Name extends SceneName>(name: Name): Promise<string> {
   const [{ createElement }, { renderToStaticMarkup }, , , { MAC_KEYS }, , { VIEWS }] = modules;
   const views: SceneViewLoaders = VIEWS;
   const View = await views[name]();
@@ -96,8 +96,13 @@ async function renderView<Name extends SceneName>(name: Name): Promise<HTMLEleme
     keys: MAC_KEYS,
     options: optionsOf(name),
   };
+  return renderToStaticMarkup(createElement(View, props));
+}
+
+/** Parses the markup of the scene `name` and returns its root, out of the document. */
+function viewOf(name: SceneName, markup: string): HTMLElement {
   const holder = document.createElement("div");
-  holder.innerHTML = renderToStaticMarkup(createElement(View, props));
+  holder.innerHTML = markup;
   const root = holder.firstElementChild;
   if (!(root instanceof HTMLElement)) throw new Error(`The ${name} view has no root.`);
   return root;
@@ -107,25 +112,27 @@ type RunCase = {
   label: string;
   name: SceneName;
   chapter: string | null;
-  view: HTMLElement;
+  markup: string;
   build: SceneBuilder<string>;
 };
 
-// Render each scene once. Each case mounts a new copy, because playing a timeline changes its DOM.
+// Render each scene once, to markup. Each case parses its own copy, because playing a timeline
+// changes its DOM, and the copy lives only during its case, so the document holds one scene at a
+// time.
 const RUN_CASES: RunCase[] = (
   await Promise.all(
     SCENE_NAMES.map(async (name): Promise<RunCase[]> => {
       const [, , , , , { SCENES }] = modules;
       const entry = SCENES[name];
-      const view = await renderView(name);
+      const markup = await renderMarkup(name);
       if (!("chapters" in entry)) {
-        return [{ label: name, name, view, chapter: null, build: await entry.timeline() }];
+        return [{ label: name, name, chapter: null, markup, build: await entry.timeline() }];
       }
       return Object.entries(await entry.chapters()).map(([chapter, build]) => ({
         label: `${name} (${chapter})`,
         name,
-        view,
         chapter,
+        markup,
         build,
       }));
     }),
@@ -134,10 +141,11 @@ const RUN_CASES: RunCase[] = (
 
 type RunView = { root: HTMLElement; frame: HTMLElement };
 
-function copyRun({ name, chapter, view }: RunCase): RunView {
-  const root = view.cloneNode(chapter === null);
+function mountRun({ name, chapter, markup }: RunCase): RunView {
+  const view = viewOf(name, markup);
+  if (chapter === null) return { root: view, frame: view };
+  const root = view.cloneNode(false);
   if (!(root instanceof HTMLElement)) throw new Error(`The ${name} copy has no root.`);
-  if (chapter === null) return { root, frame: root };
 
   // A chapter's timeline reads only its own panel.
   const panel = view.querySelector(`[data-chapter-panel="${chapter}"]`)?.cloneNode(true);
@@ -164,7 +172,7 @@ function changeTimes(timeline: gsap.core.Timeline): number[] {
 describe("each registered scene", () => {
   test.each(RUN_CASES)("$label builds its timeline from the static view", (run) => {
     const [, , { gsap }, { createScene }] = modules;
-    const { root, frame } = copyRun(run);
+    const { root, frame } = mountRun(run);
     const stage = frame.querySelector("[data-stage]");
     if (!(stage instanceof HTMLElement)) throw new Error(`The ${run.label} view has no stage.`);
     const timeline = gsap.timeline({ paused: true });

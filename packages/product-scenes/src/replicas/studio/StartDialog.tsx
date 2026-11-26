@@ -3,8 +3,8 @@
 // Reuse mode keeps the model of the existing session. The target branch shows for the
 // implementation start and the pull request launch actions. The start runner of
 // use-session-start-modal-runner.ts offers Run in background for each start: the dialog then
-// closes, and the startup notification shows the progress. A model with more than one speed shows
-// Speed next to Effort, and a fresh session starts at Standard. The title names the role, and the
+// closes, and the startup notification shows the progress. Runtime and model is one model picker
+// trigger with the model, the effort, and a speed above Standard. The title names the role, and the
 // description follows the start modes, as use-session-start-modal-coordinator.ts builds them. A
 // launch with a goal shows the Goal mode switch above Customize first message, and a start that
 // makes a new worktree shows its startup progress in the dialog. While the start runs, the dialog

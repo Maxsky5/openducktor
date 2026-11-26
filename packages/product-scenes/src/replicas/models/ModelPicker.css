@@ -1,0 +1,183 @@
+@layer replica {
+  :where(.stage) {
+    /* PopoverContent of model-picker.tsx under its trigger, with sideOffset 6: flex-col p-0, and
+       w-[min(42rem,...)] on rounded-lg border bg-popover shadow-lg. */
+    .mp {
+      position: absolute;
+      top: calc(100% + 6 * var(--u));
+      left: 0;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      width: calc(672 * var(--u));
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: var(--popover);
+      color: var(--popover-foreground);
+      box-shadow:
+        0 calc(10 * var(--u)) calc(15 * var(--u)) calc(-3 * var(--u)) rgb(15 23 42 / 0.12),
+        0 calc(4 * var(--u)) calc(6 * var(--u)) calc(-4 * var(--u)) rgb(15 23 42 / 0.1);
+      transform-origin: top left;
+    }
+    .mp-body {
+      display: grid;
+      grid-template-columns: calc(56 * var(--u)) minmax(0, 1fr);
+    }
+    /* The rail: flex-col items-center gap-1 border-r bg-muted/40 p-2. */
+    .mp-rail {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      padding: calc(8 * var(--u));
+      border-right: calc(1 * var(--u)) solid var(--border);
+      background: color-mix(in oklab, var(--muted) 40%, transparent);
+    }
+    /* A ghost icon button, size-9. The active view is a secondary button with ring-1 ring-ring. */
+    .mp-rail-button {
+      display: grid;
+      place-items: center;
+      width: calc(36 * var(--u));
+      height: calc(36 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: var(--foreground);
+    }
+    .mp[data-view="opencode"] [data-rail="opencode"],
+    .mp[data-view="codex"] [data-rail="codex"],
+    .mp[data-view="claude"] [data-rail="claude"],
+    .mp[data-view="antigravity"] [data-rail="antigravity"] {
+      background: color-mix(in oklab, var(--secondary) 70%, transparent);
+      box-shadow: 0 0 0 calc(1 * var(--u)) var(--ring);
+    }
+    .mp-main {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    /* The search: border-b p-2, an Input with pl-8 and the Search icon at left-2.5. */
+    .mp-search {
+      padding: calc(8 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+    }
+    .mp-search > .mp-input {
+      position: relative;
+      padding-left: calc(32 * var(--u));
+    }
+    .mp-search-icon {
+      position: absolute;
+      left: calc(10 * var(--u));
+      color: var(--muted-foreground);
+    }
+    /* The list: space-y-1 p-1. */
+    .mp-list {
+      display: grid;
+      gap: calc(4 * var(--u));
+      margin: 0;
+      padding: calc(4 * var(--u));
+      list-style: none;
+    }
+    .mp:not([data-view="opencode"]) [data-list="opencode"],
+    .mp:not([data-view="codex"]) [data-list="codex"],
+    .mp:not([data-view="claude"]) [data-list="claude"],
+    .mp:not([data-view="antigravity"]) [data-list="antigravity"] {
+      display: none;
+    }
+    /* A row: rounded-lg border, primary-tinted when it holds the selected model. */
+    .mp-row {
+      display: flex;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      min-width: 0;
+      border: calc(1 * var(--u)) solid transparent;
+      border-radius: calc(12 * var(--u));
+    }
+    /* border-primary/25 bg-primary/[0.07], and border-primary/35 bg-primary/[0.14] in dark, as
+       opaque sRGB mixes over the popover: they give the colors of the translucent layers. The
+       primary is outside the sRGB colors, and a translucent primary border gets a yellow edge in
+       the headless Chromium of the video tool. A scene fades the tint in with --tint. */
+    .mp-row[data-selected] {
+      --row: color-mix(in srgb, var(--primary) calc(7% * var(--tint, 1)), var(--popover));
+      border-color: color-mix(in srgb, var(--primary) calc(25% * var(--tint, 1)), var(--row));
+      background: var(--row);
+    }
+    :where([data-theme="dark"]) & .mp-row[data-selected] {
+      --row: color-mix(in srgb, var(--primary) calc(14% * var(--tint, 1)), var(--popover));
+      border-color: color-mix(in srgb, var(--primary) calc(35% * var(--tint, 1)), var(--row));
+    }
+    /* The select button: min-h-11 rounded-lg px-2.5 py-1.5 gap-2. */
+    .mp-pick {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+      min-height: calc(44 * var(--u));
+      padding: calc(6 * var(--u)) calc(10 * var(--u));
+    }
+    .mp-name {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .mp-name b,
+    .mp-name small {
+      overflow: hidden;
+      line-height: 1.25;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .mp-name b {
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+    }
+    .mp-row[data-selected] .mp-name b {
+      font-weight: 600;
+    }
+    .mp-name small {
+      color: var(--muted-foreground);
+      font-size: calc(11.5 * var(--u));
+    }
+    /* The capabilities, the context window, and the check: text-[11px] gap-1.5. */
+    .mp-meta {
+      display: flex;
+      flex: none;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      margin-left: auto;
+      color: var(--muted-foreground);
+      font-size: calc(11 * var(--u));
+    }
+    .mp-caps {
+      display: flex;
+      align-items: center;
+      gap: calc(4 * var(--u));
+    }
+    .mp-check {
+      margin-left: calc(2 * var(--u));
+      color: var(--primary);
+    }
+    .mp-row:not([data-selected]) .mp-check {
+      display: none;
+    }
+    /* The favorite toggle: a ghost icon button, size-7 mr-1. */
+    .mp-star {
+      display: grid;
+      flex: none;
+      place-items: center;
+      width: calc(28 * var(--u));
+      height: calc(28 * var(--u));
+      margin-right: calc(4 * var(--u));
+      color: var(--foreground);
+    }
+    @container stage (width <= 560px) {
+      .mp {
+        width: calc(100cqw - 32 * var(--u));
+      }
+      .mp-meta > span:not(.mp-caps) {
+        display: none;
+      }
+    }
+  }
+}

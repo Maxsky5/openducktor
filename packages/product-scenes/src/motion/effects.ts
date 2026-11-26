@@ -127,7 +127,11 @@ export function growIn(element: HTMLElement, duration = 0.4): gsap.core.Tween {
 }
 
 /** Shrinks an element to zero height, then removes it. */
-export function shrinkOut(element: HTMLElement, duration = 0.35): gsap.core.Tween {
+export function shrinkOut(
+  element: HTMLElement,
+  duration = 0.35,
+  ease: string = EASE.exit,
+): gsap.core.Tween {
   element.toggleAttribute(RESIZING, true);
   return gsap.to(element, {
     height: 0,
@@ -137,7 +141,7 @@ export function shrinkOut(element: HTMLElement, duration = 0.35): gsap.core.Twee
     marginBottom: 0,
     autoAlpha: 0,
     duration,
-    ease: EASE.exit,
+    ease,
     onComplete: () => element.remove(),
   });
 }

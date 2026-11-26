@@ -24,6 +24,9 @@ const TAB_LAND = 0.22;
 /** Seconds that the dragged tab takes from the bottom panel to the right panel. */
 const DRAG = 0.85;
 
+/** Seconds that the pointer holds the tab over the right panel before it drops it. */
+const DROP_HOLD = 0.15;
+
 /**
  * Seconds after the start of the Test terminal at which each of its lines shows: the output of
  * bun install, then of bun test, then the prompt. Each command line starts after a short wait,
@@ -69,7 +72,6 @@ export const build: SceneBuilder = (scene) => {
   const term = (id: string): HTMLElement => must(root, `[data-term="${id}"]`);
   const lines = (id: string): HTMLElement[] => all(term(id), "[data-term-line]");
   const input = must(term("shell"), "[data-input]");
-  const arrow = must(root, "[data-cursor]", SVGSVGElement);
   const tip = tooltip(scene, root);
   const cursor = pointer(scene, root);
   const keys = keyPresses(scene);
@@ -160,35 +162,43 @@ export const build: SceneBuilder = (scene) => {
   // preview follows the pointer, and the tab keeps its place until the drop. The right strip shows
   // that it accepts the tab while the pointer is over it.
   const held = cursor.point(() => shellTab, shown + 0.8, 0.8) + 0.15;
-  scene.at(held, () => {
-    const pixel = designPixel(root);
-    const from = offsetIn(shellTab, root);
-    const files = offsetIn(filesTab, root);
-    const tipX = Number(gsap.getProperty(arrow, "x")) + 4;
-    const tipY = Number(gsap.getProperty(arrow, "y")) + 3;
-    gsap.set(preview, { x: from.x, y: from.y });
-    preview.hidden = false;
-    // The tab lands after Files when the center of the preview passes the center of Files, as
-    // resolvePanelDrop decides. The window clips the end of the preview, as the app window does.
-    const grab = tipX - from.x;
-    const landX = files.x + filesTab.offsetWidth / 2 + 12 * pixel + grab - preview.offsetWidth / 2;
-    const move = { x: landX - tipX, y: files.y + filesTab.offsetHeight / 2 - tipY };
-    gsap.set(shellTab, { opacity: 0 });
-    scene.run(gsap.to(arrow, { scale: 0.9, duration: 0.1 }));
-    const travel = { duration: DRAG, ease: EASE.travel };
-    scene.run(gsap.to(arrow, { x: `+=${move.x}`, y: `+=${move.y}`, ...travel }));
-    scene.run(gsap.to(preview, { x: `+=${move.x}`, y: `+=${move.y}`, ...travel }));
-  });
+  const dropped = cursor.drag(
+    held,
+    DRAG,
+    () => {
+      const pixel = designPixel(root);
+      const lift = offsetIn(shellTab, root);
+      const files = offsetIn(filesTab, root);
+      const grip = cursor.tip();
+      gsap.set(preview, lift);
+      preview.hidden = false;
+      // The tab lands after Files when the center of the preview passes the center of Files, as
+      // resolvePanelDrop decides. The window clips the end of the preview, as the app window does.
+      const grab = grip.x - lift.x;
+      const landX =
+        files.x + filesTab.offsetWidth / 2 + 12 * pixel + grab - preview.offsetWidth / 2;
+      const move = { x: landX - grip.x, y: files.y + filesTab.offsetHeight / 2 - grip.y };
+      gsap.set(shellTab, { opacity: 0 });
+      const setX = gsap.quickSetter(preview, "x", "px");
+      const setY = gsap.quickSetter(preview, "y", "px");
+      return {
+        to: { x: grip.x + move.x, y: grip.y + move.y },
+        onMove: (progress) => {
+          setX(lift.x + move.x * progress);
+          setY(lift.y + move.y * progress);
+        },
+      };
+    },
+    DROP_HOLD,
+  );
   scene.at(held + DRAG * 0.7, () => {
     rightStrip.dataset.drop = "accepted";
   });
 
   // The tab lands after the last tab of the right panel and opens there. The terminal mounts again,
   // and the host restores its screen, so the output stays. The bottom panel keeps its Test tab.
-  const dropped = held + DRAG + 0.15;
   scene.at(dropped, () => {
     rightStrip.removeAttribute("data-drop");
-    scene.run(gsap.to(arrow, { scale: 1, duration: 0.1 }));
     filesTab.after(shellTab);
     rightBody.append(term("shell"));
     selectTab(rightStrip, rightBody, "shell");

@@ -1,0 +1,76 @@
+@layer replica {
+  :where(.stage) {
+    /* The chart host: min-w-0 and the height of the chart. The tooltip sits over it. */
+    .usage-chart {
+      position: relative;
+      min-width: 0;
+    }
+    .usage-chart-svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      overflow: visible;
+      font-size: 11px;
+    }
+    /* The y grid: a visible but quiet line at each value label. */
+    .usage-grid line {
+      stroke: var(--muted-foreground);
+      stroke-opacity: 0.22;
+      stroke-width: 1;
+    }
+    /* The bands: fillOpacity 0.26, and a 1.5 line on the top of each band. */
+    .usage-band-area {
+      fill: var(--series);
+      fill-opacity: 0.26;
+    }
+    .usage-band-line,
+    .usage-total-line,
+    .usage-current-line {
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .usage-band-line {
+      stroke: var(--series);
+      stroke-width: 1.5;
+    }
+    .usage-total-line {
+      stroke: var(--foreground);
+      stroke-width: 1.75;
+    }
+    /* The day in progress: a faint dashed segment to an open point. */
+    .usage-current-line {
+      stroke: var(--foreground);
+      stroke-width: 2;
+      stroke-dasharray: 4 4;
+      stroke-opacity: 0.6;
+    }
+    .usage-today-dot {
+      fill: var(--background);
+      stroke: var(--foreground);
+      stroke-width: 1.75;
+    }
+    /* The axis labels: the muted foreground of the chart theme at the opacity of its axes. */
+    .usage-axis text {
+      fill: var(--muted-foreground);
+      fill-opacity: 0.68;
+      font-family: inherit;
+      font-size: 11px;
+    }
+    /* The page shows the axis of its metric. */
+    [data-metric="tokens"] [data-axis="cost"],
+    [data-metric="cost"] [data-axis="tokens"] {
+      visibility: hidden;
+    }
+    .usage-crosshair {
+      stroke: var(--muted-foreground);
+      stroke-opacity: 0.35;
+      stroke-width: 1;
+    }
+    .usage-focus-dot {
+      fill: var(--foreground);
+      stroke: var(--background);
+      stroke-width: 2;
+    }
+  }
+}

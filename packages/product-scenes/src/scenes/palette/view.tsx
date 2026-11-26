@@ -89,7 +89,7 @@ export function PaletteView({
       stock={<PaletteStock />}
     >
       <AppWindow
-        chrome={{ sidebar: "full", nav: { ...PALETTE_NAV, collapsed }, kanban: true, version }}
+        chrome={{ sidebar: "full", nav: { ...PALETTE_NAV, collapsed }, page: "kanban", version }}
         keys={frame.keys}
         className="palette-window"
         style={designWidthStyle(designWidth)}

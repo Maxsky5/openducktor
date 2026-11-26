@@ -133,4 +133,10 @@
       opacity: 0;
     }
   }
+  /* animate-pulse, which the Skeleton of components/ui/skeleton.tsx uses. */
+  @keyframes pulse {
+    50% {
+      opacity: 0.5;
+    }
+  }
 }

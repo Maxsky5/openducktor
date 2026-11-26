@@ -1,0 +1,65 @@
+@layer replica {
+  :where(.stage) {
+    /*
+     * The stop confirmation: PopoverContent with side="left", align="center", and sideOffset 8,
+     * w-80 p-3, rounded-lg border bg-popover shadow-lg. processes.ts places it beside the Stop
+     * button of its command.
+     */
+    .pc {
+      position: absolute;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      width: calc(320 * var(--u));
+      padding: calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: var(--popover);
+      color: var(--popover-foreground);
+      box-shadow: var(--shadow-lg);
+      transform-origin: right center;
+    }
+    .pc-text {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      gap: calc(2 * var(--u));
+      min-width: 0;
+    }
+    .pc-text p {
+      margin: 0;
+    }
+    /* The title: truncate text-sm font-medium, with the command in font-mono text-xs. */
+    .pc-title {
+      overflow: hidden;
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .pc-command {
+      font-family: var(--mono);
+      font-size: calc(12 * var(--u));
+      font-weight: 400;
+    }
+    /* The facts: text-xs text-muted-foreground, with paths and ports in font-mono text-[11px]. */
+    .pc-facts {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .pc-code {
+      font-family: var(--mono);
+      font-size: calc(11 * var(--u));
+    }
+    /* Stop: the destructive Button of size sm with h-7 shrink-0 px-3 text-xs. The destructive
+       variant of the product has no border. */
+    .pc-button {
+      flex: 0 0 auto;
+      height: calc(28 * var(--u));
+      border-width: 0;
+    }
+  }
+}

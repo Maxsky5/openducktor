@@ -48,7 +48,7 @@ export function ImportSessionView(props: SceneViewProps): ReactElement {
     >
       <SessionWindow
         nav={NAV}
-        kanban
+        page="kanban"
         keys={props.keys}
         session={SESSION}
         pane="sidebar"

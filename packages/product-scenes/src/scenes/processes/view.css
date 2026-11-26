@@ -1,0 +1,52 @@
+@layer views {
+  :where(.stage) {
+    /*
+     * Processes: the session page of a task with the open sidebar, then the Kanban board. The rail
+     * keeps its Processes button at its bottom, so the window keeps one height for the whole scene.
+     */
+    .pr-window {
+      --design-width: 1100;
+      height: calc(640 * var(--u));
+    }
+    /*
+     * The floating window at its minimum size (FLOATING_MIN_SIZE of processes-surfaces.tsx), where
+     * the visitor drops it on the board: 20 pixels from the lower right corner, under the cards.
+     */
+    .pr-window .pw {
+      top: calc(100% - 300 * var(--u));
+      left: calc(100% - 420 * var(--u));
+      width: calc(400 * var(--u));
+      height: calc(280 * var(--u));
+    }
+    /*
+     * A phone stage shows the rail and one pane beside it under the title bar of the window: the
+     * page, or the sidebar while the visitor selects Kanban. The top bar has no quick action. The
+     * stage is 472 wide, so the floating window keeps its minimum width of 400 and fits where the
+     * flyout was, 64 from the left edge, with the 8 pixel margin of floating-window.tsx. The flyout
+     * keeps its max-w-[calc(100vw-6rem)], so its lines of 24rem or less show their ports as one
+     * button.
+     */
+    @container stage (width <= 500px) {
+      .pr-window {
+        --design-width: 472;
+      }
+      .pr-window .sh-split {
+        display: none;
+      }
+      .pr-window .rail {
+        display: flex;
+        padding-top: 0;
+        background: var(--workspace-rail);
+      }
+      .pr-window[data-pane] :is(.sidebar, .app-main) {
+        left: var(--rail-width);
+      }
+      .pr-window .pf .pp-ports {
+        display: none;
+      }
+      .pr-window .pf .pp-ports-compact {
+        display: inline-flex;
+      }
+    }
+  }
+}

@@ -1,0 +1,144 @@
+@layer replica {
+  :where(.stage) {
+    /*
+     * The flyout: PopoverContent with side="right", align="end", and sideOffset 18 from the
+     * Processes button, w-[36rem] p-0 shadow-2xl, rounded-lg border bg-popover. The stop
+     * confirmation joins it and can reach past its edge, as the confirmation of the app is fixed.
+     * The button is the first size-9 button of the bottom of the rail (Rail.css), 10 pixels from
+     * the edge of the rail, so the flyout starts 18 pixels right of the button and ends at its
+     * lower edge. Its width keeps max-w-[calc(100vw-6rem)], and the list keeps its min-h-60.
+     */
+    .pf {
+      position: absolute;
+      bottom: calc(48 * var(--u));
+      left: calc(var(--rail-width) + 8 * var(--u));
+      z-index: 25;
+      display: flex;
+      flex-direction: column;
+      width: calc(576 * var(--u));
+      max-width: calc(100cqw - 96 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: var(--popover);
+      color: var(--popover-foreground);
+      box-shadow: 0 calc(25 * var(--u)) calc(50 * var(--u)) calc(-12 * var(--u)) rgb(0 0 0 / 0.25);
+      transform-origin: left bottom;
+    }
+    .pf .pp-list {
+      flex: none;
+      height: calc(240 * var(--u));
+    }
+    /* The rule before the buttons: mx-0.5 h-4 w-px bg-border. */
+    .pf-rule {
+      flex: 0 0 auto;
+      width: calc(1 * var(--u));
+      height: calc(16 * var(--u));
+      margin: 0 calc(2 * var(--u));
+      background: var(--border);
+    }
+    /* Detach and Close: ghost icon Buttons with size-7 shrink-0 text-muted-foreground, with a
+       size-3.5 and a size-4 icon. Close has -ml-1. */
+    .pf-button {
+      flex: 0 0 auto;
+      width: calc(28 * var(--u));
+      height: calc(28 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .pf-button .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    .pf-close {
+      margin-left: calc(-4 * var(--u));
+    }
+    .pf-close .lucide {
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+    }
+    /*
+     * The floating window: rounded-xl border border-border bg-popover with an edge and a shadow on
+     * every side (floating-window.css). The scene gives its place and its size, which the flyout
+     * gives in the app.
+     */
+    .pw {
+      position: absolute;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(16 * var(--u));
+      background: var(--popover);
+      color: var(--popover-foreground);
+      box-shadow:
+        0 0 0 calc(1 * var(--u)) color-mix(in oklab, var(--foreground) 6%, transparent),
+        0 calc(2 * var(--u)) calc(6 * var(--u)) rgb(0 0 0 / 0.08),
+        0 calc(18 * var(--u)) calc(48 * var(--u)) calc(-10 * var(--u)) rgb(0 0 0 / 0.28);
+    }
+    :where([data-theme="dark"]) & .pw {
+      box-shadow:
+        0 0 0 calc(1 * var(--u)) color-mix(in oklab, var(--foreground) 10%, transparent),
+        0 calc(2 * var(--u)) calc(8 * var(--u)) rgb(0 0 0 / 0.3),
+        0 calc(24 * var(--u)) calc(64 * var(--u)) calc(-12 * var(--u)) rgb(0 0 0 / 0.7);
+    }
+    .pw > .pp {
+      flex: 1;
+      overflow: hidden;
+      border-radius: 0 0 calc(15 * var(--u)) calc(15 * var(--u));
+    }
+    /* The title bar: flex h-9 items-center gap-2 border-b border-border bg-muted/50 pr-1.5 pl-3. */
+    .pw-title {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      height: calc(36 * var(--u));
+      padding: 0 calc(6 * var(--u)) 0 calc(12 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(15 * var(--u)) calc(15 * var(--u)) 0 0;
+      background: color-mix(in oklab, var(--muted) 50%, transparent);
+    }
+    .pw-title .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    .pw-icon {
+      flex: 0 0 auto;
+      color: var(--muted-foreground);
+    }
+    /* The title: min-w-0 flex-1 truncate text-xs font-semibold text-foreground/90. */
+    .pw-name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      color: color-mix(in oklab, var(--foreground) 90%, transparent);
+      font-size: calc(12 * var(--u));
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    /* Attach and Close: ghost icon Buttons with size-6 text-muted-foreground, gap-0.5. */
+    .pw-actions {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(2 * var(--u));
+    }
+    .pw-button {
+      width: calc(24 * var(--u));
+      height: calc(24 * var(--u));
+      color: var(--muted-foreground);
+    }
+    /* The resize grip: two diagonal strokes, size-2.5 at right-1.5 bottom-1.5, in
+       text-muted-foreground/60. */
+    .pw-grip {
+      position: absolute;
+      right: calc(6 * var(--u));
+      bottom: calc(6 * var(--u));
+      width: calc(10 * var(--u));
+      height: calc(10 * var(--u));
+      color: color-mix(in oklab, var(--muted-foreground) 60%, transparent);
+      background:
+        linear-gradient(135deg, transparent 42%, currentColor 42% 52%, transparent 52%),
+        linear-gradient(135deg, transparent 72%, currentColor 72% 82%, transparent 82%);
+    }
+  }
+}

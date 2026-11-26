@@ -32,5 +32,11 @@
       bottom: auto;
       translate: -50% -50%;
     }
+    /* On the right side of the trigger, the square sits over the left edge and points left. */
+    .ui-tip[data-side="right"] i {
+      bottom: auto;
+      left: 0;
+      translate: -50% -50%;
+    }
   }
 }

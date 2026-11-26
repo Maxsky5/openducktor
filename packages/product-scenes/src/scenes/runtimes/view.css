@@ -1,0 +1,22 @@
+@layer views {
+  :where(.stage) {
+    /* The content pane of a narrow Settings dialog: under 40rem, the role rows take one column. The
+       pane holds the open model picker under the Spec role. The picker keeps 8 pixels from the
+       right edge of the pane, as the collision padding of the popover does. */
+    .rt-pane {
+      --design-width: 640;
+      height: calc(536 * var(--u));
+    }
+    .rt-pane .mp {
+      width: calc(100cqw - 52 * var(--u));
+    }
+    /* A phone stage shows the pane at the width of a phone. The effort and the profile of OpenCode
+       then take a row each, so the open picker is taller. */
+    @container stage (width <= 560px) {
+      .rt-pane {
+        --design-width: 420;
+        height: calc(580 * var(--u));
+      }
+    }
+  }
+}

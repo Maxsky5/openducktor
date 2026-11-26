@@ -1,26 +1,18 @@
-// The composer of agent-chat-composer.tsx: the draft, the runtime and model, the effort, the speed
-// of a model that offers more than Standard, the context meter, and the send and stop buttons. The
-// running ray circles the box while an agent works. The children hold more draft content, the
-// menu opens above the draft, the queue holds the queued messages above the box, and the goal row
-// sits on the top edge of the box. A runtime with agent profiles shows the agent before the model.
-import {
-  Bot,
-  BrainCog,
-  ChevronsUpDown,
-  Paperclip,
-  SendHorizontal,
-  Square,
-  Zap,
-  ZapOff,
-} from "lucide-react";
+// The composer of agent-chat-composer.tsx: the draft, the attach button, the model picker trigger,
+// the context meter, and the send and stop buttons. The trigger sums up the runtime, the agent
+// profile of OpenCode, the model, the effort, and a speed above Standard. The running ray circles
+// the box while an agent works. The children hold more draft content, the menu opens above the
+// draft, the queue holds the queued messages above the box, and the goal row sits on the top edge
+// of the box.
+import { Paperclip, SendHorizontal, Square } from "lucide-react";
 import type { CSSProperties, ReactElement, ReactNode } from "react";
-import { modelName, type RuntimeKind } from "../../sample/models";
+import type { RuntimeKind } from "../../sample/models";
 import { contextUse, type Session } from "../../sample/sessions";
 import { compactTokens } from "../format";
 import { type KeyLabels, steerKey } from "../keys";
 import type { Activity } from "../vocabulary";
+import { ModelTrigger } from "../models/ModelTrigger";
 import { Ray } from "../ui/Ray";
-import { RuntimeIcon } from "../ui/RuntimeIcon";
 import "./Composer.css";
 
 /**
@@ -32,6 +24,7 @@ const SUBAGENT_REFERENCES = {
   opencode: true,
   codex: false,
   claude: false,
+  antigravity: false,
 } as const satisfies Record<RuntimeKind, boolean>;
 
 /** The trigger hints of the placeholder on `runtime`, as agent-chat-composer-policy.ts writes them. */
@@ -65,7 +58,7 @@ type ComposerProps = {
   queue?: ReactNode;
   /** The goal row on the top edge of the box, under the queue. */
   goal?: ReactNode;
-  /** The agent of a runtime with agent profiles, such as build of OpenCode. */
+  /** The agent profile of a runtime with agent profiles, such as build of OpenCode. */
   agent?: string;
   /** More draft content after the placeholder. */
   children?: ReactNode;
@@ -83,28 +76,7 @@ function ModelControls({
       <span className="st-attach">
         <Paperclip className="i14" />
       </span>
-      {agent && (
-        <span className="st-chip agent">
-          <Bot className="i14" />
-          <span>{agent}</span>
-          <ChevronsUpDown />
-        </span>
-      )}
-      <span className="st-chip">
-        <RuntimeIcon kind={session.runtime} />
-        <span data-model="">{modelName(session)}</span>
-        <ChevronsUpDown />
-      </span>
-      <span className="st-chip effort">
-        <BrainCog className="i14" />
-        <span data-effort="">{session.effort}</span>
-        <ChevronsUpDown />
-      </span>
-      {session.speed && (
-        <span className="st-speed" data-speed={session.speed}>
-          {session.speed === "fast" ? <Zap /> : <ZapOff />}
-        </span>
-      )}
+      <ModelTrigger variant="composer" value={{ ...session, profile: agent }} />
     </span>
   );
 }

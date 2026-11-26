@@ -1,0 +1,121 @@
+@layer replica {
+  :where(.stage) {
+    /* The form trigger of model-picker-trigger.tsx: an outline button, h-9 w-full justify-between
+       gap-2 border-input bg-card px-3 text-sm font-normal. */
+    .mt {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+      height: calc(36 * var(--u));
+      padding: 0 calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(10 * var(--u));
+      background: var(--card);
+      color: var(--foreground);
+      font-size: calc(14 * var(--u));
+      white-space: nowrap;
+    }
+    .mt[data-disabled] {
+      opacity: 0.5;
+    }
+    /* The composer trigger with the selector classes of agent-chat-composer.tsx: h-7 w-auto
+       rounded-lg border-transparent bg-transparent px-2 text-xs, gap-1.5, and the quiet
+       text-muted-foreground. The open picker gives it bg-muted and text-foreground. */
+    .mt[data-variant="composer"] {
+      flex: 0 1 auto;
+      gap: calc(6 * var(--u));
+      max-width: min(calc(416 * var(--u)), 100%);
+      height: calc(28 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      border-color: transparent;
+      border-radius: calc(12 * var(--u));
+      background: transparent;
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+    }
+    .mt[data-variant="composer"][data-open] {
+      background: var(--muted);
+      color: var(--foreground);
+    }
+    /* flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden. */
+    .mt-summary {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      min-width: 0;
+      overflow: hidden;
+    }
+    .mt-logos {
+      position: relative;
+      display: flex;
+      flex: none;
+    }
+    /*
+     * The marks of the other runtimes stay rendered, hidden and out of the flow. With display: none,
+     * the gradient of a hidden Antigravity mark stops painting, and the fade of a loop shows a copy
+     * of the trigger that uses the same gradient id.
+     */
+    .mt-logos > svg {
+      position: absolute;
+      visibility: hidden;
+    }
+    .mt-logos[data-runtime="opencode"] > .opencode-logo,
+    .mt-logos[data-runtime="codex"] > .codex-logo,
+    .mt-logos[data-runtime="claude"] > .claude-logo,
+    .mt-logos[data-runtime="antigravity"] > .antigravity-logo {
+      position: static;
+      visibility: visible;
+    }
+    /* The profile: min-w-0 shrink truncate text-foreground/75, then a muted slash. */
+    .mt-profile {
+      flex: 0 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      color: color-mix(in oklab, var(--foreground) 75%, transparent);
+      text-overflow: ellipsis;
+    }
+    .mt-slash {
+      flex: none;
+      color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
+    }
+    /* The model gives up its width first: min-w-0 shrink-[1000] truncate. */
+    .mt-model {
+      flex: 0 1000 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    /* The effort badge: rounded-md border border-border bg-secondary px-1.5 py-0.5 text-[11px]
+       font-medium leading-none text-secondary-foreground. */
+    .mt-effort {
+      flex: none;
+      padding: calc(2 * var(--u)) calc(6 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(10 * var(--u));
+      background: var(--secondary);
+      color: var(--secondary-foreground);
+      font-size: calc(11 * var(--u));
+      font-weight: 500;
+      line-height: 1;
+    }
+    /* The speed above Standard: the Zap and, in a form, its label, in the color of the level. */
+    .mt-speed {
+      display: inline-flex;
+      flex: none;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      color: var(--speed-fast);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+    }
+    .mt-chevron {
+      flex: none;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      color: var(--muted-foreground);
+    }
+  }
+}

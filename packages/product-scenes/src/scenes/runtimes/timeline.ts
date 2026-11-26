@@ -1,131 +1,79 @@
-import { all, must } from "../../motion/dom";
-import { brandColor, designPixel } from "../../motion/effects";
-import { gsap } from "../../motion/gsap";
-import { EASE } from "../../motion/tokens";
+import { must } from "../../motion/dom";
 import type { SceneBuilder } from "../../motion/scene";
+import { EASE } from "../../motion/tokens";
+import { modelPicker } from "../../replicas/models/model-picker";
+import { modelTrigger } from "../../replicas/models/model-trigger";
 import { pointer } from "../../replicas/shell/cursor";
-import { type ModelRef, modelKey, modelName, SPEC_AFTER, SPEC_BEFORE } from "../../sample/models";
+import { tooltip } from "../../replicas/ui/tip";
+import { modelKey, RUNTIME_LABELS, type RuntimeKind } from "../../sample/models";
+import { SPEC_AFTER, SPEC_BEFORE, SPEC_PICKED } from "./sample";
+
+/** Seconds of the drag of the effort thumb, from medium to xhigh. */
+const DRAG = 0.9;
 
 /**
- * The per-role agent defaults. The Spec role uses Codex at the start. You open its model picker,
- * look at the OpenCode and Codex models, and choose Lyra 3 in the Claude runtime. The markup holds
- * the last frame with the picker open, so visitors without motion see the three runtimes and a
- * model list.
+ * The role defaults of a repository. The Spec role uses Vega 2 Pro on OpenCode at the start. You
+ * open its model picker, which opens on OpenCode, the runtime of the selected model. You select
+ * Codex, Claude, and Antigravity in the rail, and each list comes in. You select Gemini 4 Comet,
+ * which keeps the effort medium, and drag the effort to xhigh. You close the picker: the four roles
+ * use the four runtimes.
  */
 export const build: SceneBuilder = (scene) => {
   const root = must(scene.stage, "[data-pane]");
   const card = must(root, '[data-role="spec"]');
-  const trigger = must(card, "[data-model-trigger]");
-  const logos = must(trigger, "[data-runtime-logos]");
-  const name = must(trigger, "[data-model-name]");
-  const picker = must(card, "[data-picker]");
-  const rail = (kind: string): HTMLElement => must(picker, `[data-rail="${kind}"]`);
-  const list = (kind: string): HTMLElement => must(picker, `[data-list="${kind}"]`);
-  const row = (key: string): HTMLElement => must(picker, `[data-model="${key}"] [data-model-pick]`);
+  const triggerElement = must(card, "[data-model-trigger]");
+  const trigger = modelTrigger(triggerElement);
+  const picker = modelPicker(scene, must(card, "[data-picker]"));
+  const effort = picker.effort(modelKey(SPEC_AFTER));
   const cursor = pointer(scene, root);
-  const u = (): number => designPixel(root);
+  const tip = tooltip(scene, root);
 
-  const select = (key: string): void => {
-    for (const item of all(picker, "[data-model]"))
-      item.toggleAttribute("data-selected", item.dataset.model === key);
+  // Start: the Spec role uses Vega 2 Pro on OpenCode, and the picker is closed. The options of
+  // Gemini 4 Comet wait at the effort medium.
+  trigger.set(SPEC_BEFORE);
+  picker.reset(SPEC_BEFORE.runtime, modelKey(SPEC_BEFORE));
+  effort.reset(SPEC_PICKED.effort);
+
+  // 1. You open the model picker of the Spec role. No model is a favorite, so it opens on the
+  //    runtime of the selected model, OpenCode, with the effort and the agent profile of the model.
+  const opened = cursor.click(() => triggerElement, 0.6, 0.9);
+  scene.mark("open", opened);
+  picker.open(opened + 0.05);
+
+  // 2. You point at each runtime of the rail. Its tooltip names it, and a click shows its models.
+  const visit = (kind: RuntimeKind, at: number, travel: number): number => {
+    const arrived = cursor.point(() => picker.rail(kind), at, travel);
+    scene.at(arrived + 0.08, () => tip.show(picker.rail(kind), RUNTIME_LABELS[kind], "right"));
+    const clicked = cursor.click(() => picker.rail(kind), arrived + 0.4, 0);
+    scene.at(clicked, () => tip.hide());
+    picker.show(kind, clicked + 0.05);
+    return clicked;
   };
-  const setModel = (ref: ModelRef): void => {
-    logos.dataset.runtime = ref.runtime;
-    name.textContent = modelName(ref);
-  };
-  /** The rail button shows another runtime. The rows of the list come in one after another. */
-  const view = (kind: string, at: number): void =>
-    scene.at(at, () => {
-      picker.dataset.view = kind;
-      scene.run(
-        gsap.fromTo(
-          list(kind).children,
-          { autoAlpha: 0, x: -6 * u() },
-          {
-            autoAlpha: 1,
-            x: 0,
-            duration: 0.3,
-            stagger: 0.04,
-            ease: EASE.enter,
-            clearProps: "opacity,visibility,transform",
-          },
-        ),
-      );
-    });
+  const codex = visit("codex", opened + 0.75, 0.6);
+  const claude = visit("claude", codex + 0.55, 0.35);
+  const antigravity = visit("antigravity", claude + 0.55, 0.35);
 
-  // Start: the Spec role uses Codex, and the picker is closed.
-  setModel(SPEC_BEFORE);
-  select(modelKey(SPEC_BEFORE));
-  picker.dataset.view = "opencode";
-  picker.hidden = true;
+  // 3. You select Gemini 4 Comet. The trigger shows Antigravity, and the model keeps the effort.
+  const picked = cursor.click(() => picker.row(modelKey(SPEC_PICKED)), antigravity + 0.7, 0.7);
+  scene.mark("pick", picked);
+  picker.select(modelKey(SPEC_PICKED), picked);
+  scene.at(picked, () => trigger.set(SPEC_PICKED));
 
-  // 1. You open the model picker of the Spec role. No model is a favorite, so the picker shows
-  //    the first runtime, OpenCode.
-  const opened = cursor.click(() => trigger, 0.6, 1);
-  scene.at(opened + 0.05, () => {
-    picker.hidden = false;
-    scene.run(
-      gsap.fromTo(
-        picker,
-        { autoAlpha: 0, scale: 0.96, y: -4 * u() },
-        {
-          autoAlpha: 1,
-          scale: 1,
-          y: 0,
-          duration: 0.25,
-          ease: EASE.enter,
-          clearProps: "opacity,visibility,transform",
-        },
-      ),
-    );
-  });
+  // 4. You drag the effort thumb from medium to xhigh. The label over the thumb follows it, and
+  //    the trigger shows the new effort on release.
+  const pressed = cursor.point(effort.thumb, picked + 0.6, 0.6) + 0.1;
+  scene.mark("effort", pressed);
+  const released = cursor.drag(pressed, DRAG, () => ({
+    to: effort.tick(SPEC_AFTER.effort),
+    ease: EASE.move,
+    ...effort.grab(SPEC_AFTER.effort),
+  }));
+  scene.at(released + 0.05, () => trigger.set(SPEC_AFTER));
 
-  // 2. You look at the Codex models, with the current model, then at the Claude models.
-  const codex = cursor.click(() => rail("codex"), opened + 1.1, 0.7);
-  view("codex", codex + 0.05);
-  const claude = cursor.click(() => rail("claude"), codex + 1.3, 0.5);
-  view("claude", claude + 0.05);
-
-  // 3. You choose Lyra 3. The picker closes, and the Spec role uses the Claude runtime.
-  const picked = cursor.click(() => row(modelKey(SPEC_AFTER)), claude + 1.2, 0.7);
-  scene.at(picked + 0.05, () => select(modelKey(SPEC_AFTER)));
-  scene.at(picked + 0.25, () => {
-    scene.run(
-      gsap.to(picker, {
-        autoAlpha: 0,
-        scale: 0.96,
-        duration: 0.2,
-        ease: EASE.exit,
-        onComplete: () => {
-          picker.hidden = true;
-          gsap.set(picker, { clearProps: "opacity,visibility,transform" });
-        },
-      }),
-    );
-    setModel(SPEC_AFTER);
-    scene.run(
-      gsap.fromTo(
-        trigger,
-        { boxShadow: `0 0 0 ${3 * u()}px ${brandColor(trigger, 0.28)}` },
-        {
-          boxShadow: `0 0 0 0px ${brandColor(trigger, 0)}`,
-          duration: 1.1,
-          ease: EASE.enter,
-          clearProps: "boxShadow",
-        },
-      ),
-    );
-  });
-  // 4. The four roles now use three runtimes. Each role logo pops in turn.
-  scene.at(picked + 0.9, () => {
-    scene.run(
-      gsap.fromTo(
-        all(root, "[data-runtime-logos]"),
-        { scale: 1 },
-        { scale: 1.3, duration: 0.18, yoyo: true, repeat: 1, stagger: 0.12, ease: EASE.gentle },
-      ),
-    );
-  });
-  cursor.hide(picked + 0.8);
-  scene.endAt(picked + 3.8);
+  // 5. A click outside closes the picker. The four roles now use the four runtimes.
+  const closed = cursor.click(() => must(root, "[data-section-title]"), released + 0.6, 0.9);
+  scene.mark("close", closed);
+  picker.close(closed);
+  cursor.hide(closed + 0.4);
+  scene.endAt(closed + 3.2);
 };

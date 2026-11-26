@@ -1,0 +1,151 @@
+@layer replica {
+  :where(.stage) {
+    /* The positioner of the dialog: p-4 around DialogContent, which takes at most its width. */
+    .wfd-overlay {
+      grid-template-columns: minmax(0, 1fr);
+      padding: calc(16 * var(--u));
+    }
+    /* DialogContent with WORKFLOW_DIALOG.sm (max-w-md) or .lg (max-w-[720px]) overflow-hidden p-0:
+       rounded-xl border border-border bg-popover shadow-xl. */
+    .wfd-box {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      width: calc(448 * var(--u));
+      max-width: 100%;
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(16 * var(--u));
+      background: var(--popover);
+      color: var(--popover-foreground);
+      box-shadow: var(--shadow-xl);
+    }
+    .wfd-box[data-size="lg"] {
+      width: calc(720 * var(--u));
+    }
+    /* WORKFLOW_DIALOG.header: flex flex-col gap-1.5 border-b border-border px-6 py-4, the title in
+       text-lg font-semibold leading-6, and the description in text-sm leading-6
+       text-muted-foreground. */
+    .wfd-head {
+      display: flex;
+      flex-direction: column;
+      gap: calc(6 * var(--u));
+      padding: calc(16 * var(--u)) calc(24 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+    }
+    .wfd-head > b {
+      padding-right: calc(40 * var(--u));
+      font-size: calc(18 * var(--u));
+      font-weight: 600;
+      line-height: calc(24 * var(--u));
+    }
+    .wfd-head > p {
+      color: var(--muted-foreground);
+      font-size: calc(14 * var(--u));
+      line-height: calc(24 * var(--u));
+    }
+    /* WORKFLOW_DIALOG.body: py-4 pl-6 pr-3.5 with the 10px gutter of the scrollbar, in flex
+       flex-col gap-4. */
+    .wfd-body {
+      display: flex;
+      flex-direction: column;
+      gap: calc(16 * var(--u));
+      padding: calc(16 * var(--u)) calc(24 * var(--u));
+    }
+    /* WORKFLOW_DIALOG.footer: border-t border-border px-6 py-4, and DialogFooter: flex
+       justify-between gap-2 with buttons of at least h-9. */
+    .wfd-foot {
+      display: flex;
+      justify-content: space-between;
+      gap: calc(8 * var(--u));
+      padding: calc(16 * var(--u)) calc(24 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--border);
+    }
+    /* The name field: flex flex-col gap-2, and the label in text-sm font-medium. */
+    .wfd-name {
+      display: flex;
+      flex-direction: column;
+      gap: calc(8 * var(--u));
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+    }
+    .wfd-name .ui-input {
+      font-weight: 400;
+    }
+    /* The availability: flex items-start gap-2 text-sm text-muted-foreground, with a size-4 globe
+       at mt-0.5. */
+    .wfd-note {
+      display: flex;
+      align-items: flex-start;
+      gap: calc(8 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    .wfd-note > .lucide {
+      flex: none;
+      margin-top: calc(2 * var(--u));
+    }
+    /* The title of the task list: -mb-2 text-sm font-semibold. */
+    .wfd-moves-title {
+      margin-bottom: calc(-8 * var(--u));
+      font-size: calc(14 * var(--u));
+      font-weight: 600;
+      line-height: calc(20 * var(--u));
+    }
+    /* TaskMovesList: a section with flex flex-col gap-2 for each repository, its name in text-sm
+       font-semibold, and its tasks in flex flex-col gap-1. A task: flex items-start gap-2
+       rounded-md px-2 py-1.5 text-sm, with the details in text-xs text-muted-foreground. */
+    .wfd-group {
+      display: flex;
+      flex-direction: column;
+      gap: calc(8 * var(--u));
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    .wfd-repository {
+      font-weight: 600;
+    }
+    .wfd-group ul {
+      list-style: none;
+    }
+    .wfd-group li {
+      display: flex;
+      align-items: flex-start;
+      gap: calc(8 * var(--u));
+      padding: calc(6 * var(--u)) calc(8 * var(--u));
+    }
+    .wfd-task {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .wfd-task > small {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    /* A checked Checkbox: size-4 rounded-[4px] border border-primary bg-primary
+       text-primary-foreground shadow-xs, at mt-0.5, with a size-3.5 check. */
+    .wfd-checkbox {
+      display: flex;
+      flex: none;
+      align-items: center;
+      justify-content: center;
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+      margin-top: calc(2 * var(--u));
+      border: calc(1 * var(--u)) solid var(--primary);
+      border-radius: calc(4 * var(--u));
+      background: var(--primary);
+      color: var(--primary-foreground);
+      box-shadow: var(--shadow-xs);
+    }
+    .wfd-checkbox > .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+  }
+}

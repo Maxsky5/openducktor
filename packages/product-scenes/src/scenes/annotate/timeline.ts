@@ -68,7 +68,7 @@ export const build: SceneBuilder = (scene) => {
     scene.at(saved, () => count(index + 1));
   });
   // The pointer leaves the page, so it is an arrow again.
-  scene.at(saved + 0.15, () => browser.crosshair(false));
+  scene.at(saved + 0.15, () => cursor.crosshair(false));
 
   // A phone stage shows the chat again with Back to workspace.
   let ready = saved + 0.2;

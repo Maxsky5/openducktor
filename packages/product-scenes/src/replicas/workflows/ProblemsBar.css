@@ -1,0 +1,67 @@
+@layer replica {
+  :where(.stage) {
+    /* ProblemsPanel: border-t border-border bg-card, and its button: flex h-9 w-full items-center
+       gap-2 px-3 text-sm. */
+    .wfe-problems {
+      display: flex;
+      flex: none;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      height: calc(37 * var(--u));
+      padding: 0 calc(12 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--border);
+      background: var(--card);
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    /* A size-4 CircleCheck in text-emerald-600, or text-emerald-400 in the dark theme. A warning
+       shows the size-4 marker of ProblemMarker in text-warning-muted. */
+    .wfe-problems > .lucide {
+      flex: none;
+    }
+    .wfe-problems-ready.lucide {
+      color: var(--emerald-600);
+    }
+    :where([data-theme="dark"]) & .wfe-problems-ready.lucide {
+      color: var(--emerald-400);
+    }
+    .wfe-problems-warning.lucide {
+      color: var(--warning-muted);
+    }
+    .wfe-problems[data-level="none"] .wfe-problems-warning,
+    .wfe-problems:not([data-level="none"]) .wfe-problems-ready,
+    .wfe-problems[data-level="none"] .wfe-problems-toggle {
+      display: none;
+    }
+    /* flex min-w-0 flex-1 items-baseline gap-2: the title in font-medium, and the detail in
+       text-muted-foreground after a dot. */
+    .wfe-problems-text {
+      display: flex;
+      flex: 1;
+      min-width: 0;
+      align-items: baseline;
+      gap: calc(8 * var(--u));
+    }
+    .wfe-problems-text > b {
+      flex: none;
+      font-weight: 500;
+    }
+    .wfe-problems-detail {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--muted-foreground);
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    /* Show: flex items-center gap-1 text-xs text-muted-foreground with a size-3.5 chevron. */
+    .wfe-problems-toggle {
+      display: flex;
+      flex: none;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+  }
+}

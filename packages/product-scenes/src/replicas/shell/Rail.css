@@ -2,11 +2,15 @@
   :where(.stage) {
     /* Workspace rail. On macOS the window controls sit on the sidebar surface in a 40 pixel title
        bar, and the rail starts under it. See app-shell.tsx and the Electron styles in styles.css. */
+    /* The width of the rail, w-14, which the parts beside it read. */
+    .replica {
+      --rail-width: calc(56 * var(--u));
+    }
     .rail {
       display: flex;
-      flex: 0 0 calc(56 * var(--u));
+      flex: 0 0 var(--rail-width);
       flex-direction: column;
-      width: calc(56 * var(--u));
+      width: var(--rail-width);
       padding-top: calc(40 * var(--u));
       background: linear-gradient(var(--sidebar) calc(40 * var(--u)), var(--workspace-rail) 0);
       color: var(--foreground);
@@ -73,9 +77,55 @@
       height: calc(40 * var(--u));
       margin-top: calc(4 * var(--u));
     }
-    .rail-add .lucide {
+    .rail-add .lucide,
+    .rail-host .lucide {
       width: calc(20 * var(--u));
       height: calc(20 * var(--u));
+    }
+    /* The bottom of the rail: flex shrink-0 flex-col items-center gap-1 px-2 py-2, with ghost
+       size-9 buttons in text-sidebar-muted-foreground. */
+    .rail-foot {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      margin-top: auto;
+      padding: calc(8 * var(--u));
+    }
+    .rail-button {
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: calc(36 * var(--u));
+      height: calc(36 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: var(--sidebar-muted-foreground);
+    }
+    /* data-[open=true]:bg-sidebar-accent data-[open=true]:text-sidebar-accent-foreground. */
+    .rail-button[data-open] {
+      background: var(--sidebar-accent);
+      color: var(--sidebar-accent-foreground);
+    }
+    /* The count of the running commands: absolute top-0 right-0 h-3.5 min-w-3.5 rounded-full
+       bg-status-running/15 px-1 text-[9px] leading-none font-semibold
+       text-status-running-foreground tabular-nums. */
+    .process-badge {
+      position: absolute;
+      top: 0;
+      right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      padding: 0 calc(4 * var(--u));
+      border-radius: 999px;
+      background: color-mix(in oklab, var(--status-running) 15%, transparent);
+      color: var(--status-running-foreground);
+      font-size: calc(9 * var(--u));
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
     }
   }
 }

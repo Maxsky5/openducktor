@@ -1,0 +1,36 @@
+@layer replica {
+  :where(.stage) {
+    /* The series color of each runtime: USAGE_RUNTIME_COLORS of usage-format.ts. */
+    [data-series="claude"] {
+      --series: var(--chart-runtime-claude);
+    }
+    [data-series="codex"] {
+      --series: var(--chart-runtime-codex);
+    }
+    [data-series="opencode"] {
+      --series: var(--chart-runtime-opencode);
+    }
+    [data-series="antigravity"] {
+      --series: var(--chart-runtime-antigravity);
+    }
+    /* RuntimeDot: size-2 shrink-0 rounded-full in the series color. */
+    .usage-dot {
+      flex-shrink: 0;
+      width: calc(8 * var(--u));
+      height: calc(8 * var(--u));
+      border-radius: 50%;
+      background: var(--series);
+    }
+    /* SectionHeading: flex min-h-9 items-center, and a text-sm font-semibold title. */
+    .usage-section-heading {
+      display: flex;
+      align-items: center;
+      min-height: calc(36 * var(--u));
+    }
+    .usage-section-title {
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+      font-weight: 600;
+    }
+  }
+}

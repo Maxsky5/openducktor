@@ -1,0 +1,36 @@
+@layer replica {
+  :where(.stage) {
+    /* The trigger of ports-popover.tsx: inline-flex h-6 items-center gap-1.5 rounded-full border
+       border-border bg-card px-2 text-[11px] font-medium text-muted-foreground tabular-nums, with
+       the running dot and a size-3 chevron with -ml-0.5. */
+    .tp {
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      height: calc(24 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: 999px;
+      background: var(--card);
+      color: var(--muted-foreground);
+      font-size: calc(11 * var(--u));
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    /* The running dot: size-1.5 rounded-full bg-status-running. The ports button and the live
+       status of the list show it. */
+    .run-dot {
+      width: calc(6 * var(--u));
+      height: calc(6 * var(--u));
+      border-radius: 50%;
+      background: var(--status-running);
+    }
+    .tp .lucide {
+      width: calc(12 * var(--u));
+      height: calc(12 * var(--u));
+      margin-left: calc(-2 * var(--u));
+    }
+  }
+}
