@@ -83,3 +83,47 @@ test("a system wake reads a failed read, and unmount stops listening", async () 
   expect(systemWake.listeners.size).toBe(0);
   stopObserver();
 });
+
+test("a return reads a failed read again while a slow read from the wake still runs", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const catalogKey = ["runtime-catalog", "catalog", "/repo", "claude", "/repo"];
+  const catalogRead = Promise.withResolvers<string[]>();
+  let todosReads = 0;
+  let online = false;
+  const stopObservers = [
+    new QueryObserver(client, {
+      queryKey: todosKey,
+      queryFn: async () => {
+        todosReads += 1;
+        if (!online) throw new Error("offline");
+        return ["todos"];
+      },
+    }).subscribe(() => {}),
+  ];
+  await waitForExpectation(() => expect(client.getQueryState(todosKey)?.status).toBe("error"));
+  stopObservers.push(
+    new QueryObserver(client, {
+      queryKey: catalogKey,
+      queryFn: () => catalogRead.promise,
+    }).subscribe(() => {}),
+  );
+  const systemWake = createSystemWakeFake();
+  const visibility = createAppVisibilityFake();
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+  renderHook(() => useRefetchFailedRuntimeQueries(visibility, systemWake.wake), { wrapper });
+
+  // The wake reads todos again while the network is still down, and waits for the catalog.
+  act(() => systemWake.fire());
+  await waitForExpectation(() => expect(todosReads).toBe(2));
+  await waitForExpectation(() => expect(client.getQueryState(todosKey)?.fetchStatus).toBe("idle"));
+  online = true;
+  act(() => visibility.setHidden(false));
+
+  await waitForExpectation(() => expect(client.getQueryData(todosKey)).toEqual(["todos"]));
+  expect(client.getQueryState(catalogKey)?.fetchStatus).toBe("fetching");
+  catalogRead.resolve(["catalog"]);
+  for (const stop of stopObservers) stop();
+  client.clear();
+});

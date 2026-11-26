@@ -195,3 +195,33 @@ test("a slow running runtime read does not delay the re-read of another failed r
     client.clear();
   }
 });
+
+test("a catalog read that returned a failed surface reads again", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  let reads = 0;
+  const unsubscribe = new QueryObserver(client, {
+    queryKey: repoCatalogKey,
+    queryFn: async () => {
+      reads += 1;
+      return reads === 1
+        ? { models: { status: "failed", message: "Models did not load." } }
+        : { models: { status: "available", catalog: { models: [], defaultModelsByProvider: {} } } };
+    },
+    staleTime: Infinity,
+  }).subscribe(() => {});
+
+  try {
+    await waitForExpectation(() => expect(reads).toBe(1));
+    await waitForExpectation(() =>
+      expect(client.getQueryState(repoCatalogKey)?.fetchStatus).toBe("idle"),
+    );
+
+    await refetchFailedRuntimeQueries(client);
+
+    expect(reads).toBe(2);
+    expect(client.getQueryData(repoCatalogKey)).toMatchObject({ models: { status: "available" } });
+  } finally {
+    unsubscribe();
+    client.clear();
+  }
+});
