@@ -3,7 +3,7 @@ import { taskNamingWorkText } from "@openducktor/workflows";
 import { Effect } from "effect";
 import { buildBranchName, targetBranchName } from "../../../domain/task";
 import type { TaskRecord } from "../../../ports/task-repository-ports";
-import { startupStep, updateStartup } from "../../agent-sessions/session-startup-progress";
+import { startupStep } from "../../agent-sessions/session-startup-progress";
 import {
   branchNamingStep,
   nameBranch,
@@ -49,11 +49,8 @@ export const nameTaskBranch = (
     });
     const step = taskBranchNamingStep(repoConfig);
     if (step === null) return (yield* naming).branch;
-    const named = yield* startupStep(step, naming);
-    const notice = named.notice;
-    if (notice !== null)
-      yield* updateStartup((progress) =>
-        progress.step({ ...step, state: "completed", details: [notice] }),
-      );
+    const named = yield* startupStep(step, naming, (result) =>
+      result.notice !== null ? { details: [result.notice], warning: result.notice } : {},
+    );
     return named.branch;
   });

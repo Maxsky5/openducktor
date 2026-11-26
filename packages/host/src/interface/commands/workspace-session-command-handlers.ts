@@ -1,6 +1,5 @@
 import {
   workspaceSessionArchiveInputSchema,
-  workspaceSessionCreateInputSchema,
   workspaceSessionForkInputSchema,
   workspaceSessionListInputSchema,
   workspaceSessionRefInputSchema,
@@ -42,21 +41,6 @@ export const createWorkspaceSessionCommandHandlers = (
     workspace_session_worktrees_list: (args) =>
       parseInput(workspaceSessionListInputSchema, args).pipe(
         Effect.flatMap(({ workspaceId }) => service.listWorktrees(workspaceId)),
-      ),
-    workspace_session_create: (args) =>
-      parseInput(workspaceSessionCreateInputSchema, args).pipe(
-        Effect.flatMap((input) =>
-          service
-            .create(input)
-            .pipe(
-              Effect.tap(({ session }) =>
-                startupStep(
-                  { id: "publish", label: "Publish saved session" },
-                  publishUpdated(input.workspaceId, session),
-                ),
-              ),
-            ),
-        ),
       ),
     workspace_session_fork: (args) =>
       parseInput(workspaceSessionForkInputSchema, args).pipe(

@@ -1,6 +1,7 @@
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { resolveTaskSessionStartTarget } from "./task-session-start-target";
 import { startupStep } from "../../agent-sessions/session-startup-progress";
+import { existingCheckoutStepMeta } from "../../agent-sessions/worktree-setup-plan";
 import type { RuntimeKind } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
@@ -201,13 +202,11 @@ export const createTaskSessionStartPreparationService = ({
                 yield* taskSessionLifecycleCoordinator.acquireWorktreeLifecycle([worktreePath]);
                 const exists = yield* dependencies.settingsConfig.pathExists(worktreePath);
                 if (exists) {
+                  const isMainCheckout =
+                    normalizePathForComparison(worktreePath) ===
+                    normalizePathForComparison(canonicalRepoPath);
                   yield* startupStep(
-                    {
-                      id: "checkout",
-                      label: "Reuse task worktree",
-                      details: [worktreePath],
-                      resources: [{ kind: "worktree", value: worktreePath, state: "reused" }],
-                    },
+                    existingCheckoutStepMeta(worktreePath, isMainCheckout, "Reuse task worktree"),
                     validateExistingGitTaskWorktree(
                       dependencies,
                       canonicalRepoPath,

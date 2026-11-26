@@ -117,7 +117,6 @@ export const createNodeWorkspaceSessionPersistence = ({
     naming: {
       service: naming,
       settings: dependencies.settings,
-      git: dependencies.git,
     },
   });
   // Saved sessions can receive activity after their task closes.
@@ -152,7 +151,9 @@ export const createNodeWorkspaceSessionPersistence = ({
     publishUpdated,
     operationGate,
     sessionTitleGate,
-    chatNaming: { registerCreated: workspacePersistence.registerCreated },
+    chatNaming: {
+      registerCreated: workspacePersistence.registerCreated,
+    },
     isTitleSyncPending: persistence.isTitleSyncPending,
     markTitleSyncPending: persistence.markTitleSyncPending,
   };

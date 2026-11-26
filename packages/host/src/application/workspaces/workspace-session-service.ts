@@ -50,15 +50,10 @@ import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-se
 import { planNativeRename, syncsTitleAfterTurn } from "./workspace-session-runtime-title-sync";
 import { readWorktreeOwners, requireNoWorktreeOwners } from "./workspace-session-worktree-owners";
 import { listWorkspaceSessionWorktrees } from "./workspace-session-existing-worktree";
-import {
-  createWorkspaceSessionCreate,
-  type WorkspaceSessionCreateDependencies,
-} from "./workspace-session-create";
 import type { TaskOwnershipReader } from "../../ports/task-repository-ports";
 import type { ClaudeSessionMetadataPort } from "../../ports/claude-session-metadata-port";
 
 export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependencies &
-  WorkspaceSessionCreateDependencies &
   WorkspaceSessionForkDependencies &
   WorkspaceSessionStartDependencies &
   WorkspaceSessionRestoreDependencies & {
@@ -84,6 +79,7 @@ export const createWorkspaceSessionService = (
 ) => {
   const { store, settings, live, git, operationGate, sessionTitleGate } = dependencies;
   const { scopeFor, recordFor } = createWorkspaceSessionRecordReader({ settings, git, store });
+  const startSession = createWorkspaceSessionStart(dependencies);
   return {
     fork: createWorkspaceSessionFork(dependencies),
     listIds: (workspaceId: string) => scopeFor(workspaceId).pipe(Effect.flatMap(store.listIds)),
@@ -93,13 +89,12 @@ export const createWorkspaceSessionService = (
       scopeFor(workspaceId).pipe(Effect.flatMap(store.listArchived)),
     get: (input: WorkspaceSessionRefInput) =>
       recordFor(input).pipe(Effect.map(({ session }) => session)),
-    create: createWorkspaceSessionCreate(dependencies),
     listWorktrees: (workspaceId: string) =>
       scopeFor(workspaceId).pipe(
         Effect.flatMap(({ repoPath }) => listWorkspaceSessionWorktrees(dependencies, repoPath)),
       ),
     start: (input: WorkspaceSessionRefInput) =>
-      createWorkspaceSessionStart(dependencies)(input).pipe(
+      startSession(input).pipe(
         Effect.flatMap((started) => {
           if (started.runtimeSession) return Effect.succeed(started);
           const session = started.session;

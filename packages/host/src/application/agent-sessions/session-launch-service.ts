@@ -99,9 +99,17 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
         const ref = toControlSessionRef(repoPath, summary);
         attempt.session = { ref, summary, created: true };
         if (!hold) return Effect.void;
-        // Settlement also releases a hold that failed after it was taken.
+        // Mark held before taking the hold so interruption during holdWorkflowLaunch still releases
+        // it in settlement; an explicit failure clears both fields.
         attempt.held = true;
-        return deps.runtime.holdWorkflowLaunch(ref, true);
+        return deps.runtime.holdWorkflowLaunch(ref, true).pipe(
+          Effect.tapError(() =>
+            Effect.sync(() => {
+              delete attempt.session;
+              attempt.held = false;
+            }),
+          ),
+        );
       }),
     reusedSession: (repoPath, summary) => {
       attempt.session = { ref: toControlSessionRef(repoPath, summary), summary, created: false };
@@ -243,7 +251,11 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
             result.failure = { message: "Session launch cleanup failed.", cleanupErrors };
         }
         if (attempt.session && attempt.ownershipSaved) result.session = attempt.session.summary;
-        if (result.status === "failed" && result.session && attempt.delivery?.kind === "unsent")
+        if (
+          result.status === "failed" &&
+          attempt.ownershipSaved &&
+          attempt.delivery?.kind === "unsent"
+        )
           result.unsentInstruction = attempt.delivery.instruction;
         // The caller can leave before settlement, so the saved session must show the failure.
         if (attempt.session && result.session && result.status === "failed" && result.failure) {

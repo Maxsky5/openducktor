@@ -45,7 +45,12 @@ export const createNodeSessionStartupTracker =
         ? dependencies.settings.getRepoConfig(origin.workspaceId)
         : dependencies.settings.getRepoConfigByRepoPath(origin.repoPath!);
       let scope: StartupScope = { kind: "workspace" };
-      if (origin.sessionId) scope = { kind: "workspace", sessionId: origin.sessionId };
+      if (origin.sessionId || origin.draftId) {
+        const workspaceScope: Extract<StartupScope, { kind: "workspace" }> = { kind: "workspace" };
+        if (origin.sessionId) workspaceScope.sessionId = origin.sessionId;
+        if (origin.draftId) workspaceScope.draftId = origin.draftId;
+        scope = workspaceScope;
+      }
       if (origin.sessionScope?.kind === "workflow")
         scope = {
           kind: "task",
@@ -124,7 +129,7 @@ export const createNodeSessionStartupTracker =
                 }).pipe(Effect.provideService(CurrentStartupProgress, progress));
             }
             const phase = progress.snapshot().phase;
-            if (phase !== "failed" && phase !== "canceled")
+            if (phase !== "completed" && phase !== "failed" && phase !== "canceled")
               progress.settle(status === "failed" || status === "canceled" ? status : "completed");
             if (fields.success)
               Object.assign(result ?? {}, { startupProgress: progress.snapshot() });
@@ -145,6 +150,7 @@ const inputSchema = z.object({
   repoPath: z.string().optional(),
   taskId: z.string().optional(),
   sessionId: z.string().optional(),
+  draftId: z.string().optional(),
   sessionScope: z
     .discriminatedUnion("kind", [
       z.object({ kind: z.literal("workflow"), taskId: z.string(), role: agentRoleSchema }),
@@ -169,7 +175,7 @@ const commands = new Set([
   "agent_session_control_start",
   "agent_session_control_resume",
   "agent_session_control_fork",
-  "workspace_session_create",
   "workspace_session_start",
   "workspace_session_fork",
+  "workspace_session_launch",
 ]);

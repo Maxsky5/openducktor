@@ -243,7 +243,7 @@ export const createTaskSessionOperations = (deps: TaskSessionOperationDependenci
             Effect.gen(function* () {
               yield* progress.checkCanceled();
               const summary = yield* startupStep(
-                { id: "prepare", label: "Fork native session" },
+                { id: "prepare", label: "Fork session" },
                 runtime.forkSession(runtimeInput),
               );
               const saved = yield* Effect.exit(

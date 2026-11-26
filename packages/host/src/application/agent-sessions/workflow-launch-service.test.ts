@@ -154,7 +154,8 @@ test("startup publishes every setup step of a new task worktree in one snapshot"
   expect(planned?.steps.filter((step) => step.state === "pending").map((step) => step.id)).toEqual([
     "checkout",
     "upstream",
-    "copies",
+    "prepare",
+    "instruction",
   ]);
 });
 

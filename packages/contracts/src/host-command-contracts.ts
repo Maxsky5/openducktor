@@ -218,7 +218,6 @@ export const HOST_COMMAND_NAMES = [
   "workspace_select",
   "workspace_session_archive",
   "workspace_session_archive_preview",
-  "workspace_session_create",
   "workspace_session_external_list",
   "workspace_session_external_release",
   "workspace_session_fork",

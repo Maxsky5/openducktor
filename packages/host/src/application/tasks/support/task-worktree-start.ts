@@ -3,7 +3,10 @@ import { Effect } from "effect";
 import { HostValidationError } from "../../../effect/host-errors";
 import { classifyWorkspaceCheckout } from "../../git/workspace-checkout";
 import { startupStep, updateStartup } from "../../agent-sessions/session-startup-progress";
-import { planWorktreeSetup } from "../../agent-sessions/worktree-setup-plan";
+import {
+  copyWorktreeConfiguredFiles,
+  planWorktreeSetup,
+} from "../../agent-sessions/worktree-setup-plan";
 import type { requireBuildStartDependencies } from "./required-task-dependencies";
 import { resolveTaskWorktreeStartPoint } from "./task-branches";
 import {
@@ -181,13 +184,11 @@ export const prepareNewTaskWorktree = (
           );
         }
 
-        yield* startupStep(
-          { id: "copies", label: "Copy configured files", details: repoConfig.worktreeCopyPaths },
-          dependencies.worktreeFiles.copyConfiguredPaths(
-            canonicalRepoPath,
-            worktreePath,
-            repoConfig.worktreeCopyPaths,
-          ),
+        yield* copyWorktreeConfiguredFiles(
+          dependencies.worktreeFiles,
+          canonicalRepoPath,
+          worktreePath,
+          repoConfig.worktreeCopyPaths,
         );
 
         yield* actionRun.run({

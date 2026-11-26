@@ -3,11 +3,11 @@ import {
   effectiveWorkspaceSessionTargetBranch,
   workspaceSessionArchiveInputSchema,
   workspaceSessionBranchNameSchema,
-  workspaceSessionCreateInputSchema,
   workspaceSessionForkInputSchema,
   workspaceSessionWorktreeInputSchema,
   workspaceSessionWorktreeNameSchema,
 } from "./workspace-session-command-schemas";
+import { workspaceSessionLaunchRequestSchema } from "./workspace-session-launch-schemas";
 
 describe("named chat worktree inputs", () => {
   test("fork destinations reuse worktree validation without accepting implicit boundaries", () => {
@@ -44,45 +44,44 @@ describe("named chat worktree inputs", () => {
     ).toBe(false);
   });
 
-  test("creation has no uncommitted-changes confirmation field", () => {
+  const baseLaunch = {
+    workspaceId: "repo",
+    repoPath: "/repo",
+    draftId: "draft-1",
+    runtimeKind: "codex" as const,
+    selectedModel: null,
+    customAgentRoleId: null,
+    targetBranch: { remote: "origin", branch: "main" },
+    parts: [{ kind: "text" as const, text: "hello" }],
+  };
+
+  test("launch has no uncommitted-changes confirmation field", () => {
     const input = {
-      workspaceId: "repo",
-      runtimeKind: "codex",
-      selectedModel: null,
-      customAgentRoleId: null,
-      manualTitle: null,
-      targetBranch: { remote: "origin", branch: "main" },
-      location: "local_worktree",
-      worktree: { mode: "from_name", name: "review", branchName: null },
+      ...baseLaunch,
+      location: "local_worktree" as const,
+      worktree: { mode: "from_name" as const, name: "review", branchName: null },
     };
-    expect(workspaceSessionCreateInputSchema.parse(input)).toEqual(input);
+    expect(workspaceSessionLaunchRequestSchema.parse(input)).toEqual(input);
     expect(
-      workspaceSessionCreateInputSchema.safeParse({ ...input, confirmUncommittedChanges: true })
+      workspaceSessionLaunchRequestSchema.safeParse({ ...input, confirmUncommittedChanges: true })
         .success,
     ).toBe(false);
   });
   test("accepts only the fields of the chosen creation location", () => {
-    const fields = {
-      workspaceId: "repo",
-      runtimeKind: "codex",
-      selectedModel: null,
-      customAgentRoleId: null,
-      manualTitle: null,
-      targetBranch: { branch: "main" },
-    };
+    const fields = { ...baseLaunch, targetBranch: { branch: "main" } };
     const existing = {
       ...fields,
-      location: "existing_worktree",
+      location: "existing_worktree" as const,
       existingWorktree: { workingDirectory: "/worktrees/review" },
     };
-    expect(workspaceSessionCreateInputSchema.parse(existing)).toEqual(existing);
+    expect(workspaceSessionLaunchRequestSchema.parse(existing)).toEqual(existing);
     for (const input of [
       { ...existing, worktree: { mode: "from_name", name: "review", branchName: null } },
       { ...existing, existingWorktree: { workingDirectory: "relative/review" } },
       { ...existing, existingWorktree: undefined },
       { ...fields, location: "local_repo_root", existingWorktree: existing.existingWorktree },
     ]) {
-      expect(workspaceSessionCreateInputSchema.safeParse(input).success).toBe(false);
+      expect(workspaceSessionLaunchRequestSchema.safeParse(input).success).toBe(false);
     }
   });
   test("requires explicit removal consent while omitted archive options keep Git resources", () => {
@@ -178,15 +177,11 @@ describe("named chat worktree inputs", () => {
   });
   test("allows Tracked upstream only for the current checkout", () => {
     const input = {
-      workspaceId: "repo",
-      runtimeKind: "codex",
-      selectedModel: null,
-      customAgentRoleId: null,
-      manualTitle: null,
+      ...baseLaunch,
       targetBranch: { branch: "@{upstream}" },
     };
     expect(
-      workspaceSessionCreateInputSchema.safeParse({ ...input, location: "local_repo_root" })
+      workspaceSessionLaunchRequestSchema.safeParse({ ...input, location: "local_repo_root" })
         .success,
     ).toBe(true);
     for (const location of [
@@ -199,7 +194,7 @@ describe("named chat worktree inputs", () => {
         existingWorktree: { workingDirectory: "/worktrees/review" },
       },
     ]) {
-      const worktree = workspaceSessionCreateInputSchema.safeParse({ ...input, ...location });
+      const worktree = workspaceSessionLaunchRequestSchema.safeParse({ ...input, ...location });
       expect(worktree.error?.issues).toMatchObject([
         {
           path: ["targetBranch"],
@@ -209,38 +204,32 @@ describe("named chat worktree inputs", () => {
     }
   });
   test("requires a target branch and the worktree options of the selected location", () => {
-    const input = {
-      workspaceId: "repo",
-      runtimeKind: "codex",
-      selectedModel: null,
-      customAgentRoleId: null,
-      manualTitle: null,
-      targetBranch: { branch: "main" },
-    };
+    const input = { ...baseLaunch, targetBranch: { branch: "main" } };
     const worktree = { mode: "from_name", name: "review", branchName: null };
     expect(
-      workspaceSessionCreateInputSchema.safeParse({ ...input, location: "local_worktree" }).success,
+      workspaceSessionLaunchRequestSchema.safeParse({ ...input, location: "local_worktree" })
+        .success,
     ).toBe(false);
     expect(
-      workspaceSessionCreateInputSchema.safeParse({
+      workspaceSessionLaunchRequestSchema.safeParse({
         ...input,
         location: "local_worktree",
         worktree,
       }).success,
     ).toBe(true);
     expect(
-      workspaceSessionCreateInputSchema.safeParse({ ...input, location: "local_repo_root" })
+      workspaceSessionLaunchRequestSchema.safeParse({ ...input, location: "local_repo_root" })
         .success,
     ).toBe(true);
     expect(
-      workspaceSessionCreateInputSchema.safeParse({
+      workspaceSessionLaunchRequestSchema.safeParse({
         ...input,
         location: "local_repo_root",
         targetBranch: undefined,
       }).success,
     ).toBe(false);
     expect(
-      workspaceSessionCreateInputSchema.safeParse({
+      workspaceSessionLaunchRequestSchema.safeParse({
         ...input,
         location: "local_repo_root",
         worktree,

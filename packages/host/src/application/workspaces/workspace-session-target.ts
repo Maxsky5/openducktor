@@ -1,17 +1,22 @@
-import {
-  type GitReadContext,
-  type GitTargetBranch,
-  type RepoConfig,
-  type WorkspaceSessionExecutionTarget,
-  type WorkspaceSessionRefInput,
-  type WorkspaceSessionWorktreeInput,
-  workspaceSessionBranchNameSchema,
+import type {
+  GitReadContext,
+  GitTargetBranch,
+  RepoConfig,
+  WorkspaceSessionExecutionTarget,
+  WorkspaceSessionRefInput,
+  WorkspaceSessionWorktreeInput,
 } from "@openducktor/contracts";
 import { Cause, Effect, Exit } from "effect";
-import { startupStep, updateStartup } from "../agent-sessions/session-startup-progress";
-import { planWorktreeSetup } from "../agent-sessions/worktree-setup-plan";
-import { canonicalTargetBranch, targetBranchRef } from "../../domain/task/task-branch-policy";
-import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
+import {
+  startupStep,
+  updateStartup,
+  type StartupStepUpdate,
+} from "../agent-sessions/session-startup-progress";
+import {
+  buildWorktreeSetupPlanSteps,
+  copyWorktreeConfiguredFiles,
+} from "../agent-sessions/worktree-setup-plan";
+import { type HostError, HostOperationError } from "../../effect/host-errors";
 import type { GitPort, OwnedTrackingRef } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
@@ -26,6 +31,12 @@ import {
   classifyWorkspaceCheckout,
   type WorkspaceCheckoutGitPort,
 } from "../git/workspace-checkout";
+import {
+  invalidTargetField,
+  planNewBranch,
+  resolveUniqueManagedWorktreeName,
+  validateWorktreeBranch,
+} from "./workspace-session-target-planning";
 import {
   runWorkspaceSessionWorktreeActions,
   stopWorktreeActionTerminals,
@@ -98,47 +109,49 @@ export const validateWorkspaceSessionTarget = (
       readContext,
     );
     if (checkout === "not_git_directory") {
-      return yield* Effect.fail(
-        new HostValidationError({
-          message: `The directory of this session is not a Git checkout: ${target.workingDirectory}. Restore the checkout at this path, or archive this session.`,
-          field: "workingDirectory",
-        }),
+      return yield* invalidTargetField(
+        "workingDirectory",
+        `The directory of this session is not a Git checkout: ${target.workingDirectory}. Restore the checkout at this path, or archive this session.`,
       );
     }
-    if (checkout === target.kind) {
-      return canonicalPath;
-    }
+    if (checkout === target.kind) return canonicalPath;
     if (target.kind === "local_repo_root") {
-      return yield* Effect.fail(
-        new HostValidationError({
-          message: `This session works in ${target.workingDirectory}, but the workspace repository is now ${repoPath}. Archive this session and start a new one.`,
-          field: "workingDirectory",
-        }),
+      return yield* invalidTargetField(
+        "workingDirectory",
+        `This session works in ${target.workingDirectory}, but the workspace repository is now ${repoPath}. Archive this session and start a new one.`,
       );
     }
     if (checkout === "local_repo_root") {
-      return yield* Effect.fail(
-        new HostValidationError({
-          message: `The worktree of this session is now the repository checkout: ${canonicalPath}. Archive this session, or start a Current checkout session.`,
-          field: "workingDirectory",
-        }),
+      return yield* invalidTargetField(
+        "workingDirectory",
+        `The worktree of this session is now the repository checkout: ${canonicalPath}. Archive this session, or start a Current checkout session.`,
       );
     }
-    return yield* Effect.fail(
-      new HostValidationError({
-        message: `The directory of this session is not a registered worktree of ${repoPath}: ${canonicalPath}. If you moved this worktree, run git worktree repair in it. Otherwise archive this session.`,
-        field: "workingDirectory",
-      }),
+    return yield* invalidTargetField(
+      "workingDirectory",
+      `The directory of this session is not a registered worktree of ${repoPath}: ${canonicalPath}. If you moved this worktree, run git worktree repair in it. Otherwise archive this session.`,
     );
   });
 
-/**
- * Resolves the destination of a new chat and runs `use` with its target. Archive removal holds the
- * write guard of a directory, so a worktree destination holds a guard until `use` ends: a new chat
- * never saves a directory that archive removes. A new worktree holds a read guard, because runtime
- * and setup reads of it take read guards too. An existing worktree holds the write guard, so it
- * waits until a new worktree at that path finishes its setup or its rollback.
- */
+const planSimpleCheckout = (
+  label: string,
+  directory: string,
+  tailSteps: readonly StartupStepUpdate[],
+) =>
+  tailSteps.length > 0
+    ? updateStartup((progress) =>
+        progress.plan([
+          { id: "checkout", label, state: "pending", details: [directory] },
+          ...tailSteps,
+        ]),
+      )
+    : Effect.void;
+
+export type WorkspaceSessionTargetBranchNaming = {
+  step: { id: string; label: string };
+  resolve: (repoPath: string) => Effect.Effect<{ branch: string; title: string | null }, HostError>;
+};
+
 export const withWorkspaceSessionTarget = <A, E>(
   dependencies: WorkspaceSessionTargetCreationDependencies,
   input: {
@@ -148,22 +161,25 @@ export const withWorkspaceSessionTarget = <A, E>(
     targetBranch: GitTargetBranch;
     startPoint?: string;
     rollbackMode?: "all_owned";
-    /**
-     * The upstream setup waits for the first message, which renames the new branch. Until then the
-     * branch keeps what `git worktree add` gives it: it tracks the target branch.
-     */
-    deferUpstream?: boolean;
+    branchNaming?: WorkspaceSessionTargetBranchNaming;
+    tailSteps?: readonly StartupStepUpdate[];
   },
-  use: (target: WorkspaceSessionExecutionTarget, retainTarget: () => void) => Effect.Effect<A, E>,
+  use: (
+    target: WorkspaceSessionExecutionTarget,
+    retainTarget: () => void,
+    generatedTitle: string | null,
+  ) => Effect.Effect<A, E>,
 ): Effect.Effect<A, E | HostError> =>
   Effect.uninterruptibleMask((restore) =>
     Effect.gen(function* () {
       const { git, settingsConfig, worktreeFiles } = dependencies;
       const { repoConfig, destination } = input;
+      const tailSteps = input.tailSteps ?? [];
       const repoPath = yield* git.canonicalizePath(repoConfig.repoPath);
       // The existing worktree check reads the repository checkout itself.
       if (destination.location === "existing_worktree") {
         const { workingDirectory } = destination.existingWorktree;
+        yield* planSimpleCheckout("Reuse existing worktree", workingDirectory, tailSteps);
         yield* dependencies.lifecycle.acquireWorktreeLifecycle([
           yield* worktreeFiles.resolveWorktreeRemovalPath(workingDirectory),
         ]);
@@ -177,17 +193,16 @@ export const withWorkspaceSessionTarget = <A, E>(
             resources: [{ kind: "worktree", value: target.workingDirectory, state: "reused" }],
           }),
         );
-        return yield* restore(use(target, () => {}));
+        return yield* restore(use(target, () => {}, null));
       }
       if (!(yield* git.isGitRepository(repoPath))) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: `Workspace is not a Git repository: ${repoPath}`,
-            field: "repoPath",
-          }),
+        return yield* invalidTargetField(
+          "repoPath",
+          `Workspace is not a Git repository: ${repoPath}`,
         );
       }
       if (destination.location === "local_repo_root") {
+        yield* planSimpleCheckout("Use current checkout", repoPath, tailSteps);
         yield* updateStartup((progress) =>
           progress.step({
             id: "checkout",
@@ -197,72 +212,68 @@ export const withWorkspaceSessionTarget = <A, E>(
           }),
         );
         return yield* restore(
-          use({ kind: "local_repo_root", workingDirectory: repoPath }, () => {}),
+          use({ kind: "local_repo_root", workingDirectory: repoPath }, () => {}, null),
         );
       }
       const { worktree } = destination;
       const createBranch = worktree.mode === "from_name";
-      const branch = worktree.branchName ?? `${repoConfig.branchPrefix}/${worktree.name}`;
-      if (!workspaceSessionBranchNameSchema.safeParse(branch).success) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: `Invalid branch name: ${branch}. Choose a valid name under Advanced.`,
-            field: "worktree.branchName",
-          }),
-        );
-      }
-      const branchExists = yield* git.referenceExists(repoPath, `refs/heads/${branch}`);
-      if (createBranch === branchExists) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: createBranch
-              ? `Branch already exists: ${branch}. Choose another name or use Existing branch.`
-              : `Local branch no longer exists: ${branch}. Select another branch.`,
-            field: "worktree.branchName",
-          }),
-        );
-      }
-      if (!createBranch) {
-        const existingBranch = (yield* git.listBranches(repoPath)).find(
-          (entry) => !entry.isRemote && entry.name === branch,
-        );
-        if (existingBranch?.worktreePath) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "worktree.branchName",
-              message: `Branch ${branch} is already checked out at ${existingBranch.worktreePath}. Choose another branch or use Current checkout.`,
-            }),
-          );
-        }
-      }
       const newBranch = createBranch
         ? yield* planNewBranch(git, repoPath, input.targetBranch)
         : null;
       const base = managedWorktreeBaseForRepoConfig(settingsConfig, repoConfig);
       const namespace = settingsConfig.join(base, "workspace-sessions");
-      const workingDirectory = settingsConfig.join(namespace, worktree.name);
+      const dirName =
+        createBranch && worktree.name === ""
+          ? yield* resolveUniqueManagedWorktreeName(
+              settingsConfig,
+              namespace,
+              input.owner.sessionId,
+            )
+          : worktree.name;
+      const workingDirectory = settingsConfig.join(namespace, dirName);
       // A restore of this directory holds its guard. Check the directory after it finishes.
       yield* dependencies.lifecycle.acquireWorktreeRead(
         yield* worktreeFiles.resolveWorktreeRemovalPath(workingDirectory),
       );
       if (yield* settingsConfig.pathExists(workingDirectory)) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: `Worktree directory already exists: ${workingDirectory}. Choose another name.`,
-            field: "worktree.name",
-          }),
+        return yield* invalidTargetField(
+          "worktree.name",
+          `Worktree directory already exists: ${workingDirectory}. Choose another name.`,
         );
       }
+      const upstreamRemote = newBranch?.upstreamRemote;
+      const plannedBranch =
+        createBranch && input.branchNaming
+          ? null
+          : (worktree.branchName ?? `${repoConfig.branchPrefix}/${dirName}`);
+      if (plannedBranch !== null) {
+        yield* validateWorktreeBranch(git, repoPath, plannedBranch, createBranch);
+      }
+      yield* updateStartup((progress) =>
+        progress.plan([
+          ...buildWorktreeSetupPlanSteps({
+            label: "Create workspace worktree",
+            worktreePath: workingDirectory,
+            branch: plannedBranch,
+            namingStep:
+              createBranch && input.branchNaming
+                ? { ...input.branchNaming.step, state: "pending" }
+                : null,
+            upstreamRemote,
+            repoConfig,
+          }),
+          ...tailSteps,
+        ]),
+      );
+      let branch = plannedBranch ?? "";
+      let generatedTitle: string | null = null;
+      if (createBranch && input.branchNaming) {
+        const named = yield* restore(input.branchNaming.resolve(repoPath));
+        branch = named.branch;
+        generatedTitle = named.title;
+        yield* validateWorktreeBranch(git, repoPath, branch, true);
+      }
       yield* worktreeFiles.ensureDirectory(namespace);
-      // A deferred upstream is set later, so the startup plan does not list its step.
-      const upstreamRemote = input.deferUpstream ? undefined : newBranch?.upstreamRemote;
-      yield* planWorktreeSetup({
-        label: "Create workspace worktree",
-        worktreePath: workingDirectory,
-        branch,
-        upstreamRemote,
-        repoConfig,
-      });
       let acquired = false;
       let retained = false;
       let ownedTrackingRef: OwnedTrackingRef | null = null;
@@ -302,19 +313,14 @@ export const withWorkspaceSessionTarget = <A, E>(
                           }),
                       ),
                     ),
-                );
-                acquired = true;
-                yield* updateStartup((progress) =>
-                  progress.step({
-                    id: "checkout",
-                    label: "Create workspace worktree",
-                    state: "completed",
+                  () => ({
                     resources: [
                       { kind: "worktree", value: workingDirectory, state: "created" },
                       { kind: "branch", value: branch, state: createBranch ? "created" : "reused" },
                     ],
                   }),
                 );
+                acquired = true;
                 if (upstreamRemote) {
                   const upstream = yield* startupStep(
                     { id: "upstream", label: "Set branch upstream" },
@@ -330,17 +336,11 @@ export const withWorkspaceSessionTarget = <A, E>(
                 }
               }),
             );
-            yield* startupStep(
-              {
-                id: "copies",
-                label: "Copy configured files",
-                details: repoConfig.worktreeCopyPaths,
-              },
-              worktreeFiles.copyConfiguredPaths(
-                repoPath,
-                workingDirectory,
-                repoConfig.worktreeCopyPaths,
-              ),
+            yield* copyWorktreeConfiguredFiles(
+              worktreeFiles,
+              repoPath,
+              workingDirectory,
+              repoConfig.worktreeCopyPaths,
             );
             yield* runWorkspaceSessionWorktreeActions(actionRun, {
               owner: input.owner,
@@ -357,6 +357,7 @@ export const withWorkspaceSessionTarget = <A, E>(
                   worktreeState: "present",
                 },
                 retainTarget,
+                generatedTitle,
               ),
             );
           }),
@@ -395,36 +396,37 @@ export const withWorkspaceSessionTarget = <A, E>(
             });
       const stopped = yield* Effect.exit(stopActions);
       if (Exit.isFailure(stopped)) return yield* Effect.failCause(stopped.cause);
-      const removeWorktree = Effect.gen(function* () {
-        if (yield* git.isRegisteredWorktree(repoPath, workingDirectory))
-          yield* git.removeWorktree(repoPath, workingDirectory, true);
-      });
-      const removeDirectory = Effect.gen(function* () {
-        if (yield* settingsConfig.pathExists(workingDirectory)) {
-          if (!(yield* worktreeFiles.pathIsWithinRoot(namespace, workingDirectory)))
-            return yield* new HostValidationError({
-              message: `Cannot clean Workspace Session directory outside its namespace: ${workingDirectory}`,
-              field: "workingDirectory",
-            });
+      const cleanupSteps: Effect.Effect<void, HostError>[] = [
+        Effect.gen(function* () {
+          if (yield* git.isRegisteredWorktree(repoPath, workingDirectory))
+            yield* git.removeWorktree(repoPath, workingDirectory, true);
+        }),
+        Effect.gen(function* () {
+          if (!(yield* settingsConfig.pathExists(workingDirectory))) return;
+          if (!(yield* worktreeFiles.pathIsWithinRoot(namespace, workingDirectory))) {
+            return yield* invalidTargetField(
+              "workingDirectory",
+              `Cannot clean Workspace Session directory outside its namespace: ${workingDirectory}`,
+            );
+          }
           yield* worktreeFiles.removePathIfPresent(workingDirectory);
-        }
-      });
-      const removeBranch = Effect.gen(function* () {
-        if (createBranch && (yield* git.referenceExists(repoPath, `refs/heads/${branch}`)))
-          yield* git.deleteLocalBranch(repoPath, branch, true);
-      });
-      const removeTrackingRef = Effect.gen(function* () {
-        if (ownedTrackingRef !== null) yield* git.deleteOwnedReference(repoPath, ownedTrackingRef);
-      });
-      const cleanups: Exit.Exit<void, HostError>[] = [stopped];
-      for (const cleanup of [removeWorktree, removeDirectory, removeBranch, removeTrackingRef]) {
+        }),
+        Effect.gen(function* () {
+          if (createBranch && (yield* git.referenceExists(repoPath, `refs/heads/${branch}`)))
+            yield* git.deleteLocalBranch(repoPath, branch, true);
+        }),
+        ownedTrackingRef !== null
+          ? git.deleteOwnedReference(repoPath, ownedTrackingRef)
+          : Effect.void,
+      ];
+      const failures: Cause.Cause<HostError>[] = [];
+      for (const cleanup of cleanupSteps) {
         const cleaned = yield* Effect.exit(cleanup);
-        cleanups.push(cleaned);
-        if (Exit.isFailure(cleaned) && input.rollbackMode !== "all_owned") break;
+        if (Exit.isFailure(cleaned)) {
+          failures.push(cleaned.cause);
+          if (input.rollbackMode !== "all_owned") break;
+        }
       }
-      const failures = cleanups.flatMap((cleanup) =>
-        Exit.isFailure(cleanup) ? [cleanup.cause] : [],
-      );
       if (failures.length > 0)
         return yield* new HostOperationError({
           operation: "workspaceSession.create.cleanup",
@@ -446,20 +448,3 @@ export const withWorkspaceSessionTarget = <A, E>(
       return yield* Effect.failCause(result.cause);
     }),
   ).pipe(Effect.scoped);
-
-/** Validate the selected target before Git writes. A remote target gives the new branch its upstream. */
-const planNewBranch = (
-  git: Pick<GitPort, "referenceExists">,
-  repoPath: string,
-  targetBranch: GitTargetBranch,
-) =>
-  Effect.gen(function* () {
-    const startPoint = targetBranchRef(targetBranch);
-    if (!(yield* git.referenceExists(repoPath, startPoint))) {
-      return yield* new HostValidationError({
-        message: `Target branch ${canonicalTargetBranch(targetBranch)} is unavailable. Fetch it or select another target branch.`,
-        field: "targetBranch",
-      });
-    }
-    return { startPoint, upstreamRemote: targetBranch.remote?.trim() || null };
-  });

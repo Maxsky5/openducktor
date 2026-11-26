@@ -3,7 +3,6 @@ import { startupOperationContextSchema } from "./session-startup-context-schemas
 import { startupOperationSnapshotSchema } from "./session-startup-schemas";
 import { agentSessionControlSummarySchema } from "./agent-session-summary-schemas";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
-import { workspaceIdSchema } from "./workspace-id-schemas";
 import { type GitTargetBranch, gitTargetBranchSchema, UPSTREAM_TARGET_BRANCH } from "./git-schemas";
 import { agentSessionModelSelectionSchema } from "./session-schemas";
 import { agentSessionForkPointSchema } from "./agent-session-schemas";
@@ -71,8 +70,8 @@ export const workspaceSessionWorktreeInputSchema = z.discriminatedUnion("mode", 
   z.strictObject({
     mode: z.literal("from_name"),
     /**
-     * Blank when the workspace has a naming model: the host picks the folder and, without a
-     * branch name, names the branch from the first message.
+     * Blank lets the host pick a unique managed folder and, without a branch name, derive a unique
+     * branch name from the first message.
      */
     name: z
       .string()
@@ -86,39 +85,13 @@ export type WorkspaceSessionWorktreeInput = z.infer<typeof workspaceSessionWorkt
 export const WORKSPACE_SESSION_UPSTREAM_TARGET_MESSAGE =
   "Tracked upstream is available only for the current checkout.";
 
-const workspaceSessionCreateFields = {
-  startup: startupOperationContextSchema.optional(),
-  workspaceId: workspaceIdSchema,
-  runtimeKind: runtimeKindSchema,
-  selectedModel: agentSessionModelSelectionSchema.nullable(),
-  customAgentRoleId: z.string().min(1).nullable(),
-  manualTitle: z.string().nullable(),
-  targetBranch: gitTargetBranchSchema,
-};
-
-const workspaceSessionCreateLocationsSchema = z.discriminatedUnion("location", [
-  z.strictObject({
-    ...workspaceSessionCreateFields,
-    location: z.literal("local_repo_root"),
-  }),
-  z.strictObject({
-    ...workspaceSessionCreateFields,
-    location: z.literal("local_worktree"),
-    worktree: workspaceSessionWorktreeInputSchema,
-  }),
-  z.strictObject({
-    ...workspaceSessionCreateFields,
-    location: z.literal("existing_worktree"),
-    existingWorktree: z.strictObject({
-      workingDirectory: workspaceSessionWorkingDirectorySchema,
-    }),
-  }),
-]);
-
 /** A creation location. An existing worktree saves the same target kind as a new worktree. */
-export type WorkspaceSessionLocation = z.infer<
-  typeof workspaceSessionCreateLocationsSchema
->["location"];
+export const workspaceSessionLocationSchema = z.enum([
+  "local_repo_root",
+  "local_worktree",
+  "existing_worktree",
+]);
+export type WorkspaceSessionLocation = z.infer<typeof workspaceSessionLocationSchema>;
 
 /** Tracked upstream needs the current checkout. A worktree chat needs an explicit branch. */
 export const workspaceSessionAllowsTargetBranch = (
@@ -140,27 +113,6 @@ export const effectiveWorkspaceSessionTargetBranch = (
     ? repoDefault
     : null;
 };
-
-export const workspaceSessionCreateInputSchema = workspaceSessionCreateLocationsSchema
-  .refine((input) => workspaceSessionAllowsTargetBranch(input.location, input.targetBranch), {
-    path: ["targetBranch"],
-    message: WORKSPACE_SESSION_UPSTREAM_TARGET_MESSAGE,
-  })
-  .refine(
-    (input) =>
-      input.selectedModel === null || input.selectedModel.runtimeKind === input.runtimeKind,
-    {
-      path: ["selectedModel", "runtimeKind"],
-      message: "Model Runtime must match the Workspace Session Runtime.",
-    },
-  );
-export type WorkspaceSessionCreateInput = z.infer<typeof workspaceSessionCreateInputSchema>;
-
-export const workspaceSessionCreateResultSchema = z.strictObject({
-  session: workspaceSessionSchema,
-  startupProgress: startupOperationSnapshotSchema.optional(),
-});
-export type WorkspaceSessionCreateResult = z.infer<typeof workspaceSessionCreateResultSchema>;
 
 /** Registered worktrees that a new chat can use. A null branch means detached HEAD. */
 export const workspaceSessionWorktreesListResultSchema = z.strictObject({

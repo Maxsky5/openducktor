@@ -17,6 +17,8 @@ type Input = Omit<
   "runForkSourceOperation" | "hasUnresolvedHandoff" | "live"
 > &
   Parameters<typeof createWorkspaceSessionImportService>[0] & {
+    naming: Parameters<typeof createWorkspaceSessionLaunchService>[0]["naming"];
+    chatNaming: Parameters<typeof createWorkspaceSessionLaunchService>[0]["chatNaming"];
     live: Omit<
       Parameters<typeof createWorkspaceSessionService>[0]["live"],
       "resumeSession" | "forkSession"
@@ -28,7 +30,7 @@ type Input = Omit<
         ReturnType<
           typeof import("../../application/agent-sessions/agent-session-command-service").createAgentSessionCommandService
         >,
-        "prepareSessionCreation" | "runForkSourceOperation" | "handoff"
+        "prepareSessionCreation" | "resumeSession" | "runForkSourceOperation" | "handoff"
       >;
     resolveParts: Parameters<typeof createWorkspaceSessionLaunchService>[0]["resolveParts"];
   };

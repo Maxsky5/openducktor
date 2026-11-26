@@ -136,6 +136,7 @@ export const createPersistenceHarness = async (
   const models: AgentSessionControlUpdateModelInput["model"][] = [];
   const titleAttempts: string[] = [];
   const titleState: NativeTitleState = { nativeTitle: null };
+  const beforeBind: Effect.Effect<void, HostOperationError> = Effect.void;
   const beforeControl: Effect.Effect<void, HostError> = Effect.void;
   const beforeTitle: Effect.Effect<void, HostError> = Effect.void;
   const state = {
@@ -160,7 +161,7 @@ export const createPersistenceHarness = async (
     beforeNativeWork: Effect.void,
     afterNativeWork: Effect.void,
     beforeSnapshot: Effect.void,
-    beforeBind: Effect.void,
+    beforeBind,
     beforeControl,
     beforeModelSave: Effect.void,
     beforeTitle,
@@ -499,7 +500,6 @@ export const createPersistenceHarness = async (
     operationGate,
     hasUnresolvedHandoff: () => false,
     sessionTitleGate,
-    chatNaming: { registerCreated: persistence.registerCreated },
     isTitleSyncPending: persistence.isTitleSyncPending,
     markTitleSyncPending: persistence.markTitleSyncPending,
     store: {
@@ -569,6 +569,10 @@ export const createPersistenceHarness = async (
     launchService: () =>
       createWorkspaceSessionLaunchService({
         ...workspaceDependencies(),
+        chatNaming: {
+          registerCreated: persistence.registerCreated,
+        },
+        naming: naming.service,
         live,
         commands,
         resolveParts: (parts) =>

@@ -3,7 +3,11 @@ import {
   workspaceSessionOwnership,
 } from "../../test-support/workspace-session-ownership";
 import { gitFixtureCommand, gitFixtureEnv } from "../../test-support/git-repository-fixture";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import {
+  withWorkspaceSessionTarget,
+  type WorkspaceSessionDestination,
+} from "./workspace-session-target";
 import { WorktreeActionExitError } from "../actions/worktree-action-runner";
 import { createWorkspaceSessionImportService } from "./workspace-session-import-service";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
@@ -48,7 +52,6 @@ import {
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
 import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
-import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
 import {
   createEffectHostCommandRouter,
   toPromiseHostCommandRouter,
@@ -192,7 +195,6 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     };
     const store = createSqliteWorkspaceSessionStore(database);
     const dependencies: WorkspaceSessionServiceDependencies = {
-      chatNaming: { registerCreated: () => undefined },
       taskOwnership: database.taskOwnership,
       claudeSessionMetadata: createClaudeSessionMetadataTestDouble(),
       runtimeAdmission: { admit: (_kind, work) => work },
@@ -261,7 +263,15 @@ describe("Workspace Session commands with real Git and SQLite", () => {
         ),
       }),
     );
-    const createInput = {
+    type SeedInput = {
+      workspaceId: string;
+      runtimeKind: "opencode";
+      selectedModel: { runtimeKind: "opencode"; providerId: string; modelId: string };
+      customAgentRoleId: string | null;
+      manualTitle: string | null;
+      targetBranch: { remote?: string; branch: string };
+    } & WorkspaceSessionDestination;
+    const createInput: Extract<SeedInput, { location: "local_worktree" }> = {
       workspaceId: "fairnest",
       runtimeKind: "opencode",
       selectedModel: { runtimeKind: "opencode", providerId: "provider", modelId: "model" },
@@ -271,8 +281,55 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       manualTitle: null,
       targetBranch: { branch: "main" },
     };
+    const create = (input: SeedInput) => {
+      const sessionId = crypto.randomUUID();
+      const now = Date.now();
+      const destination: WorkspaceSessionDestination =
+        input.location === "local_worktree"
+          ? { location: "local_worktree", worktree: input.worktree }
+          : input.location === "existing_worktree"
+            ? { location: "existing_worktree", existingWorktree: input.existingWorktree }
+            : { location: "local_repo_root" };
+      return Effect.runPromise(
+        withWorkspaceSessionTarget(
+          dependencies,
+          {
+            owner: { workspaceId: input.workspaceId, sessionId },
+            destination,
+            repoConfig: config,
+            targetBranch: input.targetBranch,
+          },
+          (executionTarget, retainTarget) =>
+            store
+              .create({
+                workspaceId: input.workspaceId,
+                repoPath: config.repoPath,
+                session: {
+                  id: sessionId,
+                  runtimeKind: input.runtimeKind,
+                  selectedModel: input.selectedModel,
+                  externalSessionId: null,
+                  executionTarget,
+                  targetBranch: input.targetBranch,
+                  roleSnapshot: null,
+                  manualTitle: input.manualTitle,
+                  generatedTitle: null,
+                  createdAt: now,
+                  lastActivityAt: now,
+                  updatedAt: now,
+                  archivedAt: null,
+                },
+              })
+              .pipe(
+                Effect.tap(() => Effect.sync(retainTarget)),
+                Effect.map((session) => ({ session })),
+              ),
+        ),
+      );
+    };
     return {
       router,
+      create,
       createInput,
       starts,
       events,
@@ -289,7 +346,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     const h = setup();
     gitCommand("branch", "release", "main~1");
     const targetBranch = { branch: "release" };
-    const draft = await h.router.invoke("workspace_session_create", {
+    const draft = await h.create({
       ...h.createInput,
       targetBranch,
     });
@@ -362,7 +419,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
     const h = setup({ actions: false });
     gitCommand("branch", "feature/existing", "main~1");
-    const { session } = await h.router.invoke("workspace_session_create", {
+    const { session } = await h.create({
       ...h.createInput,
       worktree: { mode: "from_branch", name: "existing-review", branchName: "feature/existing" },
     });
@@ -384,7 +441,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     const { worktree: _worktree, ...fields } = h.createInput;
     return {
       ...fields,
-      location: "existing_worktree",
+      location: "existing_worktree" as const,
       existingWorktree: { workingDirectory },
     };
   };
@@ -415,8 +472,8 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     runGit(external, "switch", "-c", "renamed");
     const before = registeredWorktreePaths();
     const input = existingWorktreeInput(h, external);
-    const first = await h.router.invoke("workspace_session_create", input);
-    const second = await h.router.invoke("workspace_session_create", input);
+    const first = await h.create(input);
+    const second = await h.create(input);
 
     for (const created of [first, second])
       expect(created.session.executionTarget).toEqual({
@@ -462,11 +519,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       Effect.runPromise(
         Effect.flip(
           Effect.tryPromise({
-            try: () =>
-              h.router.invoke(
-                "workspace_session_create",
-                existingWorktreeInput(h, workingDirectory),
-              ),
+            try: () => h.create(existingWorktreeInput(h, workingDirectory)),
             catch: (cause) => cause,
           }),
         ),
@@ -507,7 +560,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     });
     const settingUp = Effect.runPromiseExit(
       Effect.tryPromise({
-        try: () => h.router.invoke("workspace_session_create", h.createInput),
+        try: () => h.create(h.createInput),
         catch: (cause) => cause,
       }),
     );
@@ -522,7 +575,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       resolveRemovalPath(value).pipe(Effect.tap(() => Deferred.succeed(guarding, undefined)));
     const adopting = Effect.runPromiseExit(
       Effect.tryPromise({
-        try: () => h.router.invoke("workspace_session_create", existingWorktreeInput(h, directory)),
+        try: () => h.create(existingWorktreeInput(h, directory)),
         catch: (cause) => cause,
       }),
     );
@@ -562,13 +615,13 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       });
     const loser = Effect.runPromiseExit(
       Effect.tryPromise({
-        try: () => h.router.invoke("workspace_session_create", h.createInput).then(() => undefined),
+        try: () => h.create(h.createInput).then(() => undefined),
         catch: (cause) => cause,
       }),
     );
     try {
       await Effect.runPromise(Deferred.await(entered));
-      const winner = await h.router.invoke("workspace_session_create", h.createInput);
+      const winner = await h.create(h.createInput);
       const directory = winner.session.executionTarget.workingDirectory;
       expect(winner.session.executionTarget).toMatchObject({
         kind: "local_worktree",
@@ -646,7 +699,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       resolveRemovalPath(value).pipe(Effect.tap(() => Deferred.succeed(guarding, undefined)));
     const competing = Effect.runPromiseExit(
       Effect.tryPromise({
-        try: () => h.router.invoke("workspace_session_create", h.createInput),
+        try: () => h.create(h.createInput),
         catch: (cause) => cause,
       }),
     );
@@ -684,7 +737,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     gitCommand("tag", "release", fixtureHead);
     const targetBranch = { branch: "release" };
     const branchName = "feature/archive-review";
-    const { session } = await h.router.invoke("workspace_session_create", {
+    const { session } = await h.create({
       ...h.createInput,
       targetBranch,
       worktree: { mode: "from_name", name: "different-directory-name", branchName },
@@ -903,8 +956,8 @@ describe("Workspace Session commands with real Git and SQLite", () => {
         worktreePath: occupiedGitPath,
       },
     );
-    const error = await h.router
-      .invoke("workspace_session_create", {
+    const error = await h
+      .create({
         ...h.createInput,
         worktree: { mode: "from_branch", name: "different-name", branchName: "feature/occupied" },
       })
@@ -914,11 +967,9 @@ describe("Workspace Session commands with real Git and SQLite", () => {
         },
         (cause: unknown) => cause,
       );
-    expect(hostInvokeFailureFromError(error)).toEqual({
-      kind: "workspace_session_validation",
-      field: "worktree.branchName",
-    });
+    expect(error).toBeInstanceOf(HostValidationError);
     expect(error).toMatchObject({
+      field: "worktree.branchName",
       message: `Branch feature/occupied is already checked out at ${occupiedGitPath}. Choose another branch or use Current checkout.`,
     });
     expect(await readFile(path.join(occupied, "owned.txt"), "utf8")).toBe("keep this");
@@ -1168,7 +1219,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
     gitCommand("checkout", "-b", "other-checkout");
     const h = setup({ actions: false });
-    const { session } = await h.router.invoke("workspace_session_create", {
+    const { session } = await h.create({
       ...h.createInput,
       worktree: { mode: "from_branch", name: "main-review", branchName: "main" },
     });
