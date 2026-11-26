@@ -16,13 +16,7 @@ export type TaskCreateWorkspace = Pick<
   "workspaceId" | "workspaceName" | "repoPath"
 >;
 
-export type TasksStateContextValue = TaskPullRequestOperations & {
-  tasksAreCurrent: boolean;
-  isForegroundLoadingTasks: boolean;
-  isRefreshingTasksInBackground: boolean;
-  isLoadingTasks: boolean;
-  tasks: TaskCard[];
-  refreshTasks: () => Promise<void>;
+export type TaskMutationCommands = {
   /** Creates the task in `workspace`, which can be a workspace other than the active one. */
   createTask: (
     workspace: TaskCreateWorkspace,
@@ -39,9 +33,19 @@ export type TasksStateContextValue = TaskPullRequestOperations & {
   closeTask: (taskId: string, options: CloseTaskOptions) => Promise<WireTaskCard>;
   /** Removes the worktree and local branches of a closed task. */
   removeTaskWorktree: (taskId: string) => Promise<void>;
-  resetTaskImplementation: (taskId: string, eventId: string) => Promise<WireTaskCard>;
-  resetTask: (taskId: string) => Promise<WireTaskCard>;
 };
+
+export type TasksStateContextValue = TaskPullRequestOperations &
+  TaskMutationCommands & {
+    tasksAreCurrent: boolean;
+    isForegroundLoadingTasks: boolean;
+    isRefreshingTasksInBackground: boolean;
+    isLoadingTasks: boolean;
+    tasks: TaskCard[];
+    refreshTasks: () => Promise<void>;
+    resetTaskImplementation: (taskId: string, eventId: string) => Promise<WireTaskCard>;
+    resetTask: (taskId: string) => Promise<WireTaskCard>;
+  };
 
 /** Reads and saves the workflow documents of the active workspace by artifact code. */
 export type DocumentStateContextValue = {
