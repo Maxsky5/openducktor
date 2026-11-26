@@ -311,14 +311,15 @@ describe("useAgentStudioTerminals reconciliation", () => {
       expect(view.panels().bottom.focusRequest).toBe(0);
       expect(document.activeElement?.textContent).not.toBe("Terminal focus owner");
 
+      // Task A keeps the bottom panel that the user hid.
       await act(async () => view.update({ taskId: "task-a", mountedTaskIds: ["task-a"] }));
       await waitFor(
         () => {
-          expect(view.panels().bottom.isVisible).toBe(true);
           expect(selectedBottomTerminal(view.panels())?.terminalId).toBe("terminal-task-a");
         },
         { timeout: 2_000 },
       );
+      expect(view.panels().bottom.isVisible).toBe(false);
       expect(view.panels().bottom.focusRequest).toBe(0);
       expect(document.activeElement?.textContent).not.toBe("Terminal focus owner");
     } finally {

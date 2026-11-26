@@ -364,30 +364,52 @@ export const reconcileSessionPanelLayout = (
   return { panels, closedKinds, selectedRight, selectedBottom };
 };
 
+/** The tabs of a panel: the ones that show, and the ones that hide while the host closes them. */
+export type PanelTabsResolution = { shown: ResolvedPanelTab[]; closing: ResolvedPanelTab[] };
+
+/** Resolves the entries of a panel, in order. */
+export const resolvePanelTabs = (
+  layout: SessionPanelLayout,
+  panel: PanelId,
+  context: SessionPanelContext,
+): PanelTabsResolution => {
+  const resolution: PanelTabsResolution = { shown: [], closing: [] };
+  const place = (tab: ResolvedPanelTab, isClosing: boolean): void => {
+    if (isClosing) resolution.closing.push(tab);
+    else resolution.shown.push(tab);
+  };
+  for (const entry of layout.panels[panel]) {
+    if (entry.kind === "terminal") {
+      const { tabs, closingIds } = context.hostTabs.terminal;
+      const terminal = HOST_TAB_RULES.terminal.findTab(entry, tabs);
+      if (terminal) {
+        place({ id: entry.id, kind: "terminal", terminal }, closingIds.has(terminal.tabId));
+      }
+      continue;
+    }
+    if (entry.kind === "new_tab") {
+      place(entry, false);
+      continue;
+    }
+    if (context.unavailableKinds.has(entry.kind)) continue;
+    if (entry.kind === "browser") {
+      // A new tab shows before the host lists it.
+      const { tabs, closingIds } = context.hostTabs.browser;
+      const tab = HOST_TAB_RULES.browser.findTab(entry, tabs) ?? null;
+      place({ id: entry.id, kind: "browser", entry, tab }, closingIds.has(entry.tabId));
+      continue;
+    }
+    place(entry, false);
+  }
+  return resolution;
+};
+
 /** The entries that the panel shows, in order. */
 export const shownPanelTabs = (
   layout: SessionPanelLayout,
   panel: PanelId,
   context: SessionPanelContext,
-): ResolvedPanelTab[] =>
-  layout.panels[panel].flatMap((entry): ResolvedPanelTab[] => {
-    if (entry.kind === "new_tab") return [entry];
-    if (entry.kind === "terminal") {
-      const { tabs, closingIds } = context.hostTabs.terminal;
-      const terminal = HOST_TAB_RULES.terminal.findTab(entry, tabs);
-      if (!terminal || closingIds.has(terminal.tabId)) return [];
-      return [{ id: entry.id, kind: "terminal", terminal }];
-    }
-    if (context.unavailableKinds.has(entry.kind)) return [];
-    if (entry.kind === "browser") {
-      // A new tab shows before the host lists it.
-      const { tabs, closingIds } = context.hostTabs.browser;
-      if (closingIds.has(entry.tabId)) return [];
-      const tab = HOST_TAB_RULES.browser.findTab(entry, tabs) ?? null;
-      return [{ id: entry.id, kind: "browser", entry, tab }];
-    }
-    return [entry];
-  });
+): ResolvedPanelTab[] => resolvePanelTabs(layout, panel, context).shown;
 
 export const selectedPanelTabId = (
   layout: SessionPanelLayout,

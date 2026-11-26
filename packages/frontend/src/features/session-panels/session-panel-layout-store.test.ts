@@ -156,6 +156,77 @@ describe("session panel layout store", () => {
     expect(restored.selectedBottom).toBe(`browser:${TAB_2}`);
   });
 
+  test("saves the open state of each panel in the layout record, and restores it", () => {
+    const owner = taskOwner();
+
+    store.setBottomState(owner, "open");
+    store.update(owner, (layout) => ({
+      ...layout,
+      panels: { ...layout.panels, right: [{ id: "diffs", kind: "diffs" }] },
+    }));
+    store.setRightOpen(owner, false);
+
+    expect(savedRecord(owner)).toEqual({
+      version: 2,
+      panels: { right: [{ kind: "diffs" }], bottom: [] },
+      closedKinds: [],
+      selectedRight: {},
+      selectedBottom: null,
+      open: { right: false, bottom: true },
+    });
+    const restored = createSessionPanelLayoutStore(storage);
+    expect(restored.readPanels(owner)).toEqual({ right: false, bottom: "restoring" });
+    expect(restored.read(owner).panels.right).toEqual([{ id: "diffs", kind: "diffs" }]);
+    expect(restored.readPanels(taskOwner())).toEqual({ right: null, bottom: "default" });
+  });
+
+  test.each([
+    ["default", undefined, "default"],
+    ["closed", false, "closed"],
+    ["open", true, "restoring"],
+    ["restoring", true, "restoring"],
+    ["open_while_closing", true, "restoring"],
+  ] as const)(
+    "saves the bottom state %s as %p, and restores it as %s",
+    (state, saved, restored) => {
+      const owner = taskOwner();
+      store.setRightOpen(owner, true);
+      store.setBottomState(owner, state);
+
+      expect(savedRecord(owner).open.bottom).toBe(saved);
+      expect(createSessionPanelLayoutStore(storage).readPanels(owner).bottom).toBe(restored);
+    },
+  );
+
+  test("tells no view when the shown view writes its check", () => {
+    const owner = taskOwner();
+    let changes = 0;
+    const unsubscribe = store.subscribe(() => {
+      changes += 1;
+    });
+    try {
+      store.writeBottomCheck(owner, { tabCount: 2, wasOpen: true });
+    } finally {
+      unsubscribe();
+    }
+
+    expect(changes).toBe(0);
+    expect(store.readBottomCheck(owner)).toEqual({ tabCount: 2, wasOpen: true });
+  });
+
+  test("reports each restore failure cause once for the connection", () => {
+    const owners = [taskOwner(), taskOwner()];
+    for (const owner of owners) storage.setItem(sessionPanelLayoutStorageKey(owner), "{}");
+    const consoleError = spyOn(console, "error");
+    try {
+      expect(store.readPanels(owners[0]!)).toEqual({ right: null, bottom: "default" });
+      expect(store.takeReadError(owners[0]!)).not.toBeNull();
+      expect(store.takeReadError(owners[1]!)).toBeNull();
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   test("upgrades a v1 layout once with its tool tabs, closed kinds, and selections", () => {
     const owner = taskOwner();
     const v1Key = sessionPanelLayoutStorageKey(owner).replace(":v2:", ":v1:");
@@ -248,13 +319,13 @@ describe("session panel layout store", () => {
     ).toEqual(["terminal:tab:1"]);
   });
 
-  test("reports a continuing save failure once and reports it again after recovery", async () => {
+  test("reports each save failure cause once and reports it again after recovery", async () => {
     const owner = taskOwner();
-    let quotaFull = true;
+    let failure: string | null = "The storage quota is full.";
     const layoutStore = createSessionPanelLayoutStore({
       ...storage,
       setItem: (key, value) => {
-        if (quotaFull) throw new Error("The storage quota is full.");
+        if (failure !== null) throw new Error(failure);
         storage.setItem(key, value);
       },
     });
@@ -267,20 +338,26 @@ describe("session panel layout store", () => {
     try {
       await withMockedToast(async ({ toastErrorMock }) => {
         selectTool("diffs");
+        failure = "Site data is blocked.";
+        layoutStore.setRightOpen(owner, false);
+        failure = "The storage quota is full.";
         selectTool("files");
 
         expect(layoutStore.read(owner).panels.right).toEqual([{ id: "files", kind: "files" }]);
-        expect(consoleError).toHaveBeenCalledTimes(1);
-        expect(toastErrorMock).toHaveBeenCalledTimes(1);
+        expect(layoutStore.readPanels(owner).right).toBe(false);
+        expect(toastErrorMock).toHaveBeenCalledTimes(2);
 
-        quotaFull = false;
+        failure = null;
         selectTool("document");
-        expect(savedRecord(owner).panels.right).toEqual([{ kind: "document" }]);
-        quotaFull = true;
+        expect(savedRecord(owner)).toMatchObject({
+          panels: { right: [{ kind: "document" }] },
+          open: { right: false },
+        });
+        failure = "The storage quota is full.";
         selectTool("files");
 
-        expect(consoleError).toHaveBeenCalledTimes(2);
-        expect(toastErrorMock).toHaveBeenCalledTimes(2);
+        expect(consoleError).toHaveBeenCalledTimes(3);
+        expect(toastErrorMock).toHaveBeenCalledTimes(3);
       });
     } finally {
       consoleError.mockRestore();

@@ -6,6 +6,13 @@ import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { ClientStorage } from "@openducktor/frontend-core/platform/client-storage";
 import { perConnection } from "@openducktor/frontend-core/lib/per-connection";
 import { isToolTabKind, TOOL_TAB_KINDS } from "./panel-tab-kinds";
+import {
+  type BottomPanelCheck,
+  type BottomPanelState,
+  bottomStateFromSaved,
+  NO_BOTTOM_CHECK,
+  savedBottomOpen,
+} from "./session-panel-bottom-rules";
 import { fromV1Record, V1_STORAGE_PREFIX } from "./session-panel-layout-v1";
 import {
   browserTabEntry,
@@ -16,7 +23,10 @@ import {
   sessionPanelOwnerKey,
 } from "./session-panel-layout";
 
-/** The panel layouts of one client connection. */
+/** The open state of the panels of an owner. A right panel without a saved state is null. */
+export type SessionPanelsOpenState = { right: boolean | null; bottom: BottomPanelState };
+
+/** The panel layouts and open states of one client connection. */
 export type SessionPanelLayoutStore = {
   subscribe: (listener: () => void) => () => void;
   /**
@@ -26,17 +36,36 @@ export type SessionPanelLayoutStore = {
   snapshot: () => ReadonlyMap<string, SessionPanelLayout>;
   /** Reads the layout of an owner. The first read restores the saved layout. */
   read: (owner: SessionPanelOwner) => SessionPanelLayout;
-  /** Returns the restore failure of an owner one time, so the app reports it once. */
+  /**
+   * Returns the restore failure of an owner one time. A cause that the app already reported for
+   * this connection returns null, so the app reports each cause once.
+   */
   takeReadError: (owner: SessionPanelOwner) => string | null;
   /**
    * Applies `change` to the layout of an owner and saves the tool tabs when they change. A save
-   * failure reports its cause once until it changes or the next save succeeds. The layout stays
-   * in memory.
+   * failure reports each cause once until a save succeeds. The layout stays in memory.
    */
   update: (
     owner: SessionPanelOwner,
     change: (layout: SessionPanelLayout) => SessionPanelLayout,
   ) => void;
+  /**
+   * The open state of the panels of an owner. The first read restores the saved record. A new object
+   * replaces it on each change.
+   */
+  readPanels: (owner: SessionPanelOwner) => SessionPanelsOpenState;
+  /**
+   * Sets the open state of a panel of an owner, and saves it. A save failure acts as in `update`.
+   * A bottom state change that keeps the saved value does not write.
+   */
+  setRightOpen: (owner: SessionPanelOwner, isOpen: boolean) => void;
+  setBottomState: (owner: SessionPanelOwner, state: BottomPanelState) => void;
+  /**
+   * The last check of the bottom panel rules for an owner. Only the shown view reads and writes it,
+   * so a write tells no view.
+   */
+  readBottomCheck: (owner: SessionPanelOwner) => BottomPanelCheck;
+  writeBottomCheck: (owner: SessionPanelOwner, check: BottomPanelCheck) => void;
   /**
    * Removes the saved and in-memory layouts of tasks, chats, and workspaces that no longer exist.
    * Then it tells each prune listener the owners that it removed.
@@ -53,11 +82,13 @@ export type SessionPanelLayoutStore = {
 export const useSessionPanelLayoutStore = (): SessionPanelLayoutStore =>
   storeOf(useClientConnection());
 
-const storeOf = perConnection((connection) => createSessionPanelLayoutStore(connection.storage));
+const storeOf = perConnection((connection) =>
+  createSessionPanelLayoutStore(connection.layoutStorage),
+);
 
 /**
- * Keeps the layouts of all owners in memory. It saves the tool tabs in `storage`, one record for
- * each owner.
+ * Keeps the layouts and open states of all owners in memory. It saves the tool tabs and the open
+ * states in `storage`, one record for each owner.
  */
 export const createSessionPanelLayoutStore = (storage: ClientStorage): SessionPanelLayoutStore => {
   const entries = new Map<string, StoreEntry>();
@@ -65,10 +96,35 @@ export const createSessionPanelLayoutStore = (storage: ClientStorage): SessionPa
   const pruneListeners = new Set<(owners: readonly SessionPanelOwner[]) => void>();
   let snapshot: ReadonlyMap<string, SessionPanelLayout> = new Map();
   let pruneFailure: string | null = null;
+  /** The save failure causes reported since the last successful save. */
+  const reportedWriteFailures = new Set<string>();
+  const reportedReadErrors = new Set<string>();
 
+  const emit = (): void => {
+    for (const listener of listeners) listener();
+  };
   const notify = (): void => {
     snapshot = new Map([...entries].map(([ownerKey, entry]) => [ownerKey, entry.layout]));
-    for (const listener of listeners) listener();
+    emit();
+  };
+
+  /** Saves the record of an owner when it changed. The new state stays in memory on a failure. */
+  const save = (entry: StoreEntry): void => {
+    const record = JSON.stringify(toPersistedLayout(entry.layout, entry.panels));
+    if (record === entry.savedRecord) return;
+    try {
+      storage.setItem(sessionPanelLayoutStorageKey(entry.owner), record);
+      entry.savedRecord = record;
+      reportedWriteFailures.clear();
+    } catch (error) {
+      const message = errorMessage(error);
+      if (reportedWriteFailures.has(message)) return;
+      reportedWriteFailures.add(message);
+      console.error("[session-panels] Failed to save the panels.", { owner: entry.owner, error });
+      toast.error("Could not save the panels", {
+        description: `${message} The panels keep their tabs and open state until the app restarts.`,
+      });
+    }
   };
 
   const entryFor = (owner: SessionPanelOwner): StoreEntry => {
@@ -81,12 +137,21 @@ export const createSessionPanelLayoutStore = (storage: ClientStorage): SessionPa
     return entry;
   };
 
+  const setPanels = (entry: StoreEntry, change: Partial<SessionPanelsOpenState>): void => {
+    const panels = { ...entry.panels, ...change };
+    if (panels.right === entry.panels.right && panels.bottom === entry.panels.bottom) return;
+    entry.panels = panels;
+    save(entry);
+    // The layouts do not change, so the layout snapshot stays.
+    emit();
+  };
+
   /** Removes the stale records and returns their owners. */
   const removeStaleRecords = (input: SessionPanelLayoutPruneInput): SessionPanelOwner[] => {
     try {
       const staleKeys: string[] = [];
       const owners: SessionPanelOwner[] = [];
-      for (let index = 0; index < storage.length; index += 1) {
+      for (let index = 0, count = storage.length; index < count; index += 1) {
         const key = storage.key(index);
         const stored = key === null ? null : parseStorageKey(key);
         if (key === null || stored === null || !isStaleOwner(stored, input)) continue;
@@ -123,6 +188,8 @@ export const createSessionPanelLayoutStore = (storage: ClientStorage): SessionPa
       const entry = entryFor(owner);
       const error = entry.readError;
       entry.readError = null;
+      if (error === null || reportedReadErrors.has(error)) return null;
+      reportedReadErrors.add(error);
       return error;
     },
     update: (owner, change) => {
@@ -130,24 +197,15 @@ export const createSessionPanelLayoutStore = (storage: ClientStorage): SessionPa
       const layout = change(entry.layout);
       if (layout === entry.layout) return;
       entry.layout = layout;
-      const record = JSON.stringify(toPersistedLayout(layout));
-      if (record !== entry.savedRecord) {
-        try {
-          storage.setItem(sessionPanelLayoutStorageKey(owner), record);
-          entry.savedRecord = record;
-          entry.writeFailure = null;
-        } catch (error) {
-          const message = errorMessage(error);
-          if (entry.writeFailure !== message) {
-            entry.writeFailure = message;
-            console.error("[session-panels] Failed to save the panel layout.", { owner, error });
-            toast.error("Could not save the panel layout", {
-              description: `${message} The layout works until the app restarts.`,
-            });
-          }
-        }
-      }
+      save(entry);
       notify();
+    },
+    readPanels: (owner) => entryFor(owner).panels,
+    setRightOpen: (owner, isOpen) => setPanels(entryFor(owner), { right: isOpen }),
+    setBottomState: (owner, state) => setPanels(entryFor(owner), { bottom: state }),
+    readBottomCheck: (owner) => entryFor(owner).bottomCheck,
+    writeBottomCheck: (owner, check) => {
+      entryFor(owner).bottomCheck = check;
     },
     prune: (input) => {
       const removedOwners = new Map<string, SessionPanelOwner>();
@@ -199,6 +257,8 @@ const persistedLayoutSchema = z.object({
   /** Entry IDs. Null keeps a selection whose tab is gone, such as a terminal that ended on restart. */
   selectedRight: z.partialRecord(selectionKeySchema, z.string().nullable()),
   selectedBottom: z.string().nullable(),
+  /** A missing record or panel has no saved open state, so the default rule applies. */
+  open: z.object({ right: z.boolean().optional(), bottom: z.boolean().optional() }).optional(),
 });
 
 type PersistedLayout = z.infer<typeof persistedLayoutSchema>;
@@ -210,7 +270,10 @@ const toPersistedTab = (entry: PanelTabEntry): PersistedPanelTab | null => {
   return null;
 };
 
-const toPersistedLayout = (layout: SessionPanelLayout): PersistedLayout => {
+const toPersistedLayout = (
+  layout: SessionPanelLayout,
+  openState: SessionPanelsOpenState,
+): PersistedLayout => {
   const savedIds = new Set<string>();
   const persistedTabs = (panelEntries: PanelTabEntry[]): PersistedPanelTab[] =>
     panelEntries.flatMap((entry) => {
@@ -230,13 +293,20 @@ const toPersistedLayout = (layout: SessionPanelLayout): PersistedLayout => {
     if (entryId === undefined) continue;
     selectedRight[key] = savedSelection(entryId);
   }
-  return {
+  const record: PersistedLayout = {
     version: 2,
     panels,
     closedKinds: [...layout.closedKinds],
     selectedRight,
     selectedBottom: savedSelection(layout.selectedBottom),
   };
+  const bottom = savedBottomOpen(openState.bottom);
+  if (openState.right !== null || bottom !== null) {
+    record.open = {};
+    if (openState.right !== null) record.open.right = openState.right;
+    if (bottom !== null) record.open.bottom = bottom;
+  }
+  return record;
 };
 
 const fromPersistedTab = (tab: PersistedPanelTab): PanelTabEntry => {
@@ -254,37 +324,53 @@ const fromPersistedLayout = (record: PersistedLayout): SessionPanelLayout => ({
   selectedBottom: record.selectedBottom,
 });
 
+export const NO_SAVED_PANELS: SessionPanelsOpenState = { right: null, bottom: "default" };
+
 type StoreEntry = {
   owner: SessionPanelOwner;
   layout: SessionPanelLayout;
+  panels: SessionPanelsOpenState;
+  bottomCheck: BottomPanelCheck;
   /** The last saved or restored record, so a change of live entries only does not write. */
   savedRecord: string | null;
   readError: string | null;
-  writeFailure: string | null;
 };
 
-/** Restores the saved layout of an owner. A failed read starts an empty layout and keeps the error. */
+/**
+ * Restores the saved layout and open state of an owner. A failed read starts an empty layout
+ * without a saved open state, and keeps the error.
+ */
 const readEntry = (storage: ClientStorage, owner: SessionPanelOwner): StoreEntry => {
   const empty: StoreEntry = {
     owner,
     layout: emptySessionPanelLayout(),
+    panels: NO_SAVED_PANELS,
+    bottomCheck: NO_BOTTOM_CHECK,
     savedRecord: null,
     readError: null,
-    writeFailure: null,
   };
   try {
     const key = sessionPanelLayoutStorageKey(owner);
     const saved = storage.getItem(key);
     if (saved !== null) {
       const record = persistedLayoutSchema.parse(JSON.parse(saved));
-      return { ...empty, layout: fromPersistedLayout(record), savedRecord: saved };
+      const panels: SessionPanelsOpenState = {
+        right: record.open?.right ?? null,
+        bottom: bottomStateFromSaved(record.open?.bottom ?? null),
+      };
+      return {
+        ...empty,
+        layout: fromPersistedLayout(record),
+        panels,
+        savedRecord: saved,
+      };
     }
     // A layout of an app version before browser tabs upgrades once, then only v2 stays.
     const oldKey = ownerStorageKey(V1_STORAGE_PREFIX, owner);
     const old = storage.getItem(oldKey);
     if (old === null) return empty;
     const layout = fromV1Record(old);
-    const record = JSON.stringify(toPersistedLayout(layout));
+    const record = JSON.stringify(toPersistedLayout(layout, NO_SAVED_PANELS));
     storage.setItem(key, record);
     storage.removeItem(oldKey);
     return { ...empty, layout, savedRecord: record };
