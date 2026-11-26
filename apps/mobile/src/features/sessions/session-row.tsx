@@ -216,6 +216,11 @@ function EntryIcon({ entry }: { entry: SessionNavigationEntry }): ReactElement {
       />
     );
   }
+  if (entry.target.kind === "workspace_session_draft") {
+    return (
+      <Icon name="message-circle-plus" size={17} colorStyle={colorStyles(theme, color).text} />
+    );
+  }
   return (
     <Icon
       name={entry.target.kind === "workspace_session" ? "messages-square" : "clipboard-list"}
@@ -232,6 +237,47 @@ function EntryIcon({ entry }: { entry: SessionNavigationEntry }): ReactElement {
  * the running color while it works. A long press opens the session menu. A swipe to the left
  * archives a chat.
  */
+function SessionContextBadge({ entry }: { entry: SessionNavigationEntry }): ReactElement | null {
+  if (entry.context.kind === "task") {
+    // The desktop row uses the short state label; its attention says the rest.
+    return (
+      <Badge
+        label={entry.context.task.sharedState.shortLabel}
+        tone={statusTone(entry.context.task.sharedState)}
+      />
+    );
+  }
+  if (entry.context.kind === "workspace_draft") {
+    const isStarting = entry.context.isStarting;
+    return (
+      <Badge label={isStarting ? "Starting" : "Draft"} tone={isStarting ? "info" : "neutral"} />
+    );
+  }
+  return null;
+}
+
+function resolveSwipeAction(
+  entry: SessionNavigationEntry,
+  starting: boolean,
+  onArchive: () => void,
+  onDiscardDraft: () => void,
+) {
+  if (entry.context.kind === "workspace_draft") {
+    return {
+      label: "Discard",
+      icon: "trash-2" as const,
+      onAction: onDiscardDraft,
+      enabled: !entry.context.isStarting,
+    };
+  }
+  return {
+    label: "Archive",
+    icon: "archive" as const,
+    onAction: onArchive,
+    enabled: entry.context.kind === "workspace" && !starting,
+  };
+}
+
 export const SessionRow = memo(function SessionRow({
   entry,
   starting,
@@ -271,25 +317,30 @@ export const SessionRow = memo(function SessionRow({
     [select],
   );
   const archive = useCallback(() => onAction(entry, "archive", unread), [entry, onAction, unread]);
+  const discardDraft = useCallback(
+    () => onAction(entry, "discard_draft", unread),
+    [entry, onAction, unread],
+  );
   const open = useCallback(() => {
     swipeGroup.closeOpenRow();
     onOpen(entry);
   }, [entry, onOpen, swipeGroup]);
-  const chat = entry.context.kind === "workspace";
-  const task = entry.context.kind === "task" ? entry.context.task : null;
+  const isDraftStarting = entry.context.kind === "workspace_draft" && entry.context.isStarting;
+  const rowStarting = starting || isDraftStarting;
+  const swipe = resolveSwipeAction(entry, starting, archive, discardDraft);
   const notStarted = sessionEntryDestination(entry).kind === "not_started";
   const commandCount = useSessionCommandCount(entry);
-  const label = sessionRowAccessibleLabel(entry, { commandCount, unread, starting });
+  const label = sessionRowAccessibleLabel(entry, { commandCount, unread, starting: rowStarting });
   const surface = styles[SURFACE_STYLES[sessionRowSurface(entry)]];
 
   return (
     <View style={styles.cell}>
       <SwipeRow
         resetKey={entry.key}
-        label="Archive"
-        icon="archive"
-        onAction={archive}
-        enabled={chat && !starting}
+        label={swipe.label}
+        icon={swipe.icon}
+        onAction={swipe.onAction}
+        enabled={swipe.enabled}
         group={swipeGroup}
       >
         {/* A tap opens the session; only a long press opens the session menu. */}
@@ -303,7 +354,7 @@ export const SessionRow = memo(function SessionRow({
             accessibilityRole="button"
             accessibilityLabel={label}
             accessibilityHint={notStarted ? "Starts the session, then opens it." : undefined}
-            accessibilityState={{ busy: starting }}
+            accessibilityState={{ busy: rowStarting }}
             accessibilityActions={accessibilityActions}
             onAccessibilityAction={runAccessibilityAction}
             style={[styles.row, surface]}
@@ -313,11 +364,8 @@ export const SessionRow = memo(function SessionRow({
               <Text numberOfLines={1} style={styles.workspace}>
                 {entry.workspace.workspaceName}
               </Text>
-              {task ? (
-                // The desktop row uses the short state label; its attention says the rest.
-                <Badge label={task.sharedState.shortLabel} tone={statusTone(task.sharedState)} />
-              ) : null}
-              <RowMetadata entry={entry} starting={starting} />
+              <SessionContextBadge entry={entry} />
+              <RowMetadata entry={entry} starting={rowStarting} />
             </View>
             <View style={styles.line}>
               <View style={styles.iconFrame}>

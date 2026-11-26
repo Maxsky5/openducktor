@@ -5,6 +5,7 @@ import {
 } from "@openducktor/frontend-core/tasks/issue-import/issue-import-provider";
 import { useRouter } from "expo-router";
 import { useFeedbackStore } from "@/app-shell/app-services";
+import { useOpenNewChat } from "@/features/new-chat/use-open-workspace-chat";
 import { useBoardAvailability } from "./board/use-board-availability";
 import { routes } from "@/navigation/routes";
 import { haptics } from "@/ui/haptics";
@@ -71,6 +72,7 @@ export const useWorkspaceCreateActions = (workspace: WorkspaceRecord): CreateAct
 /** Opens the sheet of an action, or tells why the action cannot run now. */
 export const useRunCreateAction = (workspaceId: string | null, onClose: () => void) => {
   const router = useRouter();
+  const openNewChat = useOpenNewChat();
   const { feedback } = useFeedbackStore();
   return (action: CreateAction): void => {
     if (action.blockedReason !== null || workspaceId === null) {
@@ -81,7 +83,7 @@ export const useRunCreateAction = (workspaceId: string | null, onClose: () => vo
     haptics.selection();
     onClose();
     if (action.id === "task") router.push(routes.newTask(workspaceId));
-    if (action.id === "chat") router.push(routes.newChat(workspaceId));
+    if (action.id === "chat") openNewChat(workspaceId);
     if (action.id === "import") router.push(routes.importIssues(workspaceId));
   };
 };

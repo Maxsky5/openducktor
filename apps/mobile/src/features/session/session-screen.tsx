@@ -299,6 +299,7 @@ function SessionTargetResolver({
       key={target.sessionKey}
       target={target}
       focusPendingInput={route.focusPendingInput}
+      startupAttemptId={route.startupAttemptId}
     />
   );
 }
@@ -332,9 +333,11 @@ function SessionResolutionState({
 function SessionScreenContent({
   target,
   focusPendingInput,
+  startupAttemptId,
 }: {
   target: SessionTarget;
   focusPendingInput: boolean;
+  startupAttemptId: string | null;
 }): ReactElement {
   const gate = useCommandGate();
   const readModel = useAgentSessionReadModelStateContext();
@@ -384,6 +387,7 @@ function SessionScreenContent({
       target={target}
       interaction={interaction}
       focusPendingInput={focusPendingInput}
+      startupAttemptId={startupAttemptId}
     >
       <SessionForkProvider task={task}>
         <SessionView />

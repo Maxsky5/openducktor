@@ -9,8 +9,10 @@ import {
   type WorkflowLaunchResult,
   type WorkspaceSession,
   type WorkspaceSessionForkResult,
+  type WorkspaceSessionLaunchResult,
   type WorkspaceSessionStartResult,
 } from "@openducktor/contracts";
+import { toAgentUserMessageParts } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
 import type { HostClient } from "@openducktor/host-client";
 import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import type { DemoCheckout } from "./demo-repository";
@@ -313,6 +315,8 @@ export const createDemoLaunches = ({
     model: AgentSessionModelSelection | null;
     executionTarget: WorkspaceSession["executionTarget"];
     title: string;
+    manualTitle?: string | null;
+    generatedTitle?: string | null;
     roleSnapshot: WorkspaceSession["roleSnapshot"];
     targetBranch: WorkspaceSession["targetBranch"];
   }) => {
@@ -326,8 +330,8 @@ export const createDemoLaunches = ({
       executionTarget: input.executionTarget,
       roleSnapshot: input.roleSnapshot,
       selectedModel: { ...model, runtimeKind: input.runtimeKind },
-      generatedTitle: null,
-      manualTitle: input.title,
+      generatedTitle: input.generatedTitle ?? null,
+      manualTitle: input.manualTitle !== undefined ? input.manualTitle : input.title,
       targetBranch: input.targetBranch,
       createdAt: now,
       lastActivityAt: now,
@@ -409,9 +413,6 @@ export const createDemoLaunches = ({
     };
   };
 
-  /** Chats that wait for their start keep the steps of their new worktree. */
-  const pendingSteps = new Map<string, StartupStep[]>();
-
   const handlers = {
     agentSessionWorkflowLaunch: launch,
     agentSessionControlResume: async (input) => {
@@ -488,26 +489,69 @@ export const createDemoLaunches = ({
           branchName: checkout.branch,
         })),
     }),
-    workspaceSessionCreate: async (input) => {
+    workspaceSessionLaunch: async (input) => {
       const workspace = findWorkspace(world, input.workspaceId);
+      const firstText = input.parts
+        .filter((part) => part.kind === "text")
+        .map((part) => part.text)
+        .join(" ")
+        .trim();
+      const slug =
+        firstText
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "")
+          .slice(0, 32) || `session-${chatNumber}`;
+      const title = firstText.slice(0, 48) || "New session";
+      const scope = { kind: "workspace" as const, draftId: input.draftId };
+      const steps: StartupStep[] = [];
       let executionTarget: WorkspaceSession["executionTarget"];
-      let steps: StartupStep[] = [];
+
       if (input.location === "local_repo_root") {
         executionTarget = { kind: "local_repo_root", workingDirectory: workspace.record.repoPath };
+        steps.push({
+          id: "checkout",
+          label: "Use current checkout",
+          state: "completed",
+          details: [workspace.record.repoPath],
+        });
       } else if (input.location === "existing_worktree") {
         const checkout = workspace.repository.findCheckout(input.existingWorktree.workingDirectory);
-        if (!checkout)
+        if (!checkout) {
           throw new Error("This worktree is not in the demo repository. Choose another worktree.");
+        }
         executionTarget = {
           kind: "local_worktree",
           workingDirectory: checkout.workingDirectory,
           branchName: checkout.branch,
           worktreeState: "present",
         };
+        steps.push({
+          id: "checkout",
+          label: "Use existing worktree",
+          state: "completed",
+          details: [checkout.workingDirectory],
+        });
       } else {
-        const branch = input.worktree.branchName ?? `odt/${input.worktree.name}`;
-        const workingDirectory = `${workspace.worktreeRoot}/${input.worktree.name}`;
-        // The new branch starts from the selected target branch, as on a host.
+        const autoNamed =
+          input.worktree.mode === "from_name" &&
+          !input.worktree.name.trim() &&
+          !input.worktree.branchName?.trim();
+        const dirName = input.worktree.name.trim() || slug;
+        const branchPrefix = workspace.repoConfig.branchPrefix || "odt";
+        const branch =
+          input.worktree.mode === "from_branch"
+            ? input.worktree.branchName
+            : input.worktree.branchName?.trim() || `${branchPrefix}/${dirName}`;
+        const workingDirectory = `${workspace.worktreeRoot}/${dirName}`;
+        if (autoNamed) {
+          steps.push({
+            id: "naming",
+            label: "Choose directory and branch name",
+            state: "completed",
+            details: [`Directory: ${dirName}`, `Branch: ${branch}`],
+          });
+        }
         const checkout = workspace.repository.addWorktree({
           workingDirectory,
           branch,
@@ -519,14 +563,18 @@ export const createDemoLaunches = ({
           branchName: branch,
           worktreeState: "present",
         };
-        steps = await setUpWorktree({
+        const worktreeSteps = await setUpWorktree({
           workspace,
           checkout,
           context: input.startup,
-          scope: { kind: "workspace" },
+          scope,
           terminalContext: {},
         });
+        for (const step of worktreeSteps) {
+          steps.push(step.id === "worktree" ? { ...step, id: "checkout" } : step);
+        }
       }
+
       const role = input.customAgentRoleId
         ? (world.customRoles.find((candidate) => candidate.id === input.customAgentRoleId) ?? null)
         : null;
@@ -535,18 +583,75 @@ export const createDemoLaunches = ({
         runtimeKind: input.runtimeKind,
         model: input.selectedModel,
         executionTarget,
-        title: input.manualTitle?.trim() || "New chat",
+        title,
+        manualTitle: null,
+        generatedTitle: title,
         roleSnapshot: role,
         targetBranch: input.targetBranch,
       });
-      pendingSteps.set(chat.owner.record.id, steps);
-      return { session: chat.owner.record };
+      const liveStateSequence = engine.upsert(chat);
+      const acceptedMessage = engine.acceptUserMessage(chat, toAgentUserMessageParts(input.parts));
+      engine.startRun(
+        chat,
+        promptRun(
+          {
+            workspace,
+            checkout: workspace.repository.checkout(chat.ref.workingDirectory),
+            outcomes,
+          },
+          firstText,
+        ),
+      );
+      steps.push(
+        {
+          id: "prepare",
+          label: "Start agent session",
+          state: "completed",
+          details: [chat.ref.workingDirectory],
+        },
+        {
+          id: "instruction",
+          label: "Send first message",
+          state: "completed",
+          details: [],
+        },
+      );
+      const startupProgress = progress(input.startup, {
+        workspaceId: workspace.record.workspaceId,
+        repoPath: workspace.record.repoPath,
+        scope: { kind: "workspace", sessionId: chat.owner.record.id, draftId: input.draftId },
+        phase: "completed",
+        steps,
+        ownership: {
+          state: "saved",
+          target: {
+            kind: "workspace",
+            record: chat.owner.record,
+            runtimeSession: engine.summaryOf(chat),
+          },
+        },
+        prepared: {
+          ref: chat.ref,
+          runtimeId: runtimeIdOf(chat.ref.runtimeKind),
+          liveStateSequence,
+        },
+        instruction: { state: "accepted", messageId: acceptedMessage.messageId },
+      });
+      const result: WorkspaceSessionLaunchResult = {
+        workspaceId: workspace.record.workspaceId,
+        repoPath: workspace.record.repoPath,
+        status: "completed",
+        sessionId: chat.owner.record.id,
+        record: chat.owner.record,
+        session: engine.summaryOf(chat),
+        acceptedMessage,
+      };
+      if (startupProgress) result.startupProgress = startupProgress;
+      return result;
     },
     workspaceSessionStart: async ({ workspaceId, sessionId, startup }) => {
       const chat = findChat(workspaceId, sessionId);
-      const steps = pendingSteps.get(sessionId) ?? [];
-      pendingSteps.delete(sessionId);
-      const startupProgress = preparedChat(chat, startup, steps);
+      const startupProgress = preparedChat(chat, startup, []);
       const result: WorkspaceSessionStartResult = {
         session: chat.owner.record,
         runtimeSession: engine.summaryOf(chat),

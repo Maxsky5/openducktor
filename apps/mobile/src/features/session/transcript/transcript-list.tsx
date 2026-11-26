@@ -35,7 +35,7 @@ import type {
   TranscriptListItems,
   TranscriptListKind,
 } from "./transcript-list-items";
-import { TranscriptNoticeContext } from "./transcript-notice-context";
+import { TranscriptNoticeContext, TranscriptStartupContext } from "./transcript-notice-context";
 import type { PresentToolCall } from "./transcript-row-type";
 import type { TranscriptFullView } from "./transcript-rows-context";
 import {
@@ -62,6 +62,7 @@ export type TranscriptListProps = {
   activeStreamingMessageId: string | null;
   messagesVersion: number;
   notice: AgentChatTranscriptNotice | null;
+  startupAttemptId?: string | null | undefined;
   presentToolCall: PresentToolCall;
   subagentPendingCountBySessionKey: Readonly<Record<string, number>>;
   onOpenSubagent: (target: AgentSessionTranscriptTarget) => void;
@@ -99,6 +100,7 @@ export function TranscriptList({
   activeStreamingMessageId,
   messagesVersion,
   notice,
+  startupAttemptId = null,
   presentToolCall,
   subagentPendingCountBySessionKey,
   onOpenSubagent,
@@ -323,29 +325,31 @@ export function TranscriptList({
     <ViewportProvider value={viewportStore}>
       <View ref={frameRef} style={styles.fill} onLayout={onFrameLayout}>
         <NativeParagraphKeyContext value={paragraphKey}>
-          <TranscriptNoticeContext value={notice}>
-            {TRANSCRIPT_LIST_SLOTS.map((slot) =>
-              ready.has(slot) ? (
-                <TranscriptChatList
-                  key={slot}
-                  kind={SLOT_KIND[slot]}
-                  rows={slotRows[slot]}
-                  shown={slot === shownSlot}
-                  listRef={refs[slot]}
-                  itemsRef={itemRefs[slot]}
-                  rowState={rowState}
-                  presentToolCall={presentToolCall}
-                  onOpenSubagent={onOpenSubagent}
-                  openFullView={openFullView}
-                  onPlace={placeHandlers[slot]}
-                  onRest={onRest}
-                  onTopRow={onTopRow}
-                  accessibilityActions={TRANSCRIPT_ACTIONS}
-                  onAccessibilityAction={jumps.onAccessibilityAction}
-                />
-              ) : null,
-            )}
-          </TranscriptNoticeContext>
+          <TranscriptStartupContext value={startupAttemptId}>
+            <TranscriptNoticeContext value={notice}>
+              {TRANSCRIPT_LIST_SLOTS.map((slot) =>
+                ready.has(slot) ? (
+                  <TranscriptChatList
+                    key={slot}
+                    kind={SLOT_KIND[slot]}
+                    rows={slotRows[slot]}
+                    shown={slot === shownSlot}
+                    listRef={refs[slot]}
+                    itemsRef={itemRefs[slot]}
+                    rowState={rowState}
+                    presentToolCall={presentToolCall}
+                    onOpenSubagent={onOpenSubagent}
+                    openFullView={openFullView}
+                    onPlace={placeHandlers[slot]}
+                    onRest={onRest}
+                    onTopRow={onTopRow}
+                    accessibilityActions={TRANSCRIPT_ACTIONS}
+                    onAccessibilityAction={jumps.onAccessibilityAction}
+                  />
+                ) : null,
+              )}
+            </TranscriptNoticeContext>
+          </TranscriptStartupContext>
         </NativeParagraphKeyContext>
         <TranscriptTopButton atTop={follow.atTop} onJumpToTop={jumps.jumpToTop} />
         <TranscriptLatestButton

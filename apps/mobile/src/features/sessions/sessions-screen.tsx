@@ -15,7 +15,7 @@ import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useMobileWorkspaces } from "@/composition/workspace-selection";
-import { useOpenWorkspaceChat } from "@/features/new-chat/use-open-workspace-chat";
+import { useOpenNewChat, useOpenWorkspaceChat } from "@/features/new-chat/use-open-workspace-chat";
 import { useTerminalBridge } from "@/features/terminals/use-terminal-bridge";
 import { NoOpenWorkspaceState } from "@/features/workspaces/no-open-workspace";
 import { useCommandGate, useIsDemo } from "@/host-session/active-session-context";
@@ -216,6 +216,10 @@ export function SessionsScreen(): ReactElement {
       const destination = sessionEntryDestination(entry);
       if (destination.kind === "task") {
         router.push(routes.task(destination.workspaceId, destination.taskId));
+        return;
+      }
+      if (destination.kind === "draft") {
+        router.push(routes.newChat(destination.workspaceId, destination.draftId));
         return;
       }
       // A chat without pending input opens, or starts first, through openChat.
@@ -438,6 +442,7 @@ function NoSessionsState({
   refresh: PullRefresh;
 }): ReactElement {
   const router = useRouter();
+  const openNewChat = useOpenNewChat();
   return (
     <ScrollView
       contentContainerStyle={styles.grow}
@@ -461,7 +466,7 @@ function NoSessionsState({
                 label="New Session"
                 icon="message-circle-plus"
                 variant="outline"
-                onPress={() => router.push(routes.newChat(workspaceId))}
+                onPress={() => openNewChat(workspaceId)}
               />
             </>
           ) : null

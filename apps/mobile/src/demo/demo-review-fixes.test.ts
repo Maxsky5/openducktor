@@ -272,15 +272,22 @@ describe("demo task worktree owners", () => {
     const reviewed = await taskOf(demo, "Open search with a keyboard shortcut");
     const worktree = await demo.client.taskWorktreeGet(FIELDNOTES, reviewed.id);
     if (!worktree) throw new Error("The task has no worktree.");
-    await demo.client.workspaceSessionCreate({
+    const shared = await demo.client.workspaceSessionLaunch({
       workspaceId: "fieldnotes",
+      repoPath: FIELDNOTES.repoPath,
+      draftId: "draft-shared-chat",
       location: "existing_worktree",
       existingWorktree: { workingDirectory: worktree.workingDirectory },
       runtimeKind: "claude",
       selectedModel: null,
       customAgentRoleId: null,
-      manualTitle: "Shared chat",
       targetBranch: { remote: "origin", branch: "main" },
+      parts: [{ kind: "text", text: "Shared chat" }],
+    });
+    await demo.client.workspaceSessionRename({
+      workspaceId: "fieldnotes",
+      sessionId: shared.record!.id,
+      manualTitle: "Shared chat",
     });
     const owners = await demo.client.taskWorktreeOwnersGet({
       ...FIELDNOTES,
@@ -670,15 +677,17 @@ describe("demo QA fixes", () => {
     await first;
 
     const { chat, ref } = await chatOf(demo, "Why do tags drop on sync?");
-    await demo.client.workspaceSessionCreate({
+    await demo.client.workspaceSessionLaunch({
       workspaceId: "fieldnotes",
+      repoPath: FIELDNOTES.repoPath,
+      draftId: "draft-shared-archive",
       location: "existing_worktree",
       existingWorktree: { workingDirectory: chat.executionTarget.workingDirectory },
       runtimeKind: "claude",
       selectedModel: null,
       customAgentRoleId: null,
-      manualTitle: "Shared",
       targetBranch: { remote: "origin", branch: "main" },
+      parts: [{ kind: "text", text: "Shared" }],
     });
     await demo.client.agentSessionMessageSubmit({
       ...ref,
@@ -700,15 +709,17 @@ describe("demo QA fixes", () => {
 
     const reviewed = await taskOf(demo, "Open search with a keyboard shortcut");
     const worktree = await demo.client.taskWorktreeGet(FIELDNOTES, reviewed.id);
-    await demo.client.workspaceSessionCreate({
+    await demo.client.workspaceSessionLaunch({
       workspaceId: "fieldnotes",
+      repoPath: FIELDNOTES.repoPath,
+      draftId: "draft-on-the-task",
       location: "existing_worktree",
       existingWorktree: { workingDirectory: worktree?.workingDirectory ?? "" },
       runtimeKind: "claude",
       selectedModel: null,
       customAgentRoleId: null,
-      manualTitle: "On the task",
       targetBranch: { remote: "origin", branch: "main" },
+      parts: [{ kind: "text", text: "On the task" }],
     });
     await expect(demo.client.taskWorktreeRemove(FIELDNOTES, reviewed.id)).rejects.toThrow(
       "A session still works in this worktree",
@@ -876,23 +887,26 @@ describe("demo QA fixes", () => {
       FIELDNOTES.repoPath,
       worktree?.workingDirectory ?? "",
     );
-    const created = demo.client.workspaceSessionCreate({
+    const created = demo.client.workspaceSessionLaunch({
       workspaceId: "fieldnotes",
+      repoPath: FIELDNOTES.repoPath,
+      draftId: "draft-on-shortcut",
       location: "local_worktree",
       worktree: { mode: "from_name", name: "on-shortcut", branchName: null },
       runtimeKind: "claude",
       selectedModel: null,
       customAgentRoleId: null,
-      manualTitle: "On the shortcut branch",
       targetBranch: { branch: branch.name ?? "" },
+      parts: [{ kind: "text", text: "On the shortcut branch" }],
     });
     await demo.advance(5_000);
-    const { session } = await created;
+    const { record } = await created;
+    if (!record) throw new Error("The launched chat record is missing.");
     const status = await demo.client.gitGetWorktreeStatus(
       FIELDNOTES.repoPath,
       `refs/heads/${branch.name}`,
       "target",
-      session.executionTarget.workingDirectory,
+      record.executionTarget.workingDirectory,
     );
     expect(status.fileDiffs).toEqual([]);
     expect(status.targetAheadBehind).toEqual({ ahead: 0, behind: 0 });
@@ -902,19 +916,19 @@ describe("demo QA fixes", () => {
     const demo = openDemo();
     await observeLive(demo);
     const { chat } = await chatOf(demo, "Why do tags drop on sync?");
-    await demo.client.workspaceSessionCreate({
+    const secondLaunch = await demo.client.workspaceSessionLaunch({
       workspaceId: "fieldnotes",
+      repoPath: FIELDNOTES.repoPath,
+      draftId: "draft-second-chat",
       location: "existing_worktree",
       existingWorktree: { workingDirectory: chat.executionTarget.workingDirectory },
       runtimeKind: "claude",
       selectedModel: null,
       customAgentRoleId: null,
-      manualTitle: "Second chat",
       targetBranch: { remote: "origin", branch: "main" },
+      parts: [{ kind: "text", text: "Second chat" }],
     });
-    const second = (await demo.client.workspaceSessionListActive("fieldnotes")).find(
-      (item) => item.manualTitle === "Second chat",
-    );
+    const second = secondLaunch.record;
     if (!second) throw new Error("The second chat is missing.");
     const archive = (sessionId: string, removeWorktree: boolean) =>
       demo.client.workspaceSessionArchive({

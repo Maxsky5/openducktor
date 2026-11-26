@@ -19,13 +19,14 @@ const emptyActivity = () => EMPTY_TERMINAL_ACTIVITY;
 /** The number of commands that run in the terminals of the task or chat of an entry. */
 export const useSessionCommandCount = (entry: SessionNavigationEntry): number => {
   const controller = use(SessionCommandsContext);
-  const key = terminalActivityOwnerKey(sessionEntryTerminalContext(entry));
+  const terminalContext = sessionEntryTerminalContext(entry);
+  const key = terminalContext ? terminalActivityOwnerKey(terminalContext) : null;
   const read = useCallback(
-    () => (controller ? controller.readActivity(key) : EMPTY_TERMINAL_ACTIVITY),
+    () => (controller && key ? controller.readActivity(key) : EMPTY_TERMINAL_ACTIVITY),
     [controller, key],
   );
   const state = useSyncExternalStore(
-    controller?.subscribeActivity ?? noSubscription,
+    key ? (controller?.subscribeActivity ?? noSubscription) : noSubscription,
     read,
     emptyActivity,
   );

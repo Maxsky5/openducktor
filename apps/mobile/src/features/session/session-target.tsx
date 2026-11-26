@@ -52,9 +52,14 @@ export type SessionScreenValue = {
   interaction: SessionInteraction;
   /** The route asked to scroll to and focus the pending input. */
   focusPendingInput: boolean;
+  /** The startup attempt passed on the route, or null. */
+  startupAttemptId: string | null;
 };
 
-type SessionScreenRoute = Pick<SessionScreenValue, "target" | "focusPendingInput">;
+type SessionScreenRoute = Pick<
+  SessionScreenValue,
+  "target" | "focusPendingInput" | "startupAttemptId"
+>;
 
 // The interaction changes while the session prepares and when the connection changes. A separate
 // context renders only its readers again, not every view of the screen.
@@ -65,9 +70,13 @@ export function SessionScreenProvider({
   target,
   interaction,
   focusPendingInput,
+  startupAttemptId,
   children,
 }: PropsWithChildren<SessionScreenValue>): ReactElement {
-  const route = useMemo(() => ({ target, focusPendingInput }), [focusPendingInput, target]);
+  const route = useMemo(
+    () => ({ target, focusPendingInput, startupAttemptId }),
+    [focusPendingInput, startupAttemptId, target],
+  );
   return (
     <SessionRouteContext value={route}>
       <SessionInteractionContext value={interaction}>{children}</SessionInteractionContext>
@@ -94,3 +103,6 @@ export const useSessionTarget = (): SessionTarget => useSessionRoute().target;
 
 /** True when the route asked to scroll to and focus the pending input. */
 export const useFocusPendingInput = (): boolean => useSessionRoute().focusPendingInput;
+
+/** The startup attempt ID passed on the session route, or null. */
+export const useRouteStartupAttemptId = (): string | null => useSessionRoute().startupAttemptId;

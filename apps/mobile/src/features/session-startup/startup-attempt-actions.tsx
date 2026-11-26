@@ -1,7 +1,7 @@
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { StartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 import {
-  canOpenStartupSession,
+  canOpenStartupAttempt,
   startupIsPending,
 } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
 import type { ReactElement } from "react";
@@ -14,9 +14,6 @@ type StartupAttemptActionsProps = {
   attempt: StartupAttempt;
   onContinueInBackground?: (() => void) | undefined;
   onEditChoices?: (() => void) | undefined;
-  onRepairSavedSession?: (() => void) | undefined;
-  progressExpanded: boolean;
-  onToggleProgress?: (() => void) | undefined;
 };
 
 export function StartupAttemptActions(props: StartupAttemptActionsProps): ReactElement | null {
@@ -25,8 +22,13 @@ export function StartupAttemptActions(props: StartupAttemptActionsProps): ReactE
   const actions = startupActionButtons(props, () =>
     connection.startupAttempts.dismiss(props.attempt.id),
   );
-  const saved = props.attempt.ownership.state === "saved";
-  if (actions.length === 0 && !saved) return null;
+  const saved =
+    props.attempt.ownership.state === "saved" && props.attempt.presentation !== "inline";
+  const openableDraft =
+    props.attempt.presentation === "notification" &&
+    props.attempt.navigationTarget?.kind === "workspace_session_draft";
+  const showOpenButton = saved || openableDraft;
+  if (actions.length === 0 && !showOpenButton) return null;
   return (
     <View style={styles.footer}>
       {actions.length > 0 ? (
@@ -42,14 +44,14 @@ export function StartupAttemptActions(props: StartupAttemptActionsProps): ReactE
           ))}
         </View>
       ) : null}
-      {saved ? (
+      {showOpenButton ? (
         <Button
-          label="Open session"
+          label={openableDraft ? "Open draft" : "Open session"}
           icon="arrow-up-right"
           variant="filled"
           size="md"
           onPress={() => openSession(props.attempt.id)}
-          disabled={!canOpenStartupSession(props.attempt)}
+          disabled={!canOpenStartupAttempt(props.attempt)}
           fill
         />
       ) : null}
@@ -58,26 +60,12 @@ export function StartupAttemptActions(props: StartupAttemptActionsProps): ReactE
 }
 
 function startupActionButtons(
-  {
-    attempt,
-    onContinueInBackground,
-    onEditChoices,
-    onRepairSavedSession,
-    progressExpanded,
-    onToggleProgress,
-  }: StartupAttemptActionsProps,
+  { attempt, onContinueInBackground, onEditChoices }: StartupAttemptActionsProps,
   dismiss: () => void,
 ): ButtonProps[] {
   const phase = attempt.status.phase;
   const running = startupIsPending(attempt);
   const actions: ButtonProps[] = [];
-  if (onToggleProgress && attempt.presentation !== "notification")
-    actions.push({
-      label: progressExpanded ? "Hide progress" : "View progress",
-      trailingIcon: progressExpanded ? "chevron-up" : "chevron-down",
-      variant: "plain",
-      onPress: onToggleProgress,
-    });
   if (running) {
     if (onContinueInBackground)
       actions.push({
@@ -97,9 +85,7 @@ function startupActionButtons(
       });
     if (attempt.ownership.state === "not_saved" && onEditChoices)
       actions.push({ label: "Edit choices", onPress: onEditChoices });
-    if (phase === "failed" && attempt.ownership.state === "saved" && onRepairSavedSession)
-      actions.push({ label: "Retry preparation", command: true, onPress: onRepairSavedSession });
-    if (attempt.presentation === "inline")
+    if (attempt.presentation === "dialog" && phase !== "ready")
       actions.push({
         label: "Dismiss",
         variant: "plain",
