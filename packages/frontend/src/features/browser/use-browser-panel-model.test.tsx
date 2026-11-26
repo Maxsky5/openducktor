@@ -50,7 +50,8 @@ const renderModel = () => {
       },
     },
   });
-  const view = renderHook(() => useBrowserPanelModel(OWNER), {
+  // Two views of one task, as with kept role views.
+  const view = renderHook(() => [useBrowserPanelModel(OWNER), useBrowserPanelModel(OWNER)], {
     wrapper: ({ children }: { children: ReactNode }) =>
       withShellPlatform(
         <QueryProvider connection={connection}>
@@ -59,16 +60,18 @@ const renderModel = () => {
         shellPlatform,
       ),
   });
-  const model = () => {
-    const current = view.result.current;
-    if (current === null) throw new Error("Expected a browser model.");
+  const modelAt = (index: 0 | 1) => {
+    const current = view.result.current[index];
+    if (!current) throw new Error("Expected a browser model.");
     return current;
   };
   return {
-    model,
+    model: () => modelAt(0),
+    otherView: () => modelAt(1),
     opened,
     closed,
     emit: (tab: BrowserTabSummary) => emit({ type: "tab_upserted", tab }),
+    emitClosed: (tabId: string) => emit({ type: "tab_closed", tabId, owner: OWNER }),
   };
 };
 
@@ -107,5 +110,26 @@ describe("useBrowserPanelModel", () => {
       await close.catch(() => undefined);
     });
     expect(model().closingTabIds.has(TAB_ID)).toBe(false);
+  });
+
+  test("hides a closing tab in every view, until the host list removes it", async () => {
+    const { model, otherView, closed, emit, emitClosed } = renderModel();
+    await waitFor(() => expect(model().isSynced).toBe(true));
+    act(() => emit(createBrowserTabSummaryFixture({ tabId: TAB_ID, owner: OWNER })));
+
+    let close!: Promise<void>;
+    act(() => {
+      close = model().closeTab(TAB_ID);
+    });
+    expect(otherView().closingTabIds.has(TAB_ID)).toBe(true);
+
+    closed.resolve();
+    await act(async () => {
+      await close;
+    });
+    expect(otherView().closingTabIds.has(TAB_ID)).toBe(true);
+    act(() => emitClosed(TAB_ID));
+    expect(model().closingTabIds.has(TAB_ID)).toBe(false);
+    expect(otherView().closingTabIds.has(TAB_ID)).toBe(false);
   });
 });

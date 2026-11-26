@@ -5,7 +5,7 @@ import {
   browserTabOwnerKey,
 } from "@openducktor/contracts";
 import { HostBrowserClientError } from "@openducktor/host-client";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import {
   type BrowserTabView,
@@ -18,6 +18,7 @@ import { BROWSER_TABS_NEED_LOCAL_APP } from "./browser-frame-display";
 import { useBrowserRuntime, useBrowserTabs } from "./browser-runtime";
 import { BrowserTabContent } from "./browser-tab-content";
 import { browserTabPanelOwner } from "./browser-tab-placement";
+import { withId, withoutId } from "./tab-id-set";
 import type { BrowserTabsSnapshot } from "@openducktor/frontend-core/browser/browser-tabs-store";
 
 /** The browser tabs of one task or Workspace Session, for its session panels. */
@@ -28,7 +29,10 @@ export const useBrowserPanelModel = (
   const snapshot = useBrowserTabs();
   const ownerKey = owner === null ? null : browserTabOwnerKey(owner);
   const [openingTabIds, setOpeningTabIds] = useState<ReadonlySet<string>>(NO_TAB_IDS);
-  const [closingTabIds, setClosingTabIds] = useState<ReadonlySet<string>>(NO_TAB_IDS);
+  const closingTabIds = useSyncExternalStore(
+    runtime.closingTabs.subscribe,
+    runtime.closingTabs.ids,
+  );
 
   const openTab = useCallback(
     (tabId: string, address: string | null, tabOwner: BrowserTabOwner): Promise<void> => {
@@ -45,12 +49,12 @@ export const useBrowserPanelModel = (
     [runtime],
   );
 
-  // A closed tab stays hidden: it leaves when the host list no longer has it.
+  // A closed tab stays hidden in every view: it leaves when the host list no longer has it.
   const closeTab = useCallback(
     (tabId: string): Promise<void> => {
-      setClosingTabIds((ids) => withId(ids, tabId));
+      runtime.closingTabs.add(tabId);
       return runtime.requests.close(tabId).catch((cause: unknown) => {
-        setClosingTabIds((ids) => withoutId(ids, tabId));
+        runtime.closingTabs.remove(tabId);
         throw cause;
       });
     },
@@ -93,11 +97,6 @@ export const useBrowserPanelModel = (
 };
 
 const NO_TAB_IDS: ReadonlySet<string> = new Set();
-
-const withId = (ids: ReadonlySet<string>, id: string): ReadonlySet<string> => new Set([...ids, id]);
-
-const withoutId = (ids: ReadonlySet<string>, id: string): ReadonlySet<string> =>
-  new Set([...ids].filter((candidate) => candidate !== id));
 
 /**
  * Why the Browser card cannot open a tab now. The engine matters only in Electron: web runner tabs
