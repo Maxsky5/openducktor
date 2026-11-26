@@ -25,6 +25,8 @@ An agent works on a task in a session. Each role of a task, such as the Spec age
 
 When the agent moves the task, a card with the event as its title shows in the transcript, for example **Build Completed**. Select the title to read the note of the agent. When the agent saves the pull request of the task, a **Set Pull Request** card shows it.
 
+Consecutive commands, file reads, and searches show as one group that you can fold. An answered question shows as one row, with your answer under each question. Select a row to see its details. To change how groups show, see [Group tool calls](/settings-reference/#chat-group-tool-calls).
+
 ## Start a session [#start-a-session]
 
 <Steps>
@@ -32,11 +34,11 @@ When the agent moves the task, a card with the event as its title shows in the t
 <Step>In the dialog, check the model, then select <Action>Start session</Action>. The session page opens and the agent starts.</Step>
 </Steps>
 
-<Screenshot id="start-session-dialog" alt="The Start Spec session dialog with Runtime and model, Effort, the Customize first message switch, and the Cancel, Run in background, and Start session buttons." />
+<Screenshot id="start-session-dialog" alt="The Start Spec session dialog. Runtime and model shows one model button with Haiku 5.5 and low effort. Below it are the Customize first message switch, and the Cancel, Run in background, and Start session buttons." />
 
 | Option | Use it to |
 |---|---|
-| **Runtime and model**, **Effort**, **Speed**, **Runtime profile** | Choose the model of this session. See [Change the model of one session](/models/#session-model). |
+| **Runtime and model** | Choose the model of this session, and its **Effort**, **Profile**, or **Speed**. See [Change the model of one session](/models/#session-model). |
 | **Target branch** | Choose the branch that the work merges into. It shows for <Action>Start Builder</Action> and <Action>Generate Pull Request</Action>. See [Git and pull requests](/git-and-pull-requests/). |
 | **Session mode** | Continue an earlier session of the role with **Reuse existing**, or start a new one with **Start fresh**. It shows for <Action>Request QA Review</Action>, <Action>Address QA Feedbacks</Action>, <Action>Request Changes</Action>, and <Action>Resolve Git Conflict</Action>. For <Action>Generate Pull Request</Action>, choose **Reuse existing** or **Fork existing**. |
 | **Goal mode** | Give the Builder a goal instead of a first message. It shows for <Action>Start Builder</Action>, <Action>Address QA Feedbacks</Action>, and <Action>Request Changes</Action>. See [Work toward a goal](#goal-mode). |
@@ -80,22 +82,18 @@ When a turn stops before it finishes, a notice shows above the composer. To cont
 
 When the harness reaches its usage limit, the notice shows **The session reached its usage limit.** and the time until the limit resets.
 
-In Claude Code and Codex sessions, OpenDucktor resumes the turn by itself after the reset:
+When the harness has [auto-resume](/harnesses/#capabilities), OpenDucktor resumes the turn by itself after the reset:
 
 - The notice shows **Resumes automatically at** and the time of the resume, about 30 seconds after the reset.
 - The resume starts also when no window shows the session, while the host runs.
 - To keep the turn stopped, select <Action>Cancel auto-resume</Action>. The cancel applies only to this stop. You can still select <Action>Resume</Action>.
-- When the resume starts, the notice shows **Resuming**. To stop the turn, stop the session.
-- If the resumed turn stops on a usage limit again, OpenDucktor plans a new resume for the new reset time.
 - If the resume fails for another reason, the notice shows the reason and <Action>Resume</Action>. OpenDucktor does not try again.
 
-In Codex sessions, OpenDucktor also asks Codex at the reset time if your account can work again. If it cannot yet, OpenDucktor waits for the next reset that Codex reports. This needs a Codex sign-in with ChatGPT. With an API key, Codex cannot tell, so select <Action>Resume</Action> after the reset.
-
-OpenCode sessions have no auto-resume. Select <Action>Resume</Action> after the reset.
+Without auto-resume, select <Action>Resume</Action> after the reset. A harness without <Action>Resume</Action> continues with your next message.
 
 To turn the auto-resume off, see [Auto-resume after usage limits](/settings-reference/#chat-auto-resume-after-usage-limits).
 
-<Callout type="info" title="Host restart and sleep">After a host restart, OpenDucktor reads the session history and plans the resumes again, also for a stop that you canceled. It does not resume a stop whose reset time passed while the host was off. Select <Action>Resume</Action> for that stop. If the computer sleeps through a reset, the resume starts within one minute after the computer wakes.</Callout>
+If a session did not resume, see [Troubleshooting](/troubleshooting/#auto-resume-missed).
 
 ## Work toward a goal [#goal-mode]
 
@@ -112,10 +110,9 @@ In Goal mode, the Builder gets a goal instead of a first message. Its harness th
 <Step>Select <Action>Start session</Action>.</Step>
 </Steps>
 
-- **The agent gets only the goal.** **Customize first message** hides while Goal mode is on. A goal can have 4000 characters.
+- The agent gets only the goal. **Customize first message** hides while Goal mode is on. A goal can have 4000 characters.
 - **Generate goal** uses the [Default model](/settings-reference/#repository-agents-default-model) of the repository, and the [Goal Writer](/agent-prompts/#goal-writer) prompt. Without a default model, the button is off.
-- **Your harness must support goals.** If it does not, the switch is off and tells you why. See [Goal mode support](/harnesses/#goals).
-- **Autopilot** never starts a session in Goal mode.
+- Your harness must support goals. If it does not, the switch is off and tells you why. See [What each harness supports](/harnesses/#capabilities).
 
 ### Follow the goal [#goal-row]
 
@@ -129,7 +126,7 @@ The goal row shows above the composer: **Goal**, the status, and the objective. 
 | **Complete** | The goal is met. |
 | **Goal ended** | The goal stopped. |
 
-The row has <Action>Pause goal</Action>, <Action>Resume goal</Action>, and <Action>Clear goal</Action>. Some harnesses can only clear a goal.
+The row has <Action>Pause goal</Action>, <Action>Resume goal</Action>, and <Action>Clear goal</Action>. Some harnesses can only clear a goal. See [What each harness supports](/harnesses/#capabilities).
 
 A goal does not end when the task moves to another lane. The Builder can keep working after it reports the build as completed, until the goal is met. Before OpenDucktor removes a task worktree, it stops the sessions that work on a goal.
 
@@ -167,8 +164,9 @@ The **Background tasks** bar shows above the composer while a task runs. It show
 
 - The task leaves the list when it stops. The agent and the other tasks continue.
 - A stopped subagent ends before it finishes its work.
-- If a harness cannot stop a task, the row tells you why. Codex can stop a terminal from version 0.140.0.
+- If a harness cannot stop a task, the row tells you why. See [What each harness supports](/harnesses/#capabilities).
 - <Action>Stop</Action> on the session stops the agent and all its background tasks.
+- To see the ports of a command, or to stop a command that you started yourself, use [Processes and ports](/coding-sessions/processes/).
 
 ## Answer the agent [#answer-pending-input]
 
@@ -202,12 +200,12 @@ An agent asks for a permission before it does some actions, for example before i
 
 <Screenshot id="approval-card" alt="An Approval required card. Codex asks to run a shell command, the card shows the command, and it has the Approve once and Reject buttons." />
 
-Some harnesses also show these replies:
+Some harnesses also show these replies. For each harness, see [What each harness supports](/harnesses/#capabilities).
 
 | Reply | What it does |
 |---|---|
 | <Action>Approve for session</Action> | Allows the same request until the session ends. |
-| <Action>Always allow</Action> | Also allows the same request in later sessions. OpenCode shows it as <Action>Allow for project</Action>. |
+| <Action>Always allow</Action> or <Action>Allow for project</Action> | Also allows the same request in later sessions. |
 
 To get fewer requests, set the [permissions of each harness](/harnesses/#permissions).
 
@@ -241,6 +239,7 @@ If source code appears in one text color, see [Files and diffs in Troubleshootin
 <Cards>
   <Card title="Terminals" href="/coding-sessions/terminals/">Run commands in the task worktree beside a session.</Card>
   <Card title="Web pages" href="/coding-sessions/web-pages/">Open your dev server beside a session.</Card>
+  <Card title="Processes and ports" href="/coding-sessions/processes/">Open the ports of a dev server, or stop it.</Card>
   <Card title="Notifications" href="/notifications/">Get an alert when a session needs you.</Card>
   <Card title="Git and pull requests" href="/git-and-pull-requests/">Merge the work or open a pull request.</Card>
   <Card title="Command palette" href="/command-palette/">Start and answer sessions from the keyboard.</Card>

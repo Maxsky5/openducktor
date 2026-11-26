@@ -8,7 +8,7 @@ Each entry gives what a setting changes, its values, its default, and when a cha
 
 ## Open the Settings dialog [#open-settings]
 
-- Select **Settings** at the bottom of the sidebar. When the sidebar is collapsed, select the gear icon.
+- Select the gear icon, **Settings**, at the bottom of the sidebar.
 - Run **Open settings** in the [command palette](/command-palette/).
 - Run a palette command that starts with `Settings:`, such as **Settings: Notifications**, to open that section.
 - Select a control that opens one section. For example, **Manage actions** in the actions menu of a session opens [Scripts](#repository-scripts).
@@ -65,7 +65,7 @@ A save sends only the values that you changed. If another client of the host cha
 
 | Scope | Where the value applies | Sections |
 |---|---|---|
-| Host | Every desktop or browser client of the host. | Appearance, Remote control, Git, Agent runtimes, System prompts, Reusable prompts, Custom agent roles, Sessions, Notifications, Kanban, Autopilot |
+| Host | Every desktop or browser client of the host. | Keyboard shortcuts, Appearance, Remote control, Git, Agent runtimes, System prompts, Reusable prompts, Custom agent roles, Sessions, Notifications, Kanban, Autopilot |
 | Repository | Only the workspace that you select in **Repositories**. | Configuration, Scripts, Git, Agents, Repository prompts |
 | Device | Only the device that shows OpenDucktor. | The preferences of the mobile app |
 
@@ -98,6 +98,16 @@ The tour shows once after the first-run setup. **Show tour** shows it again.
 ### Settings files [#save-changes-settings-file]
 
 The host keeps shared settings in its database, `database.sqlite`. It keeps the personal preferences of the host in `config.json`. These are the Appearance, Sessions, Notifications, Kanban, and Reusable prompts settings. Both files are in `~/.openducktor`. To use another folder, set the `OPENDUCKTOR_CONFIG_DIR` environment variable.
+
+## Keyboard shortcuts [#keyboard-shortcuts]
+
+Sets the keys of each command. For the steps and the default keys, see [Keyboard shortcuts](/keyboard-shortcuts/).
+
+- **Search commands** finds a command by its name or its keys. **All commands** and **Assigned** filter the list.
+- **When** sets where an app command runs: **Always**, also while you type in an editor, a terminal, or a page, or **Not while typing**.
+- **Custom** marks a change of the default keys, and **Removed** marks a removed default. Each row can reset its default or remove its keys. **Reset all** restores every default.
+- The list also has the actions of each workflow, with no default keys.
+- The host saves the shortcuts, so they apply to every app that connects to the host. A shortcut that a device cannot use shows **Off on this device.** and the reason.
 
 ## Appearance [#appearance]
 
@@ -420,7 +430,7 @@ Sets what Antigravity approves without asking you. The change applies to Antigra
 
 - The default is **Auto**.
 - Set **Role overrides** to give a role another mode. **Inherited** uses the default.
-- Spec, Planner, QA, and other read-only roles never change files: OpenDucktor refuses their file edits in every mode. Their mode decides whether their commands and other tools run without asking: **Auto** and **Bypass permissions** run them, **Default** and **Accept edits** ask you.
+- Read-only roles never edit files. Their mode decides whether their commands and other tools run without asking: **Auto** and **Bypass permissions** run them, **Default** and **Accept edits** ask you.
 - Your Antigravity permission rules apply in every mode. In **Bypass permissions**, OpenDucktor approves each request that is left.
 - In **Auto**, Antigravity asks before each tool call of a global MCP server, such as a server in `~/.gemini/config/mcp_config.json`. To run these calls without asking, set the role to **Bypass permissions**.
 
@@ -565,20 +575,21 @@ For the model that each new session uses, see [Which model a session uses](/mode
 
 #### Default model [#repository-agents-default-model]
 
-- Sets the **Runtime and model**, **Agent profile**, and **Effort** for new workspace sessions and for roles without a default. When the harness has no agent profiles, **Agent profile** shows **Not supported by runtime**. When the harness sets the effort itself, **Effort** shows **Runtime sets effort**.
+- Sets the model of new workspace sessions and of the roles without a default. The options at the bottom of the model picker also set the **Effort**, the **Profile**, and the **Speed**. **Standard** saves no speed. For the harnesses that have each option, see [What each harness supports](/harnesses/#capabilities).
+- When the harness sets the effort itself, the picker shows `Effort is managed by the runtime.`
 - **Generate goal** in [Goal mode](/coding-sessions/#goal-mode) also uses this model, with the [Goal Writer](/agent-prompts/#goal-writer) prompt. Without a default model, **Generate goal** is off.
 - The default is none, unless you set a model when you added the workspace.
 
 #### Agent defaults by role [#repository-agents-role-defaults]
 
-- Sets the model of **Spec**, **Planner**, **Builder**, and **QA**, with the same fields as **Default model**.
+- Sets the model of each workflow role, such as **Spec**, **Planner**, **Builder**, and **QA**, with the same options as **Default model**.
 - The default is none, so the role uses the **Default model**. **Clear** sets the role back to the **Default model**.
 - A default on a disabled harness shows a warning with the role ID, such as `build agent runtime "Codex" is disabled.`
 - If the saved model is not available, the session start fails with a message such as `The saved build default or repository Default Model is not available for runtime codex.` Choose another model.
 
 #### Naming model [#repository-agents-naming-model]
 
-- Sets the **Runtime and model** and the **Effort** of the model that names work in this workspace. It has no **Agent profile**.
+- Sets the model and the **Effort** of the model that names work in this workspace. It has no **Profile** and no **Speed**.
 - The model writes the title of a new workspace session from its first message. It also names the branch of a new task worktree, and the branch of a new workspace session worktree when you leave **Worktree name** blank. See [Name work with a model](/workspace-sessions/#naming-model).
 - An Antigravity naming model saves each naming request as a conversation in your Antigravity history.
 - The default is none. Without a naming model, OpenDucktor makes no naming request: titles come from the first message, task branches come from the task title, and **Worktree name** is required. **Clear** removes the naming model.
@@ -593,9 +604,9 @@ For the model that each new session uses, see [Which model a session uses](/mode
 
 ## System prompts [#system-prompts]
 
-Sets the global appends and overrides of the prompts of the workflow agents. A [Repository prompts](#repository-prompts) change of the same prompt applies on top. For the prompts, the placeholders, the errors, and when a change applies, see [Agent prompts](/agent-prompts/).
+Sets the global appends and overrides of the prompts of the workflow agents and of the naming model. A [Repository prompts](#repository-prompts) change of the same prompt applies on top. For the prompts, the placeholders, the errors, and when a change applies, see [Agent prompts](/agent-prompts/).
 
-The first screen lists **Agent roles** and **Workflows**. Select a workflow to see its prompts, then select a prompt to edit it. See [Find a prompt](/agent-prompts/#find-a-prompt).
+The first screen lists **Agent roles**, **Workflows**, and **Naming**, also your workflow roles and custom workflows. Select a workflow to see its prompts, then select a prompt to edit it. See [Find a prompt](/agent-prompts/#find-a-prompt).
 
 ### Append instructions [#system-prompts-append]
 
@@ -641,6 +652,8 @@ Optional. The slash-command menu shows it.
 
 Sets reusable instructions for workspace sessions, such as a code reviewer or a research assistant. You choose the role when you start a workspace session. See [Use a custom role](/workspace-sessions/#custom-roles).
 
+A workflow cannot start these roles. To make a role that a workflow starts, see [Workflow roles](/tasks-and-workflows/custom-workflows/#roles).
+
 - The default is no roles.
 - A deletion applies when you save.
 - New sessions use the saved role. Existing sessions keep their role, even after you edit or delete it.
@@ -670,13 +683,24 @@ Sets message delivery and transcript display for task sessions and workspace ses
 - When a session stops on a usage limit and the harness reports a reset time, OpenDucktor resumes the session after the reset. See [After a usage limit](/coding-sessions/#usage-limit).
 - The default is on.
 - A save applies at once to every planned resume.
-- Claude Code and Codex sessions report a reset time. Codex needs a ChatGPT sign-in.
+- For the harnesses that report a reset time, see [What each harness supports](/harnesses/#capabilities).
 - The mobile app also uses this value.
 
 ### Show thinking messages [#chat-show-thinking-messages]
 
 - The default is off.
 - The mobile app has its own switch on each device.
+
+### Group tool calls [#chat-group-tool-calls]
+
+- Shows consecutive commands, file reads, searches, and other tool calls as one group that you can fold. When off, each call has its own row.
+- The default is on.
+
+### Collapse finished tool calls [#chat-collapse-finished-tool-calls]
+
+- Folds a group of tool calls when all its calls ended and the agent wrote after it. A group that you open stays open.
+- It needs **Group tool calls**.
+- The default is on.
 
 ### Show conversation minimap [#chat-show-conversation-minimap]
 
@@ -777,8 +801,6 @@ Sets which tasks and lanes the board shows. See [Tasks and workflows](/tasks-and
 
 Sets which workflow action starts by itself after a task change. See [Autopilot](/autopilot/).
 
-- Autopilot runs on the host for every open workspace while the host runs, even when no client is connected.
-- Autopilot acts only on task changes that occur after the host starts. When the host stops, Autopilot forgets the sessions that it did not start yet.
 - If the saved rules do not load, the section shows `The saved Autopilot rules could not load:` and you cannot edit it. Close Settings, then open it again.
 
 ### Always start QA reviews in a fresh session [#autopilot-always-start-qa-reviews-fresh]
@@ -796,7 +818,7 @@ Sets which workflow action starts by itself after a task change. See [Autopilot]
 
 <Cards>
   <Card title="Actions, worktrees, and prompts" href="/customize-openducktor/">Follow the steps for actions, worktrees, and reusable prompts.</Card>
-  <Card title="Harnesses" href="/harnesses/">Set up OpenCode, Codex, and Claude Code.</Card>
+  <Card title="Harnesses" href="/harnesses/">Set up OpenCode, Codex, Claude Code, or Antigravity.</Card>
   <Card title="Models" href="/models/">Choose the model of each role.</Card>
   <Card title="Troubleshooting" href="/troubleshooting/">Fix harness, workspace, and browser problems.</Card>
 </Cards>

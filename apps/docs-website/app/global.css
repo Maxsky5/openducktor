@@ -87,6 +87,11 @@ html > body[data-scroll-locked] {
   outline: none;
 }
 
+/* A path or a key in a table cell can wrap, so the table fits the width of a phone. */
+#nd-page :is(td, th) code {
+  overflow-wrap: anywhere;
+}
+
 /* Headings stay below the sticky header and the narrow "On this page" bar when a link opens them. */
 #nd-page :is(h2, h3, h4) {
   scroll-margin-top: calc(var(--fd-docs-row-3, 0px) + 1.5rem);

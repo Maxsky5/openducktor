@@ -2,5 +2,5 @@
   "title": "Tasks and workflows",
   "icon": "Workflow",
   "defaultOpen": true,
-  "pages": ["spec-plan-build"]
+  "pages": ["spec-plan-build", "custom-workflows"]
 }

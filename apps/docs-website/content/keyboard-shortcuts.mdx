@@ -1,0 +1,108 @@
+---
+icon: Keyboard
+title: Keyboard shortcuts
+description: Use the default keys, open a session or a workspace by its position, and give any command your own keys.
+---
+
+Some commands of OpenDucktor have default keys, and you can change them. You can also give keys to most other commands, such as a workflow action.
+
+<ProductDemo id="keyboard-shortcuts" />
+
+## Open a session by its position [#positions]
+
+Hold <kbd>Cmd</kbd> on macOS or <kbd>Ctrl</kbd> on Windows and Linux. Each session of the sidebar and each workspace of the workspace rail shows its key.
+
+- Press a number from <kbd>1</kbd> to <kbd>0</kbd> to open the session at that position.
+- Add <kbd>Shift</kbd> to open the workspace at that position.
+
+## Change a shortcut [#change]
+
+<Steps>
+<Step>Open [**Settings**](/settings-reference/#open-settings), then **Keyboard shortcuts**.</Step>
+<Step>In **Search commands**, type the name of the command or its keys.</Step>
+<Step>Select the keys of the command, or **Add keys** if it has none. Then press the new keys.</Step>
+<Step>If another command uses these keys, select <Action>Replace</Action> to move the keys, or <Action>Record other keys</Action>.</Step>
+<Step>Select <Action>Save settings</Action>.</Step>
+</Steps>
+
+The command shows the **Custom** badge. For the other options of each command, see [Keyboard shortcuts](/settings-reference/#keyboard-shortcuts) in the Settings reference.
+
+## Default keys [#default-keys]
+
+<Tabs items={["macOS", "Windows and Linux"]}>
+<Tab value="macOS">
+
+| Command | Keys |
+|---|---|
+| Toggle command palette | <kbd>Cmd</kbd>+<kbd>K</kbd> |
+| Open Settings | <kbd>Control</kbd>+<kbd>,</kbd> |
+| Toggle sidebar | <kbd>Control</kbd>+<kbd>B</kbd> |
+| New task | <kbd>Control</kbd>+<kbd>O</kbd> |
+| New session | <kbd>Control</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd> |
+| Go to Kanban | <kbd>Control</kbd>+<kbd>G</kbd> |
+| Focus task search | <kbd>Cmd</kbd>+<kbd>F</kbd> |
+| Focus composer | <kbd>Control</kbd>+<kbd>I</kbd> |
+| Toggle bottom panel | <kbd>Cmd</kbd>+<kbd>J</kbd> |
+| Toggle right panel | <kbd>Cmd</kbd>+<kbd>L</kbd> |
+| New tab in bottom panel | <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>Enter</kbd> |
+| New tab in right panel | <kbd>Cmd</kbd>+<kbd>Option</kbd>+<kbd>Enter</kbd> |
+| Close current panel tab, desktop app | <kbd>Cmd</kbd>+<kbd>W</kbd> |
+| Close current panel tab, browser runner | <kbd>Control</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> |
+| Edit task | <kbd>Cmd</kbd>+<kbd>E</kbd> |
+| Select session at position 1 to 10 | <kbd>Cmd</kbd>+<kbd>1</kbd> to <kbd>0</kbd> |
+| Select workspace at position 1 to 10 | <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>1</kbd> to <kbd>0</kbd> |
+
+</Tab>
+<Tab value="Windows and Linux">
+
+| Command | Keys |
+|---|---|
+| Toggle command palette | <kbd>Ctrl</kbd>+<kbd>K</kbd> |
+| Open Settings | <kbd>Ctrl</kbd>+<kbd>,</kbd> |
+| Toggle sidebar | <kbd>Ctrl</kbd>+<kbd>B</kbd> |
+| New task | <kbd>Ctrl</kbd>+<kbd>O</kbd> |
+| New session | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd> |
+| Go to Kanban | <kbd>Ctrl</kbd>+<kbd>G</kbd> |
+| Focus task search | <kbd>Ctrl</kbd>+<kbd>F</kbd> |
+| Focus composer | <kbd>Ctrl</kbd>+<kbd>I</kbd> |
+| Toggle bottom panel | <kbd>Ctrl</kbd>+<kbd>J</kbd> |
+| Toggle right panel | <kbd>Ctrl</kbd>+<kbd>L</kbd> |
+| New tab in bottom panel | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Enter</kbd> |
+| New tab in right panel | <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Enter</kbd> |
+| Close current panel tab, desktop app | <kbd>Ctrl</kbd>+<kbd>W</kbd> |
+| Close current panel tab, browser runner | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> |
+| Edit task | <kbd>Ctrl</kbd>+<kbd>E</kbd> |
+| Select session at position 1 to 10 | <kbd>Ctrl</kbd>+<kbd>1</kbd> to <kbd>0</kbd> |
+| Select workspace at position 1 to 10 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>1</kbd> to <kbd>0</kbd> |
+
+</Tab>
+</Tabs>
+
+The other commands have no default keys, such as **Go to Usage**, **Go to Workflows**, and **Running processes and ports**.
+
+## Fixed keys [#fixed-keys]
+
+You cannot change these keys.
+
+### Composer [#fixed-composer]
+
+| What it does | Keys |
+|---|---|
+| Sends the message, or queues it while the agent works. See [Queue a message](/coding-sessions/#queue). | <kbd>Enter</kbd> |
+| Steers the message into the running turn. [Steer messages by default](/settings-reference/#chat-steer-messages-by-default) swaps it with <kbd>Enter</kbd>. | <kbd>Cmd</kbd>+<kbd>Enter</kbd> on macOS, <kbd>Ctrl</kbd>+<kbd>Enter</kbd> on Windows and Linux |
+
+### Command palette [#fixed-palette]
+
+| What it does | Keys |
+|---|---|
+| Runs the main action of the selected task. | <kbd>Cmd</kbd>+<kbd>Enter</kbd> on macOS, <kbd>Ctrl</kbd>+<kbd>Enter</kbd> on Windows and Linux |
+| Shows the actions of a task or a workspace session. <kbd>Right</kbd> works when the cursor is at the end of the search. | <kbd>Tab</kbd> or <kbd>Right</kbd> |
+| In an action list with an empty search, goes back to the main list. | <kbd>Backspace</kbd> |
+| Opens the workspace filter. | <kbd>Option</kbd>+<kbd>Down</kbd> on macOS, <kbd>Alt</kbd>+<kbd>Down</kbd> on Windows and Linux |
+
+## Next [#next]
+
+<Cards>
+  <Card title="Command palette" href="/command-palette/">Find and run any command from the keyboard.</Card>
+  <Card title="Processes and ports" href="/coding-sessions/processes/">Open the Processes view.</Card>
+</Cards>

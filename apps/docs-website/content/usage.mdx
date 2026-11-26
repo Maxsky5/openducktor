@@ -1,0 +1,64 @@
+---
+icon: ChartSpline
+title: Usage
+description: See the tokens and the estimated API cost of each harness on your host, by model, project, and period.
+---
+
+The Usage page shows how many tokens your harnesses used on this host, and what they would cost at API rates. It counts every session in the history of each harness, also the sessions that started outside OpenDucktor.
+
+<ProductDemo id="usage" />
+
+## Open Usage [#open]
+
+<Steps>
+<Step>At the bottom of the expanded sidebar, select **Usage**, the chart icon beside the gear icon of Settings. You can also run **Go to Usage** in the [command palette](/command-palette/).</Step>
+<Step>Wait for the first read. The page shows the progress of each harness.</Step>
+</Steps>
+
+The first visit reads all the history of the host. On a large history, it can take about one minute. Later visits read only the new activity.
+
+## Filter the page [#filters]
+
+| Filter | Values |
+|---|---|
+| Harness menu, beside the title | **All runtimes**, or one harness. |
+| Range | **7 days**, **30 days**, **90 days**, **All time**, or **Custom** with a start date and an end date. The default is **30 days**. |
+| Metric | **Tokens** or **Cost**. |
+
+Select <Action>Refresh</Action> to read the new activity now.
+
+## What each section shows [#sections]
+
+| Section | What it shows |
+|---|---|
+| Overview | The total, the number of sessions, and the part of each harness, beside the trend chart. |
+| **Highlights** | **Cache hit rate**, the busiest period, the average per period, and the value per session. |
+| **Tokens by type** | **New input**, **Cache reads**, **Cache writes**, and **Output**. Output includes the reasoning tokens. |
+| **Breakdown** | The total by **Model**, by **Project**, or by period. |
+| **Sources** | For each harness, **All history read**, **Some history unread**, or **No history**, and the date of the rates. |
+
+A value with a warning mark leaves out some usage, for example history that Usage cannot read.
+
+## Where the data comes from [#sources]
+
+Usage reads the history files of each harness on the host. It opens them read-only and sends no path or transcript to the page.
+
+| Harness | History that Usage reads |
+|---|---|
+| Claude Code | `~/.claude/projects/`, or the folder of `CLAUDE_CONFIG_DIR` |
+| Codex | `~/.codex/sessions/` and `~/.codex/archived_sessions/`, or the folder of `CODEX_HOME` |
+| OpenCode | `~/.local/share/opencode/opencode*.db`, or the folder of `XDG_DATA_HOME`, or the file of `OPENCODE_DB` |
+| Antigravity | `~/.gemini/antigravity-cli/conversations/`. Not the conversations of the Antigravity desktop app. |
+
+## The cost is an estimate [#cost]
+
+The cost uses the API rates of [models.dev](https://models.dev), a public list of model prices. It is not a bill. With a subscription, such as a Claude or ChatGPT plan, it shows what the same tokens cost at API rates.
+
+A dash means that models.dev has no rate for the model. Usage downloads the rates at most once a day, and sends no usage data.
+
+## Next [#next]
+
+<Cards>
+  <Card title="Models" href="/models/">Choose the model of each role.</Card>
+  <Card title="Harnesses" href="/harnesses/">Set up the harnesses that Usage reads.</Card>
+</Cards>

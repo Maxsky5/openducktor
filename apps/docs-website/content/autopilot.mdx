@@ -34,7 +34,7 @@ A new session uses the [default model of its role](/models/#role-defaults), or t
 
 Each workflow has its own rules. A rule acts on task changes after you save it. It does not start an agent for a task that is already in that lane.
 
-**Always start QA reviews in a fresh session** applies to every workflow. When it is on, each review that Autopilot starts gets a new session, also when the action reuses sessions. A review is the step of a role that saves a verdict, such as QA.
+To give each review that Autopilot starts a new session, turn on [Always start QA reviews in a fresh session](/settings-reference/#autopilot-always-start-qa-reviews-fresh).
 
 ## Where Autopilot stops [#human-approval]
 
@@ -48,7 +48,7 @@ Autopilot only starts agents. It does not do these steps:
 
 ## When a step stops on a usage limit [#usage-limit]
 
-A Claude Code or Codex step that stops on a usage limit continues after the reset, while the host runs. When the step completes, Autopilot starts the next action as usual. An OpenCode step, or a Codex step with an API key sign-in, waits until you select <Action>Resume</Action>. See [After a usage limit](/coding-sessions/#usage-limit).
+When its harness has [auto-resume](/harnesses/#capabilities), a step that stops on a usage limit continues after the reset, while the host runs. When the step completes, Autopilot starts the next action as usual. Otherwise the step waits until you resume it. See [After a usage limit](/coding-sessions/#usage-limit).
 
 ## When Autopilot cannot start an agent [#skipped-or-failed]
 

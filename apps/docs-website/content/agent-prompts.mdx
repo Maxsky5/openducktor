@@ -10,7 +10,7 @@ OpenDucktor tells each agent of a task what to do with a set of prompts. You can
 
 ### The system prompt [#system-prompt]
 
-Each Spec, Planner, Builder, or QA session gets a system prompt: the rules that the agent follows for the whole session.
+Each session of a workflow role, such as Spec or the Builder, gets a system prompt: the rules that the agent follows for the whole session.
 
 <Diagram name="systemPrompt" />
 
@@ -33,7 +33,7 @@ Workspace sessions do not get these prompts. To give a workspace session its own
 Two prompts do not start a step:
 
 - **Builder Git Conflict Message** goes to the Builder session when a Git operation stops on conflicts.
-- **Read-Only Permission Rejection** is the reply that a Spec, Planner, or QA agent gets when it asks for a tool that writes, such as a file edit.
+- **Read-Only Permission Rejection** is the reply that a read-only role, such as Spec, Planner, or QA, gets when it asks for a tool that writes, such as a file edit.
 
 ## Append or replace [#append-or-replace]
 
@@ -83,6 +83,8 @@ Each prompt is separate. If a repository overrides **Builder Kickoff**, its othe
 />
 
 Open **Settings**, then **System prompts** for all repositories. For one repository, open **Repositories**, select the repository, then **Repository prompts**. Both screens work in the same way.
+
+**Agent roles** also lists your [workflow roles](/tasks-and-workflows/custom-workflows/#roles), and **Workflows** lists your custom workflows. **Naming** lists the prompts of the [naming model](#naming).
 
 A badge on a prompt shows its state on the screen that you see:
 

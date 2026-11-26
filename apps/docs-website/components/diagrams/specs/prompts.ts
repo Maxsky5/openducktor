@@ -83,7 +83,7 @@ export const systemPrompt = defineDiagram({
       type: "item",
       data: {
         title: "Native system prompt",
-        text: "From OpenCode, Codex, or Claude Code",
+        text: "From OpenCode, Codex, Claude Code, or Antigravity",
         Icon: Cpu,
         tone: "native",
       },

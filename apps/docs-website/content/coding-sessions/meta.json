@@ -2,5 +2,5 @@
   "title": "Coding sessions",
   "icon": "MessagesSquare",
   "defaultOpen": true,
-  "pages": ["terminals", "web-pages"]
+  "pages": ["terminals", "web-pages", "processes"]
 }

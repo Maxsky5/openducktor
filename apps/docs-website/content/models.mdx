@@ -10,7 +10,7 @@ Each agent role has a default model, and you can change the model, effort, or sp
 
 <Steps>
 <Step>Open [**Settings**](/settings-reference/#open-settings), then **Repositories**, your repository, and **Agents**.</Step>
-<Step>Under **Default model**, select a model in **Runtime and model**. Then select the **Effort**, and the **Agent profile** for OpenCode.</Step>
+<Step>Under **Default model**, open the model picker and select a model. In the options at the bottom of the picker, set the **Effort**, the **Profile** for OpenCode, or the **Speed**.</Step>
 <Step>Optional: to give a role another model, select it under **Agent defaults by role**.</Step>
 <Step>Select <Action>Save settings</Action>.</Step>
 </Steps>
@@ -36,53 +36,55 @@ A new task session uses the first model that is set.
 ## Change the model of one session [#session-model]
 
 <Steps>
-<Step>In the [start dialog](/coding-sessions/#start-a-session), open **Runtime and model**. In the composer of a running session, select the model name under the message box.</Step>
-<Step>Select a model.</Step>
-<Step>If the model supports it, set **Effort** or **Speed** next to the model.</Step>
+<Step>In the [start dialog](/coding-sessions/#start-a-session), open **Runtime and model**. In the composer of a running session, select the model under the message box.</Step>
+<Step>Select a harness in the rail on the left, then a model in the list.</Step>
+<Step>If the model has options, set them at the bottom of the picker: **Effort**, **Profile**, or **Speed**.</Step>
 </Steps>
 
 <AnnotatedScreenshot
   id="session-model-picker"
-  alt="The Runtime and model picker. The left column shows the Favorites star and one icon for each harness. The Claude harness is selected and lists its models, each with a star, and Haiku 5.5 is selected."
+  alt="The model picker of a Claude session. The left column shows Favorites and one icon for each harness. The Claude list shows the starred models Opus 5.5 and Haiku 5.5 first. The bottom bar shows Effort at high and Speed at Fast."
   parts={[
     { at: "favorites", title: "Favorites", text: "The models that you starred, from all harnesses." },
     { at: "harnesses", title: "Harnesses", text: "One icon for each harness. Select one to see its models." },
     { at: "search-models", title: "Search models", text: "Searches the models of all harnesses." },
     { at: "star", title: "Star", text: "Adds the model to Favorites at once, for all workspaces." },
+    { at: "effort", title: "Effort", text: "Drag the slider. With a higher effort, the model thinks longer before it answers." },
+    { at: "speed", title: "Speed", text: "Standard or Fast. Only some models have it." },
   ]}
 />
 
-When you have favorites, the picker opens on them, and each harness list shows them first.
+The start dialog, the composer, and Settings use the same picker. When you have favorites, the picker opens on them. In the composer, a model of another harness moves the session to that harness. See [Continue a session in another harness](#runtime-handoff).
 
 <AnnotatedScreenshot
   id="session-composer-model"
-  alt="The composer of a running Codex session. Under the message box are the model GPT-6.1-Sol, the Effort low, and the Speed icon, a crossed-out lightning bolt for Standard."
+  alt="The composer of a Claude session. Under the message box, one model button shows Opus 5.5, the effort high, and a lightning icon for Fast."
   parts={[
-    { at: "model", title: "Model", text: "Select a model for the next message." },
+    { at: "model", title: "Model", text: "Opens the picker. Select a model for the next message." },
     { at: "effort", title: "Effort", text: "How much the model thinks before it answers." },
-    { at: "speed", title: "Speed", text: "How fast the model answers. A higher speed can cost more. A crossed-out icon means Standard." },
+    { at: "speed", title: "Speed", text: "A lightning icon means Fast. Standard shows no icon." },
   ]}
 />
 
-**Speed** is available only with Codex and Claude Code. **Agent profile** is an OpenCode setting. With Antigravity, **Effort** is the thinking level of the model, and only some models have it. The start dialog calls it **Runtime profile**.
+- **Effort** sets how much the model thinks before it answers. Only some models have it.
+- **Profile** chooses an agent profile of the harness. To change it, start a new session.
+- **Speed** shows only for the models that have it. **Standard** is the normal speed. A faster speed can cost more.
 
-**Speed** has no default. A new or forked session starts at **Standard**. A change in the composer applies to the next turn.
+For the options of each harness, see [What each harness supports](/harnesses/#capabilities).
 
-## Continue a chat in another runtime [#runtime-handoff]
+A change in the composer applies to the next turn.
 
-You can hand off a chat between OpenCode, Codex, Claude Code, and Antigravity.
+## Continue a session in another harness [#runtime-handoff]
 
-1. Open the model picker in a Workspace Chat or Agent Studio. On mobile, open **Message options** first.
-2. Choose a model in another runtime. The composer shows the source, the destination, and which earlier content Send can share.
-3. Send the message after the current runtime and its child agents finish. Resolve any pending input and clear queued work first.
+You can move a session to a model of another harness. The new harness continues in the same checkout, with the same role.
 
-Switching to Codex requires Codex CLI 0.136.0 or later.
+<Steps>
+<Step>In the composer of a session, open the model picker. On mobile, open **Message options** first.</Step>
+<Step>Select a model of another harness. The composer shows the two harnesses and the earlier content that the new harness gets.</Step>
+<Step>Wait until the agent and its subagents stop. Answer the pending requests, clear the queue, then send your message.</Step>
+</Steps>
 
-The new runtime uses the same checkout and chat role. The transcript marks the switch and tells you if earlier context did not fit. Choose the current runtime to cancel a switch before you send.
-
-If delivery remains uncertain, use **Check delivery**. You can do this after reconnecting to the same running host.
-
-If the host restarts while a handoff is pending in the open chat, OpenDucktor checks for a saved handoff. If the host saved it, the chat opens the destination. If the host saved no handoff, you can start a new handoff from the source.
+The transcript marks the switch, and tells you if the earlier content did not fit. To cancel before you send, select <Action>Cancel</Action>, or a model of the current harness. If the switch does not complete, see [Troubleshooting](/troubleshooting/#handoff-not-delivered).
 
 ## Next [#next]
 

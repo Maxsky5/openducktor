@@ -14,7 +14,7 @@ A workspace session is a session that does not belong to a task. It has no workf
 
 In a collapsed sidebar, select <Action>+</Action>, then <Action>New session</Action>. You can also run <Action>New session</Action> from the [command palette](/command-palette/).
 
-**Runtime and model** starts with the [**Default model**](/models/#model-choice) of the repository. For OpenCode, also check **Runtime profile**.
+**Runtime and model** starts with the [**Default model**](/models/#model-choice) of the repository. Check the **Profile** at the bottom of the model picker when it shows one.
 
 | Work location | Where the agent works |
 |---|---|
@@ -32,7 +32,7 @@ When the workspace has a [Naming model](/settings-reference/#repository-agents-n
 - A new worktree with a blank **Worktree name** and no branch name gets a temporary branch, such as `odt/1a2b3c4d`, and a folder with the same digits. When you send the first message, the model names the branch, for example `fix/oauth-login-redirect`, and the agent starts on that branch. The folder keeps its name.
 - A branch name that you type does not change.
 
-If the model does not answer in 15 seconds, the branch comes from the first words of the message, such as `odt/fix-login-redirect-after-oauth`. If the model fails, the same names apply and the session shows the error.
+If the model does not answer or fails, the branch comes from the first words of the message, such as `odt/fix-login-redirect-after-oauth`. A failure also shows the error.
 
 To change how the model names work, edit the [naming prompts](/agent-prompts/#naming).
 
@@ -48,7 +48,7 @@ A custom agent role, such as a code reviewer, gives a workspace session its own 
 <Step>Start a workspace session, and choose the role in **Custom role** in the **New session** dialog.</Step>
 </Steps>
 
-Roles are available in every workspace. New sessions use the saved role. Existing sessions keep their role when you edit or delete it.
+Roles are available in every workspace.
 
 ## Create tasks from a request [#create-tasks]
 
@@ -71,7 +71,7 @@ New tasks start in <Status of="open" />. Their first step depends on their [issu
 
 A fork is a new workspace session with the conversation of the source session up to one reply. Use it to try another follow-up and keep the source session as it is.
 
-<Action>Fork from this reply</Action> shows under the last reply of each completed turn. The fork keeps the runtime, the model, the role, and the target branch of the source session.
+<Action>Fork from this reply</Action> shows under the last reply of each completed turn. The fork keeps the harness, the model, the role, and the target branch of the source session.
 
 | Work location | Where the fork works |
 |---|---|

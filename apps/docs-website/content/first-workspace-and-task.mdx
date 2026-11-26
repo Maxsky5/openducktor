@@ -12,7 +12,7 @@ You need a local Git repository with at least one commit, and one [harness](/har
 
 ### Turn on your harnesses [#turn-on-harnesses]
 
-<Screenshot id="onboarding-agents" alt="The Configure coding agents step. OpenCode, Codex, and Claude each show Available, an Enabled switch, the executable path, and the version." />
+<Screenshot id="onboarding-agents" alt="The Configure coding agents step. OpenCode, Codex, and Claude show Available and Enabled. Antigravity shows Available, and its Enabled switch is off. Each card shows the executable path and the version." />
 
 <Steps>
   <Step>Turn on **Enabled** for each harness that you want to use.</Step>
@@ -39,24 +39,28 @@ Turn on system notifications for your platform. See [System permission](/notific
 
 ### Choose the default model [#choose-the-default-model]
 
-<Screenshot id="onboarding-models" alt="The Models step. The Default model is Haiku 5.5 with low effort, Agent profile shows Not supported by runtime, and the Role defaults section is below it." />
+<Screenshot id="onboarding-models" alt="The Models step. The Default model is Opus 5.5 with high effort, the Naming model is empty, and each role in Role defaults uses the workspace default." />
 
-A role without a model in **Role defaults** uses the **Default model**. You can change both later. See [Models](/models/#role-defaults). Then select <Action>Open repository</Action>.
+<Steps>
+<Step>Check the **Default model**. The step fills it with a recommended model of your harnesses.</Step>
+<Step>Optional: set a model in **Role defaults**, or a **Naming model**. You can change them later. See [Models](/models/#role-defaults).</Step>
+<Step>Select <Action>Open repository</Action>.</Step>
+</Steps>
 
 ## Create your first task [#create-a-task]
 
-Start with a small, clear change, such as a typo fix. The Builder can start a **Task** or a **Bug** immediately. A **Feature** first gets a spec and a plan. See [Issue types](/tasks-and-workflows/spec-plan-build/#issue-types).
+Start with a small, clear change, such as a typo fix. In the built-in Spec, Plan, Build workflow, the Builder can start a **Task** or a **Bug** immediately. A **Feature** first gets a spec and a plan. See [Issue types](/tasks-and-workflows/spec-plan-build/#issue-types).
 
 <Screenshot id="new-task-type" alt="The first step of the Create task dialog. The title reads Create task in fieldnotes, and the workspace name opens a menu of the open workspaces. Below are three issue types: Feature, Bug, and Task, each with a short description." />
 
 <Steps>
-  <Step>In the sidebar, select <Action>New task</Action>, then **Task**.</Step>
+  <Step>In the sidebar, select <Action>New task</Action>, then **Task**. If a **Workflow** step shows, select **Spec, Plan, Build**.</Step>
   <Step>Type a **Title** and a **Description** of the change, then select <Action>Create task</Action>.</Step>
 </Steps>
 
 ## Start the Builder [#start-the-builder]
 
-<Screenshot id="start-builder-dialog" alt="The Start Builder session dialog with Target branch main, the model Haiku 5.5, and low effort. The Goal mode and Customize first message switches are off. At the bottom are Cancel, Run in background, and Start session." />
+<Screenshot id="start-builder-dialog" alt="The Start Builder session dialog with Target branch main, and one model button that shows Haiku 5.5 with low effort. The Goal mode and Customize first message switches are off." />
 
 <Steps>
   <Step>On the task card in <Status of="open" />, select <Action>Start Builder</Action>.</Step>

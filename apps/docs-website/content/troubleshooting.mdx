@@ -10,7 +10,7 @@ Start with the Diagnostics panel. It checks the harnesses, Git, and the selected
 
 ## Diagnostics [#diagnostics]
 
-To open the panel, select the shield icon at the bottom of the sidebar, beside **Settings**.
+To open the panel, select the shield icon at the bottom of the sidebar.
 
 <ProductDemo id="local" />
 
@@ -128,10 +128,10 @@ Cause: the automatic installation of the downloaded update stopped. The message 
 
 ## Harnesses [#harnesses]
 
-The **Agent runtimes** card in [Diagnostics](#diagnostics) shows the state of OpenCode, Codex, and Claude Code. Host messages name the settings section `Settings > Runtimes`. In the Settings dialog, its name is **Agent runtimes**.
+The **Agent runtimes** card in [Diagnostics](#diagnostics) shows the state of OpenCode, Codex, Claude Code, and Antigravity. Host messages name the settings section `Settings > Runtimes`. In the Settings dialog, its name is **Agent runtimes**.
 
 <Accordions>
-<Accordion id="harness-not-found" title="Cannot start the OpenCode, Codex, or Claude runtime">
+<Accordion id="harness-not-found" title="Cannot start the OpenCode, Codex, Claude, or Antigravity runtime">
 
 Cause: the harness did not start. The message on the row gives the reason, for example a missing executable or an old version.
 
@@ -146,7 +146,7 @@ Cause: the harness did not start. The message on the row gives the reason, for e
 
 Cause: the harness is too old, or it did not start. The message gives the reason and the update command.
 
-1. Run the update command in the message, for example `opencode upgrade`, `claude update`, or `agy update`.
+1. Run the update command in the message.
 2. Select <Action>Check again</Action>, and wait for **Available**.
 3. Select <Action>Restart</Action> on the Diagnostics row, then <Action>Restart</Action> in the dialog.
 4. Wait until the row shows **Ready**.
@@ -166,7 +166,7 @@ Cause: the **Goal mode** switch is off because the harness of the session cannot
 
 1. Run the update command in the message, for example `opencode upgrade`.
 2. Select <Action>Check again</Action> in **Settings**, **Agent runtimes**, and wait for **Available**.
-3. Open the start dialog again. For the versions, see [Goal mode support](/harnesses/#goals).
+3. Open the start dialog again. For the versions, see [What each harness supports](/harnesses/#capabilities).
 
 </Accordion>
 <Accordion id="goal-plugin-off" title="OpenCode has no /goal command">
@@ -185,7 +185,27 @@ Cause: <Action>Generate goal</Action> uses the default model of the repository, 
 2. Set the [Default model](/settings-reference/#repository-agents-default-model), then select <Action>Save settings</Action>.
 
 </Accordion>
-<Accordion id="runtime-stopped" title="The OpenCode, Codex, or Claude runtime stopped unexpectedly">
+<Accordion id="auto-resume-missed" title="A session did not resume after a usage limit">
+
+Cause: the host was off, or the computer slept, at the reset time.
+
+- After a host restart, OpenDucktor plans the resumes again from the session history, also for a stop that you canceled. It does not resume a stop whose reset time passed while the host was off.
+- If the computer sleeps through a reset, the resume starts within one minute after the computer wakes.
+
+To continue the turn, select <Action>Resume</Action> in the session.
+
+</Accordion>
+<Accordion id="handoff-not-delivered" title="A switch to another harness shows Handoff needs attention">
+
+Cause: OpenDucktor does not know whether the new harness got your message, for example after the connection to the host stopped. The notice above the composer gives the reason.
+
+1. Connect again to the same running host.
+2. Select <Action>Check delivery</Action> in the composer.
+
+If the host restarted during the switch, open the session. When the host saved the switch, the session opens in the new harness. Otherwise, start the switch again from the model picker.
+
+</Accordion>
+<Accordion id="runtime-stopped" title="The OpenCode, Codex, Claude, or Antigravity runtime stopped unexpectedly">
 
 Cause: the harness process stopped.
 
@@ -672,6 +692,6 @@ Add these details:
 
 <Cards>
   <Card title="Install and update" href="/install-and-update/">Install the desktop app or the browser runner again.</Card>
-  <Card title="Harnesses" href="/harnesses/">Set up OpenCode, Codex, and Claude Code.</Card>
+  <Card title="Harnesses" href="/harnesses/">Set up OpenCode, Codex, Claude Code, or Antigravity.</Card>
   <Card title="Settings reference" href="/settings-reference/">Look up each setting and its default value.</Card>
 </Cards>

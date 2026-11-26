@@ -1,0 +1,65 @@
+---
+icon: Cpu
+title: Processes and ports
+description: See the commands that run in your checkouts, open their ports in the browser, and stop them.
+---
+
+The Processes view lists the commands that run in the checkouts of your open workspaces, such as a dev server that an agent started. You can open a port in your browser or stop a command without a terminal.
+
+<ProductDemo id="processes" />
+
+## Open the Processes view [#open]
+
+<Steps>
+<Step>At the bottom of the workspace rail, select **Processes**, the chip icon. Its badge shows the number of running commands.</Step>
+<Step>Find the command. The checkouts of the current task come first, with the **This task** tag. To filter the list, type a command, a folder, a PID, or a port in **Search commands**.</Step>
+</Steps>
+
+The view opens beside the rail, and the app stays usable. To close it, select outside it or press <kbd>Esc</kbd>. You can also run **Running processes and ports** in the [command palette](/command-palette/#actions).
+
+## Read a row [#rows]
+
+Each row is one command: its folder, the command, its ports, and <Action>Stop</Action>.
+
+- Select a port to open its address in your default browser.
+- Select the command to see each of its processes, with its PID.
+- The processes that another app started, such as an editor, show in one row for each app.
+
+## Stop a command [#stop]
+
+<Steps>
+<Step>On the row, select <Action>Stop</Action>, the square icon.</Step>
+<Step>Check the folder, the processes, and the ports, then select <Action>Stop</Action>.</Step>
+</Steps>
+
+OpenDucktor stops every process that the command started, as <kbd>Ctrl</kbd>+<kbd>C</kbd> stops a command in a terminal. The row then leaves the list.
+
+## Keep the list open [#detach]
+
+To watch the list while you work, select <Action>Detach into a floating window</Action> in its toolbar. The window stays over the app when you open other pages. Drag its title bar to move it, or drag an edge to change its size.
+
+To put the list back beside the rail, select <Action>Attach to the rail</Action>. A reload of the app closes the window.
+
+## Ports of a task [#task-ports]
+
+When a command of a task listens on a web port, a ports button shows in the header of the task details and of the session page. It shows the number of ports. Select it, then select a port to open it in your browser.
+
+<Screenshot id="task-ports-popover" alt="The header of the task Show the word count in the editor. The 1 port button is open and lists port 5173 of a Python process, with a link that opens it. Below it is the Workflow section." />
+
+## Processes and background tasks [#background-tasks]
+
+The Processes view lists the processes of all your checkouts, also the commands that you started yourself. The **Background tasks** bar of a session lists only the work that its agent waits on. See [Background tasks](/coding-sessions/#background-tasks).
+
+## Limits [#limits]
+
+- The view works only on the local host. A [remote client](/remote-control/) and the [mobile app](/mobile/) do not show it.
+- The view does not show the harnesses, their MCP servers and tools, or OpenDucktor itself.
+- On Windows, a stop is forced. The processes cannot save their work.
+
+## Next [#next]
+
+<Cards>
+  <Card title="Terminals" href="/coding-sessions/terminals/">Run commands in the task worktree.</Card>
+  <Card title="Web pages" href="/coding-sessions/web-pages/">Open your dev server beside a session.</Card>
+  <Card title="Keyboard shortcuts" href="/keyboard-shortcuts/">Give the Processes view a key.</Card>
+</Cards>

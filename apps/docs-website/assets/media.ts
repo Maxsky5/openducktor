@@ -27,6 +27,8 @@ import phoneChangesLight from "./screens/phone-changes-light.webp";
 import phoneChangesDark from "./screens/phone-changes-dark.webp";
 import phoneConnectLight from "./screens/phone-connect-light.webp";
 import phoneConnectDark from "./screens/phone-connect-dark.webp";
+import phoneDemoLight from "./screens/phone-demo-light.webp";
+import phoneDemoDark from "./screens/phone-demo-dark.webp";
 import phoneCreateMenuLight from "./screens/phone-create-menu-light.webp";
 import phoneCreateMenuDark from "./screens/phone-create-menu-dark.webp";
 import phoneDiagnosticsLight from "./screens/phone-diagnostics-light.webp";
@@ -141,6 +143,20 @@ import taskGitHeaderLight from "./screens/task-git-header-light.webp";
 import taskGitHeaderDark from "./screens/task-git-header-dark.webp";
 import newTaskImportMenuLight from "./screens/new-task-import-menu-light.webp";
 import newTaskImportMenuDark from "./screens/new-task-import-menu-dark.webp";
+import workflowsLibraryLight from "./screens/workflows-library-light.webp";
+import workflowsLibraryDark from "./screens/workflows-library-dark.webp";
+import workflowEditorOverviewLight from "./screens/workflow-editor-overview-light.webp";
+import workflowEditorOverviewDark from "./screens/workflow-editor-overview-dark.webp";
+import workflowPublishDialogLight from "./screens/workflow-publish-dialog-light.webp";
+import workflowPublishDialogDark from "./screens/workflow-publish-dialog-dark.webp";
+import newTaskWorkflowLight from "./screens/new-task-workflow-light.webp";
+import newTaskWorkflowDark from "./screens/new-task-workflow-dark.webp";
+import workflowAvailabilityDialogLight from "./screens/workflow-availability-dialog-light.webp";
+import workflowAvailabilityDialogDark from "./screens/workflow-availability-dialog-dark.webp";
+import workflowRoleDialogLight from "./screens/workflow-role-dialog-light.webp";
+import workflowRoleDialogDark from "./screens/workflow-role-dialog-dark.webp";
+import taskPortsPopoverLight from "./screens/task-ports-popover-light.webp";
+import taskPortsPopoverDark from "./screens/task-ports-popover-dark.webp";
 
 /** A box around a part of a capture, in percent of the capture: left, top, width, and height. */
 type PartBox = { x: number; y: number; w: number; h: number };
@@ -193,6 +209,7 @@ export const SCREENS = {
     },
   },
   "phone-connect": { light: phoneConnectLight, dark: phoneConnectDark },
+  "phone-demo": { light: phoneDemoLight, dark: phoneDemoDark },
   "phone-create-menu": {
     light: phoneCreateMenuLight,
     dark: phoneCreateMenuDark,
@@ -361,19 +378,21 @@ export const SCREENS = {
     light: sessionModelPickerLight,
     dark: sessionModelPickerDark,
     parts: {
-      favorites: { x: 1.1, y: 3.3, w: 4.9, h: 8 },
-      harnesses: { x: 0.7, y: 13.3, w: 5.6, h: 31.4 },
-      "search-models": { x: 9.6, y: 2.2, w: 89.2, h: 10 },
-      star: { x: 93.6, y: 18.4, w: 4.2, h: 77 },
+      favorites: { x: 1.2, y: 1.6, w: 6, h: 9.1 },
+      harnesses: { x: 1.2, y: 10.7, w: 6, h: 36.4 },
+      "search-models": { x: 9.3, y: 1.6, w: 89.6, h: 9.1 },
+      star: { x: 93.9, y: 14.8, w: 5, h: 64 },
+      effort: { x: 1.8, y: 85.9, w: 51.9, h: 12.3 },
+      speed: { x: 56.4, y: 85.9, w: 41.8, h: 12.3 },
     },
   },
   "session-composer-model": {
     light: sessionComposerModelLight,
     dark: sessionComposerModelDark,
     parts: {
-      model: { x: 7.4, y: 55, w: 19.4, h: 32 },
-      effort: { x: 27.8, y: 55, w: 12.8, h: 32 },
-      speed: { x: 41.8, y: 55, w: 4.8, h: 32 },
+      model: { x: 16.9, y: 13.5, w: 36.3, h: 82.7 },
+      effort: { x: 54.4, y: 13.5, w: 18.5, h: 82.7 },
+      speed: { x: 74.3, y: 13.5, w: 8, h: 82.7 },
     },
   },
   "settings-git-provider": {
@@ -453,6 +472,29 @@ export const SCREENS = {
     },
   },
   "new-task-import-menu": { light: newTaskImportMenuLight, dark: newTaskImportMenuDark },
+  "workflows-library": { light: workflowsLibraryLight, dark: workflowsLibraryDark },
+  "workflow-editor-overview": {
+    light: workflowEditorOverviewLight,
+    dark: workflowEditorOverviewDark,
+    parts: {
+      version: { x: 17.4, y: 2, w: 15.2, h: 3.2 },
+      elements: { x: 0.2, y: 7.5, w: 24.1, h: 92.3 },
+      canvas: { x: 24.5, y: 7.5, w: 46.8, h: 87.6 },
+      problems: { x: 24.5, y: 95.3, w: 46.8, h: 4.5 },
+      details: { x: 71.5, y: 7.5, w: 28.3, h: 92.3 },
+    },
+  },
+  "workflow-publish-dialog": {
+    light: workflowPublishDialogLight,
+    dark: workflowPublishDialogDark,
+  },
+  "new-task-workflow": { light: newTaskWorkflowLight, dark: newTaskWorkflowDark },
+  "workflow-availability-dialog": {
+    light: workflowAvailabilityDialogLight,
+    dark: workflowAvailabilityDialogDark,
+  },
+  "workflow-role-dialog": { light: workflowRoleDialogLight, dark: workflowRoleDialogDark },
+  "task-ports-popover": { light: taskPortsPopoverLight, dark: taskPortsPopoverDark },
 } satisfies Record<string, Screen>;
 
 export type ScreenId = keyof typeof SCREENS;

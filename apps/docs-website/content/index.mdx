@@ -13,7 +13,7 @@ OpenDucktor is free and open source. Its license is the Apache License 2.0. [Rea
 
 ## How a task moves [#how-a-task-moves]
 
-A task goes from a one-line request to merged code. The built-in [Spec, Plan, Build](/tasks-and-workflows/spec-plan-build/) workflow sets its steps. You [start the first agent](/first-workspace-and-task/#start-the-builder) of each task. [Autopilot](/autopilot/) can start the next agents and the pull request for you.
+A task goes from a one-line request to merged code. Its workflow sets its steps. This diagram shows the built-in workflow, [Spec, Plan, Build](/tasks-and-workflows/spec-plan-build/). You [start the first agent](/first-workspace-and-task/#start-the-builder) of each task. [Autopilot](/autopilot/) can start the next agents and the pull request for you.
 
 <Diagram name="workflow" />
 
@@ -23,9 +23,9 @@ A task goes from a one-line request to merged code. The built-in [Spec, Plan, Bu
 |---|---|
 | Workspace | A local Git repository that you open in OpenDucktor. Each workspace has its own board, tasks, and settings. Settings lists workspaces under **Repositories**. |
 | Task | One piece of work on the board, of the type Feature, Task, or Bug. See [Tasks and workflows](/tasks-and-workflows/). |
-| Workflow | The lanes, roles, artifacts, and actions that a task follows. OpenDucktor has one workflow, Spec, Plan, Build. See [How a task moves](/tasks-and-workflows/#workflows). |
+| Workflow | The lanes, roles, artifacts, and actions that a task follows. Spec, Plan, Build is built in, and you can make your own. See [Custom workflows](/tasks-and-workflows/custom-workflows/). |
 | Lane | A column of the board. Each lane holds the tasks in one state of the workflow. See [The board](/tasks-and-workflows/#board-lanes). |
-| Role | The job of an agent on a task. The built-in roles are Spec (writes the specification), Planner, Builder, and QA. See [Start an agent](/tasks-and-workflows/#agent-roles). |
+| Role | The job of an agent on a task. The built-in roles are Spec (writes the specification), Planner, Builder, and QA. A custom workflow can use your own roles. See [Start an agent](/tasks-and-workflows/#agent-roles). |
 | Session | One conversation between you and an agent. A task session runs one role of a task. A [workspace session](/workspace-sessions/) has no task. See [Coding sessions](/coding-sessions/). |
 | Artifact | A file that an agent or you save on a task, such as the Specification, the Implementation Plan, or the QA Report. See [Artifacts](/tasks-and-workflows/#artifacts). |
 | Worktree | A separate folder and branch for the code changes of one task. Your main checkout stays the same. See [Git and pull requests](/git-and-pull-requests/#task-worktrees). |
