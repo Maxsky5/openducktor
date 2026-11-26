@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, jest, mock, spyOn, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
+import { createHostConnectionStore } from "@openducktor/frontend-core/connection/host-connection-state";
+import { HostUnreachableError } from "@openducktor/host-client";
 import { act, fireEvent, screen } from "@testing-library/react";
 import * as appModule from "./App";
 import * as frontend from "./index";
@@ -21,13 +23,17 @@ afterEach(async () => {
 const bootLocalHost = async (
   readSettings: () => Promise<SettingsSnapshot>,
   routerMode?: "hash",
+  connectionState = createHostConnectionStore(),
 ): Promise<void> => {
   const rootElement = document.createElement("div");
   document.body.append(rootElement);
   await act(async () => {
     const options: frontend.OpenDucktorShellBootstrapOptions = {
       createShellBridge: () =>
-        createShellBridgeFixture({ client: { workspaceGetSettingsSnapshot: readSettings } }),
+        createShellBridgeFixture({
+          client: { workspaceGetSettingsSnapshot: readSettings },
+          bridge: { connectionState },
+        }),
       hosts: {
         localHost: "web",
         createRemoteBridge: noRemoteHost,
@@ -99,6 +105,29 @@ describe("bootstrapOpenDucktorShell", () => {
         preloadError,
       );
     } finally {
+      appSpy.mockRestore();
+      consoleError.mockRestore();
+    }
+  });
+
+  test("renders the app when the settings preload loses the host", async () => {
+    const appSpy = spyOn(appModule, "App").mockImplementation(() => <p>App</p>);
+    const consoleError = spyOn(console, "error").mockImplementation(() => {});
+    const connectionState = createHostConnectionStore();
+    try {
+      // The app must render, so the connection indicator can explain the lost host.
+      await bootLocalHost(
+        async () => {
+          connectionState.setState("reconnecting");
+          throw new HostUnreachableError(new TypeError("Failed to fetch"));
+        },
+        undefined,
+        connectionState,
+      );
+
+      expect(await screen.findByText("App")).toBeDefined();
+    } finally {
+      connectionState.setState("connected");
       appSpy.mockRestore();
       consoleError.mockRestore();
     }

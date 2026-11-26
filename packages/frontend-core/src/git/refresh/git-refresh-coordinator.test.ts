@@ -196,6 +196,22 @@ describe("GitRefreshCoordinator", () => {
     expect(coordinator.manualState(manualRefreshKey(denied)).error).toBe("status unavailable");
   });
 
+  test("a reconnect during a Refresh drops the lost connection failure that settles after it", async () => {
+    const read = Promise.withResolvers<void>();
+    const view = createView([], { steps: { readLocal: () => read.promise } });
+    const { coordinator } = createCoordinator();
+    coordinator.publish(view);
+    const refresh = coordinator.refresh("hard");
+    await flush();
+
+    // The reads of the Refresh wait for the reconnect, so the run is still pending.
+    coordinator.clearConnectionFailures();
+    read.reject(new HostUnreachableError(new TypeError("Failed to fetch")));
+    await refresh;
+
+    expect(coordinator.manualState(manualRefreshKey(view)).error).toBeNull();
+  });
+
   test("each context keeps its own Refresh, and a return to a context joins it", async () => {
     const log: Log = [];
     const fetchA = Promise.withResolvers<void>();

@@ -72,6 +72,8 @@ type ManualRun = {
   state: ManualRefreshState;
   /** A lost host connection failed the run, so the reconnect clears its failure. */
   lostConnection: boolean;
+  /** The reconnects before the run started. A failure from before a later one is not shown. */
+  reconnects: number;
 };
 type FetchRun = { force: boolean; promise: Promise<void> };
 /**
@@ -102,6 +104,8 @@ export class GitRefreshCoordinator {
   readonly #waiters = new Set<(view: GitRefreshView | null) => void>();
   readonly #listeners = new Set<() => void>();
   readonly #manualRuns = new Map<string, ManualRun>();
+  // Counts the reconnects that `clearConnectionFailures` reported.
+  #reconnects = 0;
   readonly #fetches = new Map<string, FetchRun>();
   readonly #fetchedAt = new Map<string, number>();
   /** Fetch keys whose last fetch failed. Their next fetch is forced, so it cannot skip the remote. */
@@ -164,6 +168,7 @@ export class GitRefreshCoordinator {
       promise: null,
       state: { isRefreshing: true, error: null },
       lostConnection: false,
+      reconnects: this.#reconnects,
     };
     this.#manualRuns.set(key, run);
     this.#notify();
@@ -184,12 +189,19 @@ export class GitRefreshCoordinator {
       run.lostConnection = isConnectionFailure(cause);
     }
     run.promise = null;
+    // The reads of the run waited for the reconnect, so its lost connection is already over.
+    if (run.lostConnection && run.reconnects !== this.#reconnects) {
+      this.#manualRuns.delete(run.key);
+      this.#notify();
+      return;
+    }
     run.state = { isRefreshing: false, error };
     this.#notify();
   }
 
   /** Clears each Refresh failure that a lost host connection caused, after the connection returns. */
   clearConnectionFailures(): void {
+    this.#reconnects += 1;
     let cleared = false;
     for (const [key, run] of this.#manualRuns) {
       if (run.promise || !run.lostConnection) continue;
