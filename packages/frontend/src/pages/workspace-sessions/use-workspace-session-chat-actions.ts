@@ -31,6 +31,11 @@ import { GitConflictRequestCancelled } from "@openducktor/frontend-core/git/conf
 import { startWorkspaceSessionRuntime } from "@openducktor/frontend-core/workspace-sessions/create/launch-workspace-session";
 import { useChatSessionPreparation } from "@openducktor/frontend-core/sessions/composer/use-chat-session-preparation";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
+import {
+  useWorkspaceSessionHasStartupAttempt,
+  useWorkspaceSessionStartupPending,
+  useWorkspaceSessionStartupSubmittedComposer,
+} from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 
 const CHAT_UNAVAILABLE =
   "The original session is no longer available. Reopen it to send your draft.";
@@ -139,14 +144,27 @@ export function useWorkspaceSessionChatActions(
     workspace.repoPath,
     workspace.workspaceId,
   ]);
+  const hasTrackedStartupAttempt = useWorkspaceSessionHasStartupAttempt(
+    workspace.workspaceId,
+    record.id,
+  );
+  const isStartupPending = useWorkspaceSessionStartupPending(workspace.workspaceId, record.id);
+  const startupSubmittedComposer = useWorkspaceSessionStartupSubmittedComposer(
+    workspace.workspaceId,
+    record.id,
+  );
+  const shouldAutoPrepare =
+    preparationEnabled &&
+    record.archivedAt === null &&
+    !(hasTrackedStartupAttempt && (isStartupPending || record.externalSessionId === null));
   const preparation = useChatSessionPreparation({
     repoPath: workspace.repoPath,
     identity: recordIdentity,
     targetKey: JSON.stringify([workspace.workspaceId, record.id, visitKey]),
-    enabled: preparationEnabled && record.archivedAt === null,
+    enabled: shouldAutoPrepare,
     prepare,
   });
-  const isStarting = preparationEnabled && !preparation.ready && preparation.error === null;
+  const isStarting = shouldAutoPrepare && !preparation.ready && preparation.error === null;
 
   const sendStandaloneMessage = async (
     parts: AgentUserMessagePart[],
@@ -361,6 +379,8 @@ export function useWorkspaceSessionChatActions(
   return {
     isSending: activity.isActive(activityKey),
     isStarting,
+    isStartupPending,
+    startupSubmittedComposer,
     error: error ?? preparation.error,
     updateDraftModel,
     pendingDraftModel,

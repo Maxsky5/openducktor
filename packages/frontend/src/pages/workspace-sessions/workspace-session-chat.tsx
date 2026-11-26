@@ -19,6 +19,7 @@ import { useSessionPromptInput } from "@openducktor/frontend-core/sessions/compo
 import type { ChatSettings, ReusablePrompt, WorkspaceSession } from "@openducktor/contracts";
 import { branchNamingNotice } from "@openducktor/frontend-core/workspace-sessions/chat/workspace-session-branch-naming";
 import { type ReactElement, useMemo } from "react";
+import { InlineStartup } from "@/features/session-startup/inline-session-startup";
 import { SessionViewShownActivity } from "@/features/session-navigation/session-view-visibility";
 import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-chat";
 import { resolveAgentChatRuntimePresentation } from "@openducktor/frontend-core/sessions/send/agent-chat-runtime-presentation";
@@ -41,6 +42,7 @@ import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/ag
 import { createWorkspaceSessionChatDraftPersistence } from "@openducktor/frontend-core/sessions/composer/workspace-session-chat-draft";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { ActiveWorkspace } from "@/types/state-slices";
+import { DraftSubmittedMessageBubble } from "./workspace-session-draft-view";
 import {
   useWorkspaceConflictChatActions,
   type WorkspaceConflictChatActions,
@@ -50,6 +52,10 @@ import { useWorkspaceSessionTranscript } from "./use-workspace-session-transcrip
 import { blockedSpeedReason } from "@openducktor/frontend-core/sessions/model-selection/model-picker-presentation";
 import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
 import { useWorkspaceSessionModelTarget } from "./use-workspace-session-model-target";
+import {
+  projectAcceptedWorkspaceChat,
+  useRuntimeHandoff,
+} from "@openducktor/frontend-core/sessions/send/runtime-handoff";
 import { useWorkspaceSessionToolRefresh } from "./use-workspace-session-tool-refresh";
 
 type WorkspaceSessionChatProps = {
@@ -87,7 +93,14 @@ function useWorkspaceChatHandoff(workspace: ActiveWorkspace, savedRecord: Worksp
   return { record, handoff };
 }
 
-export function WorkspaceSessionChat({
+const hasRenderedUserMessage = (
+  transcriptSession: { messages: { items: readonly { role: string }[] } } | null | undefined,
+): boolean => transcriptSession?.messages.items.some((message) => message.role === "user") === true;
+
+const firstError = (errors: readonly (string | null | undefined)[]): string | null =>
+  errors.find((error) => error != null) ?? null;
+
+function useWorkspaceSessionChatSurface({
   isActive,
   workspace,
   record: savedRecord,
@@ -97,7 +110,7 @@ export function WorkspaceSessionChat({
   isMounted,
   visitKey = 0,
   onActionsReady,
-}: WorkspaceSessionChatProps): ReactElement {
+}: WorkspaceSessionChatProps) {
   const { record, handoff } = useWorkspaceChatHandoff(workspace, savedRecord);
   const identity = useStableAgentSessionIdentity(workspaceSessionIdentity(record));
   const session = useAgentSession(identity);
@@ -121,7 +134,7 @@ export function WorkspaceSessionChat({
     runtimeReadiness.state === "ready" && readModel.sessionReadModelLoadState.kind === "ready",
     visitKey,
   );
-  const { isStarting } = actions;
+  const { isStarting, isStartupPending, startupSubmittedComposer } = actions;
   const recordsError = readModel.workspaceSessionRecordsError;
   const fault = readModel.getSessionFault(identity);
   const chatState = useMemo(
@@ -220,6 +233,7 @@ export function WorkspaceSessionChat({
     readModel,
     loadHistory: operations.loadAgentSessionHistory,
     branchNaming: branchNamingNotice(record, session),
+    suppressLoadingNotice: isStartupPending,
   });
   const descriptor =
     runtime.allRuntimeDefinitions.find((entry) => entry.kind === record.runtimeKind) ?? null;
@@ -318,20 +332,19 @@ export function WorkspaceSessionChat({
     transcript,
     chatSettings,
     modelCatalog,
-    sessionAuxiliaryError:
-      [
-        retryError,
-        actions.error,
-        recordsError,
-        fault?.message,
-        chatState.statusUnavailableReason,
-        contextError,
-        runtimeData.contextError,
-        runtimeData.runtimePolicyError,
-        runtimeData.todosError,
-        catalogError,
-        canResumeSession ? null : actions.persistentResumeError,
-      ].find((error) => error != null) ?? null,
+    sessionAuxiliaryError: firstError([
+      retryError,
+      actions.error,
+      recordsError,
+      fault?.message,
+      chatState.statusUnavailableReason,
+      contextError,
+      runtimeData.contextError,
+      runtimeData.runtimePolicyError,
+      runtimeData.todosError,
+      catalogError,
+      canResumeSession ? null : actions.persistentResumeError,
+    ]),
     interactionEnabled: canInteract,
     runtimePresentation,
     emptyState: null,
@@ -361,6 +374,7 @@ export function WorkspaceSessionChat({
     composer: buildWorkspaceSessionComposer({
       state: chatState,
       identity,
+      isStartupPending,
       actions,
       delivery: messageDelivery,
       goalRow,
@@ -374,19 +388,49 @@ export function WorkspaceSessionChat({
       stopSession: operations.stopAgentSession,
     }),
   });
+  const pendingSubmittedComposer =
+    startupSubmittedComposer && !hasRenderedUserMessage(surface.thread.transcript.session)
+      ? startupSubmittedComposer
+      : null;
+  return { surface, fork, pendingSubmittedComposer };
+}
+
+export function WorkspaceSessionChat(props: WorkspaceSessionChatProps): ReactElement {
+  const { workspace, record, visitKey = 0 } = props;
+  const { surface, fork, pendingSubmittedComposer } = useWorkspaceSessionChatSurface(props);
+  const topContent = useMemo(
+    () => (
+      <>
+        <InlineStartup
+          scope={{
+            kind: "workspace",
+            repoPath: workspace.repoPath,
+            sessionId: record.id,
+          }}
+        />
+        {pendingSubmittedComposer ? (
+          <DraftSubmittedMessageBubble composer={pendingSubmittedComposer} animate={false} />
+        ) : null}
+      </>
+    ),
+    [pendingSubmittedComposer, record.id, workspace.repoPath],
+  );
+  const model = useMemo(
+    () => ({
+      ...surface,
+      thread: {
+        ...surface.thread,
+        threadKey: `workspace-session:${record.id}`,
+        topContent,
+        forkActions: fork.actions,
+        forkDialog: fork.dialog,
+      },
+    }),
+    [fork.actions, fork.dialog, record.id, surface, topContent],
+  );
   return (
     <SessionViewShownActivity>
-      <AgentChatSurface
-        model={{
-          ...surface,
-          thread: { ...surface.thread, forkActions: fork.actions, forkDialog: fork.dialog },
-        }}
-        visitKey={visitKey}
-      />
+      <AgentChatSurface model={model} visitKey={visitKey} />
     </SessionViewShownActivity>
   );
 }
-import {
-  projectAcceptedWorkspaceChat,
-  useRuntimeHandoff,
-} from "@openducktor/frontend-core/sessions/send/runtime-handoff";

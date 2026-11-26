@@ -63,12 +63,10 @@ function useModelPickerProps({
   );
 }
 
-/** The model picker of a new chat, with the repository Default Model. */
-export function useWorkspaceSessionCreateModelPicker(
-  repoPath: string,
-  defaultSelection: AgentModelSelection | null,
+/** Attaches host-backed model picker props to an existing create-session model controller. */
+export function useCreateModelPickerProps(
+  model: ReturnType<typeof useWorkspaceSessionCreateModel>,
 ) {
-  const model = useWorkspaceSessionCreateModel(repoPath, defaultSelection);
   const modelPicker = useModelPickerProps({
     runtimes: model.runtimes,
     selection: model.selection,
@@ -76,7 +74,20 @@ export function useWorkspaceSessionCreateModelPicker(
     onValueChange: model.selectModel,
     onOpenChange: model.onCatalogSelectorOpen,
   });
-  return { ...model, modelPicker };
+  return useMemo(() => ({ ...model, modelPicker }), [model, modelPicker]);
+}
+
+/** The model picker of a new chat, with the repository Default Model. */
+export function useWorkspaceSessionCreateModelPicker(
+  repoPath: string,
+  defaultSelection: AgentModelSelection | null,
+  controlled?: {
+    selection: AgentModelSelection | null;
+    onSelectionChange: (selection: AgentModelSelection | null) => void;
+  },
+) {
+  const model = useWorkspaceSessionCreateModel(repoPath, defaultSelection, controlled);
+  return useCreateModelPickerProps(model);
 }
 
 /** The model picker of a chat, with the model selection policies of its session. */

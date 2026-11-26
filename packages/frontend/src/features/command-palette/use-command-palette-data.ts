@@ -207,10 +207,15 @@ const sessionEntriesByRow = (
 };
 
 /** The palette row of a sidebar entry: its task or its chat. */
-const rowKeyOf = ({ target }: SessionNavigationEntry): string =>
-  target.kind === "workspace_session"
-    ? paletteChatKey(target.workspaceId, target.sessionId)
-    : paletteTaskKey(target.workspaceId, target.taskId);
+const rowKeyOf = ({ target }: SessionNavigationEntry): string => {
+  if (target.kind === "workspace_session") {
+    return paletteChatKey(target.workspaceId, target.sessionId);
+  }
+  if (target.kind === "workspace_session_draft") {
+    return `draft:${target.workspaceId}:${target.draftId}`;
+  }
+  return paletteTaskKey(target.workspaceId, target.taskId);
+};
 
 type TaskSessionReads = ReadonlyMap<string, SessionNavigationRead<AgentSessionRecord[]>>;
 

@@ -58,7 +58,11 @@ export type WorkspaceStateContextValue = {
   commitWorkspaceProviderSetup: (
     input: WorkspaceProviderSetupCommit,
   ) => Promise<WorkspaceProviderSetupProgress>;
-  selectWorkspace: (workspaceId: string, onSelected?: () => void) => Promise<void>;
+  selectWorkspace: (
+    workspaceId: string,
+    onSelected?: () => void,
+    options?: { immediate?: boolean },
+  ) => Promise<void>;
   closeWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;
   removeWorkspace: (input: WorkspaceRemovalInput) => Promise<void>;
   reopenWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;

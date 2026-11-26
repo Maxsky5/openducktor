@@ -56,7 +56,11 @@ type UseWorkspaceSelectionOperationsResult = {
   commitWorkspaceProviderSetup: (
     input: WorkspaceProviderSetupCommit,
   ) => Promise<WorkspaceProviderSetupProgress>;
-  selectWorkspace: (workspaceId: string, onSelected?: () => void) => Promise<void>;
+  selectWorkspace: (
+    workspaceId: string,
+    onSelected?: () => void,
+    options?: { immediate?: boolean },
+  ) => Promise<void>;
   closeWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;
   removeWorkspace: (input: WorkspaceRemovalInput) => Promise<void>;
   reopenWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;
@@ -370,21 +374,33 @@ export function useWorkspaceSelectionOperations({
   );
 
   const selectWorkspace = useCallback(
-    async (workspaceId: string, onSelected?: () => void): Promise<void> => {
+    async (
+      workspaceId: string,
+      onSelected?: () => void,
+      options?: { immediate?: boolean },
+    ): Promise<void> => {
       const switchVersion = ++workspaceSwitchVersionRef.current;
+      const immediate = options?.immediate === true;
 
-      // The flag renders with the new workspace, so the host request starts before any render.
-      startTransition(() => setIsSwitchingWorkspace(true));
+      if (!immediate) {
+        // The flag renders with the new workspace, so the host request starts before any render.
+        startTransition(() => setIsSwitchingWorkspace(true));
+      }
 
       try {
         const selectedWorkspace = await hostClient.workspaceSelect(workspaceId);
 
         if (workspaceSwitchVersionRef.current === switchVersion) {
-          // Keep the route and workspace in the same render when opening a session.
-          startTransition(() => {
+          const apply = () => {
             applyWorkspaceRecord(selectedWorkspace);
             onSelected?.();
-          });
+          };
+          if (immediate) {
+            apply();
+          } else {
+            // Keep the route and workspace in the same render when opening a session.
+            startTransition(apply);
+          }
         }
       } catch (error) {
         if (workspaceSwitchVersionRef.current === switchVersion) {
@@ -394,7 +410,7 @@ export function useWorkspaceSelectionOperations({
           throw error;
         }
       } finally {
-        if (workspaceSwitchVersionRef.current === switchVersion) {
+        if (!immediate && workspaceSwitchVersionRef.current === switchVersion) {
           startTransition(() => setIsSwitchingWorkspace(false));
         }
       }

@@ -24,6 +24,7 @@ export function useWorkspaceSessionTranscript({
   readModel,
   loadHistory,
   branchNaming,
+  suppressLoadingNotice = false,
 }: {
   workspace: WorkspaceRef;
   state: ReturnType<typeof projectWorkspaceSessionChatState>;
@@ -36,6 +37,8 @@ export function useWorkspaceSessionTranscript({
   loadHistory: AgentOperationsContextValue["loadAgentSessionHistory"];
   /** The notice of a first message that waits while the host names the branch, or null. */
   branchNaming: AgentChatTranscriptNotice | null;
+  /** Suppresses the duplicate loading banner while inline startup steps are already active. */
+  suppressLoadingNotice?: boolean;
 }) {
   const { repoPath, workspaceId } = workspace;
   const session = useRuntimeHandoffTranscript({
@@ -69,7 +72,10 @@ export function useWorkspaceSessionTranscript({
     runtimeBlockedAction: presentation.runtimeBlockedAction,
     failedTranscriptAction: recovery.action,
   });
-  let notice = readiness.transcriptNotice;
+  let notice =
+    suppressLoadingNotice && readiness.transcriptNotice?.severity === "loading"
+      ? null
+      : readiness.transcriptNotice;
   if (state.targetFault) {
     notice = {
       kind: "session_failed",

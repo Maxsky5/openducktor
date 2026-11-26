@@ -7,7 +7,7 @@ import type { ActiveWorkspace } from "@/types/state-slices";
 
 /** A dialog keeps the workspace that was active when it opened, so a submission never moves. */
 export type WorkspaceDialogRequest =
-  | { kind: "chat" | "archived_chats" | "import_chat"; workspace: ActiveWorkspace }
+  | { kind: "archived_chats" | "import_chat"; workspace: ActiveWorkspace }
   | { kind: "import_tasks"; workspace: ActiveWorkspace; provider: IssueImportProvider };
 
 export type WorkspaceDialogsContextValue = {

@@ -659,14 +659,22 @@ describe("AppShell", () => {
     Reflect.deleteProperty(globalThis, "localStorage");
   });
 
-  test("opens New chat on the first menu click", async () => {
-    await renderAppShellForTest();
+  test("opens a new draft session immediately on the first menu click without a modal", async () => {
+    const SessionsLocation = () => {
+      const location = useLocation();
+      return (
+        <main data-testid="sessions-location">{`${location.pathname}${location.search}`}</main>
+      );
+    };
+    await renderAppShellForTest({ sessionContent: <SessionsLocation /> });
     fireEvent.click(screen.getByRole("button", { name: "More actions for OpenDucktor" }));
     fireEvent.click(await screen.findByRole("button", { name: "New session" }));
 
-    const dialog = screen.getByRole("dialog", { name: "New session" });
-    expect(within(dialog).getByRole("textbox", { name: /^Name/ })).toBeTruthy();
-    expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: "New session" })).toBeNull();
+    const location = await screen.findByTestId("sessions-location");
+    expect(location.textContent).toMatch(
+      /^\/sessions\?workspace=workspace-1&kind=workspace&draft=.+/,
+    );
   });
 
   test("keeps the active repo config loaded outside Agent Studio", async () => {

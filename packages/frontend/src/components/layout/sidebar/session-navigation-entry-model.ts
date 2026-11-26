@@ -5,6 +5,7 @@ import {
   ClipboardList,
   Clock,
   type LucideIcon,
+  MessageCirclePlus,
   MessagesSquare,
 } from "lucide-react";
 import { roleIconForHint } from "@/lib/agent-role-presentation";
@@ -26,6 +27,11 @@ export const sessionEntryIcon = (entry: SessionNavigationEntry): LucideIcon => {
         ? workflowRoleIcon(entry.context.task.taskWorkflow, entry.target.role)
         : undefined,
     );
+  }
+  if (entry.target.kind === "workspace_session_draft") {
+    return entry.context.kind === "workspace_draft" && entry.context.isStarting
+      ? MessagesSquare
+      : MessageCirclePlus;
   }
   if (entry.target.kind === "workspace_session") return MessagesSquare;
   return ClipboardList;

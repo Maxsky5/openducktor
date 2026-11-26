@@ -160,6 +160,9 @@ export function SessionRowContent({
 }): ReactElement {
   const titleClassName = SESSION_TITLE_CLASSES[sessionEntryTitleTone(entry, unread)];
   const task = entry.context.kind === "task" ? entry.context.task : null;
+  const draft = entry.context.kind === "workspace_draft" ? entry.context : null;
+  const isSavedWorkspaceStarting =
+    entry.context.kind === "workspace" && entry.context.isStarting === true;
   const Icon = sessionEntryIcon(entry);
   return (
     <>
@@ -177,6 +180,19 @@ export function SessionRowContent({
             )}
           >
             {task.sharedState.shortLabel}
+          </Badge>
+        )}
+        {(draft || isSavedWorkspaceStarting) && (
+          <Badge
+            variant="outline"
+            className={cn(
+              "h-4 shrink-0 px-1.5 py-0 text-[10px] leading-none",
+              isSavedWorkspaceStarting || draft?.isStarting
+                ? "border-info-border bg-info-surface text-info-muted"
+                : "border-border bg-muted text-muted-foreground",
+            )}
+          >
+            {isSavedWorkspaceStarting || draft?.isStarting ? "Starting" : "Draft"}
           </Badge>
         )}
         <SessionRowMetadata entry={entry} sampleNow={sampleNow} />
@@ -359,7 +375,7 @@ function SessionGroupSection({
           <ul id={listId}>
             <CssPresenceList isLoading={isLoading}>
               {group.entries.map((entry) => (
-                <SessionListItem key={entry.key} entry={entry} onOpen={onOpen} />
+                <SessionListItem key={entry.listKey ?? entry.key} entry={entry} onOpen={onOpen} />
               ))}
             </CssPresenceList>
           </ul>

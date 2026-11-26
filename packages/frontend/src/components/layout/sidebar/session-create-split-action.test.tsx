@@ -10,6 +10,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import * as settingsModal from "@/components/features/settings/settings-modal";
 import { WorkspaceDialogsProvider } from "@/components/layout/workspace-dialogs";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
+import { VisibleSessionTargetProvider } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
 import { TaskWorkflowActionsContext } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
@@ -98,11 +99,13 @@ const renderSplitAction = ({
                   setIsLoadingTasks: () => {},
                 }}
               >
-                <WorkspacePreviewTransitionGuardProvider>
-                  <WorkspaceDialogsProvider>
-                    <SessionCreateSplitAction compact={compact} />
-                  </WorkspaceDialogsProvider>
-                </WorkspacePreviewTransitionGuardProvider>
+                <VisibleSessionTargetProvider>
+                  <WorkspacePreviewTransitionGuardProvider>
+                    <WorkspaceDialogsProvider>
+                      <SessionCreateSplitAction compact={compact} />
+                    </WorkspaceDialogsProvider>
+                  </WorkspacePreviewTransitionGuardProvider>
+                </VisibleSessionTargetProvider>
               </TaskControlContext.Provider>
             </TaskWorkflowActionsContext.Provider>
           </ChecksStateContext.Provider>

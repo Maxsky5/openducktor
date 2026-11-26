@@ -78,6 +78,9 @@ export function StartupActionOutput({
         if (!disposed) void controller.acknowledge(terminalId, sequenceEnd).catch(report);
       },
       onHydrated: () => {
+        if (!disposed && element.clientWidth > 0 && element.clientHeight > 0) {
+          binding.fitAddon.fit();
+        }
         const position = presentation.terminalScroll.get(terminalId);
         if (presentation.terminalFollowBottom.get(terminalId)) terminal.scrollToBottom();
         else if (position !== undefined) terminal.scrollToLine(position);
@@ -116,8 +119,21 @@ export function StartupActionOutput({
       }
     });
     binding.fitAddon.fit();
+    let fitFrame: number | null = null;
+    const resizeObserver = new ResizeObserver(() => {
+      if (disposed || fitFrame !== null) return;
+      fitFrame = requestAnimationFrame(() => {
+        fitFrame = null;
+        if (!disposed && element.clientWidth > 0 && element.clientHeight > 0) {
+          binding.fitAddon.fit();
+        }
+      });
+    });
+    resizeObserver.observe(element);
     return () => {
       disposed = true;
+      if (fitFrame !== null) cancelAnimationFrame(fitFrame);
+      resizeObserver.disconnect();
       rememberPosition();
       sequencer.dispose();
       unsubscribe();
@@ -130,39 +146,46 @@ export function StartupActionOutput({
   }, [controller, openExternalUrl, presentation, terminalId]);
 
   return (
-    <div className="flex min-w-0 flex-col gap-2">
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={!controller}
-          onClick={() => {
-            const buffer = bindingRef.current?.terminal.buffer.active;
-            if (!buffer) return;
-            const text = Array.from(
-              { length: buffer.length },
-              (_, index) => buffer.getLine(index)?.translateToString(true) ?? "",
-            ).join("\n");
-            presentation.terminalText.set(terminalId, text);
-            setTextOutput(text);
-          }}
-        >
-          {textOutput === null ? "Read output as text" : "Update text output"}
-        </Button>
-        {textOutput !== null ? (
+    <div className="flex min-w-0 max-w-full flex-col overflow-hidden rounded-md border border-border">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/80 bg-muted/50 px-2.5 py-1">
+        <span className="text-[11px] font-medium text-muted-foreground">
+          {readingText ? "Text snapshot" : "Terminal output"}
+        </span>
+        <div className="flex items-center gap-1">
           <Button
             type="button"
             size="sm"
             variant="ghost"
+            className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+            disabled={!controller}
             onClick={() => {
-              presentation.terminalText.delete(terminalId);
-              setTextOutput(null);
+              const buffer = bindingRef.current?.terminal.buffer.active;
+              if (!buffer) return;
+              const text = Array.from(
+                { length: buffer.length },
+                (_, index) => buffer.getLine(index)?.translateToString(true) ?? "",
+              ).join("\n");
+              presentation.terminalText.set(terminalId, text);
+              setTextOutput(text);
             }}
           >
-            Show terminal output
+            {textOutput === null ? "Read output as text" : "Update text output"}
           </Button>
-        ) : null}
+          {textOutput !== null ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                presentation.terminalText.delete(terminalId);
+                setTextOutput(null);
+              }}
+            >
+              Show terminal output
+            </Button>
+          ) : null}
+        </div>
       </div>
       <div
         ref={container}
@@ -170,7 +193,7 @@ export function StartupActionOutput({
         aria-label="Setup action output, read only"
         aria-hidden="true"
         className={cn(
-          "h-48 overflow-auto rounded-md bg-[var(--terminal-panel)] p-2",
+          "h-48 w-full min-w-0 overflow-hidden bg-[var(--terminal-panel)] p-2",
           textOutput !== null && "hidden",
         )}
       />
@@ -181,14 +204,17 @@ export function StartupActionOutput({
           value={textOutput}
           aria-label="Command output text snapshot"
           aria-live="off"
-          className="h-48 resize-none font-mono text-xs"
+          className="h-48 w-full min-w-0 resize-none rounded-none border-0 bg-background font-mono text-[11px] focus-visible:ring-0"
           onScroll={(event) => {
             presentation.terminalTextScroll.set(terminalId, event.currentTarget.scrollTop);
           }}
         />
       ) : null}
       {transportError || error ? (
-        <p role="status" className="break-words text-xs text-destructive">
+        <p
+          role="status"
+          className="border-t border-border/80 bg-destructive/5 px-2.5 py-1.5 break-words text-xs text-destructive"
+        >
           {transportError ?? error}
         </p>
       ) : null}

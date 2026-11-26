@@ -54,6 +54,7 @@ const plan: Step[] = [
   },
   { id: "upstream", label: "Set branch upstream", state: "completed", details: [] },
   { id: "copies", label: "Copy configured files", state: "completed", details: [] },
+  { id: "prepare", label: "Start session", state: "pending", details: [] },
 ];
 
 describe("the startup notification copied from the app", () => {

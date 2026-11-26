@@ -7,6 +7,7 @@ import {
   useWorkspaceDialogs,
   type WorkspaceDialogRequest,
 } from "@/components/layout/workspace-dialogs-context";
+import { useOpenNewWorkspaceSession } from "@/features/session-navigation/use-open-new-workspace-session";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useRequiredTaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
@@ -78,12 +79,14 @@ function SessionCreateMenuItems({
   workspace,
   importState,
   isTaskCreationDisabled,
+  onOpenNewSession,
   onOpenDialog,
   onOpenSettings,
 }: {
   workspace: ActiveWorkspace;
   importState: IssueImportState;
   isTaskCreationDisabled: boolean;
+  onOpenNewSession: () => void;
   onOpenDialog: (dialog: WorkspaceDialogRequest) => void;
   onOpenSettings: () => void;
 }): ReactElement {
@@ -93,7 +96,7 @@ function SessionCreateMenuItems({
         shortcutId="new-chat"
         icon={<MessageCirclePlus />}
         label="New session"
-        onSelect={() => onOpenDialog({ kind: "chat", workspace })}
+        onSelect={onOpenNewSession}
       />
       <MenuItem
         shortcutId={importState.kind === "ready" ? "import-tasks" : undefined}
@@ -135,6 +138,7 @@ export function SessionCreateSplitAction({ compact = false }: { compact?: boolea
   const { onCreateTask } = useRequiredTaskWorkflowActions();
   const { openSettings } = useSettingsModal();
   const { openWorkspaceDialog } = useWorkspaceDialogs();
+  const openNewWorkspaceSession = useOpenNewWorkspaceSession();
   const { gitProvider } = useWorkspaceRepositorySettings({
     activeWorkspaceId: workspace?.workspaceId ?? null,
     activeRepoPath: workspace?.repoPath ?? null,
@@ -207,6 +211,10 @@ export function SessionCreateSplitAction({ compact = false }: { compact?: boolea
                 workspace={workspace}
                 importState={toIssueImportState(gitProvider.context, gitProvider.error)}
                 isTaskCreationDisabled={isTaskCreationDisabled}
+                onOpenNewSession={() => {
+                  setMenuOpen(false);
+                  openNewWorkspaceSession(workspace.workspaceId);
+                }}
                 onOpenDialog={openDialog}
                 onOpenSettings={() => {
                   setMenuOpen(false);

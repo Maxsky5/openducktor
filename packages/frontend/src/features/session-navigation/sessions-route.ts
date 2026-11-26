@@ -17,7 +17,7 @@ export const TASK_SESSION_QUERY_KEYS = {
 
 export const WORKSPACE_SESSION_QUERY_KEYS = {
   session: "session",
-  create: "create",
+  draft: "draft",
 } as const;
 
 export type SessionsPageKind = "task" | "workspace";
@@ -36,10 +36,10 @@ const pageSearchParams = (workspaceId: string, kind: SessionsPageKind | null): U
 export const buildSessionsPageHref = (workspaceId: string, kind: SessionsPageKind | null): string =>
   `${SESSIONS_PATH}?${pageSearchParams(workspaceId, kind).toString()}`;
 
-/** The workspace session content opens its create dialog for this address. */
-export const buildNewWorkspaceSessionHref = (workspaceId: string): string => {
+/** Opens a new workspace session draft page in the workspace. */
+export const buildWorkspaceSessionDraftHref = (workspaceId: string, draftId: string): string => {
   const params = pageSearchParams(workspaceId, "workspace");
-  params.set(WORKSPACE_SESSION_QUERY_KEYS.create, "session");
+  params.set(WORKSPACE_SESSION_QUERY_KEYS.draft, draftId);
   return `${SESSIONS_PATH}?${params.toString()}`;
 };
 
@@ -48,6 +48,11 @@ export const buildSessionNavigationSearch = (target: SessionNavigationTarget): s
   if (target.kind === "workspace_session") {
     const params = pageSearchParams(target.workspaceId, "workspace");
     params.set(WORKSPACE_SESSION_QUERY_KEYS.session, target.sessionId);
+    return `?${params.toString()}`;
+  }
+  if (target.kind === "workspace_session_draft") {
+    const params = pageSearchParams(target.workspaceId, "workspace");
+    params.set(WORKSPACE_SESSION_QUERY_KEYS.draft, target.draftId);
     return `?${params.toString()}`;
   }
   const params = pageSearchParams(target.workspaceId, "task");
@@ -64,10 +69,11 @@ export const buildSessionNavigationSearch = (target: SessionNavigationTarget): s
 export const buildSessionNavigationHref = (target: SessionNavigationTarget): string =>
   `${SESSIONS_PATH}${buildSessionNavigationSearch(target)}`;
 
-/** The query keys that name the task, the session, and the role that an address selects. */
+/** The query keys that name the task, the session, the draft, and the role that an address selects. */
 export const SESSION_SELECTION_KEYS = [
   TASK_SESSION_QUERY_KEYS.task,
   TASK_SESSION_QUERY_KEYS.session,
+  WORKSPACE_SESSION_QUERY_KEYS.draft,
   TASK_SESSION_QUERY_KEYS.agent,
 ] as const;
 

@@ -15,28 +15,26 @@ import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { projectWorkspaceSessionChatState } from "@openducktor/frontend-core/workspace-sessions/chat/workspace-session-chat-state";
 import type { createWorkspaceSessionChatDraftPersistence } from "@openducktor/frontend-core/sessions/composer/workspace-session-chat-draft";
 import type { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
-import type { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
+import type {
+  useWorkspaceSessionCreateModelPicker,
+  useWorkspaceSessionModelPicker,
+} from "./use-workspace-session-model-picker";
 import type { SessionPromptInput } from "@openducktor/frontend-core/sessions/composer/prompt-input/use-session-prompt-input";
 
-type WorkspaceSessionComposerInput = {
-  state: ReturnType<typeof projectWorkspaceSessionChatState>;
-  identity: AgentSessionIdentity | null;
-  actions: Pick<
-    ReturnType<typeof useWorkspaceSessionChatActions>,
-    "isStarting" | "isResumingSession"
-  >;
-  delivery: ReturnType<typeof useAgentChatSend>;
-  goalRow: AgentChatComposerConfig["goalRow"];
-  goalRowScope: AgentChatComposerConfig["goalRowScope"];
-  backgroundTasks: AgentChatComposerConfig["backgroundTasks"];
-  pendingSend: ReturnType<typeof usePendingSendContext>;
-  draftPersistence: ReturnType<typeof createWorkspaceSessionChatDraftPersistence>;
-  picker: Omit<ReturnType<typeof useWorkspaceSessionModelPicker>, "modelPicker"> & {
-    modelPicker: AgentChatComposerConfig["modelPicker"];
-  };
-  promptInput: SessionPromptInput;
-  contextUsage: ReturnType<typeof useSelectedSessionContextUsage>;
-  stopSession: AgentOperationsContextValue["stopAgentSession"];
+type WorkspaceSessionComposerPicker = Pick<
+  ReturnType<typeof useWorkspaceSessionModelPicker> &
+    ReturnType<typeof useWorkspaceSessionCreateModelPicker>,
+  | "selection"
+  | "speed"
+  | "selectedModelEntry"
+  | "isLoading"
+  | "supportsProfiles"
+  | "agentProfileOptions"
+  | "variantOptions"
+  | "handleSelectAgentProfile"
+  | "handleSelectVariant"
+> & {
+  modelPicker: AgentChatComposerConfig["modelPicker"];
 };
 
 export function useWorkspaceSessionChatDelivery({
@@ -68,44 +66,16 @@ export function useWorkspaceSessionChatDelivery({
   return { messageDelivery, handoffModelPicker, pendingSendContext };
 }
 
-export function buildWorkspaceSessionComposer({
-  state,
-  identity,
-  actions,
-  delivery,
-  goalRow,
-  goalRowScope,
-  backgroundTasks,
-  pendingSend,
-  draftPersistence,
-  picker,
-  promptInput,
-  contextUsage,
-  stopSession,
-}: WorkspaceSessionComposerInput): AgentChatComposerConfig {
+export function buildComposerCatalogFields(
+  picker: WorkspaceSessionComposerPicker,
+  promptInput: Pick<
+    SessionPromptInput,
+    "support" | "slashCommands" | "skills" | "subagents" | "refreshCatalogIfStale" | "searchFiles"
+  >,
+) {
   const { support, slashCommands, skills, subagents, searchFiles, refreshCatalogIfStale } =
     promptInput;
   return {
-    ...delivery,
-    goalRow,
-    goalRowScope,
-    backgroundTasks,
-    displayedSessionKey: state.sessionKey,
-    selectedSession: identity,
-    isSessionWorking: state.isWorking,
-    foregroundTurnActive: state.foregroundTurnActive,
-    isWaitingInput: isAgentSessionBlockedOnInput(state),
-    waitingInputPlaceholder: getAgentSessionWaitingInputPlaceholder(state),
-    canStopSession: state.canStopSession,
-    stopAgentSession: stopSession,
-    isResumingSession: actions.isResumingSession,
-    isReadOnly: state.isReadOnly,
-    readOnlyReason: state.readOnlyReason,
-    draftScope: { key: draftPersistence.targetKey, persistence: draftPersistence },
-    onSend: pendingSend.onSend,
-    pendingSendItems: pendingSend.pendingSendItems,
-    isStarting: identity === null && actions.isStarting,
-    contextUsage,
     selectedModelSelection: picker.selection,
     speed: picker.speed,
     selectedModelDescriptor: picker.selectedModelEntry,
@@ -125,5 +95,68 @@ export function buildWorkspaceSessionComposer({
     onSelectAgent: picker.handleSelectAgentProfile,
     onSelectVariant: picker.handleSelectVariant,
     modelPicker: picker.modelPicker,
+  };
+}
+
+type WorkspaceSessionComposerInput = {
+  state: ReturnType<typeof projectWorkspaceSessionChatState>;
+  identity: AgentSessionIdentity | null;
+  isStartupPending: boolean;
+  actions: Pick<
+    ReturnType<typeof useWorkspaceSessionChatActions>,
+    "isStarting" | "isResumingSession"
+  >;
+  delivery: ReturnType<typeof useAgentChatSend>;
+  goalRow: AgentChatComposerConfig["goalRow"];
+  goalRowScope: AgentChatComposerConfig["goalRowScope"];
+  backgroundTasks: AgentChatComposerConfig["backgroundTasks"];
+  pendingSend: ReturnType<typeof usePendingSendContext>;
+  draftPersistence: ReturnType<typeof createWorkspaceSessionChatDraftPersistence>;
+  picker: Omit<ReturnType<typeof useWorkspaceSessionModelPicker>, "modelPicker"> & {
+    modelPicker: AgentChatComposerConfig["modelPicker"];
+  };
+  promptInput: SessionPromptInput;
+  contextUsage: ReturnType<typeof useSelectedSessionContextUsage>;
+  stopSession: AgentOperationsContextValue["stopAgentSession"];
+};
+
+export function buildWorkspaceSessionComposer({
+  state,
+  identity,
+  isStartupPending,
+  actions,
+  delivery,
+  goalRow,
+  goalRowScope,
+  backgroundTasks,
+  pendingSend,
+  draftPersistence,
+  picker,
+  promptInput,
+  contextUsage,
+  stopSession,
+}: WorkspaceSessionComposerInput): AgentChatComposerConfig {
+  return {
+    ...delivery,
+    goalRow,
+    goalRowScope,
+    backgroundTasks,
+    displayedSessionKey: state.sessionKey,
+    selectedSession: identity,
+    isSessionWorking: state.isWorking,
+    foregroundTurnActive: state.foregroundTurnActive,
+    isWaitingInput: isAgentSessionBlockedOnInput(state),
+    waitingInputPlaceholder: getAgentSessionWaitingInputPlaceholder(state),
+    canStopSession: state.canStopSession,
+    stopAgentSession: stopSession,
+    isResumingSession: actions.isResumingSession,
+    isReadOnly: isStartupPending || state.isReadOnly,
+    readOnlyReason: isStartupPending ? "Starting session..." : state.readOnlyReason,
+    draftScope: { key: draftPersistence.targetKey, persistence: draftPersistence },
+    onSend: pendingSend.onSend,
+    pendingSendItems: pendingSend.pendingSendItems,
+    isStarting: isStartupPending || (identity === null && actions.isStarting),
+    contextUsage,
+    ...buildComposerCatalogFields(picker, promptInput),
   };
 }

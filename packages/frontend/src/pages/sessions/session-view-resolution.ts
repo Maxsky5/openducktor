@@ -140,9 +140,11 @@ function followPublished(
 ): SessionView {
   if (published?.viewId !== view.id) return view;
   const { target } = published;
+  const isWorkspaceTarget =
+    target.kind === "workspace_session" || target.kind === "workspace_session_draft";
   if (
     target.workspaceId !== view.workspace.workspaceId ||
-    (target.kind === "workspace_session") !== (view.kind === "workspace")
+    isWorkspaceTarget !== (view.kind === "workspace")
   )
     return view;
   const search = buildSessionNavigationSearch(target);
@@ -162,7 +164,7 @@ function followPublished(
 function resolveActiveView(
   views: SessionView[],
   activeId: string | null,
-  { location, scope, createId }: SessionViewsInput,
+  { location, scope, hasOwner, createId }: SessionViewsInput,
   workspace: ActiveWorkspace,
   kind: SessionsPageKind,
   follow: (view: SessionView) => SessionView,
@@ -170,27 +172,52 @@ function resolveActiveView(
   const params = new URLSearchParams(location.search);
   const candidates = views.filter((view) => sameOwner(view, workspace, kind));
   const active = candidates.find((view) => view.id === activeId);
+  const activeView = views.find((view) => view.id === activeId);
   // A view whose task or chat has gone can still share a selection, so the active view wins.
   const exact = candidates.filter((view) => sameSessionSelection(view.search, location.search));
   const activeAddress = new URLSearchParams(active?.search);
+  const requestedDraftId =
+    kind === "workspace" ? params.get(WORKSPACE_SESSION_QUERY_KEYS.draft) : null;
+  const activeViewDraftId =
+    kind === "workspace" && activeView?.kind === "workspace"
+      ? new URLSearchParams(activeView.search).get(WORKSPACE_SESSION_QUERY_KEYS.draft)
+      : null;
+  // Moving the active draft to another workspace reuses its view in place so the draft page and
+  // sidebar selection do not unmount or flicker.
+  const movesActiveDraft =
+    exact.length === 0 &&
+    activeView !== undefined &&
+    requestedDraftId !== null &&
+    activeViewDraftId === requestedDraftId;
   // The active view stays for an address that names no selection, or less than the view.
   const keepsActive =
     exact.length === 0 &&
     active !== undefined &&
     (!hasSelection(location.search, kind) || fitsAddress(active, params));
-  // The active view takes an address that adds to an empty selection or to a task without a session.
+  // The active view takes an address that adds to an empty selection, to a task without a session,
+  // or replaces a retired/missing workspace draft in place with its saved session or recovery draft.
+  const replacesMissingDraft =
+    kind === "workspace" &&
+    active !== undefined &&
+    activeAddress.has(WORKSPACE_SESSION_QUERY_KEYS.draft) &&
+    !hasOwner(active) &&
+    (params.has(WORKSPACE_SESSION_QUERY_KEYS.session) ||
+      params.has(WORKSPACE_SESSION_QUERY_KEYS.draft));
   const growsActive =
     exact.length === 0 &&
     active !== undefined &&
     (!hasSelection(active.search, kind) ||
-      (activeAddress.get(TASK_SESSION_QUERY_KEYS.task) ===
-        params.get(TASK_SESSION_QUERY_KEYS.task) &&
+      replacesMissingDraft ||
+      (kind === "task" &&
+        activeAddress.get(TASK_SESSION_QUERY_KEYS.task) ===
+          params.get(TASK_SESSION_QUERY_KEYS.task) &&
         !activeAddress.has(TASK_SESSION_QUERY_KEYS.session)));
   const previous =
     (active && exact.includes(active) ? active : exact[0]) ??
     (keepsActive || growsActive ? active : undefined) ??
+    (movesActiveDraft ? activeView : undefined) ??
     // An address without a session goes back to the last view of its task.
-    (params.has(TASK_SESSION_QUERY_KEYS.session)
+    (kind !== "task" || params.has(TASK_SESSION_QUERY_KEYS.session)
       ? undefined
       : candidates.findLast(
           (view) =>
@@ -235,8 +262,11 @@ function fitsAddress(view: SessionView, params: URLSearchParams): boolean {
 }
 
 function hasSelection(search: string, kind: SessionsPageKind): boolean {
-  return new URLSearchParams(search).has(
-    kind === "task" ? TASK_SESSION_QUERY_KEYS.task : WORKSPACE_SESSION_QUERY_KEYS.session,
+  const params = new URLSearchParams(search);
+  if (kind === "task") return params.has(TASK_SESSION_QUERY_KEYS.task);
+  return (
+    params.has(WORKSPACE_SESSION_QUERY_KEYS.session) ||
+    params.has(WORKSPACE_SESSION_QUERY_KEYS.draft)
   );
 }
 

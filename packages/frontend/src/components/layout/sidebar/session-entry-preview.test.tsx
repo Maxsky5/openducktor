@@ -8,6 +8,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { createWorkspaceActivityObserver } from "@openducktor/frontend-core/workspace-activity/workspace-activity-observer";
 import { sessionNavigationTargetKey } from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
 import { VisibleSessionTargetProvider } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
@@ -159,27 +160,29 @@ const mountSidebar = (
   const onOpen = mock(() => {});
   const other = workspaceSessionEntry("other");
   render(
-    <ClientConnectionProvider connection={connection}>
-      <HostRuntimeStatusContext value={runtimeStatus}>
-        <SessionMenuProvider>
-          <WorkspaceActivityContext value={observer}>
-            <VisibleSessionTargetProvider>
-              <SessionReadStateProvider visibility={documentVisibility}>
-                <SessionSelectionProvider
-                  selection={{ entryKey: other.key, visibleKey: other.key }}
-                >
-                  <SessionNavigationList
-                    model={navigationModel({ needs_you: [entry], recent: [other] })}
-                    onOpen={onOpen}
-                    onRetry={() => {}}
-                  />
-                </SessionSelectionProvider>
-              </SessionReadStateProvider>
-            </VisibleSessionTargetProvider>
-          </WorkspaceActivityContext>
-        </SessionMenuProvider>
-      </HostRuntimeStatusContext>
-    </ClientConnectionProvider>,
+    <MemoryRouter>
+      <ClientConnectionProvider connection={connection}>
+        <HostRuntimeStatusContext value={runtimeStatus}>
+          <SessionMenuProvider>
+            <WorkspaceActivityContext value={observer}>
+              <VisibleSessionTargetProvider>
+                <SessionReadStateProvider visibility={documentVisibility}>
+                  <SessionSelectionProvider
+                    selection={{ entryKey: other.key, visibleKey: other.key }}
+                  >
+                    <SessionNavigationList
+                      model={navigationModel({ needs_you: [entry], recent: [other] })}
+                      onOpen={onOpen}
+                      onRetry={() => {}}
+                    />
+                  </SessionSelectionProvider>
+                </SessionReadStateProvider>
+              </VisibleSessionTargetProvider>
+            </WorkspaceActivityContext>
+          </SessionMenuProvider>
+        </HostRuntimeStatusContext>
+      </ClientConnectionProvider>
+    </MemoryRouter>,
   );
   return {
     client,

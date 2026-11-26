@@ -41,7 +41,7 @@ test.each([
     });
     const connection = createTestClientConnection({
       client: {
-        workspaceSessionCreate: mutation,
+        workspaceSessionLaunch: mutation,
         workspaceSessionStart: mutation,
         agentSessionControlResume: mutation,
       },

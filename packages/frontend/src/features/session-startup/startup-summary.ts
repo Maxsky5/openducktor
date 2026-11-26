@@ -5,6 +5,8 @@ import { basenameForPath } from "@openducktor/path-support";
 import { actionResultText } from "./action-result-text";
 import {
   startupActiveStep,
+  startupStepHasFailure,
+  startupStepHasWarning,
   startupTraceRows,
 } from "@openducktor/frontend-core/sessions/startup/startup-trace";
 
@@ -21,6 +23,13 @@ export function startupIssue(attempt: StartupAttempt): string | undefined {
     );
   const result = failed?.action?.result;
   return result && !terminalCommandSucceeded(result) ? actionResultText(result) : attempt.error;
+}
+
+export function startupWarning(attempt: StartupAttempt): string | undefined {
+  const warned = attempt.operations
+    .flatMap((operation) => operation.steps)
+    .findLast((step) => startupStepHasWarning(step));
+  return warned?.warning?.trim() || undefined;
 }
 
 export function startupActivity(attempt: StartupAttempt): string | undefined {
@@ -44,10 +53,11 @@ export function startupTitle(attempt: StartupAttempt): string {
   const scope = attempt.origin.scope;
   const subject = scope.kind === "task" ? `${attempt.roleLabel ?? "Task"} session` : "Session";
   switch (attempt.status.phase) {
-    case "ready":
-      return startupCurrentStep(attempt)
-        ? `${subject} ready with a setup error`
-        : `${subject} ready`;
+    case "ready": {
+      if (startupCurrentStep(attempt)) return `${subject} ready with a setup error`;
+      if (startupWarning(attempt)) return `${subject} ready with a warning`;
+      return `${subject} ready`;
+    }
     case "failed":
       return `${subject} failed to start`;
     case "canceled":
@@ -65,7 +75,19 @@ export function startupOrigin(attempt: StartupAttempt): string {
     : `${workspace} · Workspace session`;
 }
 
-export function startupCurrentStep(attempt: StartupAttempt): StartupStep | undefined {
+export const STARTUP_UNCONFIRMED_MESSAGE =
+  "Startup is not confirmed. Inspect the session before you try again.";
+
+export function startupProgressToggleLabel(
+  expanded: boolean,
+  hasTrace: boolean,
+  phase: StartupAttempt["status"]["phase"],
+): string {
+  if (expanded) return hasTrace ? "Hide progress" : "Hide details";
+  return !hasTrace || phase === "ready" ? "Details" : "View progress";
+}
+
+function startupCurrentStep(attempt: StartupAttempt): StartupStep | undefined {
   const steps = attempt.operations.flatMap((operation) => operation.steps);
   if (attempt.status.phase === "ready")
     return steps.findLast((step) =>
@@ -73,22 +95,6 @@ export function startupCurrentStep(attempt: StartupAttempt): StartupStep | undef
     );
   return (
     steps.findLast((step) => step.state === "running" || step.state === "waiting") ??
-    steps.findLast((step) => startupStepFailed(step))
-  );
-}
-
-export function startupProgress(attempt: StartupAttempt) {
-  const steps = startupTraceRows(attempt).map(({ step }) => step);
-  return {
-    completed: steps.filter((step) => step.state === "completed" && !startupStepFailed(step))
-      .length,
-    total: steps.length,
-  };
-}
-
-export function startupStepFailed(step: StartupStep): boolean {
-  return (
-    step.state === "failed" ||
-    Boolean(step.action?.result && !terminalCommandSucceeded(step.action.result))
+    steps.findLast((step) => startupStepHasFailure(step))
   );
 }

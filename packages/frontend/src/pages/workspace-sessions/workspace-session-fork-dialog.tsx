@@ -1,5 +1,6 @@
 import type {
   AgentSessionForkPoint,
+  RepoConfig,
   WorkspaceSession,
   WorkspaceSessionWorktreeInput,
 } from "@openducktor/contracts";
@@ -10,19 +11,28 @@ import {
   type WorkspaceSessionForkDestination,
   workspaceSessionForkInput,
 } from "@openducktor/frontend-core/workspace-sessions/fork/workspace-session-fork-form";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { type UseQueryResult, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Folder, GitBranch, GitFork, LoaderCircle } from "lucide-react";
-import { type ReactElement, useState } from "react";
+import { type PropsWithChildren, type ReactElement, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { DialogBody, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { repoConfigQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { forkWorkspaceSession } from "@openducktor/frontend-core/sessions/session-forks";
 import { useAgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import { workspaceSessionValidationError } from "@openducktor/frontend-core/workspace-sessions/create/workspace-session-create-input";
+import { workspaceSessionValidationError } from "@openducktor/frontend-core/workspace-sessions/create/workspace-session-worktree-rules";
 import { NewWorktreeBranchFields, WorktreeNameField } from "./workspace-session-worktree-inputs";
 import { WorkspaceSessionWorkLocationField } from "./workspace-session-work-location-field";
 import { StartupDialogProgress } from "@/features/session-startup/session-startup-dialog-progress";
@@ -31,10 +41,69 @@ import {
   useStartupDialogAttempt,
   useStartupDialogClose,
 } from "@/features/session-startup/use-startup-dialog-attempt";
+import type { StartupAttempt } from "@openducktor/frontend-core/sessions/startup/startup-attempt-store";
 import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
-import { startupShowsProgress } from "@openducktor/frontend-core/sessions/startup/startup-trace";
+import {
+  startupShowsProgress,
+  startupTraceRows,
+} from "@openducktor/frontend-core/sessions/startup/startup-trace";
 import { useWorkspaceForkHandoff } from "./use-workspace-fork-handoff";
-import { ChatDialogFrame } from "./workspace-session-dialog-frame";
+
+function ForkDialogFrame({
+  open,
+  attempt,
+  starting,
+  onClose,
+  onCloseAutoFocus,
+  title,
+  description,
+  children,
+}: PropsWithChildren<{
+  title: string;
+  description: string;
+  open: boolean;
+  attempt: StartupAttempt | null;
+  starting: boolean;
+  onClose: () => void;
+  onCloseAutoFocus: ((event: Event) => void) | undefined;
+}>): ReactElement {
+  const showingProgress = startupShowsProgress(attempt);
+  const hasTrace = attempt !== null && startupTraceRows(attempt).length > 0;
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !starting) onClose();
+      }}
+    >
+      <DialogContent
+        className={cn(
+          "my-0 gap-0 p-0 sm:max-w-2xl",
+          showingProgress && "max-w-lg overflow-hidden sm:max-w-lg",
+          hasTrace && "min-h-[min(18rem,calc(100dvh-2rem))] max-h-[min(30rem,calc(100dvh-2rem))]",
+        )}
+        closeButton={starting ? null : undefined}
+        onCloseAutoFocus={onCloseAutoFocus}
+        onEscapeKeyDown={(event) => {
+          if (starting) event.preventDefault();
+        }}
+        onPointerDownOutside={(event) => {
+          if (starting) event.preventDefault();
+        }}
+      >
+        <DialogHeader
+          className={cn("border-b border-border px-6 py-4", showingProgress && "px-4 py-3")}
+        >
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription className={cn(showingProgress && "sr-only")}>
+            {description}
+          </DialogDescription>
+        </DialogHeader>
+        {children}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export function WorkspaceSessionForkDialog({
   open,
@@ -125,7 +194,7 @@ export function WorkspaceSessionForkDialog({
     setFailure(null);
   };
   return (
-    <ChatDialogFrame
+    <ForkDialogFrame
       open={open}
       attempt={attempt}
       starting={starting}
@@ -154,7 +223,7 @@ export function WorkspaceSessionForkDialog({
           <fieldset disabled={starting} className="contents">
             <DialogBody className="flex flex-col gap-4 px-6 py-4">
               <ForkLocationFields
-                workspace={workspace}
+                config={config}
                 record={record}
                 destination={destination}
                 onDestinationChange={setDestination}
@@ -174,12 +243,12 @@ export function WorkspaceSessionForkDialog({
           </fieldset>
         </form>
       )}
-    </ChatDialogFrame>
+    </ForkDialogFrame>
   );
 }
 
 function ForkLocationFields({
-  workspace,
+  config,
   record,
   destination,
   onDestinationChange,
@@ -188,7 +257,7 @@ function ForkLocationFields({
   disabled,
   error,
 }: {
-  workspace: ActiveWorkspace;
+  config: UseQueryResult<RepoConfig>;
   record: WorkspaceSession;
   destination: WorkspaceSessionForkDestination;
   onDestinationChange: (value: WorkspaceSessionForkDestination) => void;
@@ -251,12 +320,11 @@ function ForkLocationFields({
             error={error}
           />
           <NewWorktreeBranchFields
-            workspace={workspace}
+            config={config}
             value={worktree}
             onChange={onWorktreeChange}
             disabled={disabled}
             error={error}
-            alwaysExpanded
           />
           <p className="text-sm text-muted-foreground">{FORK_CHAT_TEXT.uncommittedChanges}</p>
         </div>

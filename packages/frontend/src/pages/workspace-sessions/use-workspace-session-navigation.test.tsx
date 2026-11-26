@@ -76,27 +76,27 @@ test("keeps the displayed owner until the router commits the requested URL", () 
   }
 });
 
-test("coalesces rapid updates and preserves the creation flag and unrelated params", () => {
+test("coalesces rapid updates and switches cleanly between draft and session params", () => {
   const h = createHarness();
   try {
     act(() => {
       h.result.current.updateNavigation({ sessionId: "Second" }, false);
       h.result.current.updateNavigation({ sessionId: "Third" }, false);
-      h.result.current.updateNavigation({ creating: true });
+      h.result.current.updateNavigation({ draftId: "draft-1" });
     });
-    expect(h.result.current.sessionId).toBe("First");
-    expect(h.result.current.creating).toBe(true);
+    expect(h.result.current.sessionId).toBeNull();
+    expect(h.result.current.draftId).toBe("draft-1");
     expect(h.writes).toEqual([
       {
-        search: "session=Third&keep=value&create=session",
+        search: "keep=value&draft=draft-1",
         options: { replace: true, preventScrollReset: true },
       },
     ]);
-    act(() => h.result.current.updateNavigation({ sessionId: "New chat", creating: false }));
-    expect(h.writes[1]?.search).toBe("session=New+chat&keep=value");
+    act(() => h.result.current.updateNavigation({ sessionId: "New chat", draftId: null }));
+    expect(h.writes[1]?.search).toBe("keep=value&session=New+chat");
     expect(h.result.current.sessionId).toBe("First");
-    expect(h.result.current.creating).toBe(false);
-    act(() => h.result.current.updateNavigation({ sessionId: "New chat", creating: false }));
+    expect(h.result.current.draftId).toBeNull();
+    act(() => h.result.current.updateNavigation({ sessionId: "New chat", draftId: null }));
     expect(h.writes).toHaveLength(2);
   } finally {
     h.unmount();
@@ -248,8 +248,8 @@ test("a hidden chat drops its outbound request and ignores callbacks from its la
     h.rerender({ ...route, enabled: true });
     expect(h.result.current.sessionId).toBe("First");
     expect(h.writes).toHaveLength(1);
-    act(() => h.result.current.updateNavigation({ creating: true }));
-    expect(h.writes.at(-1)?.search).toBe("session=First&keep=value&create=session");
+    act(() => h.result.current.updateNavigation({ draftId: "draft-2" }));
+    expect(h.writes.at(-1)?.search).toBe("keep=value&draft=draft-2");
   } finally {
     h.unmount();
   }

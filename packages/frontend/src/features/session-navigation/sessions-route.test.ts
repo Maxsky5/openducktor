@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
-  buildNewWorkspaceSessionHref,
   buildSessionNavigationHref,
   buildSessionsPageHref,
+  buildWorkspaceSessionDraftHref,
   parseSessionsPageKind,
 } from "./sessions-route";
 
@@ -44,9 +44,16 @@ describe("Sessions page addresses", () => {
         sessionId: "chat 1",
       }),
     ).toBe("/sessions?workspace=w&kind=workspace&session=chat+1");
-    expect(buildNewWorkspaceSessionHref("w")).toBe(
-      "/sessions?workspace=w&kind=workspace&create=session",
+    expect(buildWorkspaceSessionDraftHref("w", "draft-1")).toBe(
+      "/sessions?workspace=w&kind=workspace&draft=draft-1",
     );
+    expect(
+      buildSessionNavigationHref({
+        kind: "workspace_session_draft",
+        workspaceId: "w",
+        draftId: "draft-1",
+      }),
+    ).toBe("/sessions?workspace=w&kind=workspace&draft=draft-1");
   });
 
   test("builds a page address with or without a content kind", () => {

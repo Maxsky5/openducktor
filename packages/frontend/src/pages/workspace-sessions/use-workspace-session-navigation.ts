@@ -3,7 +3,7 @@ import type { SetURLSearchParams } from "react-router";
 
 type Navigation = {
   sessionId: string | null | undefined;
-  creating: boolean;
+  draftId: string | null;
 };
 
 type UseWorkspaceSessionNavigationArgs = {
@@ -19,6 +19,14 @@ type WorkspaceSessionNavigation = Navigation & {
   updateNavigation: (update: Partial<Navigation>, replace?: boolean) => void;
 };
 
+const readNavigationFromParams = (searchParams: URLSearchParams): Navigation => {
+  const draftId = searchParams.get("draft");
+  return {
+    sessionId: draftId ? null : (searchParams.get("session") ?? undefined),
+    draftId,
+  };
+};
+
 export function useWorkspaceSessionNavigation({
   workspaceId,
   locationKey,
@@ -28,10 +36,9 @@ export function useWorkspaceSessionNavigation({
   enabled,
 }: UseWorkspaceSessionNavigationArgs): WorkspaceSessionNavigation {
   const [scope, setScope] = useState({ workspaceId, searchParams });
-  const [navigation, setNavigation] = useState<Navigation>(() => ({
-    sessionId: searchParams.get("session") ?? undefined,
-    creating: searchParams.get("create") === "session",
-  }));
+  const [navigation, setNavigation] = useState<Navigation>(() =>
+    readNavigationFromParams(searchParams),
+  );
   const latestSearchParams = useRef(searchParams);
   const pendingWrites = useRef<string[]>([]);
   const syncingFromUrl = useRef(false);
@@ -39,10 +46,7 @@ export function useWorkspaceSessionNavigation({
   let currentNavigation = navigation;
   if (scope.workspaceId !== workspaceId) {
     setScope({ workspaceId, searchParams });
-    currentNavigation = {
-      sessionId: searchParams.get("session") ?? undefined,
-      creating: searchParams.get("create") === "session",
-    };
+    currentNavigation = readNavigationFromParams(searchParams);
     setNavigation(currentNavigation);
   }
 
@@ -59,10 +63,11 @@ export function useWorkspaceSessionNavigation({
   }, [enabled]);
   const updateNavigation = useCallback((update: Partial<Navigation>, replace = true): void => {
     if (!enabledRef.current) return;
+    syncingFromUrl.current = false;
     replaceHistory.current = replace;
     setNavigation((current) => {
       const next = { ...current, ...update };
-      return next.sessionId === current.sessionId && next.creating === current.creating
+      return next.sessionId === current.sessionId && next.draftId === current.draftId
         ? current
         : next;
     });
@@ -72,10 +77,7 @@ export function useWorkspaceSessionNavigation({
     if (!enabled) {
       pendingWrites.current = [];
       latestSearchParams.current = searchParams;
-      setNavigation({
-        sessionId: searchParams.get("session") ?? undefined,
-        creating: searchParams.get("create") === "session",
-      });
+      setNavigation(readNavigationFromParams(searchParams));
       return;
     }
     const writeIndex =
@@ -90,11 +92,12 @@ export function useWorkspaceSessionNavigation({
     latestSearchParams.current = searchParams;
     syncingFromUrl.current = true;
     replaceHistory.current = true;
-    const sessionId = searchParams.get("session") ?? undefined;
-    const creating = searchParams.get("create") === "session";
+    const parsed = readNavigationFromParams(searchParams);
     setNavigation((current) => {
-      if (current.sessionId === sessionId && current.creating === creating) return current;
-      return { sessionId, creating };
+      if (current.sessionId === parsed.sessionId && current.draftId === parsed.draftId) {
+        return current;
+      }
+      return parsed;
     });
   }, [enabled, locationKey, navigationType, scope, searchParams]);
 
@@ -105,10 +108,14 @@ export function useWorkspaceSessionNavigation({
       return;
     }
     const next = new URLSearchParams(latestSearchParams.current);
-    if (navigation.sessionId) next.set("session", navigation.sessionId);
-    else next.delete("session");
-    if (navigation.creating) next.set("create", "session");
-    else next.delete("create");
+    if (navigation.draftId) {
+      next.set("draft", navigation.draftId);
+      next.delete("session");
+    } else {
+      next.delete("draft");
+      if (navigation.sessionId) next.set("session", navigation.sessionId);
+      else next.delete("session");
+    }
     const nextKey = next.toString();
     if (nextKey === latestSearchParams.current.toString()) return;
     latestSearchParams.current = next;
@@ -119,10 +126,11 @@ export function useWorkspaceSessionNavigation({
   }, [enabled, locationKey, navigation, navigationType, scope, searchParams, setSearchParams]);
 
   // A kept view owns its address. A local request must not replace its chat before the host switches views.
-  const ownedSessionId = searchParams.get("session");
+  const activeDraftId = enabled ? currentNavigation.draftId : searchParams.get("draft");
+  const ownedSessionId = activeDraftId ? null : searchParams.get("session");
   return {
-    ...currentNavigation,
-    sessionId: ownedSessionId ?? currentNavigation.sessionId,
+    draftId: activeDraftId,
+    sessionId: activeDraftId ? null : (ownedSessionId ?? currentNavigation.sessionId),
     updateNavigation,
   };
 }

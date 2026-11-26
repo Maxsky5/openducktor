@@ -1,4 +1,4 @@
-import { type PropsWithChildren, type ReactElement, useContext, useSyncExternalStore } from "react";
+import { type PropsWithChildren, type ReactElement, use, useSyncExternalStore } from "react";
 import type { TerminalContext } from "@openducktor/contracts";
 import {
   EMPTY_TERMINAL_ACTIVITY,
@@ -17,12 +17,12 @@ export function TerminalActivityProvider({ children }: PropsWithChildren): React
 const noSubscription = (): (() => void) => () => {};
 const emptyActivity = () => EMPTY_TERMINAL_ACTIVITY;
 
-export function useTerminalActivity(context: TerminalContext) {
-  const controller = useContext(TerminalActivityContext);
-  const key = terminalActivityOwnerKey(context);
+export function useTerminalActivity(context: TerminalContext | null) {
+  const controller = use(TerminalActivityContext);
+  const key = context ? terminalActivityOwnerKey(context) : null;
   return useSyncExternalStore(
-    controller?.subscribeActivity ?? noSubscription,
-    controller ? () => controller.readActivity(key) : emptyActivity,
+    controller && key !== null ? controller.subscribeActivity : noSubscription,
+    controller && key !== null ? () => controller.readActivity(key) : emptyActivity,
     emptyActivity,
   );
 }

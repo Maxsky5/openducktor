@@ -33,20 +33,24 @@ import {
 import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useArchiveWorkspaceSession } from "@openducktor/frontend-core/workspace-sessions/use-archive-workspace-session";
+import { useOpenNewWorkspaceSession } from "@/features/session-navigation/use-open-new-workspace-session";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   WorkspaceSessionContent,
   WorkspaceSessionReadModelNotice,
 } from "./workspace-session-content";
-import { WorkspaceSessionCreateDialog } from "./workspace-session-create-dialog";
+import { WorkspaceSessionDraftView } from "./workspace-session-draft-view";
 import { WorkspaceSessionEmptyState } from "./workspace-session-empty-state";
 import { WorkspaceSessionArchiveDialog } from "./workspace-session-archive-dialog";
 import { SessionViewControls } from "@/components/features/agents/session-view-controls";
 import { SessionRepoActions } from "@/components/features/repository-actions/session-repo-actions";
-import { WorkspaceSessionHeader } from "./workspace-session-header";
+import { type HeaderChromeReveal, WorkspaceSessionHeader } from "./workspace-session-header";
 import { useWorkspaceSessionTerminals } from "./use-workspace-session-terminals";
 import { useMountedRef } from "@openducktor/frontend-core/lib/use-mounted-ref";
-import { useWorkspaceSessionNavigation } from "./use-workspace-session-navigation";
+import {
+  useHandedOffSessionState,
+  useWorkspaceSessionDraftLifecycle,
+} from "./use-workspace-session-draft-lifecycle";
 import { useWorkspaceSessionSelection } from "./use-workspace-session-selection";
 import { useVisibleSessionId } from "./use-visible-session-id";
 import {
@@ -79,27 +83,42 @@ export function WorkspaceSessions({
   setSearchParams,
   retryRecords,
 }: WorkspaceSessionsProps): ReactElement {
+  const openNewWorkspaceSession = useOpenNewWorkspaceSession();
   const { run: guardWorkspaceChange, cancelPending } = useWorkspacePreviewTransitionGuard();
-  const { sessionId, creating, updateNavigation } = useWorkspaceSessionNavigation({
+  const archiveCloseAutoFocusRef = useRef<((event: Event) => void) | null>(null);
+  const mounted = useMountedRef();
+  const {
+    isLive,
+    sessionId,
+    draftId,
+    updateNavigation,
+    matchingDraft,
+    handedOffSession,
+    setHandedOffSession,
+    handleDiscardDraft,
+    handleSwitchDraftWorkspace,
+    handleSavedDraftRecord,
+  } = useWorkspaceSessionDraftLifecycle({
     workspaceId: workspace.workspaceId,
     locationKey,
     navigationType,
     searchParams,
     setSearchParams,
-    enabled: isActive,
+    isActive,
+    sessions,
+    mounted,
   });
-  const [createWorkspaceId, setCreateWorkspaceId] = useState<string | null>(null);
-  const createOpen = createWorkspaceId === workspace.workspaceId;
-  if (createWorkspaceId !== null && (!isActive || createWorkspaceId !== workspace.workspaceId)) {
-    setCreateWorkspaceId(null);
-  }
-  const [createAttempt, setCreateAttempt] = useState(0);
-  const archiveCloseAutoFocusRef = useRef<((event: Event) => void) | null>(null);
-  const mounted = useMountedRef();
-  const workspaceIdRef = useRef(workspace.workspaceId);
-  useLayoutEffect(() => {
-    workspaceIdRef.current = workspace.workspaceId;
-  }, [workspace.workspaceId]);
+  const isDraftMode = draftId !== null;
+  const effectiveSessions = useMemo(
+    () =>
+      handedOffSession &&
+      handedOffSession.workspaceId === workspace.workspaceId &&
+      !sessions.some((entry) => entry.id === handedOffSession.id)
+        ? [handedOffSession.record, ...sessions]
+        : sessions,
+    [handedOffSession, sessions, workspace.workspaceId],
+  );
+
   const {
     selected: requestedSelected,
     missingSessionId,
@@ -109,11 +128,12 @@ export function WorkspaceSessions({
     isRetryingNavigationPersistence,
   } = useWorkspaceSessionSelection({
     workspaceId: workspace.workspaceId,
-    sessions,
+    sessions: effectiveSessions,
     requestedSessionId: sessionId,
     isActive,
+    draftActive: isDraftMode,
   });
-  const requestedSelectedId = requestedSelected?.id ?? null;
+  const requestedSelectedId = isDraftMode ? null : (requestedSelected?.id ?? null);
   const { visibleSelectedId, leaveRemovedChat, completeArchive } = useVisibleSessionId(
     requestedSelectedId,
     guardWorkspaceChange,
@@ -121,13 +141,21 @@ export function WorkspaceSessions({
     cancelPending,
     workspace.workspaceId,
   );
-  const selected = useVisibleSessionRecord(
+  const resolvedSelected = useVisibleSessionRecord(
     workspace.workspaceId,
-    sessions,
+    effectiveSessions,
     visibleSelectedId,
     requestedSelected,
   );
+  const selected = isDraftMode ? null : resolvedSelected;
   const selectedId = selected?.id ?? null;
+  const { deferRightReveal, headerChromeReveal, startupTitleFallback } = useHandedOffSessionState(
+    workspace.workspaceId,
+    selectedId,
+    isDraftMode,
+    handedOffSession,
+    setHandedOffSession,
+  );
   const terminals = useWorkspaceSessionTerminals({
     workspace,
     selected,
@@ -154,6 +182,7 @@ export function WorkspaceSessions({
     terminals,
     browser,
     toolCallTab: toolDetails.toolCallTab,
+    deferRightReveal,
   });
   const { selectedFile, onSelectedFileChange } = useSelectedFiles(
     workspace.workspaceId,
@@ -161,27 +190,35 @@ export function WorkspaceSessions({
   );
   useEffect(() => {
     if (
+      !isDraftMode &&
       !navigationPersistenceError &&
       missingSessionId === null &&
       sessionId !== requestedSelectedId
     )
       updateNavigation({ sessionId: requestedSelectedId });
   }, [
+    isDraftMode,
     navigationPersistenceError,
     missingSessionId,
     requestedSelectedId,
     sessionId,
     updateNavigation,
   ]);
-  const visibleTarget = useMemo<SessionNavigationTarget | null>(
-    () =>
-      selectedId === null
-        ? null
-        : { kind: "workspace_session", workspaceId: workspace.workspaceId, sessionId: selectedId },
-    [selectedId, workspace.workspaceId],
-  );
+  const matchingDraftId = matchingDraft?.id ?? null;
+  const visibleTarget = useMemo<SessionNavigationTarget | null>(() => {
+    if (matchingDraftId !== null) {
+      return {
+        kind: "workspace_session_draft",
+        workspaceId: workspace.workspaceId,
+        draftId: matchingDraftId,
+      };
+    }
+    return selectedId === null
+      ? null
+      : { kind: "workspace_session", workspaceId: workspace.workspaceId, sessionId: selectedId };
+  }, [matchingDraftId, selectedId, workspace.workspaceId]);
   usePublishVisibleSessionTarget(
-    !isActive || navigationPersistenceError ? null : visibleTarget,
+    !isLive || navigationPersistenceError ? null : visibleTarget,
     selected ? workspaceSessionIdentity(selected) : null,
   );
   const { archive, archiveTarget, setArchiveTarget, beginArchive } = useWorkspaceSessionArchive({
@@ -193,11 +230,9 @@ export function WorkspaceSessions({
     completeArchive,
     guardWorkspaceChange,
   });
-  const setCreating = (open: boolean) => {
-    if (open) setCreateAttempt((attempt) => attempt + 1);
-    setCreateWorkspaceId(open ? workspace.workspaceId : null);
-    if (!open && creating) updateNavigation({ creating: false });
-  };
+  const handleCreate = useCallback(() => {
+    openNewWorkspaceSession(workspace.workspaceId);
+  }, [openNewWorkspaceSession, workspace.workspaceId]);
   if (navigationPersistenceError)
     return (
       <SessionNavigationError
@@ -214,35 +249,52 @@ export function WorkspaceSessions({
       <WorkspaceSessionReadModelNotice />
       <WorkspaceSessionRecordsRefreshNotice error={recordsError} onRetry={retryRecords} />
       {archiveTarget === null && <WorkspaceSessionArchiveError error={archive.error} />}
-      <PageToolDetailsProvider details={toolDetails}>
-        <WorkspaceSessionActiveContent
-          workspace={workspace}
-          selected={selected}
-          isActive={isActive}
-          missingSessionId={missingSessionId}
-          onDismissMissing={() => updateNavigation({ sessionId: null })}
-          panels={panels}
-          selectedFile={selectedFile}
-          onSelectedFileChange={onSelectedFileChange}
-          onSafeToLeave={leaveRemovedChat}
-          hasSessions={sessions.length > 0}
-          onCreate={() => setCreating(true)}
-          viewControls={
-            <SessionViewControls bottom={panels.bottomToggle} right={panels.rightToggle} />
-          }
-          onArchive={(onCloseAutoFocus) => {
-            if (!selected) return;
-            archiveCloseAutoFocusRef.current = onCloseAutoFocus;
-            archive.reset();
-            setArchiveTarget(selected);
-          }}
-          isArchiving={archive.isPending}
-        />
-      </PageToolDetailsProvider>
+      {isDraftMode ? (
+        matchingDraft ? (
+          <WorkspaceSessionDraftView
+            key={matchingDraft.id}
+            workspace={workspace}
+            draft={matchingDraft}
+            onDiscard={handleDiscardDraft}
+            onSwitchWorkspace={handleSwitchDraftWorkspace}
+            onSavedRecord={handleSavedDraftRecord}
+          />
+        ) : null
+      ) : (
+        <PageToolDetailsProvider details={toolDetails}>
+          <WorkspaceSessionActiveContent
+            workspace={workspace}
+            selected={selected}
+            isActive={isActive}
+            panels={panels}
+            viewControls={
+              <SessionViewControls bottom={panels.bottomToggle} right={panels.rightToggle} />
+            }
+            selection={{
+              missingSessionId,
+              onDismissMissing: () => updateNavigation({ sessionId: null }),
+              onSafeToLeave: leaveRemovedChat,
+              hasSessions: effectiveSessions.length > 0,
+              onCreate: handleCreate,
+            }}
+            fileSelection={{ selectedFile, onSelectedFileChange }}
+            header={{
+              onArchive: (onCloseAutoFocus) => {
+                if (!selected) return;
+                archiveCloseAutoFocusRef.current = onCloseAutoFocus;
+                archive.reset();
+                setArchiveTarget(selected);
+              },
+              isArchiving: archive.isPending,
+              chromeReveal: headerChromeReveal,
+              startupTitleFallback,
+            }}
+          />
+        </PageToolDetailsProvider>
+      )}
       <OnSessionViewHide
         onHide={() => {
           if (archiveTarget !== null) setArchiveTarget(null);
-          setCreateWorkspaceId(null);
         }}
       />
       {isActive && (
@@ -258,15 +310,6 @@ export function WorkspaceSessions({
             onArchiveClose={() => {
               setArchiveTarget(null);
               archive.reset();
-            }}
-            createOpen={createOpen || creating}
-            createAttempt={createAttempt}
-            onCreateClose={() => setCreating(false)}
-            onCreated={(record) => {
-              if (mounted.current && workspaceIdRef.current === workspace.workspaceId) {
-                setCreateWorkspaceId(null);
-                updateNavigation({ sessionId: record.id, creating: false });
-              }
             }}
           />
         </WhileSessionViewShown>
@@ -296,36 +339,44 @@ function WorkspaceSessionRecordsRefreshNotice({
   );
 }
 
+type WorkspaceSessionActiveSelection = {
+  missingSessionId: string | null;
+  onDismissMissing: () => void;
+  onSafeToLeave: () => void;
+  hasSessions: boolean;
+  onCreate: () => void;
+};
+
+type WorkspaceSessionActiveFileSelection = {
+  selectedFile: TaskExecutionSelectedFile | null;
+  onSelectedFileChange: (sessionId: string, selectedFile: TaskExecutionSelectedFile | null) => void;
+};
+
+type WorkspaceSessionActiveHeader = {
+  onArchive: (onCloseAutoFocus: (event: Event) => void) => void;
+  isArchiving: boolean;
+  chromeReveal: HeaderChromeReveal;
+  startupTitleFallback: string | null;
+};
+
 function WorkspaceSessionActiveContent({
   workspace,
   selected,
   isActive,
-  missingSessionId,
-  onDismissMissing,
   panels,
-  selectedFile,
-  onSelectedFileChange,
-  onSafeToLeave,
-  hasSessions,
-  onCreate,
   viewControls,
-  onArchive,
-  isArchiving,
+  selection,
+  fileSelection,
+  header,
 }: {
   workspace: ActiveWorkspace;
   selected: WorkspaceSession | null;
   isActive: boolean;
-  missingSessionId: string | null;
-  onDismissMissing: () => void;
   panels: SessionPanelsModel;
-  selectedFile: TaskExecutionSelectedFile | null;
-  onSelectedFileChange: (sessionId: string, selectedFile: TaskExecutionSelectedFile | null) => void;
-  onSafeToLeave: () => void;
-  hasSessions: boolean;
-  onCreate: () => void;
   viewControls: ReactNode;
-  onArchive: (onCloseAutoFocus: (event: Event) => void) => void;
-  isArchiving: boolean;
+  selection: WorkspaceSessionActiveSelection;
+  fileSelection: WorkspaceSessionActiveFileSelection;
+  header: WorkspaceSessionActiveHeader;
 }): ReactElement {
   const isChatActive = isActive && selected !== null;
   return (
@@ -347,8 +398,10 @@ function WorkspaceSessionActiveContent({
               />
             }
             viewControls={viewControls}
-            onArchive={onArchive}
-            isArchiving={isArchiving}
+            onArchive={header.onArchive}
+            isArchiving={header.isArchiving}
+            chromeReveal={header.chromeReveal}
+            startupTitleFallback={header.startupTitleFallback}
           />
         </WhileSessionViewShown>
       )}
@@ -363,18 +416,21 @@ function WorkspaceSessionActiveContent({
             <WorkspaceSessionContent
               workspace={workspace}
               record={selected}
-              selectedFile={selectedFile}
-              onSelectedFileChange={onSelectedFileChange}
-              onSafeToLeave={onSafeToLeave}
+              selectedFile={fileSelection.selectedFile}
+              onSelectedFileChange={fileSelection.onSelectedFileChange}
+              onSafeToLeave={selection.onSafeToLeave}
               isActive={isChatActive}
               rightPanel={panels.right}
             />
           )}
           {!selected &&
-            (missingSessionId !== null ? (
-              <WorkspaceSessionUnavailable onDismiss={onDismissMissing} />
+            (selection.missingSessionId !== null ? (
+              <WorkspaceSessionUnavailable onDismiss={selection.onDismissMissing} />
             ) : (
-              <WorkspaceSessionEmptyState hasSessions={hasSessions} onCreate={onCreate} />
+              <WorkspaceSessionEmptyState
+                hasSessions={selection.hasSessions}
+                onCreate={selection.onCreate}
+              />
             ))}
         </BottomPanelSplit>
       </SessionPanelsRoot>
@@ -531,10 +587,6 @@ function WorkspaceSessionDialogs({
   onArchiveCloseAutoFocus,
   onArchive,
   onArchiveClose,
-  createOpen,
-  createAttempt,
-  onCreateClose,
-  onCreated,
 }: {
   workspace: ActiveWorkspace;
   archiveTarget: WorkspaceSession | null;
@@ -547,12 +599,7 @@ function WorkspaceSessionDialogs({
     confirmation?: { workingDirectory: string; branchName: string },
   ) => void;
   onArchiveClose: () => void;
-  createOpen: boolean;
-  createAttempt: number;
-  onCreateClose: () => void;
-  onCreated: (record: WorkspaceSession) => void;
-}): ReactElement {
-  const createMounted = useDialogPresence(createOpen);
+}): ReactElement | null {
   const archiveMounted = useDialogPresence(archiveTarget !== null);
   const lastArchiveTarget = useRef(archiveTarget);
   useLayoutEffect(() => {
@@ -560,32 +607,20 @@ function WorkspaceSessionDialogs({
   }, [archiveTarget]);
   // The closing dialog still needs its record after selection moves to the next chat.
   const closingTarget = archiveTarget ?? lastArchiveTarget.current;
+  if (!archiveMounted || !closingTarget) return null;
   return (
-    <>
-      {archiveMounted && closingTarget && (
-        <WorkspaceSessionArchiveDialog
-          key={closingTarget.id}
-          open={archiveTarget !== null}
-          onCloseAutoFocus={onArchiveCloseAutoFocus}
-          workspaceId={workspace.workspaceId}
-          record={closingTarget}
-          isArchiving={archivePending}
-          error={archiveError}
-          onArchive={(removeWorktree, confirmation) =>
-            onArchive(closingTarget.id, removeWorktree, confirmation)
-          }
-          onClose={onArchiveClose}
-        />
-      )}
-      {createMounted && (
-        <WorkspaceSessionCreateDialog
-          key={`${workspace.workspaceId}-${createAttempt}`}
-          open={createOpen}
-          workspace={workspace}
-          onClose={onCreateClose}
-          onCreated={onCreated}
-        />
-      )}
-    </>
+    <WorkspaceSessionArchiveDialog
+      key={closingTarget.id}
+      open={archiveTarget !== null}
+      onCloseAutoFocus={onArchiveCloseAutoFocus}
+      workspaceId={workspace.workspaceId}
+      record={closingTarget}
+      isArchiving={archivePending}
+      error={archiveError}
+      onArchive={(removeWorktree, confirmation) =>
+        onArchive(closingTarget.id, removeWorktree, confirmation)
+      }
+      onClose={onArchiveClose}
+    />
   );
 }

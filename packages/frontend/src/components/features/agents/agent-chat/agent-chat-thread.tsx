@@ -9,7 +9,7 @@ import {
   memo,
   type ReactElement,
   type RefObject,
-  useContext,
+  use,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -90,6 +90,7 @@ export function AgentChatThread({
     onToggleTodoPanel,
     messagesContainerRef,
     scrollToBottomOnSendRef,
+    topContent,
   } = model;
   const { session, target: transcriptTarget } = transcript;
   const sessionKey = JSON.stringify([
@@ -135,8 +136,8 @@ export function AgentChatThread({
   });
 
   return (
-    <AgentChatForkActionsContext.Provider value={model.forkActions ?? null}>
-      <AgentChatImageSessionContext.Provider value={imageSessionRef}>
+    <AgentChatForkActionsContext value={model.forkActions ?? null}>
+      <AgentChatImageSessionContext value={imageSessionRef}>
         <ToolPartSessionContext value={toolPartSession}>
           <ToolDetailsStoreContext value={toolDetails}>
             <ToolCallSourceContext value={toolCallSourceContext}>
@@ -146,6 +147,7 @@ export function AgentChatThread({
                   <div className="flex min-h-0 flex-1">
                     <div className="@container/transcript relative flex min-h-0 min-w-0 flex-1 flex-col">
                       <AgentChatTranscript
+                        topContent={topContent}
                         emptyState={transcriptEmptyState}
                         modelCatalog={modelCatalog}
                         isStarting={isStarting}
@@ -212,9 +214,9 @@ export function AgentChatThread({
             </ToolCallSourceContext>
           </ToolDetailsStoreContext>
         </ToolPartSessionContext>
-      </AgentChatImageSessionContext.Provider>
+      </AgentChatImageSessionContext>
       {model.forkDialog}
-    </AgentChatForkActionsContext.Provider>
+    </AgentChatForkActionsContext>
   );
 }
 
@@ -240,7 +242,7 @@ const useTranscriptToolCalls = ({
   const { session, target: transcriptTarget, repoPath } = transcript;
   // A page with session panels shows the details of a call in its right panel. Elsewhere, the
   // transcript shows them beside itself.
-  const pageToolDetails = useContext(ToolDetailsStoreContext);
+  const pageToolDetails = use(ToolDetailsStoreContext);
   const [ownToolDetails] = useState(createToolDetailsStore);
   const toolDetails = pageToolDetails ?? ownToolDetails;
   const runtimeKind = session?.runtimeKind;
@@ -289,6 +291,7 @@ const useTranscriptToolCalls = ({
 };
 
 type AgentChatTranscriptProps = {
+  topContent?: AgentChatThreadModel["topContent"];
   emptyState: AgentChatThreadModel["emptyState"];
   modelCatalog: AgentChatThreadModel["modelCatalog"];
   isStarting: boolean;
@@ -400,6 +403,7 @@ type AgentChatBottomStackProps = {
 };
 
 const AgentChatTranscript = memo(function AgentChatTranscript({
+  topContent,
   emptyState,
   modelCatalog,
   isStarting,
@@ -431,6 +435,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
         style={minimapRailMaxHeight === null ? undefined : { paddingLeft: MINIMAP_GUTTER_PX }}
       >
         <div ref={messagesContentRef}>
+          {topContent}
           {transcriptNotice ? <AgentChatTranscriptNotice notice={transcriptNotice} /> : null}
           {!transcriptNotice && emptyState ? (
             <div className="space-y-3 rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">

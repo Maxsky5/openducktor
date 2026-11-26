@@ -3,6 +3,7 @@ import type { ClientConnection } from "@openducktor/frontend-core/connection/cli
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { useState, type ReactNode } from "react";
+import { MemoryRouter, useInRouterContext } from "react-router";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { runtimeQueryKeys } from "@openducktor/frontend-core/queries/runtime";
 import { WorkspaceActivityContext } from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
@@ -43,7 +44,8 @@ export function SessionNavigationTestProvider({
     );
     return next;
   });
-  return (
+  const inRouter = useInRouterContext();
+  const content = (
     <ClientConnectionProvider connection={testConnection}>
       <HostRuntimeStatusContext value={runtimeStatus}>
         <WorkspaceActivityContext value={observer}>
@@ -60,4 +62,5 @@ export function SessionNavigationTestProvider({
       </HostRuntimeStatusContext>
     </ClientConnectionProvider>
   );
+  return inRouter ? content : <MemoryRouter>{content}</MemoryRouter>;
 }

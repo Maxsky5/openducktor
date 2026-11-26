@@ -188,7 +188,7 @@ function SessionRailGroup({
         <ul className="w-full">
           <CssPresenceList isLoading={isLoading}>
             {group.entries.map((entry) => (
-              <SessionPresence as="li" key={entry.key}>
+              <SessionPresence as="li" key={entry.listKey ?? entry.key}>
                 <div className="flex justify-center px-1 pb-1.5 pt-1">
                   <SessionRailEntry entry={entry} onOpen={onOpen} />
                 </div>

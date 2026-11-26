@@ -7,7 +7,7 @@ export function RecentItemsRecorder(): null {
   const target = useVisibleSessionTarget();
   const recordRecentItem = useRecentItems((state) => state.record);
   useEffect(() => {
-    if (!target) return;
+    if (!target || target.kind === "workspace_session_draft") return;
     if (target.kind === "workspace_session") {
       recordRecentItem({
         kind: "chat",

@@ -5,6 +5,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { useMemo, useState } from "react";
 import { SessionNavigationList } from "@/components/layout/sidebar/session-navigation-list.test-view";
 import { SessionNavigationRail } from "@/components/layout/sidebar/session-navigation-rail";
@@ -226,19 +227,21 @@ const createHarness = ({ taskSession = false, unbound = false, noSessions = fals
   const runtimeStatus = createHostRuntimeStatusContextValue();
   function View(props: ViewProps) {
     return (
-      <ClientConnectionProvider connection={connection}>
-        <HostRuntimeStatusContext value={runtimeStatus}>
-          <WorkspaceActivityContext value={observer}>
-            <VisibleSessionTargetProvider>
-              <SessionReadStateProvider visibility={documentVisibility}>
-                <SessionMenuProvider>
-                  <Body {...props} />
-                </SessionMenuProvider>
-              </SessionReadStateProvider>
-            </VisibleSessionTargetProvider>
-          </WorkspaceActivityContext>
-        </HostRuntimeStatusContext>
-      </ClientConnectionProvider>
+      <MemoryRouter>
+        <ClientConnectionProvider connection={connection}>
+          <HostRuntimeStatusContext value={runtimeStatus}>
+            <WorkspaceActivityContext value={observer}>
+              <VisibleSessionTargetProvider>
+                <SessionReadStateProvider visibility={documentVisibility}>
+                  <SessionMenuProvider>
+                    <Body {...props} />
+                  </SessionMenuProvider>
+                </SessionReadStateProvider>
+              </VisibleSessionTargetProvider>
+            </WorkspaceActivityContext>
+          </HostRuntimeStatusContext>
+        </ClientConnectionProvider>
+      </MemoryRouter>
     );
   }
   return { View, emit, session: snapshots[0]! };

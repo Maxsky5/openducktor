@@ -15,10 +15,8 @@ import {
   WorkspaceDialogsContext,
 } from "@/components/layout/workspace-dialogs-context";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
-import { useDialogPresence } from "@/components/ui/dialog";
 import { returnFocusOnClose } from "@/components/ui/open-dialogs";
 import { buildSessionNavigationHref } from "@/features/session-navigation/sessions-route";
-import { WorkspaceSessionCreateDialog } from "@/pages/workspace-sessions/workspace-session-create-dialog";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
 const WorkspaceSessionHistoryDialog = lazy(() =>
@@ -37,25 +35,16 @@ const IssueImportDialog = lazy(() =>
   })),
 );
 
-/** The create chat dialog stays mounted while it closes, so it keeps its own request. */
-type ChatDialogRequest = { workspace: ActiveWorkspace; attempt: number };
-
 /** One owner for the workspace dialogs that the sidebar menu and the command palette open. */
 export function WorkspaceDialogsProvider({ children }: PropsWithChildren): ReactElement {
   const navigate = useNavigate();
   const { run: guardTransition } = useWorkspacePreviewTransitionGuard();
   const [dialog, setDialog] = useState<WorkspaceDialogRequest | null>(null);
-  const [chatDialog, setChatDialog] = useState<ChatDialogRequest | null>(null);
-  const chatAttemptRef = useRef(0);
   const returnFocusRef = useRef<HTMLElement | null>(null);
 
   const openWorkspaceDialog = useCallback(
     (request: WorkspaceDialogRequest, returnFocus: HTMLElement | null): void => {
       returnFocusRef.current = returnFocus;
-      if (request.kind === "chat") {
-        chatAttemptRef.current += 1;
-        setChatDialog({ workspace: request.workspace, attempt: chatAttemptRef.current });
-      }
       setDialog(request);
     },
     [],
@@ -79,7 +68,6 @@ export function WorkspaceDialogsProvider({ children }: PropsWithChildren): React
       {children}
       <WorkspaceDialogs
         dialog={dialog}
-        chatDialog={chatDialog}
         onClose={() => setDialog(null)}
         onOpenSession={openSessionAfterSave}
         // Settings can open from an import dialog. Keep focus in that new dialog.
@@ -91,31 +79,17 @@ export function WorkspaceDialogsProvider({ children }: PropsWithChildren): React
 
 function WorkspaceDialogs({
   dialog,
-  chatDialog,
   onClose,
   onOpenSession,
   onCloseAutoFocus,
 }: {
   dialog: WorkspaceDialogRequest | null;
-  chatDialog: ChatDialogRequest | null;
   onClose: () => void;
   onOpenSession: (workspace: ActiveWorkspace, record: WorkspaceSession) => void;
   onCloseAutoFocus: (event: Event) => void;
 }): ReactElement {
-  const chatDialogOpen = dialog?.kind === "chat";
-  const chatDialogMounted = useDialogPresence(chatDialogOpen);
   return (
     <Suspense fallback={null}>
-      {chatDialogMounted && chatDialog ? (
-        <WorkspaceSessionCreateDialog
-          key={`${chatDialog.workspace.workspaceId}-${chatDialog.attempt}`}
-          open={chatDialogOpen}
-          workspace={chatDialog.workspace}
-          onClose={onClose}
-          onCloseAutoFocus={onCloseAutoFocus}
-          onCreated={(record) => onOpenSession(chatDialog.workspace, record)}
-        />
-      ) : null}
       {dialog?.kind === "archived_chats" ? (
         <WorkspaceSessionHistoryDialog
           workspaceId={dialog.workspace.workspaceId}

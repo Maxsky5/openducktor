@@ -43,6 +43,7 @@ import { useTheme } from "@/components/layout/theme-provider";
 import { useWorkspaceDialogs } from "@/components/layout/workspace-dialogs-context";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { WorkspaceTile } from "@/components/layout/workspace-tile";
+import { useOpenNewWorkspaceSession } from "@/features/session-navigation/use-open-new-workspace-session";
 import {
   issueImportActionLabel,
   issueImportBlockedReason,
@@ -154,6 +155,7 @@ export function useCommandPaletteActions({
   const { openWorkspaceDialog } = useWorkspaceDialogs();
   const navigate = useNavigate();
   const { run: guardTransition } = useWorkspacePreviewTransitionGuard();
+  const openNewWorkspaceSession = useOpenNewWorkspaceSession();
   const repoPath = target?.repoPath ?? null;
   const taskStoreCheck = useQuery({
     ...taskStoreCheckQueryOptionsOrSkip(target),
@@ -240,7 +242,9 @@ export function useCommandPaletteActions({
           "new-chat",
           icon(MessageCirclePlus),
           ["create session", "chat", "conversation", "ask"],
-          () => openWorkspaceDialog({ kind: "chat", workspace: target }, previousFocus()),
+          () => {
+            openNewWorkspaceSession(target.workspaceId, { guard: false });
+          },
           { suggested: true },
         ),
         workspaceAction(
@@ -458,6 +462,7 @@ export function useCommandPaletteActions({
     openWorkspaceDialog,
     navigate,
     guardTransition,
+    openNewWorkspaceSession,
     repoPath,
     taskStoreCheck.data,
     taskStoreCheck.error,
