@@ -16,16 +16,13 @@ const parseUserMessageArticle = (html: string) => {
 };
 
 describe("AgentChatMessageCard messages", () => {
-  test.each([
-    { prefix: "System prompt:\n\n", label: "Show system prompt" },
-    { prefix: "Instructions update:\n\n", label: "Show instruction update" },
-  ])("keeps $label collapsed with its own label", ({ prefix, label }) => {
+  test("keeps the system prompt collapsed with its own label", () => {
     const html = renderToStaticMarkup(
       createMessageCardElement({
         message: {
           id: "instructions",
           role: "system",
-          content: `${prefix}Instructions from the runtime.`,
+          content: "System prompt:\n\nInstructions from the runtime.",
           timestamp: "2026-10-09T10:00:00Z",
         },
       }),
@@ -34,7 +31,7 @@ describe("AgentChatMessageCard messages", () => {
     const details = document.querySelector("details");
     expect(details).not.toBeNull();
     expect(details?.open).toBe(false);
-    expect(details?.querySelector("summary")?.textContent?.trim()).toBe(label);
+    expect(details?.querySelector("summary")?.textContent?.trim()).toBe("Show system prompt");
   });
 
   test("shows only the runtime when Codex history omits the turn model", () => {
@@ -378,6 +375,23 @@ describe("AgentChatMessageCard messages", () => {
     expect(bubble.className).not.toContain("bg-chat-surface");
     expect(bubble.textContent).toBe("Queued follow-up");
     expect(metaRow?.textContent).toBe("Unread10:27:00 AM");
+  });
+
+  test("names the automation that sent a prompt under the message", () => {
+    const html = renderToStaticMarkup(
+      createMessageCardElement({
+        message: {
+          id: "user-automation",
+          role: "user",
+          content: "Check the build",
+          timestamp: "2026-02-22T10:27:00.000Z",
+          meta: { kind: "user", state: "read", origin: { kind: "automation", name: "Nightly" } },
+        },
+      }),
+    );
+    const { bubble, metaRow } = parseUserMessageArticle(html);
+    expect(bubble.textContent).toBe("Check the build");
+    expect(metaRow?.textContent).toBe("Automation · Nightly10:27:00 AM");
   });
 
   test("hides the meta row when the user message time is approximate", () => {

@@ -6,6 +6,7 @@ import {
   agentSessionUsageLimitSchema,
   agentStreamPartSchema,
   agentUserMessageDisplayPartSchema,
+  agentUserMessageOriginSchema,
   agentUserMessageStateSchema,
 } from "./agent-session-event-schemas";
 import { agentSessionPendingQuestionRequestSchema } from "./agent-session-pending-schemas";
@@ -129,6 +130,7 @@ export const agentSessionHistoryMessageSchema = z.discriminatedUnion("role", [
       role: z.literal("user"),
       displayParts: z.array(agentUserMessageDisplayPartSchema),
       state: agentUserMessageStateSchema,
+      origin: agentUserMessageOriginSchema.optional(),
       model: agentModelSelectionSchema.optional(),
       resolvedQuestionRequestIds: z.array(nonEmptyStringSchema).optional(),
       parts: z.array(agentStreamPartSchema),
@@ -152,6 +154,8 @@ export const agentSessionHistoryMessageSchema = z.discriminatedUnion("role", [
     .object({
       ...sessionHistoryMessageFields,
       role: z.literal("system"),
+      /** A short label of the message. Without it, the reader shows a generic label. */
+      title: nonEmptyStringSchema.optional(),
       notice: sessionHistoryNoticeSchema.optional(),
       parts: z.tuple([]),
     })

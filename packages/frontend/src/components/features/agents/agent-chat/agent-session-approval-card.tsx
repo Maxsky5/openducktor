@@ -21,6 +21,8 @@ import { useRequestCardCollapse } from "./use-request-card-collapse";
 
 type AgentSessionApprovalCardProps = {
   request: AgentApprovalRequest;
+  /** The other pending approvals that a reject also cancels, from `approvalRejectScope`. */
+  rejectScope: string | null;
   collapseResetKey?: string;
   runtimeSupportedReplyOutcomes: readonly RuntimeApprovalReplyOutcome[] | null;
   disabled?: boolean;
@@ -31,6 +33,7 @@ type AgentSessionApprovalCardProps = {
 
 export function AgentSessionApprovalCard({
   request,
+  rejectScope,
   collapseResetKey = "",
   runtimeSupportedReplyOutcomes,
   disabled = false,
@@ -78,7 +81,7 @@ export function AgentSessionApprovalCard({
           style={{ display: isExpanded ? undefined : "none" }}
           className="space-y-2 border-t border-warning-border p-2.5"
         >
-          <ApprovalDetails request={request} />
+          <ApprovalDetails request={request} rejectScope={rejectScope} />
 
           <div className="flex flex-wrap gap-2 pt-1">
             {supportedOutcomes.map((outcome) => (
@@ -122,7 +125,13 @@ const getOutcomeVariant = (
 const PATH_CLASS_NAME =
   "rounded-md border border-border bg-background px-1.5 py-0.5 font-mono text-[0.85em] text-foreground";
 
-function ApprovalDetails({ request }: { request: AgentApprovalRequest }): ReactElement {
+function ApprovalDetails({
+  request,
+  rejectScope,
+}: {
+  request: AgentApprovalRequest;
+  rejectScope: string | null;
+}): ReactElement {
   const grantEntries = buildContentEntries(request.persistentGrant?.rules ?? [], (rule) =>
     JSON.stringify([rule.action, rule.resource]),
   );
@@ -136,11 +145,7 @@ function ApprovalDetails({ request }: { request: AgentApprovalRequest }): ReactE
           <code>{request.persistentGrant.projectDirectory}</code>.
         </p>
       ) : null}
-      {request.rejectsAllPendingApprovals ? (
-        <p className="text-xs text-foreground">
-          Reject cancels all pending approvals in this conversation.
-        </p>
-      ) : null}
+      {rejectScope ? <p className="text-xs text-foreground">{rejectScope}</p> : null}
       {request.persistentGrant?.rules ? (
         <ul className="text-xs text-muted-foreground">
           {grantEntries.map(({ value: rule, key }) => (

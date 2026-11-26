@@ -30,6 +30,8 @@ const REPLIES_IN_A_ROW = 2;
 
 export type PermissionPromptCardProps = {
   request: AgentApprovalRequest;
+  /** The other pending approvals that a reject also cancels, from `approvalRejectScope`. */
+  rejectScope: string | null;
   runtimeSupportedReplyOutcomes: readonly RuntimeApprovalReplyOutcome[] | null;
   /** True while the session cannot take a reply. `blockedReason` says why. */
   disabled: boolean;
@@ -46,6 +48,7 @@ export type PermissionPromptCardProps = {
  */
 export const PermissionPromptCard = memo(function PermissionPromptCard({
   request,
+  rejectScope,
   runtimeSupportedReplyOutcomes,
   disabled,
   blockedReason,
@@ -80,7 +83,7 @@ export const PermissionPromptCard = memo(function PermissionPromptCard({
       feedback={feedback}
       cardRef={cardRef}
     >
-      <ApprovalDetails request={request} />
+      <ApprovalDetails request={request} rejectScope={rejectScope} />
       {options.length > 0 ? (
         <View style={inRow ? styles.repliesRow : styles.repliesColumn}>
           {options.map((option) => (
@@ -102,14 +105,20 @@ export const PermissionPromptCard = memo(function PermissionPromptCard({
 });
 
 /** The desktop `ApprovalDetails`: short `text-xs` lines, with paths and tool input in boxes. */
-function ApprovalDetails({ request }: { request: AgentApprovalRequest }): ReactElement {
+function ApprovalDetails({
+  request,
+  rejectScope,
+}: {
+  request: AgentApprovalRequest;
+  rejectScope: string | null;
+}): ReactElement {
   const mutation = approvalMutationLabel(request.mutation);
   const toolInput = approvalToolInputText(request);
   const paths = request.affectedPaths ?? [];
   const { action, tool } = request;
   return (
     <View style={styles.details}>
-      <ApprovalGrant request={request} />
+      <ApprovalGrant request={request} rejectScope={rejectScope} />
       {request.title ? (
         <Text selectable style={styles.title}>
           {request.title}
@@ -143,8 +152,14 @@ function ApprovalDetails({ request }: { request: AgentApprovalRequest }): ReactE
   );
 }
 
-/** What Allow for Project saves, and that Reject cancels every pending approval. */
-function ApprovalGrant({ request }: { request: AgentApprovalRequest }): ReactElement {
+/** What Allow for Project saves, and the other pending approvals that Reject also cancels. */
+function ApprovalGrant({
+  request,
+  rejectScope,
+}: {
+  request: AgentApprovalRequest;
+  rejectScope: string | null;
+}): ReactElement {
   const grant = request.persistentGrant;
   const grantRules = buildContentEntries(grant?.rules ?? [], (rule) =>
     JSON.stringify([rule.action, rule.resource]),
@@ -157,9 +172,7 @@ function ApprovalGrant({ request }: { request: AgentApprovalRequest }): ReactEle
           <Text style={styles.code}>{grant.projectDirectory}</Text>.
         </Text>
       ) : null}
-      {request.rejectsAllPendingApprovals ? (
-        <Text style={styles.line}>Reject cancels all pending approvals in this conversation.</Text>
-      ) : null}
+      {rejectScope ? <Text style={styles.line}>{rejectScope}</Text> : null}
       {grantRules.map(({ value: rule, key }) => (
         <Text key={key} selectable style={[styles.line, styles.muted, styles.code]}>
           {`${rule.action}: ${rule.resource}`}

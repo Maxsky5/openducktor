@@ -130,7 +130,7 @@ test("projects native V2 approvals through the host and replies to the native re
           rules: [{ action: "shell", resource: "bun test*" }],
         },
       });
-      expect(approval).not.toHaveProperty("rejectsAllPendingApprovals");
+      expect(approval.rejectGroupId).toBe(`${ref.externalSessionId}:no-step`);
       expect(approval.requestId).not.toBe("permission_native");
       await Effect.runPromise(
         prepared.adapter.replyApproval({

@@ -312,8 +312,8 @@ const toApprovalRequest = (
   if (request.persistentGrant !== undefined) {
     approval.persistentGrant = request.persistentGrant;
   }
-  if (request.rejectsAllPendingApprovals !== undefined) {
-    approval.rejectsAllPendingApprovals = request.rejectsAllPendingApprovals;
+  if (request.rejectGroupId !== undefined) {
+    approval.rejectGroupId = request.rejectGroupId;
   }
   if (routing) {
     approval.source = routing.source;

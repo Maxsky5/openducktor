@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX } from "@openducktor/core";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { buildSessionPolicyNoticeMessage } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-notice-messages";
@@ -133,10 +132,9 @@ describe("AgentChatMessageCard system messages", () => {
     expect(html).not.toContain('data-notification-attention-id="2026-02-22T10:21:51.000Z"');
   });
 
-  test.each([
-    { label: "Show system prompt", prefix: "System prompt:\n\n" },
-    { label: "Show instruction update", prefix: AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX },
-  ])("keeps $label searchable with lazy Markdown", async ({ label, prefix }) => {
+  test("keeps the system prompt searchable with lazy Markdown", async () => {
+    const label = "Show system prompt";
+    const prefix = "System prompt:\n\n";
     const rendered = render(
       createMessageCardElement({
         message: {
@@ -226,6 +224,21 @@ describe("AgentChatMessageCard system messages", () => {
     } finally {
       rendered.unmount();
     }
+  });
+
+  test("folds a titled system message under its title", () => {
+    const html = renderToStaticMarkup(
+      createMessageCardElement({
+        message: buildMessage("system", "The plugin reloaded its tools.", {
+          id: "system-titled",
+          timestamp: "2026-02-22T10:22:01.000Z",
+          meta: { kind: "system", title: "Plugin reloaded" },
+        }),
+      }),
+    );
+    expect(html).toContain("<summary");
+    expect(html).toContain("Plugin reloaded</summary>");
+    expect(html).not.toContain("Show system message");
   });
 
   test("renders subagent cards without the shared System header", () => {

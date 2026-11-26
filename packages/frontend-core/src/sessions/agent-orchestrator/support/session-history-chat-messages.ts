@@ -1,11 +1,7 @@
 import { buildSessionErrorNoticeMessage } from "./session-notice-messages";
 import { settleImageGenerationMessages } from "./image-generation-settlement";
 import { createImageGenerationMessage } from "./image-generation-messages";
-import type {
-  AgentModelSelection,
-  AgentSessionHistoryMessage,
-  AgentUserMessageDisplayPart,
-} from "@openducktor/core";
+import type { AgentSessionHistoryMessage, AgentUserMessageDisplayPart } from "@openducktor/core";
 import { pendingInputIdentity } from "../../../lib/pending-input-identity";
 import { replaceEqualDeep } from "@tanstack/react-query";
 import type { AgentChatMessage, AgentSessionState } from "../../../types/agent-orchestrator";
@@ -44,11 +40,11 @@ type AssistantMessageMeta = Extract<NonNullable<AgentChatMessage["meta"]>, { kin
 type AssistantTurnDurationInput = Parameters<typeof resolveAssistantTurnDurationMs>[0];
 
 const userMessageMeta = (
-  messageModel: AgentModelSelection | undefined,
-  state: Extract<AgentSessionHistoryMessage, { role: "user" }>["state"],
-  parts: AgentUserMessageDisplayPart[] = [],
+  message: Extract<AgentSessionHistoryMessage, { role: "user" }>,
+  parts: AgentUserMessageDisplayPart[],
 ) => {
-  const effectiveModel = mergeModelSelection(null, messageModel);
+  const { state, origin } = message;
+  const effectiveModel = mergeModelSelection(null, message.model);
   const meta: UserMessageMeta = { kind: "user", state };
   if (effectiveModel?.providerId) {
     meta.providerId = effectiveModel.providerId;
@@ -64,6 +60,9 @@ const userMessageMeta = (
   }
   if (parts.length > 0) {
     meta.parts = parts;
+  }
+  if (origin) {
+    meta.origin = origin;
   }
   return meta;
 };
@@ -321,7 +320,7 @@ export const historyToChatMessages = (
       if (message.role === "assistant") {
         meta = assistantMeta;
       } else if (message.role === "user") {
-        meta = userMessageMeta(message.model, message.state, userDisplayParts);
+        meta = userMessageMeta(message, userDisplayParts);
       } else if (message.role === "system" && message.notice) {
         if (message.notice.reason === "session_error") {
           const { usageLimit, ...notice } = message.notice;
@@ -343,6 +342,8 @@ export const historyToChatMessages = (
         } else {
           meta = { kind: "session_notice", ...message.notice };
         }
+      } else if (message.role === "system" && message.title) {
+        meta = { kind: "system", title: message.title };
       }
 
       const primaryMessage: AgentChatMessage = {

@@ -65,6 +65,8 @@ export type UserMessageContent = {
   attachments: UserAttachmentPart[];
   /** True while the host queues the message and the agent has not read it. */
   isUnread: boolean;
+  /** Who sent a message that the user did not type, or null for a message of the user. */
+  originLabel: string | null;
 };
 
 type InlineReferenceRange = { part: DisplayReferencePart; start: number; end: number };
@@ -254,6 +256,7 @@ export const buildUserMessageContent = (
     ),
     attachments: allParts.filter(isAttachmentPart),
     isUnread: meta ? awaitsRuntime(meta.state) : false,
+    originLabel: meta?.origin ? `Automation · ${meta.origin.name}` : null,
   };
 };
 

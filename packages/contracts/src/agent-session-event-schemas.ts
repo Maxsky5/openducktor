@@ -350,7 +350,11 @@ const transcriptPendingApprovalRequestFields = {
   supportedReplyOutcomes: z.array(runtimeApprovalReplyOutcomeSchema).optional(),
   metadata: agentToolDataSchema.optional(),
   persistentGrant: projectApprovalGrantSchema.optional(),
-  rejectsAllPendingApprovals: z.boolean().optional(),
+  /**
+   * A reject of this request also cancels the other pending requests of the same group, such as
+   * the requests of one model step.
+   */
+  rejectGroupId: z.string().trim().min(1).optional(),
 } satisfies ZodSchemaFields;
 const inferredTranscriptPendingApprovalRequestSchema = z
   .object(transcriptPendingApprovalRequestFields)
@@ -375,6 +379,18 @@ export const agentTurnOutcomeSchema = z.enum(["completed", "interrupted", "faile
 export type AgentTurnOutcome = z.infer<typeof agentTurnOutcomeSchema>;
 
 export const agentUserMessageStateSchema = z.enum(["pending", "queued", "read"]);
+
+/** Who sent a user message that the user did not type. A message without an origin is the user's. */
+export const agentUserMessageOriginSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      /** A runtime automation, such as a schedule, sent the prompt. */
+      kind: z.literal("automation"),
+      name: z.string().trim().min(1),
+    })
+    .strict(),
+]);
+export type AgentUserMessageOrigin = z.infer<typeof agentUserMessageOriginSchema>;
 export type AgentUserMessageState = z.infer<typeof agentUserMessageStateSchema>;
 
 const transcriptEventSchema = <Fields extends ZodSchemaFields>(fields: Fields) =>
@@ -391,6 +407,7 @@ const agentUserMessageFields = {
    * `read`: the runtime works on it.
    */
   state: agentUserMessageStateSchema,
+  origin: agentUserMessageOriginSchema.optional(),
   model: agentModelSelectionSchema.optional(),
   resolvedQuestionRequestIds: z.array(z.string().trim().min(1)).optional(),
   /**
@@ -429,6 +446,8 @@ const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
     type: z.literal("session_policy_notice"),
     messageId: z.string(),
     message: z.string(),
+    /** A short label of the notice. Without it, the reader shows the notice under a generic label. */
+    title: z.string().trim().min(1).optional(),
   }),
   transcriptEventSchema({
     type: z.literal("session_started"),

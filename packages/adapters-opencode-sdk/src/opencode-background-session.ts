@@ -13,6 +13,7 @@ import {
 import {
   OpenCodeBackgroundTasks,
   type OpenCodeBackgroundEntry,
+  type OpenCodeExecutionEnd,
   type OpenCodeExecutionEndWatch,
 } from "./opencode-background-tasks";
 import { nativeRequest, operationError } from "./opencode-client";
@@ -89,7 +90,9 @@ export const createOpenCodeBackgroundSession = ({
         });
       else if (entry.target.kind === "job")
         await client.experimental.job.cancel({ id: entry.target.jobID });
-      else await client.session.interrupt({ sessionID: entry.target.childID });
+      // A round whose child execution ended waits for its report, which ends its task.
+      else if (!entry.round || isReplying(entry.target.childID))
+        await client.session.interrupt({ sessionID: entry.target.childID });
     });
 
   /** Fails Stop session with the reason when a wait of the cleanup fails. */
@@ -163,11 +166,13 @@ export const createOpenCodeBackgroundSession = ({
     childExecutionEnded: (
       childID: string,
       parentID: string,
-      succeeded: boolean,
+      end: OpenCodeExecutionEnd,
       timestamp: string,
-    ): void => changeBackground(parentID, timestamp, () => tasks.endRound(childID, succeeded)),
+    ): void => changeBackground(parentID, timestamp, () => tasks.endRound(childID, end)),
     notice: (sessionID: string, item: SessionInboxInfo, timestamp: string): void =>
       changeBackground(sessionID, timestamp, () => tasks.notice(sessionID, item)),
+    jobCancelled: (sessionID: string, jobID: string, timestamp: string): void =>
+      changeBackground(sessionID, timestamp, () => tasks.jobCancelled(sessionID, jobID)),
     settle: (sessionID: string, inboxID: string, delivered: boolean, timestamp: string): void =>
       changeBackground(sessionID, timestamp, () => tasks.settle(sessionID, inboxID, delivered)),
     /** Records that the adapter cannot tell which background tasks the session has. */

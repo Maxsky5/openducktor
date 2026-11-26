@@ -513,6 +513,7 @@ export const handleSessionPolicyNotice = (
         event.message,
         event.messageId,
         current.runtimeKind,
+        event.title,
       ),
     ),
   }));

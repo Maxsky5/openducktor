@@ -26,6 +26,9 @@ const toUserMessageMeta = (event: UserMessageEvent) => {
   if (parts.length > 0) {
     meta.parts = parts;
   }
+  if (event.origin) {
+    meta.origin = event.origin;
+  }
   return meta;
 };
 

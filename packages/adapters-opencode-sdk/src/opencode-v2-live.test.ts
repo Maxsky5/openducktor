@@ -221,8 +221,11 @@ describe("OpenCode V2 live observation", () => {
           type: "tui.toast.show",
           data: { message: "Directory change observed", variant: "warning" },
         });
+        // The directory change faults the conversation, and the runtime keeps its other ones.
         expect(await failed.promise).toMatchObject({
-          type: "fault",
+          type: "session_fault",
+          externalSessionId: ref.externalSessionId,
+          statusUnavailable: true,
           runtimeOperationFailure: { ...ref, code: "identity_mismatch" },
         });
       } finally {
@@ -757,7 +760,7 @@ describe("OpenCode V2 live observation", () => {
     }
   });
 
-  test("restores the stored workflow prompt and chronological instruction updates on reconnect", async () => {
+  test("restores the stored workflow prompt without the instructions of OpenCode on reconnect", async () => {
     const fixture = prepareFixture(({ url }) => {
       if (url.pathname.endsWith("/instructions/entries"))
         return response([
@@ -772,6 +775,8 @@ describe("OpenCode V2 live observation", () => {
             text: "Native tools changed.",
             metadata: { notice: "instructions", instructionSources: ["core/codemode"] },
           },
+          // The notice of a tool call that OpenCode migrated from its version 1 storage.
+          { id: "msg_legacy", type: "system", time: { created: 4 }, text: "Legacy tool notice." },
         ]);
       return undefined;
     });
@@ -795,7 +800,7 @@ describe("OpenCode V2 live observation", () => {
         if (signal.type !== "session_event" || signal.event.type !== "session_policy_notice")
           return;
         notices.push(signal);
-        if (signal.event.messageId === "msg_update") restored.resolve();
+        if (signal.event.messageId === "msg_legacy") restored.resolve();
       });
       fixture.channel.push({ id: "connected-2", type: "server.connected", data: {} });
       await restored.promise;
@@ -809,10 +814,7 @@ describe("OpenCode V2 live observation", () => {
         },
         {
           provenance: "baseline",
-          event: {
-            messageId: "msg_update",
-            message: "Instructions update:\n\nNative tools changed.",
-          },
+          event: { messageId: "msg_legacy", message: "Legacy tool notice." },
         },
       ]);
       expect(fixture.requests.every(({ method }) => method === "GET")).toBe(true);
@@ -1543,7 +1545,11 @@ describe("OpenCode V2 live observation", () => {
           type: "session.synthetic",
           created: 40 + seq,
           durable: { ...durable, seq: ++seq },
-          data: { sessionID: ref.externalSessionId, text: "Observation barrier" },
+          data: {
+            sessionID: ref.externalSessionId,
+            text: "Observation barrier",
+            description: "Observation barrier",
+          },
         });
         await barrier.promise;
       };
@@ -2506,6 +2512,20 @@ describe("OpenCode V2 live observation", () => {
       }
     });
 
+    test("stops the wait at once when the native event stream ends", async () => {
+      const { fixture, generated } = generationFixture(() => false);
+      const runtime = await fixture.prepare();
+      try {
+        const answer = runtime.connection.generateText(naming, new AbortController().signal);
+        await setImmediate();
+        fixture.channel.end();
+        await expect(answer).rejects.toThrow("The owned runtime connection closed.");
+        expect(generated).toEqual([]);
+      } finally {
+        await runtime.release();
+      }
+    });
+
     test("stops the wait when the caller gives up", async () => {
       const { fixture, generated } = generationFixture(() => false);
       const runtime = await fixture.prepare();
@@ -3463,7 +3483,142 @@ describe("OpenCode V2 live observation", () => {
       await runtime.release();
     }
   });
-  test.each(["native event", "synchronous listener", "asynchronous listener"] as const)(
+  test("faults only the conversation of a native event that cannot apply, until a read", async () => {
+    const other = { ...ref, externalSessionId: "ses_other" };
+    const fixture = prepareFixture(({ url }) =>
+      url.pathname === "/api/session/ses_other"
+        ? response(session({ id: "ses_other" }))
+        : undefined,
+    );
+    const runtime = await fixture.prepare();
+    const signals: OpencodeSessionRuntimeSignal[] = [];
+    const notices: string[] = [];
+    const noticed = new Map<string, () => void>();
+    const notice = async (message: string) => {
+      const seen = new Promise<void>((resolve) => noticed.set(message, resolve));
+      fixture.channel.push({
+        id: `evt_${message}`,
+        created: 1,
+        type: "tui.toast.show",
+        data: { message, variant: "warning" },
+      });
+      await seen;
+    };
+    try {
+      const sessionScope = { kind: "repository" as const, workspaceId: "repo" };
+      await runtime.connection.readSessionSources(ref.repoPath, [
+        { ...ref, sessionScope },
+        { ...other, sessionScope },
+      ]);
+      await runtime.startForwarding((signal) => {
+        signals.push(signal);
+        if (signal.type === "runtime_notice") {
+          notices.push(signal.message);
+          noticed.get(signal.message)?.();
+        }
+      });
+      fixture.channel.push({
+        id: "evt_wrong",
+        created: 5,
+        type: "session.moved",
+        durable,
+        data: {
+          sessionID: ref.externalSessionId,
+          projectID: "project-2",
+          location: { directory: "/wrong" },
+        },
+      });
+      await notice("after the failure");
+      expect(signals.filter((signal) => signal.type === "fault")).toEqual([]);
+      expect(signals.find((signal) => signal.type === "session_fault")).toMatchObject({
+        externalSessionId: ref.externalSessionId,
+        statusUnavailable: true,
+        backgroundTrackingLost: true,
+        runtimeOperationFailure: { code: "identity_mismatch" },
+      });
+      // The other conversation keeps its live updates, and the faulted one ignores its events.
+      signals.length = 0;
+      const executionStarted = (id: string, sessionID: string): V2Event => ({
+        id,
+        created: 6,
+        type: "session.execution.started",
+        durable: { aggregateID: sessionID, seq: 9, version: 1 },
+        data: { sessionID },
+      });
+      fixture.channel.push(executionStarted("evt_other_started", other.externalSessionId));
+      fixture.channel.push(executionStarted("evt_faulted_started", ref.externalSessionId));
+      await notice("after the other events");
+      expect(
+        signals.flatMap((signal) =>
+          signal.type === "session_event" && signal.event.type === "session_status"
+            ? [signal.externalSessionId]
+            : [],
+        ),
+      ).toEqual([other.externalSessionId]);
+      // A read of the conversation observes it again.
+      const read = await runtime.connection.readSessionSources(ref.repoPath);
+      expect(read.failures).toEqual([]);
+      signals.length = 0;
+      fixture.channel.push(executionStarted("evt_faulted_again", ref.externalSessionId));
+      await notice("after the read");
+      expect(
+        signals.some(
+          (signal) =>
+            signal.type === "session_event" && signal.externalSessionId === ref.externalSessionId,
+        ),
+      ).toBe(true);
+      expect(notices).toEqual(["after the failure", "after the other events", "after the read"]);
+    } finally {
+      await runtime.release();
+    }
+  });
+  test("stops a faulted conversation at once and still removes it when OpenCode deletes it", async () => {
+    const fixture = prepareFixture(({ url }) =>
+      url.pathname.endsWith("/interrupt") ? Response.json({ interrupted: true }) : undefined,
+    );
+    const runtime = await fixture.prepare();
+    const signals: OpencodeSessionRuntimeSignal[] = [];
+    const faulted = Promise.withResolvers<void>();
+    const removed = Promise.withResolvers<void>();
+    try {
+      await runtime.connection.readSessionSources(ref.repoPath, [
+        { ...ref, sessionScope: { kind: "repository", workspaceId: "repo" } },
+      ]);
+      await runtime.startForwarding((signal) => {
+        signals.push(signal);
+        if (signal.type === "session_fault") faulted.resolve();
+        if (signal.type === "session_removed") removed.resolve();
+      });
+      fixture.channel.push({
+        id: "evt_wrong",
+        created: 5,
+        type: "session.moved",
+        durable,
+        data: {
+          sessionID: ref.externalSessionId,
+          projectID: "project-2",
+          location: { directory: "/wrong" },
+        },
+      });
+      await faulted.promise;
+      // The adapter ignores the end event of the faulted conversation, so Stop cannot wait for it.
+      await expect(runtime.connection.stopSession(ref)).rejects.toThrow(
+        "The native conversation location does not match the verified conversation.",
+      );
+      fixture.channel.push({
+        id: "evt_deleted",
+        created: 6,
+        type: "session.deleted",
+        durable: { ...durable, seq: 2 },
+        data: { sessionID: ref.externalSessionId },
+      });
+      await removed.promise;
+      expect(signals.filter((signal) => signal.type === "fault")).toEqual([]);
+    } finally {
+      await runtime.release();
+    }
+  });
+  test.each(["synchronous listener", "asynchronous listener"] as const)(
     "reports a failed %s once and allows its fault listener to release the runtime",
     async (failure) => {
       const fixture = prepareFixture();
@@ -3500,29 +3655,16 @@ describe("OpenCode V2 live observation", () => {
       };
       fixture.channel.push(warning);
       fixture.channel.push(warning);
-      if (failure !== "native event") fixture.channel.push({ ...warning, id: "evt_after_failure" });
+      fixture.channel.push({ ...warning, id: "evt_after_failure" });
       try {
         await noticed;
-        if (failure === "native event")
-          fixture.channel.push({
-            id: "evt_wrong",
-            created: 5,
-            type: "session.moved",
-            durable,
-            data: {
-              sessionID: ref.externalSessionId,
-              projectID: "project-2",
-              location: { directory: "/wrong" },
-            },
-          });
         await released;
         expect(signals.filter((signal) => signal.type === "runtime_notice")).toHaveLength(1);
         expect(signals.filter((signal) => signal.type === "fault")).toHaveLength(1);
-        if (failure !== "native event")
-          expect(signals.at(-1)).toMatchObject({
-            type: "fault",
-            message: expect.stringContaining("delivery failed"),
-          });
+        expect(signals.at(-1)).toMatchObject({
+          type: "fault",
+          message: expect.stringContaining("delivery failed"),
+        });
       } finally {
         await runtime.release();
       }
@@ -3986,7 +4128,7 @@ describe("OpenCode V2 live observation", () => {
         data: { sessionID: ref.externalSessionId, error: { message: "Provider failed" } },
       } satisfies V2Event,
       outcome: "failed",
-      notice: "Turn failed.",
+      notice: "Provider failed",
     },
     {
       event: {
@@ -4004,19 +4146,8 @@ describe("OpenCode V2 live observation", () => {
     ({ event, outcome, notice }) => {
       const projector = new OpenCodeLiveMessageProjector();
       const events = projector.apply(event);
-      expect(events.filter((item) => item.type === "session_policy_notice")).toEqual(
-        outcome !== "failed"
-          ? []
-          : [
-              {
-                type: "session_policy_notice",
-                externalSessionId: ref.externalSessionId,
-                messageId: "msg_terminal",
-                timestamp: new Date(40).toISOString(),
-                message: notice,
-              },
-            ],
-      );
+      // The live `turn_error` of a failed execution is its only notice.
+      expect(events.filter((item) => item.type === "session_policy_notice")).toEqual([]);
       const expectedHistory: AgentSessionHistoryMessage[] =
         outcome === "succeeded"
           ? []
@@ -4035,6 +4166,13 @@ describe("OpenCode V2 live observation", () => {
           reason: "session_interrupted",
           title: "Interrupted",
         };
+      // History shows the error of a failed turn that no reply shows.
+      if (outcome === "failed")
+        expectedHistory[0]!.notice = {
+          tone: "error",
+          reason: "session_error",
+          title: "Turn failed",
+        };
       expect(projectMessages([...projector.messages.values()])).toEqual(expectedHistory);
       const idle = events.find((item) => item.type === "session_idle");
       expect(idle).toMatchObject({
@@ -4047,13 +4185,16 @@ describe("OpenCode V2 live observation", () => {
         expect(idle).toMatchObject({
           interruption: { messageId: "msg_terminal", message: notice },
         });
+      // The live notice has the ID of the history record, so a history merge keeps one notice.
+      // A reconnect gives the same notice in its baseline.
       if (outcome === "failed")
-        expect(events.find((item) => item.type === "turn_error")).toMatchObject({
-          message: "Provider failed",
-        });
+        for (const replayed of [events, projector.snapshotEvents(ref.externalSessionId)])
+          expect(replayed.filter((item) => item.type === "turn_error")).toEqual([
+            expect.objectContaining({ messageId: "msg_terminal", message: "Provider failed" }),
+          ]);
     },
   );
-  test("keeps native shutdown interruption resumable without a terminal notice", () => {
+  test("ends the run of a native shutdown interruption but keeps its turn resumable without a notice", () => {
     const projector = new OpenCodeLiveMessageProjector();
     expect(
       projector.apply({
@@ -4063,7 +4204,14 @@ describe("OpenCode V2 live observation", () => {
         durable,
         data: { sessionID: ref.externalSessionId, reason: "shutdown" },
       }),
-    ).toEqual([]);
+    ).toEqual([
+      {
+        type: "session_status",
+        externalSessionId: ref.externalSessionId,
+        timestamp: new Date(40).toISOString(),
+        status: { type: "idle" },
+      },
+    ]);
     expect([...projector.messages.values()]).toEqual([]);
   });
   test("retains native profile selection without adding a chat notice", () => {
@@ -4194,7 +4342,7 @@ describe("OpenCode V2 live observation", () => {
     });
   });
 
-  test("keeps native instruction updates collapsed and identical after hydration", () => {
+  test("keeps native instruction updates out of live events and history", () => {
     const projector = new OpenCodeLiveMessageProjector();
     const text = "The Code Mode tool catalog has changed.\nNew tools are available.";
     const events = projector.apply({
@@ -4204,25 +4352,8 @@ describe("OpenCode V2 live observation", () => {
       durable: { ...durable, version: 2 },
       data: { sessionID: ref.externalSessionId, delta: { "core/codemode": "Tool catalog" }, text },
     });
-    const saved: SessionMessageInfo = {
-      id: "msg_instructions",
-      type: "system",
-      time: { created: 3 },
-      text,
-      metadata: { notice: "instructions", instructionSources: ["core/codemode"] },
-      description: "Instructions updated: core/codemode",
-    };
-    expect(projectMessage(saved).text).toBe(`Instructions update:\n\n${text}`);
-    expect(events).toEqual([
-      {
-        type: "session_policy_notice",
-        externalSessionId: ref.externalSessionId,
-        timestamp: new Date(3).toISOString(),
-        messageId: saved.id,
-        message: projectMessage(saved).text,
-      },
-    ]);
-    expect(projectMessage(projector.messages.get(saved.id)!)).toEqual(projectMessage(saved));
+    expect(events).toEqual([]);
+    expect(projectMessages([...projector.messages.values()])).toEqual([]);
   });
 
   test("measures the whole native turn across tool steps in live events and history", () => {

@@ -101,6 +101,20 @@ describe("buildUserMessageContent", () => {
     expect(content.isUnread).toBe(true);
   });
 
+  test("names the automation that sent a prompt", () => {
+    const content = buildUserMessageContent(
+      buildMessage("user", "Check the build", {
+        meta: {
+          kind: "user",
+          state: "read",
+          origin: { kind: "automation", name: "Nightly check" },
+        },
+      }),
+    );
+    expect(content.originLabel).toBe("Automation · Nightly check");
+    expect(buildUserMessageContent(buildMessage("user", "Hello")).originLabel).toBeNull();
+  });
+
   test("tells reference parts from other parts", () => {
     expect(isUserMessageReferencePart(file)).toBe(true);
     expect(isUserMessageReferencePart({ kind: "text", text: "x" })).toBe(false);

@@ -19,6 +19,7 @@ const sessionScope = { kind: "repository" as const, workspaceId: "workspace-1" }
 /** A runtime with an attached root conversation and its attached child conversation. */
 const prepareTree = async (
   override?: (request: NativeRequest) => Response | Promise<Response> | undefined,
+  childID = CHILD,
 ) => {
   const fixture = prepareFixture((request) => {
     const { url } = request;
@@ -26,9 +27,9 @@ const prepareTree = async (
       url.pathname === "/api/session" &&
       url.searchParams.get("parentID") === ref.externalSessionId
     )
-      return cursorPage([session({ id: CHILD, parentID: ref.externalSessionId })]);
-    if (url.pathname === `/api/session/${CHILD}`)
-      return response(session({ id: CHILD, parentID: ref.externalSessionId }));
+      return cursorPage([session({ id: childID, parentID: ref.externalSessionId })]);
+    if (url.pathname === `/api/session/${childID}`)
+      return response(session({ id: childID, parentID: ref.externalSessionId }));
     const overridden = override?.(request);
     if (overridden) return overridden;
     // OpenCode cancels the undelivered result, such as the report of a stopped child round.
@@ -64,10 +65,12 @@ const prepareTree = async (
   let reports = 0;
   /**
    * OpenCode 2.3.0 and later report each round of a child to its parent after the end event of
-   * the child execution. A round that succeeded with no model step sends no report.
+   * the child execution. A round that succeeded with no model step sends no report, and the child
+   * of an automation run reports to no one.
    */
   const report = (sessionID: string, state: "completed" | "cancelled") => {
-    if (sessionID !== CHILD || !running.delete(sessionID)) return;
+    if (sessionID !== childID || !running.delete(sessionID)) return;
+    if (childID.startsWith("ses_aut_")) return;
     if (!stepped.delete(sessionID) && state === "completed") return;
     push({
       id: id(),
@@ -124,7 +127,7 @@ const prepareTree = async (
     backgroundCall: (
       sessionID: string,
       call: string,
-      name: "shell" | "subagent" | "generate_image" | "generate_video",
+      name: "shell" | "subagent" | "generate_image" | "generate_video" | "execute",
       input: Record<string, JsonValue>,
       metadata: Record<string, JsonValue>,
     ) => {
@@ -162,21 +165,24 @@ const prepareTree = async (
           id: call,
           content: [{ type: "text", text: "Moved to the background" }],
           executed: false,
-          // A media call completes when its job starts and has no status.
-          metadata: name.startsWith("generate_") ? metadata : { ...metadata, status: "running" },
+          // A job call completes when its job starts and has no status.
+          metadata:
+            name.startsWith("generate_") || name === "execute"
+              ? metadata
+              : { ...metadata, status: "running" },
         },
       });
     },
-    /** The end of an execution that an interrupt stopped. */
-    interrupted: (sessionID: string) => {
+    /** The end of an execution that an interrupt stopped. OpenCode resumes it after a shutdown. */
+    interrupted: (sessionID: string, reason: "user" | "shutdown" = "user") => {
       push({
         id: id(),
         type: "session.execution.interrupted",
         created: nextId,
         durable: durable(sessionID),
-        data: { sessionID, reason: "user" },
+        data: { sessionID, reason },
       });
-      report(sessionID, "cancelled");
+      if (reason === "user") report(sessionID, "cancelled");
     },
     notice: (sessionID: string, inboxID: string, payload: NoticePayload) =>
       push({
@@ -543,6 +549,76 @@ describe("OpenCode background tasks", () => {
     }
   });
 
+  test("ends a round task at a shutdown interrupt, which sends no report", async () => {
+    const { runtime, events, flush, take } = await prepareTree();
+    try {
+      events.started(CHILD);
+      events.step(CHILD);
+      await flush();
+      expect(
+        lifecycle(take())
+          .filter((item) => "background" in item)
+          .at(-1),
+      ).toEqual({
+        background: ref.externalSessionId,
+        tasks: [expect.stringMatching(new RegExp(`^subagent:${CHILD}:`))],
+        resultPending: false,
+      });
+      // OpenCode 2.4.1 also ends a step whose permission the user declined with this interrupt.
+      events.interrupted(CHILD, "shutdown");
+      await flush();
+      expect(lifecycle(take()).filter((item) => "background" in item || "idle" in item)).toEqual([
+        { background: ref.externalSessionId, tasks: [], resultPending: false },
+        { idle: ref.externalSessionId, outcome: undefined },
+      ]);
+    } finally {
+      await runtime.release();
+    }
+  });
+
+  test("ends the task of a subagent call when a shutdown interrupt stops its child", async () => {
+    const { runtime, events, flush, take } = await prepareTree();
+    try {
+      events.backgroundCall(
+        ref.externalSessionId,
+        "call_child",
+        "subagent",
+        { agent: "research", prompt: "Check" },
+        { sessionID: CHILD },
+      );
+      events.started(CHILD);
+      events.step(CHILD);
+      await flush();
+      take();
+      // OpenCode 2.4.1 ends a step whose permission the user declined with this interrupt, and
+      // keeps the job of the call to continue it when it starts again. No report follows now.
+      events.interrupted(CHILD, "shutdown");
+      await flush();
+      expect(lifecycle(take()).filter((item) => "background" in item || "idle" in item)).toEqual([
+        { background: ref.externalSessionId, tasks: [], resultPending: false },
+        { idle: ref.externalSessionId, outcome: undefined },
+      ]);
+    } finally {
+      await runtime.release();
+    }
+  });
+
+  test("keeps the child of an automation run out of the work of its parent", async () => {
+    const automationChild = "ses_aut_nightly_1";
+    const { runtime, events, flush, take } = await prepareTree(undefined, automationChild);
+    try {
+      events.started(automationChild);
+      events.step(automationChild);
+      await flush();
+      expect(lifecycle(take()).filter((item) => "background" in item)).toEqual([]);
+      events.succeeded(automationChild);
+      await flush();
+      expect(lifecycle(take()).filter((item) => "background" in item)).toEqual([]);
+    } finally {
+      await runtime.release();
+    }
+  });
+
   test("tracks a continued subagent after a report of a round that it did not see start", async () => {
     const { runtime, events, flush, take } = await prepareTree();
     try {
@@ -615,6 +691,62 @@ describe("OpenCode background tasks", () => {
             stop: { allowed: true },
           },
         ],
+      });
+      await runtime.connection.stopSession(ref);
+      expect(
+        fixture.requests.filter(({ url }) => url.pathname.startsWith("/api/experimental/job/")),
+      ).toHaveLength(1);
+      await flush();
+      expect(
+        lifecycle(take())
+          .filter((item) => "background" in item)
+          .at(-1),
+      ).toEqual({ background: ref.externalSessionId, tasks: [], resultPending: false });
+    } finally {
+      await runtime.release();
+    }
+  });
+
+  test("ends a stopped Code Mode script at its job update, because OpenCode sends no notice", async () => {
+    const tree = await prepareTree(({ url, method }) => {
+      if (method === "POST" && url.pathname === "/api/experimental/job/script_1/cancel") {
+        tree.fixture.channel.push({
+          id: "evt_script_1_cancelled",
+          type: "experimental.job.updated",
+          created: 50,
+          data: {
+            info: {
+              kind: "codemode",
+              id: "script_1",
+              sessionID: ref.externalSessionId,
+              status: "cancelled",
+              time: { started: 40, completed: 50 },
+            },
+          },
+        });
+        return noContent();
+      }
+      if (url.pathname.endsWith("/interrupt")) return interruptReply(tree.events, url);
+      return undefined;
+    });
+    const { fixture, runtime, events, flush, take } = tree;
+    try {
+      events.backgroundCall(
+        ref.externalSessionId,
+        "call_script_1",
+        "execute",
+        { code: "await build()" },
+        { jobID: "script_1" },
+      );
+      await flush();
+      expect(
+        lifecycle(take())
+          .filter((item) => "background" in item)
+          .at(-1),
+      ).toEqual({
+        background: ref.externalSessionId,
+        tasks: ["job:script_1"],
+        resultPending: false,
       });
       await runtime.connection.stopSession(ref);
       expect(

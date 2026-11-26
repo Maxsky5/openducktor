@@ -9,6 +9,7 @@ import type {
   AgentToolData,
   AgentToolDenial,
   AgentToolPart,
+  AgentUserMessageOrigin,
   FileContent,
   FileDiff,
   RuntimeKind,
@@ -82,6 +83,8 @@ export type AgentChatMessageMeta =
   | {
       kind: "user";
       state: AgentUserMessageState;
+      /** Who sent a message that the user did not type. */
+      origin?: AgentUserMessageOrigin;
       providerId?: string;
       modelId?: string;
       variant?: string;
@@ -111,6 +114,8 @@ export type AgentChatMessageMeta =
       startedAtMs?: number;
       endedAtMs?: number;
     }
+  /** A runtime system message that the transcript folds under its title. */
+  | { kind: "system"; title: string }
   | { kind: "session_notice"; tone: "warning"; reason: "runtime_policy"; title: string }
   | {
       kind: "session_notice";

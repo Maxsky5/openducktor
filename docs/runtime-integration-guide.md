@@ -406,7 +406,7 @@ Show the initial system instructions once before the first user message. Keep la
 
 OpenCode marks an interrupted step with the native `aborted` error type. Keep its interrupted tool details, but do not report the step as a turn error. Its interrupted execution produces one cancellation notice with the native message ID in live output and history. This notice replaces the local stop confirmation when both describe the same stop. Keep baseline provenance through the transcript consumer. A restored interruption must not clear a current stop request or end a new turn.
 
-OpenCode stores the OpenDucktor role prompt in the `openducktor.workflow` instruction entry. Read this entry with the native messages for both history and live restoration. Do not use a later native instruction update or current prompt settings as the stored role prompt. Show native instruction updates separately in their original order.
+OpenCode stores the OpenDucktor role prompt in the `openducktor.workflow` instruction entry. Read this entry with the native messages for both history and live restoration. Do not use a later native instruction update or current prompt settings as the stored role prompt. Do not show native instruction updates or loaded instruction files: they only set the context of the model.
 
 The host saves the turns of every runtime from the ordered live stream in `agent_session_turns`, as [Host database](host-database.md#agent-session-turns) describes. A history read adds the saved times, model, duration, and stop notice where the runtime history has only approximate times. Entries with exact native times stay as the runtime reports them. Adapters do not save or read turns.
 

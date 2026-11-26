@@ -4,6 +4,7 @@ import {
   approvalCapabilityWarning,
   approvalOutcomeEmphasis,
   approvalOutcomeLabel,
+  approvalRejectScope,
   approvalRequestDescription,
   approvalToolInputText,
   hasApprovalRequestContent,
@@ -81,5 +82,28 @@ describe("approval request content", () => {
     const tool = { name: "edit", input: { path: "a.ts" } };
     expect(approvalToolInputText(approval({ tool }))).toBe('{\n  "path": "a.ts"\n}');
     expect(approvalToolInputText(approval({ tool, command: { command: "ls" } }))).toBeNull();
+  });
+});
+
+describe("approval reject scope", () => {
+  test("counts the other pending approvals that a reject also cancels", () => {
+    const first = approval({ requestId: "permission-1", rejectGroupId: "ses:msg_1" });
+    const second = approval({ requestId: "permission-2", rejectGroupId: "ses:msg_1" });
+    const third = approval({ requestId: "permission-3", rejectGroupId: "ses:msg_1" });
+    const otherStep = approval({ requestId: "permission-4", rejectGroupId: "ses:msg_2" });
+    expect(approvalRejectScope(first, [first, otherStep])).toBeNull();
+    expect(approvalRejectScope(first, [first, second, otherStep])).toBe(
+      "Reject also cancels the other pending approval of this step.",
+    );
+    expect(approvalRejectScope(first, [first, second, third, otherStep])).toBe(
+      "Reject also cancels the 2 other pending approvals of this step.",
+    );
+  });
+
+  test("tells nothing for a request without a reject group", () => {
+    const request = approval();
+    expect(approvalRejectScope(request, [request, approval({ requestId: "permission-2" })])).toBe(
+      null,
+    );
   });
 });

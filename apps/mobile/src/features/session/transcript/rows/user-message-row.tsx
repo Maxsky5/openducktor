@@ -58,7 +58,7 @@ export const UserMessageRow = memo(function UserMessageRow({
   /** The desktop message time, or "" when the history has no exact time. */
   timeLabel: string;
 }): ReactElement {
-  const { nodes, attachments, isUnread } = useMemo(
+  const { nodes, attachments, isUnread, originLabel } = useMemo(
     () => buildUserMessageContent(message),
     [message],
   );
@@ -96,22 +96,29 @@ export const UserMessageRow = memo(function UserMessageRow({
           ) : null}
         </View>
       ) : null}
-      <MessageMeta isUnread={isUnread} timeLabel={timeLabel} />
+      <MessageMeta isUnread={isUnread} originLabel={originLabel} timeLabel={timeLabel} />
     </View>
   );
 });
 
-/** The Unread pill and the time under the bubble, or nothing when the row has neither. */
+/** The sender, the Unread pill, and the time under the bubble, or nothing when the row has none. */
 function MessageMeta({
   isUnread,
+  originLabel,
   timeLabel,
 }: {
   isUnread: boolean;
+  originLabel: string | null;
   timeLabel: string;
 }): ReactElement | null {
-  if (!isUnread && timeLabel.length === 0) return null;
+  if (!isUnread && originLabel === null && timeLabel.length === 0) return null;
   return (
     <View style={styles.meta}>
+      {originLabel ? (
+        <Text tone="tertiary" style={styles.time}>
+          {originLabel}
+        </Text>
+      ) : null}
       {isUnread ? (
         <View
           style={styles.unread}

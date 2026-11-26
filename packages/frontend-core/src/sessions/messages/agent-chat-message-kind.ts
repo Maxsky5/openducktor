@@ -1,8 +1,5 @@
 import { type WorkflowRoleId as AgentRole } from "@openducktor/workflows";
-import {
-  AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX,
-  AGENT_SESSION_SYSTEM_PROMPT_PREFIX,
-} from "@openducktor/core";
+import { AGENT_SESSION_SYSTEM_PROMPT_PREFIX } from "@openducktor/core";
 import type { AgentChatMessage } from "../../types/agent-orchestrator";
 import type { AgentChatToolCallPresentation } from "../send/agent-chat.types";
 import { assistantRoleFromMessage, formatTime } from "./message-formatting";
@@ -98,9 +95,8 @@ export const canCopyAssistantMessage = (
 ): boolean =>
   message.role === "assistant" && message.content.trim().length > 0 && !isStreamingAssistantMessage;
 
-/** A system prompt or an instructions update. Both show collapsed behind a toggle. */
+/** The system prompt of a session, which shows collapsed behind a toggle. */
 export type AgentChatInstructionsMessage = {
-  kind: "system_prompt" | "instruction_update";
   toggleLabel: string;
   markdown: string;
 };
@@ -108,15 +104,11 @@ export type AgentChatInstructionsMessage = {
 export const resolveInstructionsMessage = (
   message: AgentChatMessage,
   systemPromptBody: string,
-): AgentChatInstructionsMessage | null => {
-  if (message.role !== "system") return null;
-  if (message.content.startsWith(AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX)) {
-    return {
-      kind: "instruction_update",
-      toggleLabel: "Show instruction update",
-      markdown: message.content.slice(AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX.length),
-    };
-  }
-  if (!message.content.startsWith(AGENT_SESSION_SYSTEM_PROMPT_PREFIX)) return null;
-  return { kind: "system_prompt", toggleLabel: "Show system prompt", markdown: systemPromptBody };
-};
+): AgentChatInstructionsMessage | null =>
+  message.role === "system" && message.content.startsWith(AGENT_SESSION_SYSTEM_PROMPT_PREFIX)
+    ? { toggleLabel: "Show system prompt", markdown: systemPromptBody }
+    : null;
+
+/** The label of the folded text of a runtime system message. */
+export const systemMessageLabel = (message: AgentChatMessage): string =>
+  message.meta?.kind === "system" ? message.meta.title : "Show system message";
