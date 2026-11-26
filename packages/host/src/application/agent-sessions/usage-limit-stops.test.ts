@@ -363,47 +363,48 @@ describe("usage-limit stops", () => {
     expect(stops.entry(ref)).toBeNull();
   });
 
-  test("ignores unsupported runtimes and releases per-session work state on session removal", () => {
-    const stops = createUsageLimitStops(() => {});
-    const opencodeRef: AgentSessionLiveRef = {
-      ...ref,
-      runtimeKind: "opencode",
-      externalSessionId: "opencode-1",
+  test("preserves pending restore invalidation across session_removed after Stop or new work", () => {
+    const found = {
+      stopId: "limit-1",
+      occurredAtEpochMs: BASE - 60_000,
+      resetsAtEpochMs: RESET,
     };
-
-    stops.observe({
-      type: "transcript_event",
-      event: {
-        externalSessionId: opencodeRef.externalSessionId,
-        timestamp: new Date(BASE).toISOString(),
-        sessionRef: opencodeRef,
-        type: "assistant_part",
-        part: {
-          kind: "tool",
-          messageId: "m-1",
-          partId: "p-1",
-          tool: "Bash",
-          toolType: "bash",
-          callId: "call-1",
-          status: "running",
+    const invalidations: AgentSessionLiveEnvelope[] = [
+      {
+        type: "session_operation_updated",
+        observation: { ref, kind: "stop", pending: true, nativeOutcome: "not_issued" },
+      },
+      {
+        type: "transcript_event",
+        event: {
+          ...eventBase,
+          type: "user_message",
+          messageId: "user-2",
+          message: "Continue",
+          parts: [],
+          state: "read",
         },
       },
-    });
-    expect(stops.workCount(opencodeRef)).toBe(0);
+    ];
 
-    stops.observe({
-      type: "transcript_event",
-      event: {
-        ...eventBase,
-        type: "assistant_message",
-        messageId: "m-2",
-        message: "Done.",
-      },
-    });
-    expect(stops.workCount(ref)).toBe(1);
+    for (const invalidation of invalidations) {
+      const stops = createUsageLimitStops(() => {});
+      stops.setEnabled(true);
+      const guard = stops.beginRestore(ref);
+      stops.observe(invalidation);
+      stops.observe({ type: "session_removed", ref });
 
+      expect(stops.restore(ref, found, guard, BASE)).toBeNull();
+      expect(stops.entry(ref)).toBeNull();
+    }
+
+    // Without invalidating work, session removal does not block a legitimate restore.
+    const stops = createUsageLimitStops(() => {});
+    stops.setEnabled(true);
+    const guard = stops.beginRestore(ref);
     stops.observe({ type: "session_removed", ref });
-    expect(stops.workCount(ref)).toBe(0);
+    const restored = stops.restore(ref, found, guard, BASE);
+    expect(restored).not.toBeNull();
   });
 
   test("ends a scheduled Claude stop on assistant output or a non-limit turn error", () => {

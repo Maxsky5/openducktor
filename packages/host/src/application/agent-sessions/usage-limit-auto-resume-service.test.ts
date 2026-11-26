@@ -599,6 +599,43 @@ describe("usage-limit auto-resume", () => {
     );
   });
 
+  test.each([
+    {
+      name: "a Stop followed by session removal",
+      change: {
+        type: "session_operation_updated",
+        observation: { ref: claudeRef, kind: "stop", pending: true, nativeOutcome: "not_issued" },
+      } satisfies AgentSessionLiveEnvelope,
+    },
+    {
+      name: "a new user message followed by session removal",
+      change: userMessage("user-2"),
+    },
+  ])("does not rebuild a stop after $name during the history read", async ({ change }) => {
+    const h = createHarness();
+    const read = Deferred.makeUnsafe<UsageLimitStop | null>();
+    const adapter = {
+      binding: { runtimeKind: "claude" as const },
+      queries: { readLatestUsageLimitStop: () => Deferred.await(read) },
+    };
+    await h.run(
+      Effect.gen(function* () {
+        h.service.runtimeRegistered(adapter);
+        yield* flush;
+        h.service.observe(change);
+        h.service.observe({ type: "session_removed", ref: claudeRef });
+        yield* Deferred.succeed(read, {
+          stopId: "limit-1",
+          occurredAtEpochMs: BASE - 60_000,
+          resetsAtEpochMs: RESET,
+        });
+        yield* h.advanceTo(DUE);
+        expect(h.published).toEqual([]);
+        expect(h.resumes).toEqual([]);
+      }),
+    );
+  });
+
   test("does not rebuild a stop when the user sends a message during the history read", async () => {
     const h = createHarness();
     const read = Deferred.makeUnsafe<UsageLimitStop | null>();

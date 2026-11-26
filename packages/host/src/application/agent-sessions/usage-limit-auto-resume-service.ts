@@ -216,15 +216,17 @@ export const createUsageLimitAutoResumeService = (
     Effect.gen(function* () {
       const ref = sessionLiveRef(root);
       if (stops.hasStop(ref)) return;
-      const workCountBefore = stops.workCount(ref);
-      const read = yield* Effect.result(adapter.queries.readLatestUsageLimitStop(root));
-      if (read._tag === "Failure")
-        return yield* deps.logReadFailure(
-          `Auto-resume cannot read the usage limit of session '${root.externalSessionId}': ${causeChainMessage(read.failure)}`,
-        );
-      const now = yield* Clock.currentTimeMillis;
-      const stop = stops.restore(ref, read.success, workCountBefore, now);
-      if (stop) stops.planned(stop, true);
+      const guard = stops.beginRestore(ref);
+      yield* Effect.gen(function* () {
+        const read = yield* Effect.result(adapter.queries.readLatestUsageLimitStop(root));
+        if (read._tag === "Failure")
+          return yield* deps.logReadFailure(
+            `Auto-resume cannot read the usage limit of session '${root.externalSessionId}': ${causeChainMessage(read.failure)}`,
+          );
+        const now = yield* Clock.currentTimeMillis;
+        const stop = stops.restore(ref, read.success, guard, now);
+        if (stop) stops.planned(stop, true);
+      }).pipe(Effect.ensuring(Effect.sync(() => stops.releaseRestore(guard))));
     });
 
   /** Plans the stops that runtime history reports for the roots of one runtime. */

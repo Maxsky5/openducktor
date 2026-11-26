@@ -81,6 +81,12 @@ const hasEligibleReset = (stop: MutableStop): boolean =>
 const dueAtOf = (stop: MutableStop): number =>
   (stop.resetsAtEpochMs ?? 0) + USAGE_LIMIT_RESUME_GRACE_MS;
 
+/** Tracks whether live work invalidated one in-flight history restore before it completed. */
+export type UsageLimitRestoreGuard = {
+  readonly key: string;
+  invalidated: boolean;
+};
+
 /**
  * Owns every rule of the usage-limit stops of the host process: which stop is the latest of each
  * session, when it is planned, when new work ends it, and which stops never come back. It does
@@ -93,8 +99,8 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
   const stops = new Map<string, MutableStop>();
   /** Stops that ended in this process. A history rebuild never plans them again. */
   const ended = new Set<string>();
-  /** Counts new work of each session, so a history read can tell that the session moved on. */
-  const workCounts = new Map<string, number>();
+  /** Guards for in-flight history reads, so live work invalidates them even across removal. */
+  const pendingRestores = new Map<string, Set<UsageLimitRestoreGuard>>();
   /** Supported sessions whose latest observed live snapshot has an active foreground turn. */
   const activeForegroundKeys = new Set<string>();
 
@@ -115,7 +121,16 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
   };
 
   const countWork = (key: string): void => {
-    workCounts.set(key, (workCounts.get(key) ?? 0) + 1);
+    const guards = pendingRestores.get(key);
+    if (!guards) return;
+    for (const guard of guards) guard.invalidated = true;
+  };
+
+  const releaseRestore = (guard: UsageLimitRestoreGuard): void => {
+    const guards = pendingRestores.get(guard.key);
+    if (!guards) return;
+    guards.delete(guard);
+    if (guards.size === 0) pendingRestores.delete(guard.key);
   };
 
   /** New work in the session ends its stop. */
@@ -255,9 +270,7 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
           return null;
         case "session_removed": {
           if (!supportsUsageLimitAutoResume(envelope.ref.runtimeKind)) return null;
-          const key = agentSessionRefKey(envelope.ref);
-          workCounts.delete(key);
-          noteIdle(key);
+          noteIdle(agentSessionRefKey(envelope.ref));
           return null;
         }
         case "snapshot":
@@ -386,8 +399,20 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
     },
     /** True when a history read for the session can add nothing. */
     hasStop: (ref: AgentSessionLiveRef): boolean => stops.has(agentSessionRefKey(ref)),
-    /** The work count before a history read, to compare after it. */
-    workCount: (ref: AgentSessionLiveRef): number => workCounts.get(agentSessionRefKey(ref)) ?? 0,
+    /** Registers a guard before a history read so live work invalidates it even across removal. */
+    beginRestore: (ref: AgentSessionLiveRef): UsageLimitRestoreGuard => {
+      const key = agentSessionRefKey(ref);
+      const guard: UsageLimitRestoreGuard = { key, invalidated: false };
+      let guards = pendingRestores.get(key);
+      if (!guards) {
+        guards = new Set();
+        pendingRestores.set(key, guards);
+      }
+      guards.add(guard);
+      return guard;
+    },
+    /** Releases a restore guard when its read fails, cancels, or completes. */
+    releaseRestore,
     /**
      * Adds a stop that runtime history reports after a host start. A passed reset waits for a
      * manual Resume. New work or a live stop during the read is newer than the history.
@@ -395,16 +420,17 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
     restore: (
       ref: AgentSessionLiveRef,
       found: UsageLimitStop | null,
-      workCountBefore: number,
+      guard: UsageLimitRestoreGuard,
       now: number,
     ): TrackedUsageLimitStop | null => {
+      releaseRestore(guard);
       const key = agentSessionRefKey(ref);
       if (
+        guard.invalidated ||
         !found ||
         found.resetsAtEpochMs === undefined ||
         found.resetsAtEpochMs <= now ||
-        stops.has(key) ||
-        (workCounts.get(key) ?? 0) !== workCountBefore
+        stops.has(key)
       )
         return null;
       const stop: MutableStop = {
@@ -443,7 +469,10 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
     clear: (): void => {
       stops.clear();
       ended.clear();
-      workCounts.clear();
+      for (const guards of pendingRestores.values()) {
+        for (const guard of guards) guard.invalidated = true;
+      }
+      pendingRestores.clear();
       activeForegroundKeys.clear();
     },
   };
