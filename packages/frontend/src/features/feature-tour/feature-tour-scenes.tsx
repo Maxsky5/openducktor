@@ -16,9 +16,13 @@ const VERSION = getAppVersion();
 
 type TourSceneName = SceneProps["name"];
 
+/** The tour scenes that take options from their host. */
+type SceneWithOptions = "hero" | "palette";
+
 /**
  * The options that fit each scene to the frame of the tour. The board shows no cut lane, and the
- * views leave out what crowds the short frame.
+ * views leave out what crowds the short frame. The workflow editor takes no options: its view
+ * fits its window to the frame of the tour by itself.
  */
 const SCENE_OPTIONS = {
   hero: {
@@ -36,7 +40,7 @@ const SCENE_OPTIONS = {
     destructive: false,
     keysAtEnd: true,
   },
-} as const satisfies { [Name in TourSceneName]: Extract<SceneProps, { name: Name }>["options"] };
+} as const satisfies { [Name in SceneWithOptions]: Extract<SceneProps, { name: Name }>["options"] };
 
 type TourSceneProps = {
   scene: TourSceneName;
@@ -44,12 +48,30 @@ type TourSceneProps = {
   platform: AppPlatform;
 };
 
+/** The scene of a tour slide, framed, in the theme and with the keys of the app. */
+function FramedScene({
+  scene,
+  theme,
+  keys,
+}: Required<Pick<SceneProps, "theme" | "keys">> & { scene: TourSceneName }): ReactElement {
+  switch (scene) {
+    case "hero":
+      return <Scene name="hero" theme={theme} keys={keys} framed options={SCENE_OPTIONS.hero} />;
+    case "palette":
+      return (
+        <Scene name="palette" theme={theme} keys={keys} framed options={SCENE_OPTIONS.palette} />
+      );
+    case "workflow-editor":
+      return <Scene name="workflow-editor" theme={theme} keys={keys} framed />;
+  }
+}
+
 /**
  * A live scene of the marketing website, in the theme of the app. The tour frame draws the window
  * border, and the tour explains the app, so the scene is framed: it fills the frame and shows no
- * pointer of a visitor. The tour keeps a seen slide mounted in a hidden `Activity`, which runs the
- * effect cleanups of the scene: a hidden scene stops, and it plays again from its start when its
- * slide shows.
+ * pointer of a visitor, except the workflow editor, whose pointer shows the cause of each change.
+ * The tour keeps a seen slide mounted in a hidden `Activity`, which runs the effect cleanups of
+ * the scene: a hidden scene stops, and it plays again from its start when its slide shows.
  */
 export function TourScene({ scene, platform }: TourSceneProps): ReactElement {
   const { theme } = useTheme();
@@ -58,17 +80,7 @@ export function TourScene({ scene, platform }: TourSceneProps): ReactElement {
     <TourFrame>
       <div className="absolute inset-0">
         <Suspense fallback={null}>
-          {scene === "hero" ? (
-            <Scene name="hero" theme={theme} keys={keys} framed options={SCENE_OPTIONS.hero} />
-          ) : (
-            <Scene
-              name="palette"
-              theme={theme}
-              keys={keys}
-              framed
-              options={SCENE_OPTIONS.palette}
-            />
-          )}
+          <FramedScene scene={scene} theme={theme} keys={keys} />
         </Suspense>
       </div>
     </TourFrame>

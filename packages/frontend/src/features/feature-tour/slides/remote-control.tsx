@@ -15,7 +15,7 @@ import { createTourQueryClient } from "../feature-tour-query-client";
 import { noop } from "../feature-tour-samples";
 import { type FeatureTourSlide, type TourPart, TourPiece } from "../feature-tour-stage";
 
-// Slide 7: remote control in Settings, and the mobile app that pairs with it.
+// Slide 8: remote control in Settings, and the mobile app that pairs with it.
 
 const SETTINGS_WIDTH = 520;
 const GAP = 64;

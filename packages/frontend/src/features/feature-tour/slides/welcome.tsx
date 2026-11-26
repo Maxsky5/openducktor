@@ -6,6 +6,6 @@ import type { FeatureTourSlide } from "../feature-tour-stage";
 export const welcomeSlide = (platform: AppPlatform): FeatureTourSlide => ({
   id: "welcome",
   title: "Welcome to OpenDucktor",
-  text: "OpenDucktor runs your coding agents on your computer: Codex, Claude Code, and OpenCode. They write the spec and the plan, build each task in its own Git worktree, and pass a QA review before yours.",
+  text: "OpenDucktor runs your coding agents on your computer: OpenCode, Codex, Claude Code, and Antigravity. They write the spec and the plan, build each task in its own Git worktree, and pass a QA review before yours.",
   picture: <TourScene scene="hero" platform={platform} />,
 });

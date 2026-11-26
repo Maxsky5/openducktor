@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { TASKS } from "../feature-tour-samples";
 import type { FeatureTourSlide } from "../feature-tour-stage";
 
-// Slide 5: the two kinds of agent sessions, compared row by row, with app parts as examples.
+// Slide 6: the two kinds of agent sessions, compared row by row, with app parts as examples.
 
 const ROLE_OPTIONS = roleOptionsForTask(TASKS.titles);
 
@@ -95,8 +95,8 @@ function SessionKindsPicture(): ReactElement {
     <div className="absolute inset-0 flex items-center justify-center px-[var(--t-tour-inset)] py-8">
       <div className="w-full max-w-[64rem] overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <p className="border-b border-border bg-primary/10 px-5 py-2.5 text-sm text-foreground">
-          <span className="font-semibold">Rule of thumb:</span> not sure yet what to build? Start a
-          session to explore. You know where you are going? Create a task.
+          <span className="font-semibold">Not sure yet what to build?</span> Start a session to
+          explore. Do you know what to build? Create a task.
         </p>
         <div className="grid grid-cols-[9.5rem_minmax(0,1fr)_minmax(0,1fr)] text-sm leading-6 text-foreground">
           <span className="border-b border-border bg-muted/40" />
@@ -136,6 +136,6 @@ function SessionKindsPicture(): ReactElement {
 export const sessionsSlide: FeatureTourSlide = {
   id: "sessions",
   title: "Two kinds of agent sessions",
-  text: "Both kinds run Claude Code, Codex, or OpenCode in your repository. Explore in a session first. When you know what to build, it creates the tasks, and task sessions carry them out.",
+  text: "Both kinds run OpenCode, Codex, Claude Code, or Antigravity in your repository. Explore in a session first. When you know what to build, the session creates the tasks, and task sessions carry them out.",
   picture: <SessionKindsPicture />,
 };

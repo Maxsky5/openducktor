@@ -7,6 +7,7 @@ import { reviewSlide } from "./slides/review";
 import { rolesSlide } from "./slides/roles";
 import { sessionsSlide } from "./slides/sessions";
 import { welcomeSlide } from "./slides/welcome";
+import { workflowsSlide } from "./slides/workflows";
 import { workspacesSlide } from "./slides/workspaces";
 
 /** The ordered tour slides. Only the keys that the slides show depend on the device. */
@@ -15,6 +16,7 @@ export const buildFeatureTourSlides = (platform: AppPlatform): FeatureTourSlide[
   workspacesSlide(platform),
   issueTypesSlide,
   rolesSlide,
+  workflowsSlide(platform),
   sessionsSlide,
   commandPaletteSlide(platform),
   remoteControlSlide,

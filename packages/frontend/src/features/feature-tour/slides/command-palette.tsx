@@ -9,7 +9,7 @@ const commandPaletteShortcutLabel = (platform: AppPlatform): string => {
   return platform === "darwin" ? `${modifier}K` : `${modifier}+K`;
 };
 
-/** Slide 6: the palette scene of the marketing website, with the keys of `platform`. */
+/** Slide 7: the palette scene of the marketing website, with the keys of `platform`. */
 export const commandPaletteSlide = (platform: AppPlatform): FeatureTourSlide => ({
   id: "command-palette",
   title: "Find anything with the command palette",
