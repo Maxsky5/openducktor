@@ -13,13 +13,42 @@ import {
 import { trimTrailingPathSeparators } from "@openducktor/path-support";
 import { HostValidationError } from "../../effect/host-errors";
 import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
-import { encodeClaudePromptTextWithSourceRanges } from "./claude-agent-sdk-messages";
+import {
+  encodeClaudePromptTextWithSourceRanges,
+  toClaudeMessageFromParts,
+} from "./claude-agent-sdk-messages";
 import type {
   ClaudeAcceptedUserMessage,
   ClaudeSession,
   ClaudeSessionInput,
 } from "./claude-agent-sdk-types";
-import { claudeSessionRef, claudeSessionScope } from "./claude-agent-sdk-utils";
+import {
+  claudeSessionRef,
+  claudeSessionScope,
+  textFromContentBlocks,
+} from "./claude-agent-sdk-utils";
+
+export const prepareClaudeUserSubmission = async (
+  input: SendAgentUserMessageInput,
+  messageId: string,
+  timestamp: string,
+) => {
+  const prefix = input.handoff?.historyPrefix;
+  const nativeParts = prefix
+    ? [{ kind: "text" as const, text: prefix }, ...input.parts]
+    : input.parts;
+  const sdkMessage = await toClaudeMessageFromParts(nativeParts);
+  const nativeText = textFromContentBlocks(sdkMessage.message.content);
+  const acceptedMessage: ClaudeAcceptedUserMessage = {
+    messageId,
+    timestamp,
+    text: nativeText.slice(prefix?.length ?? 0),
+    parts: toClaudeDisplayParts(input.parts),
+  };
+  if (prefix)
+    acceptedMessage.nativeInput = { text: nativeText, parts: toClaudeDisplayParts(nativeParts) };
+  return { sdkMessage, acceptedMessage };
+};
 
 export const createClaudeSessionSummary = (
   input: ClaudeSessionInput,

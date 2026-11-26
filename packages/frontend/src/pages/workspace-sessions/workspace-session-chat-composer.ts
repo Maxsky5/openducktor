@@ -1,6 +1,10 @@
 import type { AgentChatComposerConfig } from "@/components/features/agents/agent-chat/use-agent-chat-composer-model";
-import type { useAgentChatSend } from "@openducktor/frontend-core/sessions/send/use-agent-chat-send";
-import type { usePendingSendContext } from "@/features/agent-chat-composer/use-pending-send-context";
+import { useAgentChatSend } from "@openducktor/frontend-core/sessions/send/use-agent-chat-send";
+import { usePendingSendContext } from "@/features/agent-chat-composer/use-pending-send-context";
+import { documentVisibility } from "@/features/session-navigation/document-visibility";
+import { useHandoffModelPicker } from "@/components/features/agents/agent-chat/use-handoff-model-picker";
+import type { useRuntimeHandoff } from "@openducktor/frontend-core/sessions/send/runtime-handoff";
+import type { WorkspaceRef, WorkspaceSession } from "@openducktor/contracts";
 import type { useSelectedSessionContextUsage } from "@openducktor/frontend-core/sessions/composer/context-usage/use-selected-session-context-usage";
 import {
   getAgentSessionWaitingInputPlaceholder,
@@ -27,11 +31,42 @@ type WorkspaceSessionComposerInput = {
   backgroundTasks: AgentChatComposerConfig["backgroundTasks"];
   pendingSend: ReturnType<typeof usePendingSendContext>;
   draftPersistence: ReturnType<typeof createWorkspaceSessionChatDraftPersistence>;
-  picker: ReturnType<typeof useWorkspaceSessionModelPicker>;
+  picker: Omit<ReturnType<typeof useWorkspaceSessionModelPicker>, "modelPicker"> & {
+    modelPicker: AgentChatComposerConfig["modelPicker"];
+  };
   promptInput: SessionPromptInput;
   contextUsage: ReturnType<typeof useSelectedSessionContextUsage>;
   stopSession: AgentOperationsContextValue["stopAgentSession"];
 };
+
+export function useWorkspaceSessionChatDelivery({
+  workspace,
+  record,
+  modelPicker,
+  handoff,
+  send,
+}: {
+  workspace: WorkspaceRef;
+  record: WorkspaceSession;
+  modelPicker: AgentChatComposerConfig["modelPicker"];
+  handoff: ReturnType<typeof useRuntimeHandoff>;
+  send: Omit<Parameters<typeof useAgentChatSend>[0], "handoff">;
+}) {
+  const owner = {
+    kind: "workspace_session" as const,
+    workspaceId: workspace.workspaceId,
+    sessionId: record.id,
+  };
+  const handoffModelPicker = useHandoffModelPicker(modelPicker, handoff);
+  const messageDelivery = useAgentChatSend({ ...send, handoff });
+  const pendingSendContext = usePendingSendContext({
+    owner,
+    workingDirectory: record.executionTarget.workingDirectory,
+    onSend: messageDelivery.onSend,
+    visibility: documentVisibility,
+  });
+  return { messageDelivery, handoffModelPicker, pendingSendContext };
+}
 
 export function buildWorkspaceSessionComposer({
   state,

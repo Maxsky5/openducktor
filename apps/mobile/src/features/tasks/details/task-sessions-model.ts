@@ -45,6 +45,8 @@ export type TaskSessionRow = {
   activityState: AgentSessionActivityState | null;
   /** The running session waits on background tasks. Only its style changes. */
   waitingOnBackground: boolean;
+  /** An earlier member of a chat that handed off to another runtime. */
+  historical: boolean;
 };
 
 export type TaskSessionGroup = {
@@ -150,9 +152,13 @@ export const groupTaskSessions = (
       .map((summary) => [agentSessionIdentityKey(summary), summary] as const),
   );
   const entries = new Map<string, SessionEntry>();
+  const historical = new Set<string>();
   for (const record of records) {
     const key = agentSessionIdentityKey(record);
     entries.set(key, toEntry(record, liveByKey.get(key)));
+    for (const { from } of record.handoff?.links ?? []) {
+      historical.add(agentSessionIdentityKey(from));
+    }
   }
   for (const [key, summary] of liveByKey) {
     if (!entries.has(key)) entries.set(key, toEntry(summary, summary));
@@ -192,6 +198,7 @@ export const groupTaskSessions = (
         live: activityState === "running" || activityState === "starting",
         activityState,
         waitingOnBackground: activityState === "running" && entry.waitingOnBackground,
+        historical: historical.has(key),
       };
     });
     return rows.length > 0

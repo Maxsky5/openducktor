@@ -46,12 +46,26 @@ export async function sendWithPendingItems(
     const result = await onSend(message, mode);
     if (!submissionId) return result;
 
+    if (result !== true && result !== false && result.kind === "handoff_pending") {
+      const settled = result.settled.then((committed) => {
+        if (!committed) source.restore(submissionId);
+        else {
+          try {
+            source.complete(submissionId);
+          } catch (error) {
+            feedback.show("error", `Message sent, but ${source.itemName} cleanup failed`, {
+              description: String(error),
+            });
+          }
+        }
+        return committed;
+      });
+      return { ...result, settled };
+    }
     if (result === true) {
       accepted = true;
       source.complete(submissionId);
-    } else {
-      source.restore(submissionId);
-    }
+    } else source.restore(submissionId);
     return result;
   } catch (error) {
     if (accepted) {

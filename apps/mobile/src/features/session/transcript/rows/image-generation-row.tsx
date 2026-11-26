@@ -2,6 +2,8 @@ import type {
   AgentGeneratedImageReadInput,
   AgentImageGenerationPart,
 } from "@openducktor/contracts";
+import { useRuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import type { AgentImageGenerationMessageMeta } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { runImagePreview } from "@openducktor/frontend-core/lib/image-preview-queue";
 import {
@@ -58,7 +60,7 @@ export const ImageGenerationRow = memo(function ImageGenerationRow({
   part,
   rowKey,
 }: {
-  part: AgentImageGenerationPart;
+  part: AgentImageGenerationMessageMeta;
   rowKey: string;
 }): ReactElement {
   return (
@@ -131,12 +133,13 @@ function CompletedImage({
   part,
   rowKey,
 }: {
-  part: AgentImageGenerationPart;
+  part: AgentImageGenerationMessageMeta;
   rowKey: string;
 }): ReactElement {
-  const { sessionRef, supportsImageGeneration, visibleRows } = useTranscriptRows();
+  const { sessionRef, visibleRows } = useTranscriptRows();
+  const { runtimeDefinitions } = useRuntimeDefinitionsContext();
   const visible = useRowVisible(visibleRows, rowKey);
-  const plan = resolveGeneratedImagePreviewPlan(part, sessionRef, supportsImageGeneration);
+  const plan = resolveGeneratedImagePreviewPlan(part, sessionRef, runtimeDefinitions);
   const alt = generatedImageAlt(part);
   const imageKey = `generated-image:${rowKey}`;
   if (plan.kind === "unsupported" || plan.kind === "unavailable") {

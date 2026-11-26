@@ -31,3 +31,4 @@ export const loadOpencodeModelCatalogFromConnection = (
 ) => readModelCatalog(createOpenCodeClient(connection), directory);
 
 export { createOpenCodeRuntimeProbes } from "./opencode-runtime-probes";
+export { createOpenCodeMessageId, matchesOpenCodeMessageId } from "./opencode-message-id";

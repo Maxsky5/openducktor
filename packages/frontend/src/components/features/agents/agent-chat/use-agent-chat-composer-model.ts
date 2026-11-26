@@ -26,6 +26,7 @@ export const invokeStopAgentSession = (
 };
 
 export type AgentChatComposerConfig = {
+  handoff?: AgentChatComposerModel["handoff"];
   displayedSessionKey: string | null;
   selectedSession: AgentSessionIdentity | null;
   isSessionWorking: boolean;
@@ -111,6 +112,7 @@ export function useAgentChatComposerModel({
     }
 
     const model: AgentChatComposerModel = {
+      handoff: composer.handoff,
       displayedSessionKey: composer.displayedSessionKey,
       isInteractionEnabled: interactionEnabled,
       isReadOnly: composer.isReadOnly,

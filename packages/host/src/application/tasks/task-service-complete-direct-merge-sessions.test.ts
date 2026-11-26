@@ -7,7 +7,7 @@ import type {
   TaskCompletionObservation,
 } from "@openducktor/contracts";
 import { TerminalServiceError } from "../terminals/terminal-service";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
 import type { GitPort } from "../../ports/git-port";
 import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port";
@@ -27,6 +27,7 @@ import {
 const input = { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", removeWorktree: true };
 const createHarness = ({
   countLiveSessions = () => Effect.succeed({ liveSessionCount: 0 }),
+  ensureNoUnresolvedHandoff = () => Effect.void,
   sync = Effect.succeed({ ahead: 0, behind: 0 }),
   cleanup = Effect.void,
   status = "human_review",
@@ -35,6 +36,7 @@ const createHarness = ({
   closure = Effect.void,
 }: {
   countLiveSessions?: TaskActivityGuardPort["countLiveSessions"];
+  ensureNoUnresolvedHandoff?: TaskActivityGuardPort["ensureNoUnresolvedHandoff"];
   sync?: ReturnType<GitPort["commitsAheadBehind"]>;
   cleanup?: Effect.Effect<void, TerminalServiceError>;
   status?: TaskCard["status"];
@@ -55,6 +57,7 @@ const createHarness = ({
     taskSessionLifecycleCoordinator: coordinator,
     taskActivityGuard: {
       countLiveSessions,
+      ensureNoUnresolvedHandoff,
       // Completion stops nothing: it checked that no session runs. It releases the idle ones.
       cleanupTaskSessions: () => Effect.succeed({ stoppedSessionCount: 0 }),
     },
@@ -159,6 +162,22 @@ const createSourceBranch = ({
 };
 
 describe("direct merge completion session guard", () => {
+  test("preserves the checkout and completion state during an unresolved handoff", async () => {
+    const source = createSourceBranch();
+    const handoffFailure = new HostValidationError({ message: "Use Check delivery" });
+    const harness = createHarness({
+      gitOverrides: source.gitOverrides,
+      ensureNoUnresolvedHandoff: () => Effect.fail(handoffFailure),
+    });
+
+    expect(await Effect.runPromise(Effect.flip(harness.service.completeDirectMerge(input)))).toBe(
+      handoffFailure,
+    );
+    expect(source.exists()).toBe(true);
+    expect(harness.observations).toEqual([]);
+    expect(harness.calls).not.toContain("cleanup");
+  });
+
   test.each(["before deletion", "after deletion"] as const)(
     "a rejected completion cannot change the owner's recovery or observations %s",
     async (boundary) => {

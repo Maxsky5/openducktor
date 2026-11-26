@@ -22,6 +22,7 @@ export type SessionTarget = {
   repoPath: string;
   /** A stable identity object. Pass it to store hooks as it is. */
   identity: AgentSessionIdentity;
+  handoffSource?: AgentSessionIdentity | undefined;
   sessionKey: string;
   /** A Read-only Session View shows the transcript and sends no command. */
   readOnly: boolean;

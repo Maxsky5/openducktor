@@ -36,6 +36,7 @@ export const createSessionOperationOwner = (deps: {
   policyFor: (target: AgentMessageTarget) => AgentSessionOperationPolicy;
   publish: AgentSessionLiveStateService["publishOperation"];
   retain: AgentSessionLiveStateService["retainOperation"];
+  guardWork?: ((target: AgentMessageTarget) => Effect.Effect<void, HostError>) | undefined;
 }) => {
   const workers = createHostOperationWorkers();
   const gate = createSerialGate();
@@ -171,6 +172,8 @@ export const createSessionOperationOwner = (deps: {
                         cause,
                       }),
               });
+              if (kind === "submission" || kind === "continue" || kind === "reattach")
+                yield* deps.guardWork?.(root) ?? Effect.void;
               yield* publish(operation);
               const outcome = yield* Effect.exit(restore(effect));
               const error = outcome._tag === "Failure" ? Cause.squash(outcome.cause) : undefined;
@@ -290,7 +293,7 @@ export const createSessionOperationOwner = (deps: {
             return yield* new HostValidationError({
               field: "operation",
               message:
-                "The source session has an earlier operation with uncertain acceptance. Inspect that operation before forking.",
+                "The source session has an earlier operation with uncertain acceptance. Inspect that operation before starting new work.",
             });
           const root = yield* deps.resolveRoot(target);
           if (
@@ -300,7 +303,7 @@ export const createSessionOperationOwner = (deps: {
             return yield* new HostValidationError({
               field: "externalSessionId",
               message:
-                "Fork requires the saved root session of this task and role. Select its root session and retry.",
+                "This action requires the saved root session. Select its root session and retry.",
             });
           return yield* effect;
         }),

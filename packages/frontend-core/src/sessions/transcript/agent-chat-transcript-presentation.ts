@@ -26,7 +26,10 @@ export const resolveAgentChatTranscriptPresentation = ({
   state,
   notice,
 }: ResolveAgentChatTranscriptPresentationArgs): AgentChatTranscriptPresentation => {
-  if (session && !shouldHideSession(state)) {
+  if (
+    session &&
+    (!shouldHideSession(state) || (state.kind === "failed" && session.hasEarlierHandoffSegments))
+  ) {
     return {
       kind: "session",
       repoPath,

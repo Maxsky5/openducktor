@@ -73,6 +73,7 @@ export const createWorktreeResetEffect = ({
       );
       const activity = {
         taskActivityGuard,
+        workspaceId: input.workspaceId,
         repoPath: effectiveRepoPath,
         taskId,
         sessions: canonicalSessionState.guarded,

@@ -23,6 +23,36 @@ const tokenUsageNotification = (totalTokens: number, threadId = "thread/start-ru
 });
 
 describe("CodexAppServerAdapter context loading", () => {
+  test.each([
+    ["gpt-5.5", {}, 272_000],
+    [
+      "gpt-5.5",
+      { model_context_window: 1_050_000, model_auto_compact_token_limit: 96_000 },
+      96_000,
+    ],
+    ["gpt-5.5", { model_provider: "custom" }, undefined],
+    ["unlisted", { model_context_window: 128_000 }, 128_000],
+    [
+      "custom-model",
+      {
+        model_provider: "custom",
+        model_context_window: 128_000,
+        model_auto_compact_token_limit: 96_000,
+      },
+      96_000,
+    ],
+    ["unlisted", { model_auto_compact_token_limit: 96_000 }, undefined],
+  ])("reads the effective handoff limit for %s", async (modelId, config, expected) => {
+    const transport = new RecordingTransport("runtime-live", false);
+    const request = transport.request.bind(transport);
+    transport.request = async (input) =>
+      input.method === "config/read" ? { config, layers: null } : request(input);
+    const { adapter } = createHarness({ transportFactory: () => transport });
+    await expect(adapter.loadHandoffContextWindow(codexSessionRef(), modelId)).resolves.toBe(
+      expected,
+    );
+  });
+
   test("can send from a recovered session whose runtime reasoning effort is null", async () => {
     const transport = new RecordingTransport("runtime-live", false);
     const request = transport.request.bind(transport);

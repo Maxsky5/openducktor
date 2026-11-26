@@ -15,6 +15,38 @@ const createSession = (): AgentChatTranscriptSession => ({
 });
 
 describe("resolveAgentChatTranscriptPresentation", () => {
+  test("shows earlier handoff messages and the retry action when active history fails", () => {
+    const base = createSession();
+    const retry = () => {};
+    const earlier = {
+      id: "source-message",
+      role: "user" as const,
+      content: "Earlier request",
+      timestamp: "2026-01-01",
+    };
+    const session = {
+      ...base,
+      hasEarlierHandoffSegments: true as const,
+      messages: createSessionMessagesState(base.externalSessionId, [earlier]),
+    };
+    const result = resolveAgentChatTranscriptPresentation({
+      repoPath: "/repo",
+      sessionKey: agentSessionIdentityKey(session),
+      session,
+      target: session,
+      state: { kind: "failed", message: "Active history failed" },
+      notice: {
+        kind: "session_failed",
+        severity: "error",
+        title: "Cannot load history",
+        description: "Active history failed",
+        action: { label: "Retry", onAction: retry },
+      },
+    });
+    expect(result.kind).toBe("session");
+    expect(result.session?.messages.items).toEqual([earlier]);
+    expect(result.notice?.action?.onAction).toBe(retry);
+  });
   test("passes a caller-supplied transcript target through unchanged", () => {
     const session = createSession();
     const target = {

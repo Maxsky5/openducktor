@@ -560,6 +560,7 @@ describe("createTaskService direct merge", () => {
       taskWorkflows: builtinTaskWorkflows,
       taskActivityGuard: {
         countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+        ensureNoUnresolvedHandoff: () => Effect.void,
         cleanupTaskSessions: (input) =>
           Effect.sync(() => {
             calls.push({
@@ -664,6 +665,7 @@ describe("createTaskService direct merge", () => {
       taskWorkflows: builtinTaskWorkflows,
       taskActivityGuard: {
         countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+        ensureNoUnresolvedHandoff: () => Effect.void,
         cleanupTaskSessions: () => Effect.die(new Error("unexpected session cleanup")),
       },
       gitPort: createDirectMergeGitPort({

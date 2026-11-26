@@ -55,6 +55,12 @@ const migrationFailure = (databasePath: string, message: string, cause?: unknown
  */
 export type MigrationHistoryRule = "exact" | "lastApplied";
 
+type ReorderedMigration = {
+  originalIndex: number;
+  originalDate: number;
+  currentIndex: number;
+};
+
 const unsupportedHistory = (databasePath: string, cause?: unknown) =>
   migrationFailure(
     databasePath,
@@ -68,6 +74,7 @@ const readPendingMigrations = <TSchema extends Record<string, AnySQLiteTable>, T
   migrations: readonly MigrationMeta[],
   databasePath: string,
   rule: MigrationHistoryRule,
+  reordered: ReorderedMigration | undefined,
 ) =>
   Effect.gen(function* () {
     const tables = yield* transaction.execute(
@@ -90,7 +97,7 @@ const readPendingMigrations = <TSchema extends Record<string, AnySQLiteTable>, T
           ),
         "sqliteMigrations.createHistory",
       );
-      return migrations;
+      return { pending: migrations };
     }
     const rows = yield* transaction.execute(
       (db) =>
@@ -101,20 +108,30 @@ const readPendingMigrations = <TSchema extends Record<string, AnySQLiteTable>, T
     if (!history.success) return yield* unsupportedHistory(databasePath, history.error);
     if (rule === "lastApplied") {
       const lastApplied = history.data.at(-1)?.[1];
-      if (lastApplied === undefined) return migrations;
+      if (lastApplied === undefined) return { pending: migrations };
       if (lastApplied > (migrations.at(-1)?.folderMillis ?? 0))
         return yield* unsupportedHistory(databasePath);
-      return migrations.filter((migration) => migration.folderMillis > lastApplied);
+      return { pending: migrations.filter((migration) => migration.folderMillis > lastApplied) };
     }
+    let move: { migration: MigrationMeta; originalDate: number } | undefined;
+    const applied = history.data;
+    if (reordered && applied.length === reordered.originalIndex + 1) {
+      const candidate = migrations[reordered.currentIndex];
+      const old = applied[reordered.originalIndex];
+      if (candidate && old?.[0] === candidate.hash && old[1] === reordered.originalDate) {
+        move = { migration: candidate, originalDate: reordered.originalDate };
+      }
+    }
+    const prefix = move ? applied.slice(0, -1) : applied;
     if (
-      history.data.length > migrations.length ||
-      history.data.some(
+      prefix.length > migrations.length ||
+      prefix.some(
         ([hash, createdAt], index) =>
           migrations[index]?.hash !== hash || migrations[index]?.folderMillis !== createdAt,
       )
     )
       return yield* unsupportedHistory(databasePath);
-    return migrations.slice(history.data.length);
+    return { pending: migrations.slice(prefix.length), move };
   });
 
 /**
@@ -126,6 +143,7 @@ export const applyMigrations = <TSchema extends Record<string, AnySQLiteTable>, 
   migrationsFolder: string,
   databasePath: string,
   rule: MigrationHistoryRule,
+  reordered?: ReorderedMigration,
 ): Effect.Effect<void, HostOperationErrorAggregate | TransactionError> =>
   Effect.gen(function* () {
     const migrations = yield* Effect.try({
@@ -143,9 +161,25 @@ export const applyMigrations = <TSchema extends Record<string, AnySQLiteTable>, 
       session,
       session.transaction("sqliteMigrations.apply", (transaction) =>
         Effect.gen(function* () {
-          const pending = yield* readPendingMigrations(transaction, migrations, databasePath, rule);
+          const { pending, move } = yield* readPendingMigrations(
+            transaction,
+            migrations,
+            databasePath,
+            rule,
+            reordered,
+          );
           if (pending.length === 0) return;
           for (const migration of pending) {
+            if (migration === move?.migration) {
+              yield* transaction.execute(
+                (db) =>
+                  db.run(
+                    sql`UPDATE __drizzle_migrations SET created_at = ${migration.folderMillis} WHERE hash = ${migration.hash} AND created_at = ${move.originalDate}`,
+                  ),
+                "sqliteMigrations.moveRecordedMigration",
+              );
+              continue;
+            }
             for (const query of migration.sql)
               yield* transaction.execute(
                 (db) => db.run(sql.raw(query)),

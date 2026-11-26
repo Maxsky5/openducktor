@@ -338,6 +338,7 @@ export function useAgentStudioOrchestrationController({
     selectAgentStudioSelection,
   });
 
+  const handoffModelPicker = useHandoffModelPicker(modelPicker, messageDelivery.handoff);
   const roleLabelByRole = useMemo(
     () => buildRoleLabelByRole(roleOptionsForTask(view.selectedTask)),
     [view.selectedTask],
@@ -441,7 +442,7 @@ export function useAgentStudioOrchestrationController({
       onCatalogMenuOpen,
       searchFiles,
       agentProfileOptions,
-      modelPicker,
+      modelPicker: handoffModelPicker,
       variantOptions,
       selectedSessionContextUsage,
       handleSelectAgentProfile,
@@ -486,3 +487,4 @@ export function useAgentStudioOrchestrationController({
     startSessionRequest,
   };
 }
+import { useHandoffModelPicker } from "@/components/features/agents/agent-chat/use-handoff-model-picker";

@@ -9,6 +9,36 @@ import {
 import { buildMessage } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 
 describe("AgentChatMessageCard system messages", () => {
+  test("shows the runtime direction and omitted context on the handoff marker", () => {
+    const contextNote = "Some earlier context was omitted.";
+    const { getByText } = render(
+      createMessageCardElement({
+        message: {
+          id: "handoff",
+          role: "system",
+          content: `Claude to OpenCode. ${contextNote}`,
+          timestamp: "2026-10-05T10:00:00Z",
+          timestampIsApproximate: true,
+          meta: {
+            kind: "session_notice",
+            tone: "info",
+            reason: "runtime_handoff",
+            title: "Handoff",
+            direction: { from: "claude", to: "opencode" },
+            contextNote,
+          },
+        },
+      }),
+    );
+
+    expect(getByText("Handoff")).toBeTruthy();
+    expect(
+      getByText("Claude").compareDocumentPosition(getByText("OpenCode")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(getByText(contextNote)).toBeTruthy();
+  });
+
   test("renders a Claude permission mismatch as a warning card", () => {
     const content =
       "Claude permission mode 'auto' was requested, but Claude reports 'default'. Check your Claude permission settings.";

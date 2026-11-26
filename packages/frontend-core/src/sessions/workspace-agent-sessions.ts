@@ -47,6 +47,9 @@ export const createWorkspaceAgentSessions = (): WorkspaceAgentSessions => {
       getActivitySnapshot: () => selectedStore().getActivitySnapshot(),
       listSessionSnapshots: () => selectedStore().listSessionSnapshots(),
       getSessionSnapshot: (identity) => selectedStore().getSessionSnapshot(identity),
+      getHandoffOperation: (identity) => selectedStore().getHandoffOperation(identity),
+      getHandoffBaseline: () => selectedStore().getHandoffBaseline(),
+      getHandoffHostEpoch: () => selectedStore().getHandoffHostEpoch(),
       getVisiblePendingInputSnapshot: (identity) =>
         selectedStore().getVisiblePendingInputSnapshot(identity),
       commitSessionCollection: (commit) => requireStore().commitSessionCollection(commit),

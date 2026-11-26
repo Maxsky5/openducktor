@@ -38,7 +38,7 @@ import {
   type LegacyTaskStoreSession,
 } from "./sqlite-legacy-task-store-schema";
 import { workspaceSessions as legacySessions } from "./sqlite-legacy-workspace-session-schema";
-import { selectedModelColumns } from "./sqlite-task-relations";
+import { selectedModelColumns } from "./sqlite-session-model-columns";
 import { encodeWorkspaceSessionRecord } from "./sqlite-workspace-session-reads";
 import { workspaceSessionSchema } from "@openducktor/contracts";
 import { directMergeRowValues, pullRequestRowValues } from "./sqlite-task-delivery-rows";

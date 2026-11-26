@@ -1,6 +1,11 @@
 import { Effect, type Scope } from "effect";
-import { HostDependencyError, type HostOperationError } from "../../../effect/host-errors";
+import {
+  HostDependencyError,
+  type HostOperationError,
+  type HostValidationErrorAggregate,
+} from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
+import type { TaskActivityGuardPort } from "../../../ports/task-activity-guard-port";
 import type {
   DecideTaskTransition,
   TaskRecord,
@@ -20,6 +25,7 @@ export const completeTaskClosure = <CleanupError, DecideError>({
   repoPath,
   taskId,
   workspaceId,
+  taskActivityGuard,
   taskSessionLifecycleCoordinator,
   taskStore,
 }: {
@@ -30,11 +36,17 @@ export const completeTaskClosure = <CleanupError, DecideError>({
   repoPath: string;
   taskId: string;
   workspaceId: string;
+  taskActivityGuard: TaskActivityGuardPort | undefined;
   taskSessionLifecycleCoordinator: TaskSessionLifecycleCoordinator | undefined;
   taskStore: TaskClosureStore;
 }): Effect.Effect<
   TaskRecord,
-  CleanupError | DecideError | HostDependencyError | HostOperationError | TaskStoreError
+  | CleanupError
+  | DecideError
+  | HostDependencyError
+  | HostOperationError
+  | HostValidationErrorAggregate
+  | TaskStoreError
 > =>
   Effect.scoped(
     Effect.gen(function* () {
@@ -62,6 +74,9 @@ export const completeTaskClosure = <CleanupError, DecideError>({
         [taskId],
         operation,
       );
+      if (taskActivityGuard) {
+        yield* taskActivityGuard.ensureNoUnresolvedHandoff({ workspaceId, taskId });
+      }
       yield* cleanup;
       return yield* Effect.suspend(() =>
         taskStore.transitionTask({ repoPath, taskId, workspaceId, decide }),

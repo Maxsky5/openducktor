@@ -4,7 +4,7 @@ import type {
 } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 import type { AgentChatTranscriptSession } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript.types";
 import { useAgentChatTranscriptModel } from "@openducktor/frontend-core/sessions/transcript/use-agent-chat-transcript-model";
-import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import type { AgentSessionTranscriptTarget } from "@openducktor/frontend-core/sessions/transcript/agent-session-transcript-target";
 import { memo, type ReactElement, useMemo, useState } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -26,7 +26,7 @@ export type SessionTranscriptProps = {
   runtimePresentation: AgentChatRuntimePresentation;
   /** Pending approvals and questions of each Subagent session, by session key. */
   subagentPendingCountBySessionKey: Readonly<Record<string, number>>;
-  onOpenSubagent: (identity: AgentSessionIdentity) => void;
+  onOpenSubagent: (target: AgentSessionTranscriptTarget) => void;
   /** Increases after the user sends a message. The list then jumps to the latest message. */
   latestSignal: JumpToLatestSignal;
 };

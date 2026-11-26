@@ -332,7 +332,11 @@ describe("electron shell bridge", () => {
         args: { repoPath: "/repo" },
       }),
     );
-    expect(live).toHaveBeenCalledWith({ ...liveSnapshot, isConnectionSnapshot: true });
+    expect(live).toHaveBeenCalledWith({
+      ...liveSnapshot,
+      isConnectionSnapshot: true,
+      hostEpoch: "fake-host-epoch",
+    });
 
     stopRunEvents();
     stopRuntimeChanges();
@@ -565,7 +569,7 @@ describe("electron shell bridge", () => {
     const stop = await observing;
 
     expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([
-      { ...snapshot, isConnectionSnapshot: true },
+      { ...snapshot, isConnectionSnapshot: true, hostEpoch: "fake-host-epoch" },
       transcriptEvent,
       newerRemoval,
     ]);

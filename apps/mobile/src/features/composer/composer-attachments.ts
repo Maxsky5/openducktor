@@ -2,6 +2,7 @@ import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
 import type { AgentAttachmentKind, AgentModelAttachmentSupport } from "@openducktor/core";
 import {
   buildComposerAttachmentFromDeviceFile,
+  CHAT_ATTACHMENT_PICKER_TYPES,
   readAttachmentFileName,
 } from "@openducktor/frontend-core/drafts/agent-chat-attachments";
 import type { AgentChatComposerAttachment } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
@@ -15,13 +16,6 @@ export const ATTACHMENT_KIND_ICONS = {
   video: "film",
   pdf: "file-text",
 } as const satisfies Record<AgentAttachmentKind, IconName>;
-
-const KIND_PICKER_TYPES = {
-  image: "image/*",
-  audio: "audio/*",
-  video: "video/*",
-  pdf: "application/pdf",
-} satisfies Record<AgentAttachmentKind, string>;
 
 const KIND_NAMES = {
   image: "images",
@@ -74,7 +68,7 @@ export const resolveAttachmentPickers = ({
   const kinds = ATTACHMENT_KINDS.filter((kind) => support[kind]);
   return {
     library: support.image,
-    documentTypes: kinds.map((kind) => KIND_PICKER_TYPES[kind]),
+    documentTypes: kinds.map((kind) => CHAT_ATTACHMENT_PICKER_TYPES[kind]),
     kinds,
     unavailableReason: kinds.length === 0 ? "The selected model takes no attachments." : null,
   };

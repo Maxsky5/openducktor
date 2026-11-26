@@ -28,8 +28,10 @@ import type { AgentChatComposerModel } from "./agent-chat.types";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 import { AgentChatGoalRow } from "./agent-chat-goal-row";
 import { AgentChatBackgroundTaskBar } from "./agent-chat-background-task-bar";
-import { buildComposerAttachmentsFromFiles } from "./agent-chat-attachment-intake";
-import { CHAT_ATTACHMENT_ACCEPT } from "@openducktor/frontend-core/drafts/agent-chat-attachments";
+import {
+  buildComposerAttachmentsFromFiles,
+  composerFileInputAccept,
+} from "./agent-chat-attachment-intake";
 import {
   createComposerAutofocusState,
   resolveComposerAutofocus,
@@ -65,6 +67,7 @@ import { useComposerPolicy } from "@openducktor/frontend-core/sessions/composer/
 import { useAgentChatComposerSubmit } from "@openducktor/frontend-core/sessions/composer/use-agent-chat-composer-submit";
 import type { ComposerFailure } from "@openducktor/frontend-core/sessions/composer/composer-failure";
 import { steerShortcutLabel } from "@/lib/steer-shortcut";
+import { RuntimeHandoffCue } from "./agent-chat-runtime-handoff";
 
 const MemoizedAgentChatComposerEditor = memo(AgentChatComposerEditor);
 
@@ -114,7 +117,6 @@ export function AgentChatComposer({
     isInteractionEnabled,
     isReadOnly,
     draftScope,
-    supportsAttachments,
     accentColor: composerAccentColor,
     composerEditorRef,
     onComposerEditorInput,
@@ -133,6 +135,15 @@ export function AgentChatComposer({
   });
   const draftRef = useRef<AgentChatComposerDraft>(draft);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const handoffSelection = model.handoff?.selection;
+  const policy = useComposerPolicy({
+    model,
+    handoffSelection,
+    draft,
+    primaryMode,
+    settingsReady,
+    steerShortcutLabel: steerShortcutLabel(),
+  });
   const {
     isSubmitting,
     isComposerInputDisabled,
@@ -144,15 +155,10 @@ export function AgentChatComposer({
     sendDisabled,
     sendBlockedReason,
     pendingSendBlockedReason,
-  } = useComposerPolicy({
-    model,
-    draft,
-    primaryMode,
-    settingsReady,
-    steerShortcutLabel: steerShortcutLabel(),
-  });
+  } = policy;
   // A send clears the draft at once, so the user can write the next message while it runs.
-  const attachmentIntakeDisabled = !supportsAttachments || isComposerInputDisabled;
+  const attachmentAccept = composerFileInputAccept(policy, handoffSelection !== undefined);
+  const attachmentIntakeDisabled = !attachmentAccept || isComposerInputDisabled;
 
   const handleDraftChange = useCallback(
     (nextDraft: AgentChatComposerDraft) => {
@@ -205,13 +211,15 @@ export function AgentChatComposer({
     draftRef.current = draft;
   }, [draft]);
 
-  const hardModelPickerReadOnlyReason = resolveModelPickerReadOnlyReason({
-    isReadOnly,
-    readOnlyReason: model.readOnlyReason,
-    isSubmitting,
-    isInteractionEnabled,
-    isRuntimeLocked: model.modelPicker.selectionPolicy.kind === "runtime_locked",
-  });
+  const hardModelPickerReadOnlyReason = model.handoff?.blocked
+    ? "Resolve the pending handoff before changing the model."
+    : resolveModelPickerReadOnlyReason({
+        isReadOnly,
+        readOnlyReason: model.readOnlyReason,
+        isSubmitting,
+        isInteractionEnabled,
+        isRuntimeLocked: model.modelPicker.selectionPolicy.kind === "runtime_locked",
+      });
   const closedModelPickerDisabledReason = null;
 
   const scheduleComposerFocus = useAgentChatComposerFocus({
@@ -279,6 +287,7 @@ export function AgentChatComposer({
       model={model}
       draft={draft}
       attachmentInputRef={attachmentInputRef}
+      attachmentAccept={attachmentAccept}
       attachmentErrors={attachmentErrors}
       attachmentIntakeDisabled={attachmentIntakeDisabled}
       composerAccentColor={composerAccentColor}
@@ -306,6 +315,7 @@ type AgentChatComposerFormViewProps = {
   model: AgentChatComposerModel;
   draft: AgentChatComposerDraft;
   attachmentInputRef: RefObject<HTMLInputElement | null>;
+  attachmentAccept: string;
   attachmentErrors: Record<string, string>;
   attachmentIntakeDisabled: boolean;
   composerAccentColor: string | undefined;
@@ -536,6 +546,7 @@ function AgentChatComposerFormView({
   model,
   draft,
   attachmentInputRef,
+  attachmentAccept,
   attachmentErrors,
   attachmentIntakeDisabled,
   composerAccentColor,
@@ -646,7 +657,7 @@ function AgentChatComposerFormView({
         type="file"
         aria-label="Add attachments"
         multiple
-        accept={CHAT_ATTACHMENT_ACCEPT}
+        accept={attachmentAccept}
         disabled={attachmentIntakeDisabled}
         className="hidden"
         onChange={(event) => {
@@ -668,6 +679,12 @@ function AgentChatComposerFormView({
       <AgentChatGoalRow
         model={model.isReadOnly ? null : model.goalRow}
         scope={model.goalRowScope}
+      />
+      <RuntimeHandoffCue
+        notice={model.handoff?.notice}
+        sourceModel={model.selectedModelDescriptor?.modelName}
+        currentRuntime={model.handoff?.identity?.runtimeKind}
+        editorRef={composerEditorRef}
       />
       <div
         className={composerCardClassName({

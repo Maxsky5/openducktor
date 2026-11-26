@@ -505,7 +505,7 @@ describe("createLocalHostChannel", () => {
     const abort = new AbortController();
     const pending = test.channel.request(
       { method: "invoke", command: "path_check", args: {} },
-      abort.signal,
+      { signal: abort.signal },
     );
     await waitFor(() => methods(test.host().requests).includes("invoke"), "the invoke request");
     const reason = new Error("diagnostics timeout");
@@ -539,7 +539,7 @@ describe("createLocalHostChannel", () => {
     const abort = new AbortController();
     const pending = channel.request(
       { method: "invoke", command: "path_check", args: {} },
-      abort.signal,
+      { signal: abort.signal },
     );
     await waitFor(() => sockets.length === 1, "the socket");
     const reason = new Error("diagnostics timeout");

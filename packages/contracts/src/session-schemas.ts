@@ -7,6 +7,7 @@ import {
 } from "./agent-runtime-schemas";
 import { agentToolDataSchema } from "./agent-session-event-schemas";
 import { agentRoleSchema } from "./agent-workflow-schemas";
+import { chatHandoffReadSchema } from "./agent-chat-handoff-schemas";
 
 type ZodSchemaFields = Parameters<typeof z.object>[0];
 
@@ -94,6 +95,7 @@ const agentSessionRecordFields = {
   lastActivityAt: z.number().int().nonnegative().optional(),
   runtimeKind: runtimeKindSchema,
   workingDirectory: nonEmptyStringSchema,
+  handoff: chatHandoffReadSchema.optional(),
   selectedModel: z.preprocess(
     (value) => (value === undefined ? null : value),
     agentSessionModelSelectionSchema.nullable(),

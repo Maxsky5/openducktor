@@ -21,10 +21,14 @@ export type TaskActivityGuardTaskSessions = {
 };
 
 export type TaskActivityGuardPort = {
+  ensureNoUnresolvedHandoff(input: {
+    workspaceId: string;
+    taskId: string;
+  }): Effect.Effect<void, HostValidationErrorAggregate>;
   countLiveSessions(
     input: TaskActivityGuardTaskSessions,
   ): Effect.Effect<{ liveSessionCount: number }, TaskActivityGuardError>;
   cleanupTaskSessions(
-    input: TaskActivityGuardTaskSessions,
+    input: TaskActivityGuardTaskSessions & { workspaceId: string },
   ): Effect.Effect<TaskActivityCleanupResult, TaskActivityGuardError>;
 };

@@ -114,6 +114,79 @@ const copyMigrationsUpTo = async (directory: string, lastIndex: number) => {
   return folder;
 };
 
+test.each(["main", "handoff preview"])(
+  "upgrades a %s database to migration 0008",
+  async (source) => {
+    const directory = await mkdtemp(path.join(tmpdir(), "odt-host-migration-"));
+    cleanups.add(() => rm(directory, { recursive: true, force: true }));
+    const databasePath = path.join(directory, "database.sqlite");
+    const preview = source === "handoff preview";
+    const initialFolder = await copyMigrationsUpTo(directory, preview ? 4 : 7);
+    if (preview) {
+      const journalPath = path.join(initialFolder, "meta", "_journal.json");
+      const journal = JSON.parse(await readFile(journalPath, "utf8"));
+      journal.entries.push({
+        idx: 5,
+        version: "6",
+        when: 1795306864035,
+        tag: "0005_runtime_handoffs",
+        breakpoints: true,
+      });
+      await writeFile(journalPath, JSON.stringify(journal));
+      await cp(
+        path.join(migrationsFolder, "0008_runtime_handoffs.sql"),
+        path.join(initialFolder, "0005_runtime_handoffs.sql"),
+      );
+    }
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { session } = yield* openSqliteDrizzleConnection({
+            databasePath,
+            configureWal: false,
+            configureHostDatabase: true,
+            config: { schema: hostDatabaseSchema },
+          });
+          const run = (query: string) =>
+            session.execute((db) => db.run(sql.raw(query)), "test.run");
+          const read = (query: string) =>
+            session.execute((db) => db.values(sql.raw(query)), "test.read");
+          yield* applyMigrations(session, initialFolder, databasePath, "exact");
+          yield* run(
+            `INSERT INTO workspaces (workspace_id, workspace_name, repo_path, branch_prefix, default_target_branch, closed)
+           VALUES ('ws', 'Workspace', '/repo', 'odt', 'main', 0)`,
+          );
+          yield* run(
+            `INSERT INTO tasks (workspace_id, id, title, status, issue_type, priority, created_at_ms, updated_at_ms)
+           VALUES ('ws', 'ws-1', 'Task to keep', 'open', 'task', 2, 1, 1)`,
+          );
+          if (preview) {
+            yield* run(
+              `INSERT INTO runtime_handoffs
+             (workspace_id, task_id, task_role, first_runtime, first_session_id, working_directory,
+              ordinal, source_runtime, source_session_id, target_runtime, target_session_id, first_message_id, partial_history)
+             VALUES ('ws', 'ws-1', 'build', 'codex', 'first', '/repo', 0, 'codex', 'first',
+                     'claude', 'second', 'first-message', 0)`,
+            );
+          }
+          yield* ensureSchema(session, databasePath);
+          yield* ensureSchema(session, databasePath);
+          return {
+            handoffs: yield* read("SELECT target_session_id FROM runtime_handoffs"),
+            tasks: yield* read("SELECT title, workflow_id FROM tasks"),
+            foreignKeys: yield* read("PRAGMA foreign_key_check"),
+          };
+        }),
+      ),
+    );
+    expect(result).toEqual({
+      handoffs: preview ? [["second"]] : [],
+      tasks: [["Task to keep", "openducktor-spec-plan-build"]],
+      foreignKeys: [],
+    });
+  },
+);
+
 test("0002 moves prompt overrides to their owners, Autopilot rules to the built-in workflow, and renames the cleanup commands", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "odt-host-migration-"));
   cleanups.add(() => rm(directory, { recursive: true, force: true }));

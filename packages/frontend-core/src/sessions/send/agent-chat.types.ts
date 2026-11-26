@@ -128,6 +128,7 @@ export type AgentChatMessageQueueModel = {
 
 /** The send state and actions that a chat composer reads. */
 export type AgentChatSend = {
+  handoff?: ReturnType<typeof import("./runtime-handoff").useRuntimeHandoff> | undefined;
   messageQueue: AgentChatMessageQueueModel | null;
   /** Why the session cannot steer the running turn now, or null when it can. */
   steerBlockedReason: string | null;

@@ -55,6 +55,7 @@ export const closeSyncedMergedTask = (
       repoPath,
       decide: coreTaskTransition(taskWorkflows, "close"),
       taskId,
+      taskActivityGuard: services.taskActivityGuard,
       taskSessionLifecycleCoordinator,
       taskStore,
     });

@@ -105,6 +105,7 @@ export const createTaskFullResetUseCase = ({
       const cleanupProgress = createTaskCleanupProgressState();
       if (hasWorkflowSessions && activityGuard) {
         const { stoppedSessionCount } = yield* activityGuard.cleanupTaskSessions({
+          workspaceId: input.workspaceId,
           repoPath: effectiveRepoPath,
           taskSessions: [
             {

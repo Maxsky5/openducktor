@@ -58,7 +58,7 @@ When you have favorites, the picker opens on them, and each harness list shows t
   id="session-composer-model"
   alt="The composer of a running Codex session. Under the message box are the model GPT-6.1-Sol, the Effort low, and the Speed icon, a crossed-out lightning bolt for Standard."
   parts={[
-    { at: "model", title: "Model", text: "Lists only the models of the harness that runs the session." },
+    { at: "model", title: "Model", text: "Select a model for the next message." },
     { at: "effort", title: "Effort", text: "How much the model thinks before it answers." },
     { at: "speed", title: "Speed", text: "How fast the model answers. A higher speed can cost more. A crossed-out icon means Standard." },
   ]}
@@ -67,6 +67,22 @@ When you have favorites, the picker opens on them, and each harness list shows t
 **Speed** is available only with Codex and Claude Code. **Agent profile** is an OpenCode setting. With Antigravity, **Effort** is the thinking level of the model, and only some models have it. The start dialog calls it **Runtime profile**.
 
 **Speed** has no default. A new or forked session starts at **Standard**. A change in the composer applies to the next turn.
+
+## Continue a chat in another runtime [#runtime-handoff]
+
+You can hand off a chat between OpenCode, Codex, Claude Code, and Antigravity.
+
+1. Open the model picker in a Workspace Chat or Agent Studio. On mobile, open **Message options** first.
+2. Choose a model in another runtime. The composer shows the source, the destination, and which earlier content Send can share.
+3. Send the message after the current runtime and its child agents finish. Resolve any pending input and clear queued work first.
+
+Switching to Codex requires Codex CLI 0.136.0 or later.
+
+The new runtime uses the same checkout and chat role. The transcript marks the switch and tells you if earlier context did not fit. Choose the current runtime to cancel a switch before you send.
+
+If delivery remains uncertain, use **Check delivery**. You can do this after reconnecting to the same running host.
+
+If the host restarts while a handoff is pending in the open chat, OpenDucktor checks for a saved handoff. If the host saved it, the chat opens the destination. If the host saved no handoff, you can start a new handoff from the source.
 
 ## Next [#next]
 

@@ -26,6 +26,8 @@ import {
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useChatSessionPreparation } from "@openducktor/frontend-core/sessions/composer/use-chat-session-preparation";
 import type { AgentStudioSelectedSessionState } from "./selected-session-state";
+import { useHandoffObservation } from "@openducktor/frontend-core/sessions/send/runtime-handoff";
+import { readTaskHandoff } from "@openducktor/frontend-core/sessions/send/use-task-runtime-handoff";
 import {
   deriveSelectedSessionRuntimeTarget,
   deriveSelectedSessionViewProjection,
@@ -52,6 +54,17 @@ export type AgentStudioSelectedSessionView = {
   role: AgentRole | null;
   launchActionId: SessionLaunchActionId | null;
 };
+
+function usePendingTaskHandoffLink(
+  identity: AgentSessionIdentity | null,
+  repoPath: string | null,
+  scope: Parameters<typeof readTaskHandoff>[1],
+) {
+  const observed = useHandoffObservation(identity, repoPath);
+  const handoff = readTaskHandoff(observed, scope);
+  if (!handoff?.link || handoff.committed) return undefined;
+  return matchesAgentSessionIdentity(handoff.link.from, identity) ? handoff.link : undefined;
+}
 
 export function useAgentStudioSelectedSessionView({
   workspaceId,
@@ -102,9 +115,14 @@ export function useAgentStudioSelectedSessionView({
       : null;
   const isUnresolvedExplicitRouteSession =
     sessionExternalId !== null && sessionExternalId === unresolvedRouteSessionExternalId;
-  const selectedSessionIdentity = isUnresolvedExplicitRouteSession
-    ? null
-    : selection.sessionIdentity;
+  const routeIdentity = isUnresolvedExplicitRouteSession ? null : selection.sessionIdentity;
+  const pendingLink = usePendingTaskHandoffLink(routeIdentity, workspaceRepoPath, {
+    workspaceId,
+    repoPath: workspaceRepoPath,
+    taskId: selectedTask?.id,
+    role: selection.role,
+  });
+  const selectedSessionIdentity = pendingLink?.to ?? routeIdentity;
   const session = useAgentSession(selectedSessionIdentity);
   const loadedSession = useMemo(() => {
     if (!matchesAgentSessionIdentity(session, selectedSessionIdentity)) return null;
@@ -238,6 +256,7 @@ export function useAgentStudioSelectedSessionView({
       role,
     ]),
     enabled:
+      !pendingLink &&
       loadedSession !== null &&
       runtimeReadinessState === "ready" &&
       sessionReadModelLoadState.kind === "ready",
@@ -269,6 +288,7 @@ export function useAgentStudioSelectedSessionView({
   const selectedSession = useMemo<AgentStudioSelectedSessionState>(
     () => ({
       identity: selectedSessionIdentity,
+      handoffSource: pendingLink?.from,
       activityState: selectedSessionActivityState,
       selectedModel: selectedSessionModel,
       loadedSession,
@@ -285,6 +305,7 @@ export function useAgentStudioSelectedSessionView({
       runtimeData,
       selectedSessionActivityState,
       selectedSessionIdentity,
+      pendingLink,
       selectedSessionModel,
       selectedSessionViewProjection.sessionAuxiliaryError,
       loadedSession,

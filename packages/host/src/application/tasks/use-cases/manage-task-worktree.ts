@@ -27,6 +27,7 @@ export const createTaskWorktreeUseCases = ({
   gitPort,
   taskStore,
   taskWorkflows,
+  taskActivityGuard,
   settingsConfig,
   systemCommands,
   terminalService,
@@ -137,6 +138,12 @@ export const createTaskWorktreeUseCases = ({
         [taskId],
         "remove task worktree",
       );
+      if (taskActivityGuard) {
+        yield* taskActivityGuard.ensureNoUnresolvedHandoff({
+          workspaceId: input.workspaceId,
+          taskId,
+        });
+      }
       const metadata = yield* taskStore.getTaskMetadata(input);
       const { worktreePaths, branchNames } = yield* collectTaskCleanupTargets({
         workspaceId: input.workspaceId,

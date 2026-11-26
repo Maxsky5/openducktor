@@ -5,4 +5,9 @@ export type AgentChatSendRecovery = {
   error: Error;
 };
 
-export type AgentChatSendResult = boolean | AgentChatSendRecovery;
+export type PendingHandoffSend = {
+  kind: "handoff_pending";
+  settled: Promise<boolean>;
+};
+
+export type AgentChatSendResult = boolean | AgentChatSendRecovery | PendingHandoffSend;

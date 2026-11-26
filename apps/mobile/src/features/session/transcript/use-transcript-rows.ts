@@ -80,7 +80,6 @@ export const useTranscriptRowsContext = ({
   const optionalSurfaces = runtimeDefinitions.find(
     (runtime) => runtime.kind === identity.runtimeKind,
   )?.capabilities.optionalSurfaces;
-  const supportsImageGeneration = optionalSurfaces?.supportsImageGeneration === true;
   const supportsRunningCommandOutput = optionalSurfaces?.supportsRunningCommandOutput === true;
   const taskId = owner.kind === "task" ? owner.taskId : null;
   return useMemo<TranscriptRowsContextValue>(
@@ -96,7 +95,6 @@ export const useTranscriptRowsContext = ({
       workingDirectory: identity.workingDirectory,
       presentToolCall,
       modelCatalog,
-      supportsImageGeneration,
       supportsRunningCommandOutput,
       expandFileDiffsByDefault: chatSettings?.expandFileDiffsByDefault ?? true,
       // Transcript images never come from the source issue of the task.
@@ -124,7 +122,6 @@ export const useTranscriptRowsContext = ({
       presentToolCall,
       repoPath,
       rowState,
-      supportsImageGeneration,
       supportsRunningCommandOutput,
       taskId,
       visibleRows,

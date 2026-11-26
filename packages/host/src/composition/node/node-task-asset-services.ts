@@ -60,6 +60,7 @@ const unsupportedIssueImportStore: IssueImportStorePort = {
 };
 
 export type NodeTaskAssetServices = {
+  runtimeHandoffs: ReturnType<typeof createSqliteRuntimeHandoffStore>;
   workspaceSessionStore: WorkspaceSessionStorePort;
   agentSessionTurnStore: AgentSessionTurnStorePort;
   taskOwnership: TaskOwnershipReader;
@@ -157,6 +158,7 @@ export const createNodeTaskAssetServices = ({
 
   return {
     agentSessionTurnStore: createSqliteAgentSessionTurnStore(contextManager),
+    runtimeHandoffs: createSqliteRuntimeHandoffStore(contextProvider),
     workspaceSessionStore: createSqliteWorkspaceSessionStore({
       contextProvider,
       workspacesProvider,
@@ -207,3 +209,4 @@ export const createNodeTaskAssetServices = ({
     removeWorkspaceTaskAssets: (workspaceId) => filePort.removeWorkspaceData({ workspaceId }),
   };
 };
+import { createSqliteRuntimeHandoffStore } from "../../adapters/sqlite/sqlite-runtime-handoffs";

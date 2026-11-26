@@ -29,6 +29,9 @@ import {
   agentMessageSubmitInputSchema,
   agentWorkflowSessionStartInputSchema,
   agentSessionUsageLimitAutoResumeCancelInputSchema,
+  agentChatHandoffSendSchema,
+  agentChatHandoffCheckSchema,
+  type AgentChatHandoffResult,
 } from "@openducktor/contracts";
 import type { UsageLimitAutoResumeService } from "../../application/agent-sessions/usage-limit-auto-resume-service";
 import { Effect } from "effect";
@@ -41,6 +44,7 @@ import type { z } from "zod";
 import type { HostCommandArgs } from "./command-inputs";
 import { WorkflowIntentRejectedError } from "../../ports/workflow-intent-rejected-error";
 import { SessionOperationError } from "../../ports/session-operation-error";
+import type { createRuntimeHandoffCommands } from "../../application/agent-sessions/runtime-handoff-command";
 
 const parseCommandInput = <Output>(
   schema: z.ZodType<Output>,
@@ -69,6 +73,7 @@ type AgentSessionCommandService = Omit<AgentSessionLiveStateService, "startSessi
     input: AgentWorkflowSessionStartInput,
   ) => Effect.Effect<AgentSessionControlSummary, HostError | TaskServiceError>;
   applyGoalAction: (input: AgentSessionGoalControlInput) => Effect.Effect<void, HostError>;
+  handoff?: Pick<ReturnType<typeof createRuntimeHandoffCommands>, "send" | "check"> | undefined;
 };
 
 export const createAgentSessionLiveCommandHandlers = (
@@ -76,6 +81,26 @@ export const createAgentSessionLiveCommandHandlers = (
   messageDelivery: Pick<AgentMessageDeliveryService, "submit" | "manage">,
 ) =>
   ({
+    agent_chat_handoff_send: (args) =>
+      parseCommandInput(agentChatHandoffSendSchema, args, "agent_chat_handoff_send").pipe(
+        Effect.flatMap(
+          (input): Effect.Effect<AgentChatHandoffResult, HostError> =>
+            service.handoff?.send(input) ??
+            Effect.fail(
+              new HostValidationError({ message: "This host does not support runtime handoffs." }),
+            ),
+        ),
+      ),
+    agent_chat_handoff_check: (args) =>
+      parseCommandInput(agentChatHandoffCheckSchema, args, "agent_chat_handoff_check").pipe(
+        Effect.flatMap(
+          (input): Effect.Effect<AgentChatHandoffResult, HostError> =>
+            service.handoff?.check(input) ??
+            Effect.fail(
+              new HostValidationError({ message: "This host does not support runtime handoffs." }),
+            ),
+        ),
+      ),
     agent_session_control_fork: (args) =>
       parseCommandInput(
         agentSessionControlForkInputSchema,

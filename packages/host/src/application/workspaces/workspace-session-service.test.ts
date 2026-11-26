@@ -245,6 +245,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       },
       lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate: createWorkspaceSessionOperationGate(),
+      hasUnresolvedHandoff: () => false,
       sessionTitleGate: createWorkspaceSessionOperationGate(),
       isTitleSyncPending: (ref) => pendingTitles.has(ref.externalSessionId),
       markTitleSyncPending: (ref) => {
@@ -1999,6 +2000,50 @@ describe("host-owned Workspace Session lifecycle", () => {
       /database write failed[\s\S]*worktree removal failed/,
     );
   });
+
+  test.each([false, true])(
+    "archive waits for handoff settlement before touching the chat, remove worktree: %s",
+    async (removeWorktree) => {
+      const h = setup();
+      const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+      const ref = { workspaceId: h.config.workspaceId, sessionId: session.id };
+      const { session: active } = await Effect.runPromise(h.service.start(ref));
+      const { branchName } = await Effect.runPromise(h.service.archivePreview(ref));
+      if (branchName === null) throw new Error("Expected a worktree on a branch.");
+      const { archive } = createWorkspaceSessionService({
+        ...h.dependencies,
+        hasUnresolvedHandoff: ({ workspaceId, sessionId }) =>
+          workspaceId === ref.workspaceId && sessionId === ref.sessionId,
+        live: {
+          ...h.dependencies.live,
+          read: () => Effect.die("Archive accessed the saved source."),
+        },
+        terminalService: {
+          acquireWorkspaceSessionCleanup: () => Effect.die("Archive started terminal cleanup."),
+        },
+        browserTabs: { closeOwnerTabs: () => Effect.die("Archive started browser cleanup.") },
+      });
+      const callsBefore = [...h.calls];
+
+      await expect(
+        Effect.runPromise(
+          archive({
+            ...ref,
+            confirmStop: true,
+            removeWorktree,
+            worktreeConfirmation: {
+              workingDirectory: active.executionTarget.workingDirectory,
+              branchName,
+            },
+          }),
+        ),
+      ).rejects.toThrow("Use Check delivery");
+
+      expect(await Effect.runPromise(h.service.get(ref))).toEqual(active);
+      expect(h.paths.has(active.executionTarget.workingDirectory)).toBe(true);
+      expect(h.calls).toEqual(callsBefore);
+    },
+  );
 
   test("requires confirmation to stop before archive and retains state after Stop or observation failure", async () => {
     const h = setup();

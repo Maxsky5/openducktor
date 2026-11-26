@@ -55,6 +55,7 @@ import { createNodeAgentSessionLiveState } from "./node-agent-session-live-state
 import { createNodeMessageDelivery } from "./node-message-delivery";
 import { createLiveSessionFaultLogger, defaultLifecycleLogger } from "./node-host-lifecycle-logger";
 import { createNodeRuntimeExecutableCommandHandlers } from "./node-runtime-executable-command-handlers";
+import { stagedHandoffOwners } from "./node-runtime-handoff";
 import { createNodeHostRouterLifecycle } from "./node-host-router-lifecycle";
 import type { NodeHostSharedPorts } from "./node-shared-storage";
 import { createNodeBrowser } from "./node-browser-composition";
@@ -107,12 +108,11 @@ export const assembleNodeEffectHostCommandRouter = (
     worktreeFiles,
   } = defaultPorts;
   const automation = createNodeSessionAutomation(onBackgroundFailure, lifecycleLogger, git);
-  const notificationComposition = createNodeNotificationServices(
+  const { settingsConfig, ...notificationComposition } = createNodeNotificationServices(
     withTaskWorkflowSettings(baseSettingsConfig, workflowWiring.readWorkflowSettings),
     eventBus,
     automation.configCommitted,
   );
-  const { settingsConfig } = notificationComposition;
   const setup = createNodeWorkspaceProviderSetup(
     { ...defaultPorts, settingsConfig },
     { ...input, gitlab },
@@ -169,7 +169,7 @@ export const assembleNodeEffectHostCommandRouter = (
     createNodeAgentSessionLiveState({
       runtimeAdmission,
       observeNotificationInput: notificationComposition.acceptLive,
-      observeWorkflowInput: createWorkflowLiveObserver(
+      ...createWorkflowLiveObserver(
         () => taskSessions,
         messageDelivery.runBackground,
         automation.observeLive,
@@ -230,33 +230,12 @@ export const assembleNodeEffectHostCommandRouter = (
     tasks: taskStore,
     workspaceSessions: workspaceSessions.store,
     liveSessions: liveSessionAdapterRegistry,
+    stagedOwners: (workspaceId) => stagedHandoffOwners(taskSessions, workspaceId),
     localAttachments: localAttachmentService,
     eventBus,
     lifecycleLogger,
   });
-  const repoActionService = createRepoActionService({
-    terminals: terminalService,
-    settings: workspaceSettingsService,
-  });
   const worktreeActions = createWorktreeActionRunner(terminalService);
-  const workspaceLifecycleService = createWorkspaceLifecycleService({
-    onWorkspaceReopened: (repoPath) => observeWorkflowWorkspace(repoPath),
-    activity: createWorkspaceActivityInspector({ agentSessionLiveStateService, terminalService }),
-    admission: workspaceAdmissionService,
-    gitPort: git,
-    settingsConfig,
-    storage: createNodeWorkspaceStorageRemoval({
-      taskAssets: assets,
-      azureDevOpsConnection,
-      gitlabConnection: gitlab.connection,
-      browserService,
-    }),
-    taskSessionLifecycleCoordinator,
-    taskStore,
-    taskOwnership: assets.taskOwnership,
-    workspaceSettingsService,
-    worktreeFiles,
-  });
   const taskSessions = createNodeTaskSessionServices({
     naming,
     runtimeAdmission,
@@ -312,6 +291,26 @@ export const assembleNodeEffectHostCommandRouter = (
   );
   const { taskEventStream, taskService, taskSyncService, agentSessionCommandService } =
     taskSessions;
+  const workspaceLifecycleService = createWorkspaceLifecycleService({
+    onWorkspaceReopened: observeWorkflowWorkspace,
+    activity: createWorkspaceActivityInspector({ agentSessionLiveStateService, terminalService }),
+    hasUnresolvedHandoff: (workspaceId) =>
+      agentSessionCommandService.handoff?.hasUnresolvedWorkspaceHandoff(workspaceId) === true,
+    admission: workspaceAdmissionService,
+    gitPort: git,
+    settingsConfig,
+    storage: createNodeWorkspaceStorageRemoval({
+      taskAssets: assets,
+      azureDevOpsConnection,
+      gitlabConnection: gitlab.connection,
+      browserService,
+    }),
+    taskSessionLifecycleCoordinator,
+    taskStore,
+    taskOwnership: assets.taskOwnership,
+    workspaceSettingsService,
+    worktreeFiles,
+  });
   const notificationService = notificationComposition.attach({
     taskWorkflows,
     tasks: taskService,
@@ -399,7 +398,6 @@ export const assembleNodeEffectHostCommandRouter = (
     mcpHostBridge: resolvedMcpHostBridge,
     runtimeRegistry,
     initializeRuntimes: hostRuntimeService.initialize,
-    // Deletes unlinked GitLab accounts. The sweep logs its failures, so it cannot stop the startup.
     startupSweep: () => startupSweep().pipe(Effect.andThen(gitlab.connection.sweep())),
     taskAssetStagingService,
     taskSyncService,
@@ -470,7 +468,9 @@ export const assembleNodeEffectHostCommandRouter = (
     }),
     ...createTerminalCommandHandlers(terminalService),
     ...createBrowserCommandHandlers(browserService),
-    ...createRepoActionCommandHandlers(repoActionService),
+    ...createRepoActionCommandHandlers(
+      createRepoActionService({ terminals: terminalService, settings: workspaceSettingsService }),
+    ),
     ...createWorkspaceSettingsCommandHandlers(workspaceSettingsService, hostRuntimeService),
     ...createNodeKeyboardShortcutHandlers(settingsConfig, eventBus),
     ...createWorkspaceLifecycleCommandHandlers(workspaceSettingsService, workspaceLifecycleService),

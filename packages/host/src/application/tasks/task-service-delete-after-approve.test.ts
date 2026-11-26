@@ -129,6 +129,7 @@ const createHarness = (worktreeOwners: TaskWorktreeOwnerReader = noWorktreeOwner
   });
   const service = createTaskService({
     taskActivityGuard: createRuntimeTaskActivityGuard({
+      hasUnresolvedTaskHandoff: () => false,
       runtimeRegistry: createRuntimeRegistryPort({
         probeSessionStatus: () => Effect.succeed({ supported: true, hasLiveSession: false }),
       }),

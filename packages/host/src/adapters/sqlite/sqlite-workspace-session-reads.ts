@@ -1,10 +1,11 @@
-import { selectedModelColumns } from "./sqlite-task-relations";
+import { selectedModelColumns } from "./sqlite-session-model-columns";
 import { workspaceSessionSchema, type WorkspaceSession } from "@openducktor/contracts";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type { HostDatabaseSession } from "./sqlite-host-database-schema";
 import { type WorkspaceSessionRow, workspaceSessions } from "./sqlite-workspace-session-schema";
+import { readWorkspaceHandoffLinks } from "./sqlite-runtime-handoffs";
 
 export const workspaceSessionScope = (workspaceId: string, sessionId?: string) =>
   and(
@@ -96,17 +97,40 @@ export const decodeRecord = (row: WorkspaceSessionRow) =>
       }),
   });
 
+export const decodeWorkspaceSessions = (
+  session: HostDatabaseSession,
+  workspaceId: string,
+  rows: WorkspaceSessionRow[],
+) =>
+  Effect.gen(function* () {
+    const groups = yield* readWorkspaceHandoffLinks(
+      session,
+      workspaceId,
+      rows.map((row) => row.id),
+    );
+    return yield* Effect.forEach(rows, (row) =>
+      decodeRecord(row).pipe(
+        Effect.map((record) => {
+          const entries = groups.get(row.id);
+          return entries ? { ...record, handoff: { links: entries } } : record;
+        }),
+      ),
+    );
+  });
+
 /** Reads the active saved chats of one workspace, the most recently updated first. */
 export const readActiveWorkspaceSessions = (session: HostDatabaseSession, workspaceId: string) =>
-  Effect.gen(function* () {
-    const rows = yield* session.execute(
-      (database) =>
-        database
-          .select()
-          .from(workspaceSessions)
-          .where(and(workspaceSessionScope(workspaceId), isNull(workspaceSessions.archivedAt)))
-          .orderBy(desc(workspaceSessions.updatedAt)),
-      "workspaceSessionStore.listActive",
-    );
-    return yield* Effect.forEach(rows, decodeRecord);
-  });
+  session.readTransaction("workspaceSessionStore.listActiveWithHandoffs", (read) =>
+    Effect.gen(function* () {
+      const rows = yield* read.execute(
+        (database) =>
+          database
+            .select()
+            .from(workspaceSessions)
+            .where(and(workspaceSessionScope(workspaceId), isNull(workspaceSessions.archivedAt)))
+            .orderBy(desc(workspaceSessions.updatedAt)),
+        "workspaceSessionStore.listActive",
+      );
+      return yield* decodeWorkspaceSessions(read, workspaceId, rows);
+    }),
+  );

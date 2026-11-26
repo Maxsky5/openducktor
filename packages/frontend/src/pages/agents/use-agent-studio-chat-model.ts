@@ -28,7 +28,10 @@ import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-cha
 import type { AgentChatComposerConfig } from "@/components/features/agents/agent-chat/use-agent-chat-composer-model";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@openducktor/frontend-core/sessions/composer/context-usage/context-usage-resolution";
-import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import {
+  agentSessionIdentityKey,
+  matchesAgentSessionIdentity,
+} from "@openducktor/frontend-core/lib/agent-session-identity";
 import { latestTurnUsageLimit } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
 import { useStableAgentSessionIdentity } from "@openducktor/frontend-core/lib/use-stable-agent-session-identity";
 import { useActiveWorkspace, useAgentSessionReadModelState } from "@/state/app-state-provider";
@@ -137,6 +140,60 @@ const toChatContextUsage = (
   return contextUsage;
 };
 
+function useAgentStudioHandoffTranscript({
+  workspace,
+  repoPath,
+  taskId,
+  role,
+  rawTranscriptSession,
+  selectedSessionIdentity,
+}: {
+  workspace: ReturnType<typeof useActiveWorkspace>;
+  repoPath: string | null;
+  taskId: string;
+  role: string | null;
+  rawTranscriptSession: ReturnType<typeof toAgentStudioTranscriptSession>;
+  selectedSessionIdentity:
+    | import("@openducktor/frontend-core/types/agent-orchestrator").AgentSessionIdentity
+    | null;
+}) {
+  const handoff = useTaskRuntimeHandoff(
+    workspace && taskId && role
+      ? {
+          workspaceId: workspace.workspaceId,
+          repoPath: workspace.repoPath,
+          taskId,
+          role,
+        }
+      : null,
+    selectedSessionIdentity,
+  );
+  const handoffTranscript = useRuntimeHandoffTranscript({
+    session: rawTranscriptSession,
+    repoPath,
+    scope: handoff
+      ? {
+          kind: "workflow",
+          workspaceId: handoff.chat.workspaceId,
+          taskId: handoff.chat.taskId,
+          role: handoff.chat.role,
+        }
+      : null,
+    links: handoff?.links,
+  });
+  const historicalRuntimeReason =
+    handoff &&
+    selectedSessionIdentity &&
+    !matchesAgentSessionIdentity(selectedSessionIdentity, handoff.active)
+      ? "Reopen the chat to continue with its active runtime."
+      : null;
+  return {
+    handoffTranscript,
+    historicalRuntimeReason,
+    draftIdentity: handoff?.chat.first ?? selectedSessionIdentity,
+  };
+}
+
 export function useAgentStudioChatModel({
   selectedSession,
   sessionActions,
@@ -179,13 +236,22 @@ export function useAgentStudioChatModel({
   );
   const pendingApprovalRequests = selectedSession.pendingInput.pendingApprovalRequests;
   const pendingQuestionRequests = selectedSession.pendingInput.pendingQuestionRequests;
+  const { handoffTranscript, historicalRuntimeReason, draftIdentity } =
+    useAgentStudioHandoffTranscript({
+      workspace: activeWorkspace,
+      repoPath,
+      taskId: selectedSession.taskId,
+      role: selectedSession.role,
+      rawTranscriptSession,
+      selectedSessionIdentity,
+    });
   const {
     transcriptSession,
     runtimeBlockedAction,
     subagentPendingApprovalCountBySessionKey,
     subagentPendingQuestionCountBySessionKey,
   } = useAgentChatPresentation({
-    session: rawTranscriptSession,
+    session: handoffTranscript,
     sessionIdentity: selectedSessionIdentity,
     pendingApprovals: pendingApprovalRequests,
     pendingQuestions: pendingQuestionRequests,
@@ -224,15 +290,16 @@ export function useAgentStudioChatModel({
     ],
   );
   const chatDrafts = useClientConnection().drafts.chat;
+  const draftSession = useStableAgentSessionIdentity(draftIdentity);
   const draftPersistence = useMemo(
     () =>
       createAgentStudioChatDraftPersistence({
         drafts: chatDrafts,
         workspaceId: composer.workspaceId,
         taskId: selectedSession.taskId,
-        session: stableSelectedSessionIdentity,
+        session: draftSession,
       }),
-    [chatDrafts, composer.workspaceId, selectedSession.taskId, stableSelectedSessionIdentity],
+    [chatDrafts, composer.workspaceId, selectedSession.taskId, draftSession],
   );
   const surfaceState = useMemo(
     () =>
@@ -379,11 +446,13 @@ export function useAgentStudioChatModel({
       stopAgentSession: sessionActions.stopAgentSession,
       isResumingSession: sessionActions.isResumingSession,
       isReadOnly:
+        historicalRuntimeReason !== null ||
         surfaceState.composerReadOnly ||
         selectedSessionState.preparation.error !== null ||
         Boolean(selectedSessionState.loadedSession?.statusUnavailableReason),
       readOnlyReason:
         selectedSessionState.loadedSession?.statusUnavailableReason ??
+        historicalRuntimeReason ??
         surfaceState.composerReadOnlyReason ??
         selectedSessionState.preparation.error,
       draftScope: composerDraftScope,
@@ -428,6 +497,7 @@ export function useAgentStudioChatModel({
   }, [
     chatContextUsage,
     composerDraftScope,
+    historicalRuntimeReason,
     selectedSessionState.preparation.error,
     selectedSessionState.loadedSession?.foregroundTurnActive,
     selectedSessionState.loadedSession?.statusUnavailableReason,
@@ -553,3 +623,5 @@ export function useAgentStudioChatModel({
     [surfaceModel, forkThread],
   );
 }
+import { useRuntimeHandoffTranscript } from "@openducktor/frontend-core/sessions/transcript/use-runtime-handoff-transcript";
+import { useTaskRuntimeHandoff } from "@openducktor/frontend-core/sessions/send/use-task-runtime-handoff";

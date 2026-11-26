@@ -1,5 +1,9 @@
 import { codexWorkflowContext } from "./codex-workflow-context";
-import type { AgentUserMessageDelivery, CodexEffectivePolicy } from "@openducktor/contracts";
+import type {
+  AgentUserMessageDelivery,
+  CodexEffectivePolicy,
+  NativeHandoffInput,
+} from "@openducktor/contracts";
 import {
   type AcceptedAgentUserMessage,
   type AgentModelSelection,
@@ -21,6 +25,10 @@ import {
   codexSandboxPolicy,
 } from "./codex-session-policy";
 import { toCodexTurnInputList } from "./codex-user-inputs";
+import {
+  codexUserInputListToText,
+  codexUserInputsToDisplayParts,
+} from "./codex-user-input-display";
 import { requireModelSelection, toTransportModelSelection } from "./model-catalog";
 import type {
   CodexAppServerClient,
@@ -54,6 +62,7 @@ export type CodexTurnLifecycleContext = {
   onSent?: () => void;
   assertCurrent?: (() => void) | undefined;
   systemPrompt?: string | undefined;
+  handoff?: NativeHandoffInput | undefined;
 };
 
 /** Starts a turn for a user message, or steers the running turn, and publishes the message. */
@@ -65,10 +74,21 @@ export const sendCodexUserMessage = async (
   delivery: AgentUserMessageDelivery,
   resolvedQuestionRequestIds?: readonly string[],
 ): Promise<AcceptedAgentUserMessage> => {
+  const nativeParts: AgentUserMessagePart[] = context.handoff?.historyPrefix
+    ? [{ kind: "text", text: context.handoff.historyPrefix }, ...parts]
+    : parts;
+  const input = toCodexTurnInputList(nativeParts, resolvedQuestionRequestIds);
+  const message = context.handoff?.historyPrefix
+    ? {
+        ...acceptedUserMessage,
+        message: codexUserInputListToText(input),
+        parts: codexUserInputsToDisplayParts(input, acceptedUserMessage.messageId),
+      }
+    : acceptedUserMessage;
   const admitted = await admitCodexMessage(context, {
     externalSessionId,
-    input: toCodexTurnInputList(parts, resolvedQuestionRequestIds),
-    message: acceptedUserMessage,
+    input,
+    message,
     delivery,
     echoProvesAcceptance: true,
   });
@@ -311,6 +331,7 @@ const startNewTurn = async (
     input,
     ...toTransportModelSelection(model),
   };
+  if (context.handoff) turnInput.clientUserMessageId = context.handoff.admissionId;
   if (context.systemPrompt)
     turnInput.additionalContext = codexWorkflowContext(context.systemPrompt);
   if (!session.preserveNativeSettings) {

@@ -486,27 +486,32 @@ const applyDirectSnapshot = (
   };
 };
 
-const createObservedSession = (snapshot: AgentSessionLiveSnapshot): AgentSessionState => {
-  const identity = toSessionIdentity(snapshot.ref);
-  return applyDirectSnapshot(
-    {
-      ...identity,
-      title: snapshot.title,
-      sessionAssociation: { kind: "unbound" },
-      status: "idle",
-      runtimeStatusMessage: null,
-      startedAt: snapshot.startedAt,
-      livePresence: "present",
-      historyLoadState: "not_requested",
-      messages: createSessionMessagesState(identity.externalSessionId),
-      contextUsage: null,
-      pendingApprovals: [],
-      pendingQuestions: [],
-      selectedModel: null,
-    },
-    snapshot,
-  );
+export const createSessionFromLiveIdentity = (
+  { ref, title, startedAt }: Pick<AgentSessionLiveSnapshot, "ref" | "title" | "startedAt">,
+  sessionAssociation: AgentSessionAssociation,
+): AgentSessionState => {
+  return {
+    ...toSessionIdentity(ref),
+    title,
+    sessionAssociation,
+    status: "idle",
+    runtimeStatusMessage: null,
+    startedAt,
+    livePresence: "absent",
+    historyLoadState: "not_requested",
+    messages: createSessionMessagesState(ref.externalSessionId),
+    contextUsage: null,
+    pendingApprovals: [],
+    pendingQuestions: [],
+    selectedModel: null,
+  };
 };
+
+export const createObservedSession = (
+  snapshot: AgentSessionLiveSnapshot,
+  association: AgentSessionAssociation = { kind: "unbound" },
+): AgentSessionState =>
+  applyDirectSnapshot(createSessionFromLiveIdentity(snapshot, association), snapshot);
 
 const sameSessionAssociation = (
   left: AgentSessionAssociation,

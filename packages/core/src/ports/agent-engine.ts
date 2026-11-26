@@ -178,6 +178,7 @@ export type SendAgentUserMessageInput = SessionRef &
     resolvedQuestionRequestIds?: string[];
     /** The adapter copies it to the accepted user message, so readers can correlate both. */
     submissionId?: string;
+    handoff?: import("@openducktor/contracts").NativeHandoffInput | undefined;
   };
 
 /** A user message that the runtime admitted, so it is never `pending`. */
@@ -200,7 +201,9 @@ export type UpdateControlledAgentSessionModelInput = SessionRef &
   };
 
 export type LoadAgentSessionHistoryInput =
-  import("@openducktor/contracts").AgentRuntimeLoadSessionHistoryInput;
+  import("@openducktor/contracts").AgentRuntimeLoadSessionHistoryInput & {
+    contextDetail?: "summary" | undefined;
+  };
 
 export type LoadAgentSessionToolPartInput =
   import("@openducktor/contracts").AgentRuntimeLoadSessionToolPartInput;

@@ -53,6 +53,7 @@ export type AgentChatDraftStore = {
     draft: AgentChatComposerDraft,
   ): number;
   readVersion(identity: AgentChatDraftIdentity): number | null;
+  subscribeCleared(identity: AgentChatDraftIdentity, onClear: () => void): () => void;
   /**
    * Removes the draft from memory and storage. With `onlyIfVersion`, it keeps a draft that the
    * user changed after that version and returns `false`. With `throwOnStorageError`, a storage
@@ -184,6 +185,8 @@ export const createAgentChatDraftStore = ({
   scheduleTask: scheduleDraftTask = scheduleTask,
 }: AgentChatDraftStoreOptions): AgentChatDraftStore => {
   const draftEntries = new Map<string, DraftMemoryEntry>();
+  const clearListeners = new Map<string, Set<() => void>>();
+  let userVersion = 0;
   let didRunExpiredCleanup = false;
 
   const reportPersistenceError = (cause: unknown): void => {
@@ -360,6 +363,7 @@ export const createAgentChatDraftStore = ({
         clearEntryTimers(entry);
         draftEntries.delete(key);
       }
+      clearListeners.get(key)?.forEach((listener) => listener());
       return true;
     }
 
@@ -374,6 +378,7 @@ export const createAgentChatDraftStore = ({
       reportPersistenceError(error);
     }
 
+    clearListeners.get(key)?.forEach((listener) => listener());
     return true;
   };
 
@@ -461,11 +466,21 @@ export const createAgentChatDraftStore = ({
     set: (identity, taskId, draft) => {
       const entry = upsertEntry(identity, taskId, draft);
       entry.version += 1;
-      entry.userVersion += 1;
+      entry.userVersion = ++userVersion;
       scheduleEntryFlush(entry);
       return entry.userVersion;
     },
     readVersion: (identity) => readEntry(identity)?.userVersion ?? null,
+    subscribeCleared: (identity, onClear) => {
+      const key = toAgentChatDraftStorageKey(identity);
+      const listeners = clearListeners.get(key) ?? new Set();
+      listeners.add(onClear);
+      clearListeners.set(key, listeners);
+      return () => {
+        listeners.delete(onClear);
+        if (listeners.size === 0) clearListeners.delete(key);
+      };
+    },
     clear,
     flush,
     clearForTargets: (targets) => {

@@ -4,6 +4,7 @@ import type {
   AgentSessionAssociation,
   AgentSessionForkPoint,
   AgentSessionLiveLoadContextInput,
+  AgentSessionLiveRef,
   AgentSessionWorkflowScope,
   AgentSessionUsageLimit,
   AgentToolData,
@@ -26,8 +27,12 @@ import type {
   AgentUserMessageState,
 } from "@openducktor/core";
 
+export type AgentImageGenerationMessageMeta = AgentImageGenerationPart & {
+  sourceSession?: AgentSessionLiveRef;
+};
+
 export type AgentChatMessageMeta =
-  | AgentImageGenerationPart
+  | AgentImageGenerationMessageMeta
   | {
       kind: "reasoning";
       partId: string;
@@ -60,6 +65,7 @@ export type AgentChatMessageMeta =
       endedAtMs?: number;
       /** The details that the host cut. `useToolPartDetails` reads the full part. */
       detailsOmitted?: AgentToolPart["detailsOmitted"];
+      sourceSession?: AgentSessionIdentity;
       observedStartedAtMs?: number;
       observedEndedAtMs?: number;
       inputReadyAtMs?: number;
@@ -109,6 +115,7 @@ export type AgentChatMessageMeta =
       description?: string;
       error?: string;
       externalSessionId?: string;
+      sourceSession?: AgentSessionIdentity & { sessionScope: AgentSessionScope | null };
       executionMode?: AgentSubagentExecutionMode;
       metadata?: AgentToolData;
       startedAtMs?: number;
@@ -146,13 +153,24 @@ export type AgentChatMessageMeta =
       reason: "session_forked";
       title: string;
       parentExternalSessionId: string;
+    }
+  | {
+      kind: "session_notice";
+      tone: "info";
+      reason: "runtime_handoff";
+      title: string;
+      direction: RuntimeHandoffDirection;
+      contextNote: string | undefined;
     };
+
+export type RuntimeHandoffDirection = { from: RuntimeKind; to: RuntimeKind };
 
 export type AgentChatMessage = {
   id: string;
   role: "user" | "assistant" | "system" | "thinking" | "tool";
   content: string;
   timestamp: string;
+  sourceRuntimeKind?: AgentSessionIdentity["runtimeKind"];
   /** The timestamp is retained for ordering but hidden from the transcript clock label. */
   timestampIsApproximate?: true;
   meta?: AgentChatMessageMeta;

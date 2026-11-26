@@ -1,7 +1,7 @@
 import type { AgentSessionLiveRef, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { ParentSessionRuntimeContext } from "@openducktor/frontend-core/sessions/transcript/subagent-session-key";
-import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import type { AgentSessionTranscriptTarget } from "@openducktor/frontend-core/sessions/transcript/agent-session-transcript-target";
 import { createContext, use } from "react";
 import type { HostDocumentKey } from "@/features/tasks/documents/document-rows";
 import type { CodeLanguage } from "@/rich-content/code/highlight";
@@ -33,7 +33,6 @@ export type TranscriptRowsContextValue = {
   workingDirectory: string;
   presentToolCall: PresentToolCall;
   modelCatalog: AgentModelCatalog | null;
-  supportsImageGeneration: boolean;
   /** The runtime sends the output of a shell command while the command runs. */
   supportsRunningCommandOutput: boolean;
   expandFileDiffsByDefault: boolean;
@@ -42,7 +41,7 @@ export type TranscriptRowsContextValue = {
   visibleRows: VisibleRowsStore;
   /** The streaming message and the Subagent pending input, which each row reads for itself. */
   rowState: RowStateStore;
-  onOpenSubagent: (identity: AgentSessionIdentity) => void;
+  onOpenSubagent: (target: AgentSessionTranscriptTarget) => void;
   onOpenTask: (taskId: string) => void;
   /** Opens a file link in the file viewer, or undefined when the session has no work views. */
   onFileLinkPress: FileLinkHandler | undefined;

@@ -18,6 +18,8 @@ export class HostInvokeError extends Error {
 export type InvokeOptions = {
   /** Aborting drops the request at once. The host may still run an accepted command. */
   signal?: AbortSignal;
+  /** Refuse the request before dispatch if the open channel belongs to a different host instance. */
+  expectedHostEpoch?: string;
 };
 
 export type InvokeFn = <Result>(

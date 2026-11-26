@@ -68,7 +68,8 @@ export type CodexSessionController = Pick<
   | "stopSession"
   | "stopBackgroundTask"
   | "releaseSession"
->;
+> &
+  Partial<Pick<CodexAppServerAdapter, "loadHandoffContextWindow">>;
 
 export type PreparedCodexLiveSessionAdapter = Omit<PreparedRuntimeLiveSessionAdapter, "adapter"> & {
   readonly adapter: AgentSessionRuntimeAdapterPort;

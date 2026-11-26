@@ -1,5 +1,5 @@
 import type { AgentMessageSubmitMode, AgentSessionGoalStatus } from "@openducktor/contracts";
-import type { AgentModelCatalog } from "@openducktor/core";
+import type { AgentModelAttachmentSupport, AgentModelCatalog } from "@openducktor/core";
 import { useMemo } from "react";
 import { validateComposerAttachments } from "../../drafts/agent-chat-attachments";
 import {
@@ -19,6 +19,7 @@ import type {
   AgentChatMessageQueueModel,
   AgentChatPendingSendGroup,
 } from "../send/agent-chat.types";
+import type { HandoffSelection } from "../send/runtime-handoff";
 import { hasPendingSendItems, readPendingSendBlockedReason } from "./agent-chat-pending-send";
 
 /** The chat state that decides what the composer allows. */
@@ -60,6 +61,8 @@ export type ComposerPolicy = {
    * the state of the chat, such as a pending request. Empty when the chat offers no hint.
    */
   placeholderHints: readonly string[] | null;
+  supportsAttachments: boolean;
+  attachmentSupport: AgentModelAttachmentSupport | undefined;
   attachmentErrors: Record<string, string>;
   hasSlashAttachmentConflict: boolean;
   sendInputBlocked: boolean;
@@ -72,6 +75,7 @@ export type ComposerPolicy = {
 
 export type ComposerPolicyInput = {
   model: ComposerPolicyModel;
+  handoffSelection?: Pick<HandoffSelection, "descriptor" | "supportsAttachments"> | undefined;
   draft: AgentChatComposerDraft;
   primaryMode: AgentMessageSubmitMode;
   settingsReady: boolean;
@@ -88,20 +92,17 @@ const deriveComposerPolicy = ({
   primaryMode,
   settingsReady,
   steerShortcutLabel,
-  defaultAttachmentErrors,
+  supportsAttachments,
+  attachmentSupport,
   attachmentErrors,
+  hasBlockingAttachments,
+  hasSlashAttachmentConflict,
+  pendingSendBlockedReason,
   steersTurn,
-}: ComposerPolicyInput & {
-  defaultAttachmentErrors: Record<string, string>;
-  attachmentErrors: Record<string, string>;
-  steersTurn: boolean;
-}): ComposerPolicy => {
+}: ComposerPolicyInput &
+  ReturnType<typeof useAttachmentPolicy> & { steersTurn: boolean }): ComposerPolicy => {
   const isSubmitting = composerIsSubmitting(model);
   const isComposerInputDisabled = composerInputDisabledFor(model);
-  const hasBlockingAttachments = Object.keys(defaultAttachmentErrors).length > 0;
-  const hasSlashAttachmentConflict =
-    (draft.attachments ?? []).length > 0 && draftHasSlashCommandSegment(draft);
-  const pendingSendBlockedReason = pendingSendBlockedReasonFor(model, draft, steersTurn);
   const speedBlockedReason = blockedSpeedReason(model.speed);
   const turnSpeedBlockedReason = steersTurn ? null : speedBlockedReason;
 
@@ -131,6 +132,8 @@ const deriveComposerPolicy = ({
     isComposerInputDisabled,
     placeholder: placeholder.text,
     placeholderHints: placeholder.hints,
+    supportsAttachments,
+    attachmentSupport,
     attachmentErrors,
     hasSlashAttachmentConflict,
     sendInputBlocked,
@@ -144,20 +147,38 @@ const deriveComposerPolicy = ({
 /** Decides the placeholder and which composer actions are open for the draft. */
 export function useComposerPolicy({
   model,
+  handoffSelection,
   draft,
   primaryMode,
   settingsReady,
   steerShortcutLabel,
 }: ComposerPolicyInput): ComposerPolicy {
+  const steersTurn = !handoffSelection && steersRunningTurn(primaryMode, hasForegroundTurn(model));
+  const attachmentPolicy = useAttachmentPolicy(model, draft, steersTurn, handoffSelection);
+  return deriveComposerPolicy({
+    model,
+    draft,
+    primaryMode,
+    settingsReady,
+    steerShortcutLabel,
+    ...attachmentPolicy,
+    steersTurn,
+  });
+}
+
+function useAttachmentPolicy(
+  model: ComposerPolicyModel,
+  draft: AgentChatComposerDraft,
+  steersTurn: boolean,
+  handoffSelection: ComposerPolicyInput["handoffSelection"],
+) {
+  const supportsAttachments = handoffSelection?.supportsAttachments ?? model.supportsAttachments;
+  const attachmentSupport = (handoffSelection?.descriptor ?? model.selectedModelDescriptor)
+    ?.attachmentSupport;
   const defaultAttachmentErrors = useMemo(
-    () =>
-      validateComposerAttachments(
-        draft.attachments ?? [],
-        model.selectedModelDescriptor?.attachmentSupport,
-      ),
-    [draft.attachments, model.selectedModelDescriptor?.attachmentSupport],
+    () => validateComposerAttachments(draft.attachments ?? [], attachmentSupport),
+    [draft.attachments, attachmentSupport],
   );
-  const steersTurn = steersRunningTurn(primaryMode, hasForegroundTurn(model));
   const attachmentErrors = useMemo(
     () =>
       steersTurn
@@ -174,16 +195,23 @@ export function useComposerPolicy({
       defaultAttachmentErrors,
     ],
   );
-  return deriveComposerPolicy({
-    model,
+  const hasBlockingAttachments = Object.keys(defaultAttachmentErrors).length > 0;
+  const hasSlashAttachmentConflict =
+    (draft.attachments ?? []).length > 0 && draftHasSlashCommandSegment(draft);
+  const pendingSendBlockedReason = readPendingSendBlockedReason({
+    groups: model.pendingSendItems,
     draft,
-    primaryMode,
-    settingsReady,
-    steerShortcutLabel,
-    defaultAttachmentErrors,
-    attachmentErrors,
-    steersTurn,
+    supportsAttachments,
+    attachmentSupport: steersTurn ? model.runningTurnModel?.attachmentSupport : attachmentSupport,
   });
+  return {
+    supportsAttachments,
+    attachmentSupport,
+    attachmentErrors,
+    hasBlockingAttachments,
+    hasSlashAttachmentConflict,
+    pendingSendBlockedReason,
+  };
 }
 
 /** The placeholder text, and the hints that it lists, or null for a state message. */
@@ -250,21 +278,6 @@ const queuePlaceholderParts = (
   }
   return [`${queueKey} to queue`, `${steerKey} to ${steerAction}`];
 };
-
-/** Pending items, such as annotation images, go to the model of the turn that they join. */
-const pendingSendBlockedReasonFor = (
-  model: ComposerPolicyModel,
-  draft: AgentChatComposerDraft,
-  steersTurn: boolean,
-): string | null =>
-  readPendingSendBlockedReason({
-    groups: model.pendingSendItems,
-    draft,
-    supportsAttachments: model.supportsAttachments,
-    attachmentSupport: steersTurn
-      ? model.runningTurnModel?.attachmentSupport
-      : model.selectedModelDescriptor?.attachmentSupport,
-  });
 
 const hasComposerSendContent = (
   draft: AgentChatComposerDraft,

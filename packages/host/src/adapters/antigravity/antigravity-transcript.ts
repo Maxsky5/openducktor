@@ -13,6 +13,7 @@ import type {
   AgentUserMessageDisplayPart,
 } from "@openducktor/core";
 import { ANTIGRAVITY_COMPACT_COMMAND, compactionNotice } from "./antigravity-compaction";
+import { readAntigravityHandoffId } from "../../application/agent-sessions/runtime-handoff-history";
 import {
   AntigravityGoalTracker,
   pendingAntigravityGoalMarkerLength,
@@ -87,9 +88,11 @@ export class AntigravityTranscript {
     model?: AgentModelSelection | undefined;
     /** When the user sent the message. It defaults to now. */
     sentAt?: string | undefined;
+    messageId?: string | undefined;
   }): AntigravityLiveUserMessage {
     const closedItems = this.closeOpenItem();
-    const messageId = this.startTurn();
+    const ordinalId = this.startTurn();
+    const messageId = input.messageId ?? ordinalId;
     const timestamp = input.sentAt ?? this.now();
     this.goals.noteMessage(input.message.text);
     const event: AcceptedAgentUserMessage = {
@@ -280,7 +283,8 @@ export class AntigravityTranscript {
       return;
     }
     this.history.push({
-      messageId: open.messageId,
+      messageId:
+        (this.turn === 1 ? readAntigravityHandoffId(message.text) : undefined) ?? open.messageId,
       role: "user",
       timestamp: this.now(),
       timestampIsApproximate: true,

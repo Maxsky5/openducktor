@@ -17,9 +17,9 @@ export function AgentTranscriptSeparator({
         className,
       )}
     >
-      <div className="h-px flex-1 bg-border" aria-hidden />
-      <span className="shrink-0 font-medium tracking-wide">{label}</span>
-      <div className="h-px flex-1 bg-border" aria-hidden />
+      <div className="h-px min-w-0.5 flex-1 bg-border" aria-hidden />
+      <span className="min-w-0 text-center font-medium tracking-wide">{label}</span>
+      <div className="h-px min-w-0.5 flex-1 bg-border" aria-hidden />
     </div>
   );
 }

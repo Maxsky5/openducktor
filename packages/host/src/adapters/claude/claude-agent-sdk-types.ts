@@ -135,6 +135,7 @@ export type PendingQuestion = {
 };
 
 export type ClaudeAcceptedUserMessage = {
+  nativeInput?: { text: string; parts: AgentUserMessageDisplayPart[] };
   /** A message that the user did not write, such as an Allow consent. It is never shown. */
   hidden?: true;
   isManualCompaction?: true;

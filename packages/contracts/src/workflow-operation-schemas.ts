@@ -6,13 +6,26 @@ import {
 } from "./agent-session-control-schemas";
 import { agentModelSelectionSchema, agentSessionLiveRefSchema } from "./agent-session-schemas";
 import { workflowFailureSchema } from "./workflow-failure-schemas";
+import { handoffLinkSchema, handoffTargetSchema } from "./agent-chat-handoff-schemas";
 
 export { workflowFailureSchema, type WorkflowFailure } from "./workflow-failure-schemas";
 
 const text = z.string().min(1);
+const liveHandoffSchema = handoffTargetSchema.omit({ submissionId: true }).extend({
+  acceptedLink: handoffLinkSchema.optional(),
+  destinationStartedAt: z.iso.datetime().optional(),
+  committed: z.literal(true).optional(),
+  unsupportedPartIndexes: z.array(z.number().int().nonnegative()).optional(),
+});
+const restoredHandoffSchema = liveHandoffSchema.extend({
+  destination: z.never().optional(),
+  acceptedLink: handoffLinkSchema,
+  committed: z.literal(true),
+});
+
 export const sessionOperationObservationSchema = z.strictObject({
   ref: agentSessionLiveRefSchema,
-  kind: z.enum(["submission", "reattach", "continue", "stop", "model"]),
+  kind: z.enum(["submission", "reattach", "continue", "stop", "model", "handoff"]),
   submissionId: text.optional(),
   pending: z.boolean(),
   nativeOutcome: z.enum(["not_issued", "refused", "accepted", "uncertain"]),
@@ -24,6 +37,7 @@ export const sessionOperationObservationSchema = z.strictObject({
     })
     .optional(),
   acceptedInput: acceptedAgentInputSchema.optional(),
+  handoff: z.union([liveHandoffSchema, restoredHandoffSchema]).optional(),
   failure: workflowFailureSchema.optional(),
 });
 export type SessionOperationObservation = z.infer<typeof sessionOperationObservationSchema>;

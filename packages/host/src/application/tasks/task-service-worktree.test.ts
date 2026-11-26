@@ -7,6 +7,7 @@ import { type GitBranch, type TaskMetadataPayload } from "@openducktor/contracts
 import { Effect } from "effect";
 import type { GitRefTip } from "../../ports/git-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
+import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port";
 import type { TaskWorktreeOwnerReader } from "../../ports/task-worktree-owner-port";
 import {
   createGitPortTestDouble,
@@ -17,7 +18,9 @@ import {
 } from "../../test-support/service-test-doubles";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
-import { createTaskService } from "./task-service";
+import { type CreateTaskServiceInput, createTaskService } from "./task-service";
+import { createRuntimeTaskActivityGuard } from "./runtime-task-activity-guard";
+import { createRuntimeRegistryPort } from "./test-support/task-workflow-harness";
 import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 type StoredTaskCard = import("@openducktor/contracts").TaskCard & TaskWorkflowAssignment;
@@ -70,6 +73,7 @@ const createService = ({
   beforeWorktreeRemoval = [],
   scriptSucceeds = true,
   transitions = [],
+  taskActivityGuard,
 }: {
   current?: StoredTaskCard;
   metadata?: Partial<TaskMetadataPayload>;
@@ -80,12 +84,13 @@ const createService = ({
   beforeWorktreeRemoval?: string[];
   scriptSucceeds?: boolean;
   transitions?: string[];
+  taskActivityGuard?: TaskActivityGuardPort;
 }) => {
   const existing = new Set([...(worktreeExists ? [worktreePath] : []), ...otherExistingPaths]);
   const branches: GitBranch[] = [
     { name: "odt/task-1", isCurrent: false, isRemote: false, worktreePath },
   ];
-  return createTaskService({
+  const serviceInput: CreateTaskServiceInput = {
     taskWorkflows: builtinTaskWorkflows,
     workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
     taskStore: createTaskStoreTestDouble({
@@ -173,7 +178,9 @@ const createService = ({
           return { closedTerminalIds: [] };
         }),
     },
-  });
+  };
+  if (taskActivityGuard) serviceInput.taskActivityGuard = taskActivityGuard;
+  return createTaskService(serviceInput);
 };
 
 const input = { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" };
@@ -251,6 +258,41 @@ describe("task worktree cleanup impact", () => {
 });
 
 describe("remove the worktree of a closed task", () => {
+  test("keeps the worktree and terminals during an unresolved handoff", async () => {
+    const calls: string[] = [];
+    let unresolved = true;
+    const taskActivityGuard = createRuntimeTaskActivityGuard({
+      settingsConfig: { pathExists: () => Effect.succeed(true) },
+      hasUnresolvedTaskHandoff: ({ workspaceId, taskId }) =>
+        unresolved && workspaceId === input.workspaceId && taskId === input.taskId,
+      runtimeRegistry: createRuntimeRegistryPort({}),
+      readSessionRootRefs: () => Effect.die(new Error("Unexpected runtime cleanup")),
+      sessionService: {
+        list: () => Effect.die(new Error("Unexpected runtime cleanup")),
+        releaseSession: () => Effect.die(new Error("Unexpected runtime cleanup")),
+        stopSession: () => Effect.die(new Error("Unexpected runtime cleanup")),
+      },
+    });
+    const service = createService({
+      current: task({ status: "closed" }),
+      calls,
+      taskActivityGuard,
+    });
+
+    await expect(Effect.runPromise(service.removeTaskWorktree(input))).rejects.toThrow(
+      "Use Check delivery",
+    );
+    expect(calls).toEqual([]);
+
+    unresolved = false;
+    await Effect.runPromise(service.removeTaskWorktree(input));
+    expect(calls).toEqual([
+      "stop-terminals",
+      `remove-worktree:${worktreePath}`,
+      "delete-branch:odt/task-1",
+    ]);
+  });
+
   test("stops task terminals, then removes the worktree and the task branch", async () => {
     const calls: string[] = [];
 

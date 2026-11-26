@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
+import { chatHandoffReadSchema } from "./agent-chat-handoff-schemas";
 import { gitTargetBranchSchema } from "./git-schemas";
 import { agentSessionModelSelectionSchema } from "./session-schemas";
 import { WORKSPACE_SESSION_GENERATED_TITLE_LIMIT } from "./workspace-session-limits";
@@ -105,6 +106,7 @@ export const workspaceSessionSchema = z
     lastActivityAt: z.number().int().nonnegative().optional(),
     updatedAt: z.number().int(),
     archivedAt: z.number().int().nullable(),
+    handoff: chatHandoffReadSchema.optional(),
   })
   .refine(
     (session) =>

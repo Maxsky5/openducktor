@@ -5,6 +5,7 @@ import type { AgentChatRuntimePresentation } from "@openducktor/frontend-core/se
 import { MessageBody, MessageHeader } from "./agent-chat-message-card-content";
 import { buildAgentChatMessageCardViewModel } from "./agent-chat-message-card-view-model";
 import type { ParentSessionRuntimeContext } from "@openducktor/frontend-core/sessions/transcript/subagent-session-key";
+import { RuntimeHandoffMarker } from "./agent-chat-runtime-handoff";
 
 type AgentChatMessageCardProps = {
   message: AgentChatMessage;
@@ -25,7 +26,16 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   subagentPendingApprovalCount = 0,
   subagentPendingQuestionCount = 0,
 }: AgentChatMessageCardProps): ReactElement | null {
-  const sessionRuntimeKind = runtimePresentation.runtimeKind;
+  if (message.meta?.kind === "session_notice" && message.meta.reason === "runtime_handoff") {
+    return (
+      <RuntimeHandoffMarker
+        direction={message.meta.direction}
+        title={message.meta.title}
+        contextNote={message.meta.contextNote}
+      />
+    );
+  }
+  const sessionRuntimeKind = message.sourceRuntimeKind ?? runtimePresentation.runtimeKind;
   const sessionWorkingDirectory = sessionIdentity?.workingDirectory ?? null;
   const toolCallPresentation =
     message.meta?.kind === "tool"
@@ -63,7 +73,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
       />
       <MessageBody
         message={message}
-        modelCatalog={modelCatalog}
+        modelCatalog={sessionRuntimeKind === runtimePresentation.runtimeKind ? modelCatalog : null}
         sessionRuntimeKind={sessionRuntimeKind}
         parentSession={sessionIdentity}
         assistantAccentColor={vm.assistantAccentColor}

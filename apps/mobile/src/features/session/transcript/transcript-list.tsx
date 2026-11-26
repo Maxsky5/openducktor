@@ -1,6 +1,6 @@
 import type { AgentChatTranscriptNotice } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
-import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import type { AgentSessionTranscriptTarget } from "@openducktor/frontend-core/sessions/transcript/agent-session-transcript-target";
 import type { FlashListRef } from "@shopify/flash-list";
 import {
   type ReactElement,
@@ -64,7 +64,7 @@ export type TranscriptListProps = {
   notice: AgentChatTranscriptNotice | null;
   presentToolCall: PresentToolCall;
   subagentPendingCountBySessionKey: Readonly<Record<string, number>>;
-  onOpenSubagent: (identity: AgentSessionIdentity) => void;
+  onOpenSubagent: (target: AgentSessionTranscriptTarget) => void;
   latestSignal: JumpToLatestSignal;
 };
 

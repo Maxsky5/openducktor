@@ -1,3 +1,4 @@
+import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { WorkspaceAdmissionService } from "../../application/workspaces/workspace-admission-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
@@ -30,17 +31,18 @@ export const createWorkflowWorkspaceObservation =
 type TaskSessions = ReturnType<
   typeof import("./node-task-session-services").createNodeTaskSessionServices
 >;
-export const createWorkflowLiveObserver =
-  (
-    readServices: () => TaskSessions,
-    runBackground: RunBackground,
-    observeAutomation: (
-      envelope: import("@openducktor/contracts").AgentSessionLiveEnvelope,
-    ) => void,
-  ) =>
-  (envelope: import("@openducktor/contracts").AgentSessionLiveEnvelope) => {
+export const createWorkflowLiveObserver = (
+  readServices: () => TaskSessions | undefined,
+  runBackground: RunBackground,
+  observeAutomation: (envelope: AgentSessionLiveEnvelope) => void,
+) => ({
+  projectLiveEnvelope: (envelope: AgentSessionLiveEnvelope) =>
+    readServices()?.agentSessionCommandService.handoff?.projectEvent(envelope) ??
+    Effect.succeed(envelope),
+  observeWorkflowInput: (envelope: AgentSessionLiveEnvelope) => {
     observeAutomation(envelope);
     const services = readServices();
+    if (!services) return;
     services.approvalPolicy.observe(envelope);
     if (
       envelope.type === "snapshot" ||
@@ -48,7 +50,8 @@ export const createWorkflowLiveObserver =
       (envelope.type === "transcript_event" && envelope.event.type === "user_message")
     )
       runBackground(services.agentSessionCommandService.observeOperation(envelope));
-  };
+  },
+});
 export const workflowShutdown = (
   launches: Pick<
     import("../../application/agent-sessions/session-launch-types").SessionLaunchControls,

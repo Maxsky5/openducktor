@@ -7,7 +7,7 @@ import { agentSessionRefKey } from "@openducktor/core";
 import { resolveOwnedSessionRoot } from "../agent-sessions/session-owner-resolution";
 import { Effect } from "effect";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type {
@@ -18,6 +18,7 @@ import type {
 
 export type CreateRuntimeTaskActivityGuardInput = {
   runtimeRegistry: RuntimeRegistryPort;
+  hasUnresolvedTaskHandoff: (input: { workspaceId: string; taskId: string }) => boolean;
   sessionService: Pick<AgentSessionLiveStateService, "list" | "releaseSession" | "stopSession">;
   settingsConfig: Pick<SettingsConfigPort, "pathExists">;
   readSessionRootRefs: (
@@ -200,9 +201,22 @@ const childrenFirst = (
 
 export const createRuntimeTaskActivityGuard = ({
   runtimeRegistry,
+  hasUnresolvedTaskHandoff,
   sessionService,
   readSessionRootRefs,
 }: CreateRuntimeTaskActivityGuardInput): TaskActivityGuardPort => {
+  const ensureNoUnresolvedHandoff: TaskActivityGuardPort["ensureNoUnresolvedHandoff"] = (ref) =>
+    Effect.suspend(() =>
+      hasUnresolvedTaskHandoff(ref)
+        ? Effect.fail(
+            new HostValidationError({
+              field: "taskId",
+              message: `Task ${ref.taskId} has an unresolved runtime handoff. Use Check delivery in its Agent Studio chat, then retry.`,
+              details: ref,
+            }),
+          )
+        : Effect.void,
+    );
   const collectOwnedSessions = (input: TaskActivityGuardTaskSessions, operation: string) =>
     Effect.gen(function* () {
       const liveSessions = yield* collectTaskLiveSessions(runtimeRegistry, {
@@ -272,6 +286,7 @@ export const createRuntimeTaskActivityGuard = ({
       ),
     );
   return {
+    ensureNoUnresolvedHandoff,
     countLiveSessions(input) {
       return collectOwnedSessions(input, "runtimeTaskActivityGuard.countLiveSessions").pipe(
         Effect.map(({ liveSessions }) => ({ liveSessionCount: liveSessions.length })),
@@ -279,6 +294,10 @@ export const createRuntimeTaskActivityGuard = ({
     },
     cleanupTaskSessions(input) {
       return Effect.gen(function* () {
+        const { workspaceId } = input;
+        for (const { taskId } of input.taskSessions) {
+          yield* ensureNoUnresolvedHandoff({ workspaceId, taskId });
+        }
         const operation = "runtimeTaskActivityGuard.cleanupTaskSessions";
         const { liveSessions, ownedSnapshots } = yield* collectOwnedSessions(input, operation);
         // A release does not end a goal, and Codex continues an active goal on an idle thread.

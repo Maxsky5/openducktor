@@ -21,6 +21,7 @@ const closeDecision = coreTaskTransition(builtinTaskWorkflows, "close");
 
 const closureDependencies = () => ({
   workspaceId: "repo",
+  taskActivityGuard: undefined,
   gitPort: {
     canonicalizePath: (path: string) => Effect.succeed(path),
   },
@@ -146,6 +147,7 @@ test("holds the task lifecycle guard across cleanup and closure", async () => {
   await Effect.runPromise(
     completeTaskClosure({
       workspaceId: "repo",
+      taskActivityGuard: undefined,
       cleanup,
       gitPort: {
         canonicalizePath: () => Effect.succeed("/canonical/repo"),
@@ -193,6 +195,7 @@ test("does not begin cleanup while another task lifecycle operation is active", 
     Effect.runPromise(
       completeTaskClosure({
         workspaceId: "repo",
+        taskActivityGuard: undefined,
         cleanup: Effect.sync(() => {
           cleanupStarted = true;
         }),

@@ -86,6 +86,7 @@ export const collectImplementationResetSessionState = (
 
 type ImplementationResetActivity = {
   taskActivityGuard: TaskActivityGuardPort | undefined;
+  workspaceId: string;
   repoPath: string;
   taskId: string;
   sessions: AgentSessionRecord[];
@@ -116,6 +117,7 @@ export const cleanupImplementationResetActivity = (
       return;
     }
     const { stoppedSessionCount } = yield* activityGuard.cleanupTaskSessions({
+      workspaceId: activity.workspaceId,
       repoPath: activity.repoPath,
       taskSessions: [{ taskId: activity.taskId, sessions: activity.sessions }],
     });

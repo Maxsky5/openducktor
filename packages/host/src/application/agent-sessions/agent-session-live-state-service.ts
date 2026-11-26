@@ -4,7 +4,6 @@ import { createLiveObservationPublications } from "./live-observation-publicatio
 import { createStartedSessionRoots } from "./started-session-roots";
 import { createWorkflowLaunchHold } from "./workflow-launch-hold";
 import {
-  type AgentSessionLiveEnvelope,
   type AgentSessionLiveReadResult,
   type AgentSessionLiveSnapshot,
   agentSessionContextUsageSchema,
@@ -57,6 +56,7 @@ export const createAgentSessionLiveStateService = ({
   publish,
   observeNotificationInput,
   observeWorkflowInput,
+  projectLiveEnvelope,
   coordinator = createLiveStateCoordinator(),
   persistence,
   messageQueues,
@@ -82,18 +82,22 @@ export const createAgentSessionLiveStateService = ({
   const engagement = createRuntimeSessionEngagement();
   // One publication position lets independent live consumers compare the history they applied.
   let liveStateSequence = 0;
-  const publishEnvelopeResult = createAgentSessionLiveEnvelopePublisher(
-    (envelope) => (
-      observeWorkflowInput?.(envelope),
+  const publishProjected = createAgentSessionLiveEnvelopePublisher(
+    (envelope) => {
+      observeWorkflowInput?.(envelope);
       publish(
         isAgentSessionLiveStateEnvelope(envelope) || envelope.type === "transcript_event"
           ? { ...envelope, sequence: ++liveStateSequence }
           : envelope,
-      )
-    ),
+      );
+    },
     faultLog,
     persistence,
   );
+  const publishEnvelopeResult: typeof publishProjected = (envelope, provenance) =>
+    (projectLiveEnvelope?.(envelope) ?? Effect.succeed(envelope)).pipe(
+      Effect.flatMap((projected) => publishProjected(projected, provenance)),
+    );
   const publishEnvelope = (draft: AgentSessionLiveEnvelopeDraft) => {
     const envelope = withMessageQueues(
       messageQueues,
@@ -259,6 +263,15 @@ export const createAgentSessionLiveStateService = ({
       sequence: () => liveStateSequence,
     }),
     readStartedRoots: startedRoots.read,
+    hasHandoffBlocker: (ref) => {
+      const key = agentSessionRefKey(ref);
+      return (
+        observations.hasScheduledAutoResume(key) ||
+        messageQueues
+          .listQueues(ref.repoPath)
+          .some(({ target, entries }) => entries.length > 0 && agentSessionRefKey(target) === key)
+      );
+    },
     resolvePendingApproval: (input) =>
       adapterRegistry
         .resolveForScope(input)
@@ -282,7 +295,12 @@ export const createAgentSessionLiveStateService = ({
             yield* publishChanges([{ type: "session_upsert", snapshot: observed.session }]);
         }),
       ),
-    ...createLiveObservationPublications({ coordinator, observations, publishEnvelope }),
+    ...createLiveObservationPublications({
+      coordinator,
+      observations,
+      publishEnvelope,
+      readSession,
+    }),
     reportLaunchFailure: (ref, message) =>
       coordinator.run(
         Effect.gen(function* () {
@@ -298,23 +316,6 @@ export const createAgentSessionLiveStateService = ({
           // A launch failure is host state, not a runtime event, so it must not end the turn.
           yield* publishChanges([{ type: "session_upsert", snapshot: observed.session }]);
           return failure.messageId;
-        }),
-      ),
-    publishTaskSessionRecords: (ref, records) =>
-      coordinator.run(
-        Effect.gen(function* () {
-          // Bind ownership with current activity before a native event can pass this publication.
-          const observed = yield* readSession(ref);
-          const envelope: Extract<
-            AgentSessionLiveEnvelope,
-            { type: "task_session_records_updated" }
-          > = {
-            type: "task_session_records_updated",
-            repoPath: ref.repoPath,
-            ...records,
-          };
-          if (observed.type === "live") envelope.liveSession = observed.session;
-          yield* publishEnvelope(envelope);
         }),
       ),
     holdWorkflowLaunch: (ref, held) =>

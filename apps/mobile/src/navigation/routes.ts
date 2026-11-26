@@ -22,6 +22,10 @@ export type SessionRouteParams = AgentSessionIdentity & {
   workspaceId: string;
   /** Opens a Subagent session as a Read-only Session View. */
   readOnly?: "1";
+  /** The native parent scope of a read-only subagent transcript. */
+  transcriptScope?: string;
+  /** A history item opens that native member. */
+  pinSession?: "1";
   /** Scrolls to the pending input of the session. */
   focus?: "pending-input";
   /** The title that the opening row shows, for the navigation bar of the first frame. */
@@ -51,6 +55,8 @@ export const sessionParams = (
 export const switchedSessionParams = (workspaceId: string, identity: AgentSessionIdentity) => ({
   ...sessionParams(workspaceId, identity),
   readOnly: undefined,
+  transcriptScope: undefined,
+  pinSession: undefined,
   focus: undefined,
   title: undefined,
   task: undefined,

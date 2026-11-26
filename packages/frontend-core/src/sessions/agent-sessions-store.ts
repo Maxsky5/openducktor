@@ -54,6 +54,7 @@ import {
   markSessionHistoryUnverified,
 } from "./agent-orchestrator/history/session-history-freshness";
 import type { SessionHistoryFreshnessTracker } from "../queries/agent-session-history-freshness-tracker";
+import { projectHandoffMembers } from "./agent-orchestrator/session-read-model/project-handoff-members";
 
 export {
   type AgentActivitySessionsSnapshot,
@@ -96,6 +97,9 @@ export type AgentSessionsStore = {
   getActivitySnapshot: () => AgentActivitySessionsSnapshot;
   listSessionSnapshots: () => AgentSessionState[];
   getSessionSnapshot: (identity: AgentSessionIdentity | null) => AgentSessionState | null;
+  getHandoffOperation: (identity: AgentSessionIdentity) => SessionOperationObservation | undefined;
+  getHandoffBaseline: () => symbol | null;
+  getHandoffHostEpoch: () => string | null;
   getVisiblePendingInputSnapshot: (
     identity: AgentSessionIdentity | null,
   ) => AgentSessionVisiblePendingInput;
@@ -136,6 +140,10 @@ export const createAgentSessionsStore = (
   const launchFailures = new Map<string, AgentChatMessage>();
   const approvalFailures = new Map<string, AgentChatMessage>();
   const operations = new Map<string, Map<string, SessionOperationObservation>>();
+  const pendingHandoffMembers = new Set<string>();
+  let handoffBaseline: symbol | null = null;
+  let handoffHostEpoch: string | null = null;
+  let handoffChanged = false;
   const operationFailures = new Map<string, Map<string, AgentChatMessage>>();
   const autoResumes = new Map<string, UsageLimitAutoResume>();
   const observedActivity = new Map<string, AgentSessionLiveSnapshot>();
@@ -269,14 +277,22 @@ export const createAgentSessionsStore = (
   const retainOperation = (observation: SessionOperationObservation) => {
     const key = agentSessionIdentityKey(observation.ref);
     noticeUpdates.add(key);
-    const id = `host-operation:${observation.kind}:${observation.submissionId ?? "current"}`;
+    const submission =
+      observation.kind === "handoff" ? "current" : (observation.submissionId ?? "current");
+    const id = `host-operation:${observation.kind}:${submission}`;
     const current = operations.get(key) ?? new Map<string, SessionOperationObservation>();
-    if (observation.pending || observation.failure || observation.nativeOutcome === "uncertain")
+    if (observation.kind === "handoff") handoffChanged = true;
+    if (
+      observation.kind === "handoff" ||
+      observation.pending ||
+      observation.failure ||
+      observation.nativeOutcome === "uncertain"
+    )
       current.set(id, observation);
     else current.delete(id);
     operations.set(key, current);
     const notices = operationFailures.get(key) ?? new Map<string, AgentChatMessage>();
-    if (observation.failure)
+    if (observation.failure && observation.kind !== "handoff")
       notices.set(
         id,
         buildSessionErrorNoticeMessage(
@@ -329,7 +345,13 @@ export const createAgentSessionsStore = (
   const commitSessionCollection = <Result>(
     commit: AgentSessionCollectionCommit<Result>,
   ): Result => {
-    const { collection, result } = commit(sessionCollection);
+    const { collection: projected, result } = commit(sessionCollection);
+    const collection = projectHandoffMembers(
+      projected,
+      pendingHandoffMembers,
+      operations.values(),
+      observedActivity,
+    );
     // A snapshot can come before the record of its session, so a commit that adds the session
     // applies the kept snapshot.
     const withLiveState =
@@ -342,15 +364,16 @@ export const createAgentSessionsStore = (
           });
     const nextCollection = projectLiveNotices(withLiveState);
     noticeUpdates.clear();
-    if (areAgentSessionCollectionsEquivalent(sessionCollection, nextCollection)) {
-      return result;
-    }
-
-    sessionCollection = nextCollection;
+    const notifyHandoff = handoffChanged;
+    handoffChanged = false;
+    const changed = !areAgentSessionCollectionsEquivalent(sessionCollection, nextCollection);
+    if (!changed && !notifyHandoff) return result;
+    if (changed) sessionCollection = nextCollection;
     activitySnapshot = createAgentActivitySnapshot({
-      collection: nextCollection,
+      collection: sessionCollection,
       previous: activitySnapshot,
       workspaceRepoPath,
+      pendingHandoffMembers,
     });
     notifyListeners();
     return result;
@@ -365,6 +388,28 @@ export const createAgentSessionsStore = (
 
   const store: AgentSessionsStore = {
     getWorkspaceStore: (repoPath) => (repoPath === workspaceRepoPath ? store : null),
+    getHandoffBaseline: () => handoffBaseline,
+    getHandoffHostEpoch: () => handoffHostEpoch,
+    getHandoffOperation: (identity) => {
+      const identityKey = agentSessionIdentityKey(identity);
+      const entries = operations.get(identityKey);
+      let latest: SessionOperationObservation | undefined;
+      for (const operation of entries?.values() ?? []) {
+        if (operation.kind === "handoff") latest = operation;
+      }
+      if (latest) return latest;
+      for (const entries of operations.values()) {
+        for (const operation of entries.values()) {
+          const link = operation.handoff?.acceptedLink;
+          if (
+            link &&
+            (!operation.handoff?.committed || operation.failure) &&
+            agentSessionIdentityKey(link.to) === identityKey
+          )
+            return operation;
+        }
+      }
+    },
     getSessionSource: (identity) => {
       const session = getAgentSession(sessionCollection, identity);
       return session ? { session, lifetime } : null;
@@ -439,6 +484,11 @@ export const createAgentSessionsStore = (
           for (const key of sessionCollection.keys()) noticeUpdates.add(key);
           clearLiveNotices();
           operations.clear();
+          if (envelope.isConnectionSnapshot) {
+            handoffBaseline = Symbol();
+            handoffHostEpoch = envelope.hostEpoch ?? handoffHostEpoch;
+            handoffChanged = true;
+          }
           operationFailures.clear();
           autoResumes.clear();
           for (const autoResume of envelope.usageLimitAutoResumes ?? []) {

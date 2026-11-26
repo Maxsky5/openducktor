@@ -14,7 +14,7 @@ import { createWorkspaceSessionLaunchCommandHandlers } from "../../interface/com
 
 type Input = Omit<
   Parameters<typeof createWorkspaceSessionService>[0],
-  "runForkSourceOperation" | "live"
+  "runForkSourceOperation" | "hasUnresolvedHandoff" | "live"
 > &
   Parameters<typeof createWorkspaceSessionImportService>[0] & {
     live: Omit<
@@ -28,7 +28,7 @@ type Input = Omit<
         ReturnType<
           typeof import("../../application/agent-sessions/agent-session-command-service").createAgentSessionCommandService
         >,
-        "prepareSessionCreation" | "runForkSourceOperation"
+        "prepareSessionCreation" | "runForkSourceOperation" | "handoff"
       >;
     resolveParts: Parameters<typeof createWorkspaceSessionLaunchService>[0]["resolveParts"];
   };
@@ -40,6 +40,8 @@ export const createNodeWorkspaceSessionServices = ({
 }: Input) => {
   const workspaceSessionService = createWorkspaceSessionService({
     ...dependencies,
+    hasUnresolvedHandoff: (ref) =>
+      commands.handoff?.hasUnresolvedHandoff({ ...ref, kind: "workspace_session" }) === true,
     runForkSourceOperation: commands.runForkSourceOperation,
     live: {
       ...dependencies.live,

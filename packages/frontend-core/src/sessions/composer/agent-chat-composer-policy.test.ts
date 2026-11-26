@@ -1,5 +1,6 @@
 import "../../test-support/dom-environment";
 import { describe, expect, test } from "bun:test";
+import type { AgentModelCatalog } from "@openducktor/core";
 import {
   type AgentChatComposerDraft,
   createComposerAttachment,
@@ -134,6 +135,53 @@ describe("useComposerPolicy", () => {
 
     expect(policy.hasSlashAttachmentConflict).toBe(true);
     expect(policy.sendDisabled).toBe(true);
+  });
+
+  test("uses the handoff model for attachments until the user cancels the handoff", async () => {
+    const codex: AgentModelCatalog["models"][number] = {
+      id: "codex-model",
+      modelId: "codex-model",
+      modelName: "Codex model",
+      providerId: "openai",
+      providerName: "OpenAI",
+      variants: [],
+      attachmentSupport: { image: true, audio: false, video: false, pdf: false },
+    };
+    const claude = {
+      ...codex,
+      id: "claude-model",
+      modelId: "claude-model",
+      modelName: "Claude model",
+      providerId: "claude",
+      providerName: "Claude",
+      attachmentSupport: { ...codex.attachmentSupport!, pdf: true },
+    };
+    const pdf = createComposerAttachment({
+      name: "brief.pdf",
+      kind: "pdf",
+      path: "/tmp/brief.pdf",
+    });
+    const draft = { ...textDraft("Read the brief"), attachments: [pdf] };
+    const toClaude = await resolve({
+      model: model({ selectedModelDescriptor: codex }),
+      draft,
+      handoffSelection: { descriptor: claude, supportsAttachments: true },
+    });
+    expect(toClaude.sendDisabled).toBe(false);
+    expect(toClaude.defaultSendDisabled).toBe(false);
+    expect(toClaude.attachmentSupport?.pdf).toBe(true);
+
+    for (const policy of [
+      await resolve({ model: model({ selectedModelDescriptor: codex }), draft }),
+      await resolve({
+        model: model({ selectedModelDescriptor: claude }),
+        draft,
+        handoffSelection: { descriptor: codex, supportsAttachments: true },
+      }),
+    ]) {
+      expect(policy.attachmentErrors[pdf.id]).toContain("does not support pdf attachments");
+      expect(policy.sendDisabled).toBe(true);
+    }
   });
 
   test("keeps send closed until the chat settings load", async () => {

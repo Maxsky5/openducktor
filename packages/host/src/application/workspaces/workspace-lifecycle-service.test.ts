@@ -150,6 +150,7 @@ const createAdmissionDouble = (): Pick<
 const createService = ({
   activity = noActivity,
   admission = createAdmissionDouble(),
+  hasUnresolvedHandoff = () => false,
   getRepoConfig = () => Effect.succeed(repoConfig()),
   getWorkspaceCatalog = () => Effect.succeed(catalog()),
   closeWorkspace = () => Effect.succeed(catalog()),
@@ -202,6 +203,7 @@ const createService = ({
 }: {
   activity?: WorkspaceActivityPort;
   admission?: ReturnType<typeof createAdmissionDouble>;
+  hasUnresolvedHandoff?: (workspaceId: string) => boolean;
   getRepoConfig?: () => Effect.Effect<RepoConfig, never>;
   getWorkspaceCatalog?: () => Effect.Effect<WorkspaceCatalog, never>;
   closeWorkspace?: () => Effect.Effect<WorkspaceCatalog, never>;
@@ -240,6 +242,7 @@ const createService = ({
     onWorkspaceReopened,
     activity,
     admission,
+    hasUnresolvedHandoff,
     gitPort: createGitPortTestDouble({
       canonicalizePath,
       isRegisteredWorktree,
@@ -775,6 +778,30 @@ describe("workspace lifecycle service", () => {
       repoPath: "/repos/ws",
       workspaceId: "ws",
     });
+  });
+
+  test("removeWorkspace leaves idle sessions and worktrees intact until a handoff settles", async () => {
+    let unresolved = true;
+    const beginWorkspaceRemoval = mock(() =>
+      Effect.succeed(removalRecord({ phase: "attachments" })),
+    );
+    const releaseSessions = mock(() => Effect.void);
+    const service = createService({
+      hasUnresolvedHandoff: (workspaceId) => workspaceId === "ws" && unresolved,
+      activity: { ...noActivity, releaseSessions },
+      beginWorkspaceRemoval,
+    });
+    const input = { workspaceId: "ws", expectedRepoPath: "/repos/ws", removeTaskWorktrees: true };
+
+    const error = await Effect.runPromise(Effect.flip(service.removeWorkspace(input)));
+    expect(error.message).toContain("Check delivery");
+    expect(beginWorkspaceRemoval).not.toHaveBeenCalled();
+    expect(releaseSessions).not.toHaveBeenCalled();
+
+    unresolved = false;
+    await Effect.runPromise(service.removeWorkspace(input));
+    expect(beginWorkspaceRemoval).toHaveBeenCalledTimes(1);
+    expect(releaseSessions).toHaveBeenCalledTimes(1);
   });
 
   test("removeWorkspace blocks on running terminals", async () => {

@@ -8,6 +8,7 @@ export type AgentChatDraftPersistence = {
   readVersion: () => number | null;
   clear: (options?: { onlyIfVersion?: number | null }) => boolean;
   flush: () => Promise<void>;
+  subscribeCleared?: (onClear: () => void) => () => void;
 };
 
 export type AgentChatDraftScope = {

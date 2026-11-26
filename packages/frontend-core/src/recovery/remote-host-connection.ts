@@ -126,7 +126,8 @@ export const createRemoteHostConnection = ({
     const restoring = waitForAdmission()
       .then(() => remote.client.agentSessionLiveAttach(owner.input))
       .then((snapshot) => {
-        if (live.has(owner)) owner.attachment.install(snapshot);
+        if (live.has(owner))
+          owner.attachment.install(snapshot, remote.readState().host?.hostInstanceId);
       });
     owner.restoring = restoring;
     void restoring

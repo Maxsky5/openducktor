@@ -116,14 +116,13 @@ export const releaseMergedTaskSessions = (
       });
     }
     yield* dependencies.taskActivityGuard.cleanupTaskSessions({
+      workspaceId,
       repoPath: yield* dependencies.gitPort.canonicalizePath(repoPath),
       taskSessions: [{ taskId, sessions: workflowSessions }],
     });
   });
 /**
- * The cleanup of a merged-task close that keeps the worktree. The worktree keeps its branch,
- * because it has that branch checked out. The close still stops the task terminals and releases
- * the task sessions.
+ * Stops task terminals and releases saved sessions when a merge close runs without Git cleanup.
  */
 export const cleanupKeptTaskWorktree = (
   dependencies: Parameters<typeof releaseMergedTaskSessions>[0] & {

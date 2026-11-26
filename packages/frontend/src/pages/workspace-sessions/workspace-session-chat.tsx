@@ -5,11 +5,11 @@ import {
 } from "@openducktor/frontend-core/sessions/goals/use-agent-session-goal-row";
 import { sessionForkDisabledReason } from "@openducktor/frontend-core/sessions/session-fork-availability";
 import { useWorkspaceSessionFork } from "./use-workspace-session-fork";
-import { buildWorkspaceSessionComposer } from "./workspace-session-chat-composer";
-import { useAgentChatSend } from "@openducktor/frontend-core/sessions/send/use-agent-chat-send";
+import {
+  buildWorkspaceSessionComposer,
+  useWorkspaceSessionChatDelivery,
+} from "./workspace-session-chat-composer";
 import { buildWorkspaceInterruptedTurnResume } from "./workspace-session-interrupted-turn";
-import { usePendingSendContext } from "@/features/agent-chat-composer/use-pending-send-context";
-import { documentVisibility } from "@/features/session-navigation/document-visibility";
 import {
   canInteractWithWorkspaceSession,
   canResumeWorkspaceSession,
@@ -23,7 +23,6 @@ import { SessionViewShownActivity } from "@/features/session-navigation/session-
 import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-chat";
 import { resolveAgentChatRuntimePresentation } from "@openducktor/frontend-core/sessions/send/agent-chat-runtime-presentation";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
-import { useAgentChatPresentation } from "@openducktor/frontend-core/sessions/transcript/use-agent-chat-presentation";
 import { resolveAgentSessionAccentColor } from "@/components/features/agents/agent-accent-color";
 import { useAgentSessionApprovalActions } from "@openducktor/frontend-core/sessions/pending-input/use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "@openducktor/frontend-core/sessions/pending-input/use-agent-session-question-actions";
@@ -67,10 +66,31 @@ type WorkspaceSessionChatProps = {
     | undefined;
 };
 
+function useWorkspaceChatHandoff(workspace: ActiveWorkspace, savedRecord: WorkspaceSession) {
+  const savedIdentity = useStableAgentSessionIdentity(workspaceSessionIdentity(savedRecord));
+  const handoff = useRuntimeHandoff(
+    savedRecord.archivedAt === null
+      ? {
+          kind: "workspace_session",
+          workspaceId: workspace.workspaceId,
+          repoPath: workspace.repoPath,
+          sessionId: savedRecord.id,
+        }
+      : null,
+    savedIdentity,
+  );
+  const { acceptedLink, acceptedModel } = handoff;
+  const record = useMemo(
+    () => projectAcceptedWorkspaceChat(savedRecord, acceptedLink, acceptedModel),
+    [savedRecord, acceptedLink, acceptedModel],
+  );
+  return { record, handoff };
+}
+
 export function WorkspaceSessionChat({
   isActive,
   workspace,
-  record,
+  record: savedRecord,
   chatSettings,
   reusablePrompts,
   onToolRefresh,
@@ -78,6 +98,7 @@ export function WorkspaceSessionChat({
   visitKey = 0,
   onActionsReady,
 }: WorkspaceSessionChatProps): ReactElement {
+  const { record, handoff } = useWorkspaceChatHandoff(workspace, savedRecord);
   const identity = useStableAgentSessionIdentity(workspaceSessionIdentity(record));
   const session = useAgentSession(identity);
   useWorkspaceSessionToolRefresh(session, onToolRefresh);
@@ -182,18 +203,18 @@ export function WorkspaceSessionChat({
     catalog: modelCatalog,
     selectedModelEntry: picker.selectedModelEntry,
   });
-  const presentation = useAgentChatPresentation({
-    session: chatState.transcriptSession,
-    sessionIdentity: identity,
-    pendingApprovals: chatState.pendingApprovals,
-    pendingQuestions: chatState.pendingQuestions,
-    skills: skills.skills,
-    runtimeReadiness,
-  });
-  const { readiness, transcript, retryError } = useWorkspaceSessionTranscript({
-    repoPath: workspace.repoPath,
+  const {
+    readiness,
+    transcript,
+    retryError,
+    subagentPendingApprovalCountBySessionKey,
+    subagentPendingQuestionCountBySessionKey,
+  } = useWorkspaceSessionTranscript({
+    workspace,
     state: chatState,
-    presentation,
+    identity,
+    links: record.handoff?.links,
+    skills: skills.skills,
     fault,
     runtimeReadiness,
     readModel,
@@ -252,20 +273,27 @@ export function WorkspaceSessionChat({
       }),
     [assertCanSubmit, canInteract, sendTarget, speedBlockedReason],
   );
-  const messageDelivery = useAgentChatSend({
-    identity,
-    repoPath: workspace.repoPath,
-    runtimeDescriptor: descriptor,
-    modelCatalog,
-    messages: session?.messages.items,
-    isSessionWorking: chatState.isWorking,
-    foregroundTurnActive: chatState.foregroundTurnActive,
-    isWaitingInput,
-    selectedModelDescriptor: picker.selectedModelEntry,
-    draftRules: { reusablePrompts, supportsAttachments: support.supportsAttachments },
-    sendAgentMessage: operations.sendAgentMessage,
-    target,
-  });
+  const { messageDelivery, handoffModelPicker, pendingSendContext } =
+    useWorkspaceSessionChatDelivery({
+      workspace,
+      record,
+      modelPicker: picker.modelPicker,
+      handoff,
+      send: {
+        identity,
+        repoPath: workspace.repoPath,
+        runtimeDescriptor: descriptor,
+        modelCatalog,
+        messages: session?.messages.items,
+        isSessionWorking: chatState.isWorking,
+        foregroundTurnActive: chatState.foregroundTurnActive,
+        isWaitingInput,
+        selectedModelDescriptor: picker.selectedModelEntry,
+        draftRules: { reusablePrompts, supportsAttachments: support.supportsAttachments },
+        sendAgentMessage: operations.sendAgentMessage,
+        target,
+      },
+    });
   const goalRow = useSessionGoalRow({
     repoPath: workspace.repoPath,
     identity,
@@ -273,12 +301,6 @@ export function WorkspaceSessionChat({
   });
   const goalRowScope = useSessionGoalRowScope(identity);
   const backgroundTasks = useSessionBackgroundTasks({ repoPath: workspace.repoPath, identity });
-  const pendingSendContext = usePendingSendContext({
-    owner: { kind: "workspace_session", workspaceId: workspace.workspaceId, sessionId: record.id },
-    workingDirectory: record.executionTarget.workingDirectory,
-    onSend: messageDelivery.onSend,
-    visibility: documentVisibility,
-  });
   const fork = useWorkspaceSessionFork({
     workspace,
     record,
@@ -317,8 +339,8 @@ export function WorkspaceSessionChat({
     pendingQuestionRequests: chatState.pendingQuestions,
     todos: runtimeData.todos,
     sessionAccentColor: resolveAgentSessionAccentColor({ runtimeKind: record.runtimeKind }),
-    subagentPendingApprovalCountBySessionKey: presentation.subagentPendingApprovalCountBySessionKey,
-    subagentPendingQuestionCountBySessionKey: presentation.subagentPendingQuestionCountBySessionKey,
+    subagentPendingApprovalCountBySessionKey,
+    subagentPendingQuestionCountBySessionKey,
     approvals: {
       canReply: canInteract,
       isSubmittingByRequestId: approvalActions.isSubmittingApprovalByRequestId,
@@ -346,7 +368,7 @@ export function WorkspaceSessionChat({
       backgroundTasks,
       pendingSend: pendingSendContext,
       draftPersistence,
-      picker,
+      picker: { ...picker, modelPicker: handoffModelPicker },
       promptInput,
       contextUsage,
       stopSession: operations.stopAgentSession,
@@ -364,3 +386,7 @@ export function WorkspaceSessionChat({
     </SessionViewShownActivity>
   );
 }
+import {
+  projectAcceptedWorkspaceChat,
+  useRuntimeHandoff,
+} from "@openducktor/frontend-core/sessions/send/runtime-handoff";

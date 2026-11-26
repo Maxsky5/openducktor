@@ -5,7 +5,6 @@ import { z } from "zod";
 import {
   detectAgentFileReferenceKind,
   type AgentFileReference,
-  type AgentModelSelection,
   type AgentSessionHistoryMessage,
   type AgentUserMessageDisplayPart,
 } from "@openducktor/core";
@@ -13,19 +12,14 @@ import type {
   ClaudeHistoryConversationMessage,
   ClaudeHistoryMessage,
 } from "./claude-agent-sdk-history-messages";
+import type { ClaudeAcceptedUserMessage } from "./claude-agent-sdk-types";
 import {
   type ClaudeDecodedToolResult,
   decodeClaudeToolResultValue,
 } from "./claude-agent-sdk-tool-shapes";
 
-export type ClaudeLiveUserMessage = {
-  hidden?: true;
-  isManualCompaction?: true;
-  messageId: string;
-  model?: AgentModelSelection;
-  parts?: AgentUserMessageDisplayPart[];
-  text: string;
-  timestamp: string;
+export type ClaudeLiveUserMessage = Omit<ClaudeAcceptedUserMessage, "parts" | "submissionId"> & {
+  parts?: ClaudeAcceptedUserMessage["parts"];
 };
 
 const claudeHistoryContentBlockSchema = z.looseObject({
@@ -58,9 +52,11 @@ export const mergeUnmatchedLiveUserMessages = (
       messageId: message.messageId,
       role: "user",
       timestamp: message.timestamp,
-      text: message.text,
+      text: message.nativeInput?.text ?? message.text,
       displayParts:
-        message.parts ?? (message.text.length > 0 ? [{ kind: "text", text: message.text }] : []),
+        message.nativeInput?.parts ??
+        message.parts ??
+        (message.text.length > 0 ? [{ kind: "text", text: message.text }] : []),
       state: "read",
       parts: [],
     };

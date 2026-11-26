@@ -91,13 +91,18 @@ function FinalAssistantFooter({
 }): ReactElement | null {
   const theme = useAppTheme();
   const { runtimeKind, modelCatalog } = useTranscriptRows();
+  const sourceRuntime = message.sourceRuntimeKind ?? runtimeKind;
   const copyable = canCopyAssistantMessage(message, isStreaming);
-  const footer = getAssistantFooterData(message, runtimeKind, modelCatalog);
+  const footer = getAssistantFooterData(
+    message,
+    sourceRuntime,
+    sourceRuntime === runtimeKind ? modelCatalog : null,
+  );
   const forkPoint = isStreaming ? undefined : message.meta.forkPoint;
   if (!copyable && forkPoint === undefined && footer.infoParts.length === 0) {
     return null;
   }
-  const accent = runtimeAccentColor(theme, runtimeKind);
+  const accent = runtimeAccentColor(theme, sourceRuntime);
   const muted = theme.desktop.mutedForeground;
   return (
     <View style={styles.footer}>

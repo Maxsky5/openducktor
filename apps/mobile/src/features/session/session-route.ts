@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { agentSessionScopeSchema, type AgentSessionScope } from "@openducktor/contracts";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { type RawRouteParams, routeParam } from "@/navigation/route-params";
 import { readRouteSessionIdentity } from "@/navigation/session-route-params";
@@ -9,6 +10,8 @@ export type SessionRoute = {
   identity: AgentSessionIdentity;
   /** A Subagent session opens as a Read-only Session View. */
   readOnly: boolean;
+  transcriptScope?: AgentSessionScope;
+  pinSession?: true;
   /** The route asks to scroll to and focus the pending input of the session. */
   focusPendingInput: boolean;
 };
@@ -28,14 +31,30 @@ export const readSessionRoute = (raw: RawRouteParams): SessionRouteResult => {
           : "This link does not name a full session. Open the session again from its list.",
     };
   }
+  const route: SessionRoute = {
+    workspaceId,
+    identity: session.identity,
+    readOnly: routeParam(raw["readOnly"]) === "1",
+    focusPendingInput: routeParam(raw["focus"]) === "pending-input",
+  };
+  if (routeParam(raw["pinSession"]) === "1") route.pinSession = true;
+  const transcriptScope = routeParam(raw["transcriptScope"]);
+  if (route.readOnly && transcriptScope !== null) {
+    try {
+      const scope = agentSessionScopeSchema.parse(JSON.parse(transcriptScope));
+      if (scope.workspaceId !== workspaceId) throw new Error("Workspace mismatch");
+      route.transcriptScope = scope;
+    } catch {
+      return {
+        ok: false,
+        message:
+          "This link has an invalid transcript scope. Open the subagent again from its parent session.",
+      };
+    }
+  }
   return {
     ok: true,
-    route: {
-      workspaceId,
-      identity: session.identity,
-      readOnly: routeParam(raw["readOnly"]) === "1",
-      focusPendingInput: routeParam(raw["focus"]) === "pending-input",
-    },
+    route,
   };
 };
 

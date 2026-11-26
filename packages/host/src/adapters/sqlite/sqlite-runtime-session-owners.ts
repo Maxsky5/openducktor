@@ -1,6 +1,7 @@
 import { sqliteValues } from "./sqlite-parameters";
 import { runtimeKindSchema } from "@openducktor/contracts";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { union } from "drizzle-orm/sqlite-core";
 import { Effect } from "effect";
 import { SqliteTaskStoreDataError } from "./sqlite-task-store-errors";
 import type {
@@ -8,7 +9,11 @@ import type {
   RuntimeOwnerFilter,
 } from "../../ports/workspace-session-store-port";
 
-import { taskSessions, type HostDatabaseSession } from "./sqlite-host-database-schema";
+import {
+  runtimeHandoffs,
+  taskSessions,
+  type HostDatabaseSession,
+} from "./sqlite-host-database-schema";
 import { workspaceSessions } from "./sqlite-workspace-session-schema";
 
 export const parseSavedRuntimeKind = (value: string) =>
@@ -31,51 +36,73 @@ export const listRuntimeSessionOwners = (
     if (workspaceIds.length === 0 || filter?.externalSessionIds.length === 0) return [];
     const rows = yield* session.execute(
       (db) =>
-        db
-          .select({
-            workspaceId: workspaceSessions.workspaceId,
-            runtimeKind: workspaceSessions.runtimeKind,
-            externalSessionId: workspaceSessions.externalSessionId,
-            ownerId: workspaceSessions.id,
-            archived: sql<boolean>`${workspaceSessions.archivedAt} is not null`.mapWith(Boolean),
-            role: sql<string | null>`null`,
-          })
-          .from(workspaceSessions)
-          .where(
-            and(
-              inArray(workspaceSessions.workspaceId, sqliteValues([...workspaceIds])),
-              isNotNull(workspaceSessions.externalSessionId),
-              filter && eq(workspaceSessions.runtimeKind, filter.runtimeKind),
-              filter &&
-                inArray(
-                  workspaceSessions.externalSessionId,
-                  sqliteValues(filter.externalSessionIds),
-                ),
-            ),
-          )
-          .unionAll(
-            db
-              .select({
-                workspaceId: taskSessions.workspaceId,
-                runtimeKind: taskSessions.runtimeKind,
-                externalSessionId: taskSessions.externalSessionId,
-                ownerId: taskSessions.taskId,
-                archived: sql<boolean>`0`.mapWith(Boolean),
-                role: taskSessions.role,
-              })
-              .from(taskSessions)
-              .where(
-                and(
-                  inArray(taskSessions.workspaceId, sqliteValues([...workspaceIds])),
-                  filter && eq(taskSessions.runtimeKind, filter.runtimeKind),
-                  filter &&
-                    inArray(
-                      taskSessions.externalSessionId,
-                      sqliteValues(filter.externalSessionIds),
-                    ),
-                ),
+        union(
+          db
+            .select({
+              workspaceId: workspaceSessions.workspaceId,
+              runtimeKind: workspaceSessions.runtimeKind,
+              externalSessionId: workspaceSessions.externalSessionId,
+              ownerId: workspaceSessions.id,
+              archived: sql<boolean>`${workspaceSessions.archivedAt} is not null`.mapWith(Boolean),
+              role: sql<string | null>`null`,
+            })
+            .from(workspaceSessions)
+            .where(
+              and(
+                inArray(workspaceSessions.workspaceId, sqliteValues([...workspaceIds])),
+                isNotNull(workspaceSessions.externalSessionId),
+                filter && eq(workspaceSessions.runtimeKind, filter.runtimeKind),
+                filter &&
+                  inArray(
+                    workspaceSessions.externalSessionId,
+                    sqliteValues(filter.externalSessionIds),
+                  ),
               ),
-          ),
+            ),
+          db
+            .select({
+              workspaceId: taskSessions.workspaceId,
+              runtimeKind: taskSessions.runtimeKind,
+              externalSessionId: taskSessions.externalSessionId,
+              ownerId: taskSessions.taskId,
+              archived: sql<boolean>`0`.mapWith(Boolean),
+              role: taskSessions.role,
+            })
+            .from(taskSessions)
+            .where(
+              and(
+                inArray(taskSessions.workspaceId, sqliteValues([...workspaceIds])),
+                filter && eq(taskSessions.runtimeKind, filter.runtimeKind),
+                filter &&
+                  inArray(taskSessions.externalSessionId, sqliteValues(filter.externalSessionIds)),
+              ),
+            ),
+          db
+            .select({
+              workspaceId: runtimeHandoffs.workspaceId,
+              runtimeKind: runtimeHandoffs.sourceRuntime,
+              externalSessionId: runtimeHandoffs.sourceSessionId,
+              ownerId: workspaceSessions.id,
+              archived: sql<boolean>`${workspaceSessions.archivedAt} is not null`.mapWith(Boolean),
+              role: sql<string | null>`null`,
+            })
+            .from(runtimeHandoffs)
+            .innerJoin(
+              workspaceSessions,
+              and(
+                eq(workspaceSessions.workspaceId, runtimeHandoffs.workspaceId),
+                eq(workspaceSessions.id, runtimeHandoffs.workspaceSessionId),
+              ),
+            )
+            .where(
+              and(
+                inArray(runtimeHandoffs.workspaceId, sqliteValues([...workspaceIds])),
+                filter && eq(runtimeHandoffs.sourceRuntime, filter.runtimeKind),
+                filter &&
+                  inArray(runtimeHandoffs.sourceSessionId, sqliteValues(filter.externalSessionIds)),
+              ),
+            ),
+        ),
       "runtimeSessionOwners.list",
     );
     const owners: (RuntimeSessionOwner & { workspaceId: string })[] = [];

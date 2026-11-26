@@ -581,6 +581,7 @@ describe("TaskService.closeTask", () => {
     };
     const activityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      ensureNoUnresolvedHandoff: () => Effect.void,
       cleanupTaskSessions: () => Effect.succeed({ stoppedSessionCount: 0 }),
     };
     const service = createTaskService({
@@ -717,6 +718,7 @@ describe("TaskService.closeTask", () => {
     };
     const activityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      ensureNoUnresolvedHandoff: () => Effect.void,
       cleanupTaskSessions: () => Effect.succeed({ stoppedSessionCount: 0 }),
     };
     const service = createTaskService({
@@ -798,6 +800,7 @@ describe("TaskService.closeTask", () => {
     };
     const activityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      ensureNoUnresolvedHandoff: () => Effect.void,
       cleanupTaskSessions: (input) => {
         calls.push(
           `close task:${input.repoPath}:${input.taskSessions[0]?.sessions.length ?? 0} sessions`,
@@ -842,6 +845,7 @@ describe("TaskService.closeTask", () => {
     };
     const activityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      ensureNoUnresolvedHandoff: () => Effect.void,
       cleanupTaskSessions: (input) => {
         calls.push(
           `close task:${input.repoPath}:${input.taskSessions[0]?.sessions.length ?? 0} sessions`,
@@ -1032,6 +1036,7 @@ describe("TaskService.closeTask", () => {
     };
     const activityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      ensureNoUnresolvedHandoff: () => Effect.void,
       cleanupTaskSessions: (input) => {
         calls.push(
           `close task:${input.taskSessions[0]?.sessions.map((session) => session.role).join(",")}`,
@@ -1086,6 +1091,7 @@ describe("TaskService.closeTask", () => {
     };
     const activityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      ensureNoUnresolvedHandoff: () => Effect.void,
       cleanupTaskSessions: () => Effect.succeed({ stoppedSessionCount: 2 }),
     };
     const service = createTaskService({
@@ -1139,6 +1145,7 @@ describe("TaskService.closeTask", () => {
     };
     const activityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      ensureNoUnresolvedHandoff: () => Effect.void,
       cleanupTaskSessions: () =>
         Effect.fail(
           new HostOperationError({

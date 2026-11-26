@@ -83,6 +83,7 @@ export const toClaudeLoadContextInput = (
   if (input.sessionScope !== undefined) {
     result.sessionScope = input.sessionScope;
   }
+  if (input.handoffModelId) result.contextDetail = "summary";
   return result;
 };
 
@@ -221,6 +222,7 @@ export const toClaudeSendInput = (
     sessionScope: input.sessionScope,
     parts: input.parts.map(toClaudeUserMessagePart),
     delivery: input.delivery,
+    handoff: input.handoff,
     ...CLAUDE_RUNTIME_POLICY_BINDING,
   };
   if (input.systemPrompt !== undefined) {

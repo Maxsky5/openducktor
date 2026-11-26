@@ -306,6 +306,7 @@ export const createOpenCodeSessionControlAdapter = ({
         sessionScope: input.sessionScope,
         parts: input.parts.map(toOpenCodeUserMessagePart),
         delivery: input.delivery,
+        handoff: input.handoff,
       };
       if (input.systemPrompt) {
         request.systemPrompt = input.systemPrompt;

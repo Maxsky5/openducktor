@@ -48,12 +48,14 @@ export type CreateManagedCallerResolverInput = {
   workspaceSettings: Pick<WorkspaceSettingsService, "getRepoConfig">;
   workspaceSessions: Pick<WorkspaceSessionStorePort, "listRuntimeOwners">;
   liveSessions: { list(): ReadonlyArray<LiveSessionSource> };
+  stagedOwners?: ((workspaceId: string) => readonly RuntimeSessionOwner[]) | undefined;
 };
 
 export const createManagedCallerResolver = ({
   workspaceSettings,
   workspaceSessions,
   liveSessions,
+  stagedOwners,
 }: CreateManagedCallerResolverInput): ManagedCallerResolver => {
   /**
    * The session that holds a caller binding. A runtime that starts the MCP process before the
@@ -111,11 +113,27 @@ export const createManagedCallerResolver = ({
         const caller = yield* toRuntimeSessionCaller(nativeCaller);
         const { repoPath } = yield* workspaceSettings.getRepoConfig(workspaceId);
         const readOwners = (externalSessionIds: readonly string[]) =>
-          workspaceSessions.listRuntimeOwners({
-            workspaceId,
-            repoPath,
-            filter: { runtimeKind: caller.runtime, externalSessionIds },
-          });
+          workspaceSessions
+            .listRuntimeOwners({
+              workspaceId,
+              repoPath,
+              filter: { runtimeKind: caller.runtime, externalSessionIds },
+            })
+            .pipe(
+              Effect.map((saved) => [
+                ...saved,
+                ...(stagedOwners?.(workspaceId) ?? []).filter(
+                  (owner) =>
+                    owner.runtimeKind === caller.runtime &&
+                    externalSessionIds.includes(owner.externalSessionId) &&
+                    !saved.some(
+                      (record) =>
+                        record.runtimeKind === owner.runtimeKind &&
+                        record.externalSessionId === owner.externalSessionId,
+                    ),
+                ),
+              ]),
+            );
         let owners = yield* readOwners([caller.runtimeSessionId]);
         // A subagent session calls with its own ID. Its live parent links lead to the root.
         let parents: Map<string, string | null> | undefined;

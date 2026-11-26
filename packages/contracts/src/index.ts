@@ -8,6 +8,8 @@ export * from "./agent-session-event-schemas";
 export * from "./agent-session-goal-schemas";
 export * from "./agent-session-live-schemas";
 export * from "./workflow-operation-schemas";
+export * from "./agent-chat-handoff-schemas";
+export * from "./agent-chat-handoff-command-schemas";
 export {
   workflowIdSchema,
   workflowValueSchema,

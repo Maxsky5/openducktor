@@ -6,7 +6,11 @@ import {
   parseCodexAsyncQuestionSkipIds,
   stripCodexAsyncQuestionSkipMarker,
 } from "../codex-async-questions";
-import { codexItemTypeMatches, terminalHistoryPart } from "../codex-app-server-transcript";
+import {
+  codexItemTypeMatches,
+  codexUserMessageId,
+  terminalHistoryPart,
+} from "../codex-app-server-transcript";
 import type {
   CodexCanonicalAssistantMessageEvent,
   CodexCanonicalStreamPartEvent,
@@ -44,7 +48,7 @@ export const userMessageMapper: CodexEventMapper = {
     if (!asyncQuestionReplies && isCodexContextualUserMessage(input.item)) {
       return { handled: true, events: [] };
     }
-    const messageId = input.item.id;
+    const messageId = codexUserMessageId(input.item);
     const timestamp = ctx.timestamp ?? input.timestamp;
     if (asyncQuestionReplies) {
       const events = codexAsyncQuestionReplyTools(asyncQuestionReplies).map(

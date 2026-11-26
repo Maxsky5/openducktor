@@ -7,43 +7,38 @@ export type ParentSessionRuntimeContext = Pick<
   "runtimeKind" | "workingDirectory" | "sessionScope"
 >;
 
+type SubagentSessionReference = {
+  externalSessionId?: string | null | undefined;
+  parentSession: ParentSessionRuntimeContext | null | undefined;
+  sourceSession?: ParentSessionRuntimeContext | undefined;
+};
+
 export const toSubagentSessionIdentity = ({
   externalSessionId,
   parentSession,
-}: {
-  externalSessionId: string | null | undefined;
-  parentSession: ParentSessionRuntimeContext | null | undefined;
-}): AgentSessionIdentity | null => {
+  sourceSession,
+}: SubagentSessionReference): AgentSessionIdentity | null => {
+  const session = sourceSession ?? parentSession;
   const resolvedExternalSessionId = externalSessionId?.trim();
-  const workingDirectory = parentSession?.workingDirectory.trim();
-  if (!resolvedExternalSessionId || !parentSession || !workingDirectory) {
+  const workingDirectory = session?.workingDirectory.trim();
+  if (!resolvedExternalSessionId || !session || !workingDirectory) {
     return null;
   }
 
   return toAgentSessionIdentity({
     externalSessionId: resolvedExternalSessionId,
-    runtimeKind: parentSession.runtimeKind,
+    runtimeKind: session.runtimeKind,
     workingDirectory,
   });
 };
 
-export const toSubagentTranscriptTarget = ({
-  externalSessionId,
-  parentSession,
-}: {
-  externalSessionId: string | null | undefined;
-  parentSession: ParentSessionRuntimeContext | null | undefined;
-}): AgentSessionTranscriptTarget | null => {
-  const identity = toSubagentSessionIdentity({ externalSessionId, parentSession });
-  if (!identity || !parentSession) {
-    return null;
-  }
-
-  const target: AgentSessionTranscriptTarget = { ...identity };
-  if (parentSession.sessionScope) {
-    target.sessionScope = parentSession.sessionScope;
-  }
-  return target;
+export const toSubagentTranscriptTarget = (
+  reference: SubagentSessionReference,
+): AgentSessionTranscriptTarget | null => {
+  const identity = toSubagentSessionIdentity(reference);
+  if (!identity) return null;
+  const sessionScope = (reference.sourceSession ?? reference.parentSession)?.sessionScope;
+  return sessionScope ? { ...identity, sessionScope } : identity;
 };
 
 const getSubagentMessageSessionIdentity = ({
@@ -58,7 +53,7 @@ const getSubagentMessageSessionIdentity = ({
   }
 
   return toSubagentSessionIdentity({
-    externalSessionId: message.meta.externalSessionId,
+    ...message.meta,
     parentSession,
   });
 };

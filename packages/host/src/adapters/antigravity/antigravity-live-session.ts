@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { Effect } from "effect";
 import {
   methods,
   type CreateElicitationRequest,
@@ -64,6 +65,7 @@ import {
 } from "./antigravity-session-updates";
 import type { AntigravityTranscript } from "./antigravity-transcript";
 import { type AntigravitySendInput, AntigravityTurns } from "./antigravity-turn";
+import { HostValidationError } from "../../effect/host-errors";
 
 /** The identity and setup values of a session that the runtime opens. */
 export type AntigravityLiveSessionInput = {
@@ -102,6 +104,7 @@ export class AntigravityLiveSession {
   /** The last command list of the session. The setup publish sends it. */
   private latestSlashCommands: SlashCommandCatalog | null = null;
   private usage: AgentSessionContextUsage | null = null;
+  private readonly firstUsage = Promise.withResolvers<AgentSessionContextUsage>();
   private readonly pending = new AntigravityPendingRequests(() => this.publishInBackground([]));
   private readonly turns: AntigravityTurns;
   private readonly background = new AntigravityBackgroundCommands();
@@ -144,6 +147,22 @@ export class AntigravityLiveSession {
 
   get contextUsage(): AgentSessionContextUsage | null {
     return this.usage;
+  }
+
+  waitForHandoffContext() {
+    return Effect.promise(async () => this.usage ?? this.firstUsage.promise).pipe(
+      Effect.timeoutOrElse({
+        duration: "5 seconds",
+        orElse: () =>
+          Effect.fail(
+            new HostValidationError({
+              field: "handoff",
+              message:
+                "Antigravity did not report its context limit. Retry the handoff or choose another model.",
+            }),
+          ),
+      }),
+    );
   }
 
   snapshot(): AgentSessionLiveSnapshot {
@@ -270,6 +289,7 @@ export class AntigravityLiveSession {
     switch (update.sessionUpdate) {
       case "usage_update":
         this.usage = toAntigravityContextUsage(update, this.model.selection);
+        this.firstUsage.resolve(this.usage);
         return false;
       case "session_info_update":
         // A Workspace Session keeps the title that OpenDucktor saved.

@@ -176,6 +176,12 @@ export const prepareDirectMerge = (services: TaskServiceUseCaseInput, input: Dir
       [taskId],
       "direct merge",
     );
+    if (taskActivityGuard) {
+      yield* taskActivityGuard.ensureNoUnresolvedHandoff({
+        workspaceId: input.workspaceId,
+        taskId,
+      });
+    }
     const current = yield* taskStore.getTask({
       workspaceId: input.workspaceId,
       repoPath: effectiveRepoPath,

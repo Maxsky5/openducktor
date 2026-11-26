@@ -31,6 +31,7 @@ import {
 import type { HostDatabaseSession } from "./sqlite-host-database-schema";
 import { workspaceSessions } from "./sqlite-workspace-session-schema";
 import {
+  decodeWorkspaceSessions,
   decodeRecord,
   readActiveWorkspaceSessions,
   encodeWorkspaceSessionRecord,
@@ -46,25 +47,32 @@ const validateRecord = (value: WorkspaceSession) =>
   });
 
 const getRecord = (session: HostDatabaseSession, workspaceId: string, sessionId: string) =>
-  Effect.gen(function* () {
-    const rows = yield* session.execute(
-      (database) =>
-        database
-          .select()
-          .from(workspaceSessions)
-          .where(workspaceSessionScope(workspaceId, sessionId))
-          .limit(1),
-      "workspaceSessionStore.get",
-    );
-    const row = rows[0];
-    if (!row)
-      return yield* new HostResourceError({
-        resource: sessionId,
-        operation: "workspaceSessionStore.get",
-        message: `Workspace Session ${sessionId} does not exist in this Workspace.`,
-      });
-    return yield* decodeRecord(row);
-  });
+  session.readTransaction("workspaceSessionStore.getWithHandoffs", (read) =>
+    Effect.gen(function* () {
+      const rows = yield* read.execute(
+        (database) =>
+          database
+            .select()
+            .from(workspaceSessions)
+            .where(workspaceSessionScope(workspaceId, sessionId))
+            .limit(1),
+        "workspaceSessionStore.get",
+      );
+      const row = rows[0];
+      if (!row)
+        return yield* new HostResourceError({
+          resource: sessionId,
+          operation: "workspaceSessionStore.get",
+          message: `Workspace Session ${sessionId} does not exist in this Workspace.`,
+        });
+      const [record] = yield* decodeWorkspaceSessions(read, workspaceId, [row]);
+      if (!record)
+        return yield* new HostValidationError({
+          message: "The workspace session could not be read.",
+        });
+      return record;
+    }),
+  );
 
 const claimScope = (
   session: HostDatabaseSession,
@@ -274,7 +282,7 @@ export const createSqliteWorkspaceSessionStore = ({
                 .limit(WORKSPACE_SESSION_ARCHIVE_LIMIT),
             "workspaceSessionStore.listArchived",
           );
-          return yield* Effect.forEach(rows, decodeRecord);
+          return yield* decodeWorkspaceSessions(session, input.workspaceId, rows);
         }),
       ),
     findByRuntimeSession: ({ workspaces, runtimeKind, externalSessionId }) =>

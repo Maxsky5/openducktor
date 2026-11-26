@@ -78,7 +78,7 @@ const RECIPIENT_CHANGED =
   "The session of this composer changed. Open the session again to send your draft.";
 
 /** The draft of a composer, saved for its chat or for its task session. */
-const useComposerDraft = (target: SessionTarget) => {
+const useComposerDraft = (target: SessionTarget, taskChatAnchor?: SessionTarget["identity"]) => {
   const { drafts } = useClientConnection();
   const { identity, workspace, owner } = target;
   const chatRecordId = owner.kind === "chat" ? owner.record.id : null;
@@ -96,11 +96,11 @@ const useComposerDraft = (target: SessionTarget) => {
         drafts: drafts.chat,
         workspaceId: workspace.workspaceId,
         taskId,
-        session: identity,
+        session: taskChatAnchor ?? identity,
       });
     }
     return null;
-  }, [chatRecordId, drafts.chat, identity, taskId, workspace.workspaceId]);
+  }, [chatRecordId, drafts.chat, identity, taskChatAnchor, taskId, workspace.workspaceId]);
   const draftScope = useMemo(
     () => ({ key: persistence?.targetKey ?? target.sessionKey, persistence }),
     [persistence, target.sessionKey],
@@ -121,6 +121,24 @@ const secondaryModeFor = (
   return primaryMode === "steer" ? "default" : "steer";
 };
 
+function useComposerHandoff(
+  target: SessionTarget,
+  readOnly: boolean,
+  task: NonNullable<ReturnType<typeof useTaskRuntimeHandoff>>["chat"] | null,
+) {
+  const { identity, owner, workspace, repoPath, handoffSource } = target;
+  const chat =
+    owner.kind === "chat"
+      ? {
+          kind: "workspace_session" as const,
+          workspaceId: workspace.workspaceId,
+          repoPath,
+          sessionId: owner.record.id,
+        }
+      : task;
+  return useRuntimeHandoff(readOnly ? null : chat, handoffSource ?? identity);
+}
+
 /**
  * The send state of the session composer: the draft, the composer policy, the prompt input
  * catalogs, the Message Queue, the pending review comments, and the last failure. The draft
@@ -139,6 +157,11 @@ export function useSessionComposer({ onSent }: { onSent: () => void }) {
   const archived = owner.kind === "chat" && owner.record.archivedAt !== null;
   // An archived chat is read-only too.
   const readOnly = target.readOnly || archived;
+  const workspaceScope = { workspaceId: target.workspace.workspaceId, repoPath: target.repoPath };
+  const taskHandoff = useTaskRuntimeHandoff(
+    owner.kind === "task" ? { ...workspaceScope, taskId: owner.taskId, role: owner.role } : null,
+    identity,
+  );
   const descriptor =
     allRuntimeDefinitions.find((definition) => definition.kind === identity.runtimeKind) ?? null;
   const promptInput = useSessionPromptInput({
@@ -162,7 +185,7 @@ export function useSessionComposer({ onSent }: { onSent: () => void }) {
     [composerFacts.runningTurnMessage],
   );
 
-  const { draftScope, draftState } = useComposerDraft(target);
+  const { draftScope, draftState } = useComposerDraft(target, taskHandoff?.chat.first);
 
   const [failure, setFailure] = useState<ComposerFailure | null>(null);
   const activity = useAsyncActivityTracker();
@@ -194,6 +217,7 @@ export function useSessionComposer({ onSent }: { onSent: () => void }) {
     }),
     [activity, canInteract, draftKey, identity, target.sessionKey],
   );
+  const handoff = useComposerHandoff(target, readOnly, taskHandoff?.chat ?? null);
   const delivery = useAgentChatSend({
     identity,
     repoPath: target.repoPath,
@@ -210,6 +234,7 @@ export function useSessionComposer({ onSent }: { onSent: () => void }) {
     },
     sendAgentMessage: operations.sendAgentMessage,
     target: sendTarget,
+    handoff,
   });
   const goalRow = useSessionGoalRow({
     repoPath: target.repoPath,
@@ -265,6 +290,7 @@ export function useSessionComposer({ onSent }: { onSent: () => void }) {
   };
   const policy = useComposerPolicy({
     model: policyModel,
+    handoffSelection: handoff.selection,
     draft: draftState.draft,
     primaryMode,
     settingsReady,
@@ -288,6 +314,7 @@ export function useSessionComposer({ onSent }: { onSent: () => void }) {
       draftScope,
       steerBlockedReason: delivery.steerBlockedReason,
       runningTurnModel: delivery.runningTurnModel,
+      handoff: delivery.handoff,
     },
     draftState,
     draftRef: editor.draftRef,
@@ -303,7 +330,7 @@ export function useSessionComposer({ onSent }: { onSent: () => void }) {
   return {
     target,
     gateOpen: gate.open,
-    canInteract,
+    canInteract: canInteract && !handoff.blocked,
     settingsReady,
     blockedReason: interaction.blockedReason,
     draft: draftState.draft,
@@ -332,7 +359,7 @@ export function useSessionComposer({ onSent }: { onSent: () => void }) {
     selectedModel: facts.selectedModel,
     // As on desktop, a read-only or archived session and a send in progress keep the model fixed.
     // A running turn and pending input keep it open.
-    modelOptionsDisabled: readOnly || delivery.isSending,
+    modelOptionsDisabled: readOnly || delivery.isSending || handoff.blocked,
     isWorking: facts.isWorking,
     foregroundTurnActive: facts.foregroundTurnActive,
     isWaitingInput: facts.isWaitingInput,
@@ -344,3 +371,5 @@ export function useSessionComposer({ onSent }: { onSent: () => void }) {
 }
 
 export type SessionComposerModel = ReturnType<typeof useSessionComposer>;
+import { useTaskRuntimeHandoff } from "@openducktor/frontend-core/sessions/send/use-task-runtime-handoff";
+import { useRuntimeHandoff } from "@openducktor/frontend-core/sessions/send/runtime-handoff";

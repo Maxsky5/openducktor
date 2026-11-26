@@ -1,7 +1,7 @@
 import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { createMemoryAgentSessionTurnStore } from "../../ports/agent-session-turn-store.test-support";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
-import { expect, test } from "bun:test";
+import { expect, mock, test } from "bun:test";
 import {
   createPrepareOpencodeSessionRuntime,
   OpencodeSdkAdapter,
@@ -9,11 +9,13 @@ import {
 } from "@openducktor/adapters-opencode-sdk";
 import {
   type AgentSessionLiveSnapshot,
+  type AgentSessionHistoryMessage,
   type RuntimeInstanceSummary,
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeKind,
   type AgentModelCatalog,
 } from "@openducktor/contracts";
+import { agentSessionRefsEqual, agentSessionScopesEqual } from "@openducktor/core";
 import { emptyArtifactSummary } from "@openducktor/workflows/test-support";
 import { Effect } from "effect";
 import { once } from "node:events";
@@ -29,6 +31,7 @@ import {
 } from "../../test-support/service-test-doubles";
 import { HostOperationError, HostResourceError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import type { AgentRuntimeQueryAdapterPort } from "../../ports/agent-runtime-query-port";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { createAgentRuntimeQueryService } from "./agent-runtime-query-service";
 import { createDeniedToolPartRecords } from "../agent-sessions/denied-tool-part-records";
@@ -47,6 +50,13 @@ const harness = async (
     worktreeBasePath?: string | undefined;
     canonicalizePath?: SettingsConfigPort["canonicalizePath"];
     catalog?: AgentModelCatalog;
+    isAcceptedHandoffMember?: Parameters<
+      typeof createAgentRuntimeQueryService
+    >[0]["isAcceptedHandoffMember"];
+    isStagedHandoffMember?: Parameters<
+      typeof createAgentRuntimeQueryService
+    >[0]["isStagedHandoffMember"];
+    loadSessionHistory?: AgentRuntimeQueryAdapterPort["loadSessionHistory"];
   } = {},
 ) => {
   let runtime: RuntimeInstanceSummary | null = {
@@ -83,11 +93,13 @@ const harness = async (
               },
             };
           }),
-        loadSessionHistory: (input) =>
-          Effect.sync(() => {
-            calls.push(input);
-            return [];
-          }),
+        loadSessionHistory:
+          options.loadSessionHistory ??
+          ((input) =>
+            Effect.sync(() => {
+              calls.push(input);
+              return [];
+            })),
         searchFiles: (input) =>
           Effect.sync(() => {
             calls.push(input);
@@ -110,6 +122,8 @@ const harness = async (
     adapterRegistry,
     deniedToolParts,
     sessionTurns: createMemoryAgentSessionTurnStore().store,
+    isAcceptedHandoffMember: options.isAcceptedHandoffMember,
+    isStagedHandoffMember: options.isStagedHandoffMember,
     runtimeRegistry: {
       requireReady: (kind) =>
         Effect.suspend(() =>
@@ -722,6 +736,97 @@ test("reads cold history without a live snapshot and requires task ownership whe
     ).toBe("scope_mismatch");
   }
   expect(h.calls).toHaveLength(2);
+});
+
+test("reads an accepted handoff before its owned task record is saved, in its exact scope", async () => {
+  const staged = { ...historyRef, externalSessionId: "staged" };
+  const scope = {
+    kind: "workflow",
+    workspaceId: "workspace",
+    taskId: "task",
+    role: "build",
+  } as const;
+  const h = await harness("opencode", {
+    isAcceptedHandoffMember: (ref, requested) =>
+      agentSessionRefsEqual(ref, staged) && agentSessionScopesEqual(requested, scope),
+  });
+  expect(
+    await Effect.runPromise(h.service.loadSessionHistory({ ...staged, sessionScope: scope })),
+  ).toEqual([]);
+  const wrongTask = await Effect.runPromise(
+    Effect.flip(
+      h.service.loadSessionHistory({
+        ...staged,
+        sessionScope: { ...scope, taskId: "another-task" },
+      }),
+    ),
+  );
+  expect(wrongTask.failure.code).toBe("scope_mismatch");
+  expect(h.calls).toHaveLength(1);
+});
+
+test("Check reads raw history for the exact staged session and rejects a replaced runtime's receipt", async () => {
+  const staged = {
+    ...historyRef,
+    externalSessionId: "staged",
+    sessionScope: { kind: "workflow", workspaceId: "workspace", taskId: "task", role: "build" },
+  } as const;
+  const receipt: AgentSessionHistoryMessage = {
+    role: "user",
+    state: "read",
+    messageId: "native-admission-id",
+    timestamp: "2026-09-10T10:00:00.000Z",
+    text: "Original native message",
+    displayParts: [],
+    parts: [],
+  };
+  let beforeHistory = async () => {};
+  const loadSessionHistory = mock<AgentRuntimeQueryAdapterPort["loadSessionHistory"]>(() =>
+    Effect.promise(async () => {
+      await beforeHistory();
+      return [receipt];
+    }),
+  );
+  const h = await harness("opencode", {
+    isStagedHandoffMember: (ref) =>
+      agentSessionRefsEqual(ref, staged) &&
+      agentSessionScopesEqual(ref.sessionScope, staged.sessionScope),
+    loadSessionHistory,
+  });
+  const wrongScope = {
+    ...staged,
+    sessionScope: { ...staged.sessionScope, taskId: "another-task" },
+  };
+  const error = await Effect.runPromise(
+    Effect.flip(h.service.loadStagedHandoffHistory(wrongScope)),
+  );
+  expect(error.failure.code).toBe("scope_mismatch");
+  expect(loadSessionHistory).not.toHaveBeenCalled();
+  expect(await Effect.runPromise(h.service.loadStagedHandoffHistory(staged))).toEqual([receipt]);
+
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  beforeHistory = async () => {
+    entered.resolve();
+    await release.promise;
+  };
+  const pending = Effect.runPromise(Effect.flip(h.service.loadStagedHandoffHistory(staged)));
+  await entered.promise;
+  try {
+    await Effect.runPromise(h.adapterRegistry.remove("runtime-1"));
+    await Effect.runPromise(
+      h.adapterRegistry.register(
+        createAgentSessionRuntimeAdapterTestDouble(
+          { ...h.adapter.binding, runtimeId: "runtime-2" },
+          {},
+        ),
+      ),
+    );
+    h.setRuntime({ ...h.runtime, runtimeId: "runtime-2" });
+  } finally {
+    release.resolve();
+  }
+  expect((await pending).failure.code).toBe("runtime_unavailable");
 });
 
 test("accepts retained child ancestry backed by an ODT root record", async () => {

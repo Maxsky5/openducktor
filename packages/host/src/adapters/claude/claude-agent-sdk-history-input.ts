@@ -70,7 +70,9 @@ export const createClaudeHistoryInputProjector = (options: {
     );
     const messageId = liveUserMessage?.messageId ?? input.fallbackMessageId;
     const displayParts =
-      liveUserMessage?.parts ?? readClaudeHistoryDisplayParts(messageId, input.message);
+      liveUserMessage?.nativeInput?.parts ??
+      liveUserMessage?.parts ??
+      readClaudeHistoryDisplayParts(messageId, input.message);
     if (input.text.trim().length === 0 && displayParts.length === 0) {
       return undefined;
     }
