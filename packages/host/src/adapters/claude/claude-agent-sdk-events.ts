@@ -150,7 +150,7 @@ export const handleClaudeSdkMessage = ({
     const userToolResultMessage = parseClaudeUserToolResultIngress(message);
     if (isRootSession && isClaudeWakeUserMessage(message, userToolResultMessage)) {
       session.replyStartedAt ??= timestamp;
-      clearClaudePreviousTurnState(session);
+      clearClaudePreviousAssistantTracking(session);
       session.sdkInitiatedTurnActive = true;
       applyClaudeLifecycleEvent({ emit, session, timestamp, event: { kind: "sdk_turn_started" } });
     }
@@ -274,7 +274,7 @@ export const handleClaudeSdkMessage = ({
   }
 };
 
-const clearClaudePreviousTurnState = (session: ClaudeEventSession): void => {
+const clearClaudePreviousAssistantTracking = (session: ClaudeEventSession): void => {
   delete session.lastAssistantNativeUuid;
   delete session.lastAssistantNativeUuidTurnIndex;
   delete session.lastAssistantTextMessageId;
@@ -283,7 +283,6 @@ const clearClaudePreviousTurnState = (session: ClaudeEventSession): void => {
   delete session.lastAssistantTextModel;
   delete session.lastAssistantTextDurationMs;
   delete session.lastAssistantTextTurnIndex;
-  delete session.lastSuccessfulResultTurnIndex;
 };
 
 const startRootSdkTurn = ({
@@ -296,7 +295,11 @@ const startRootSdkTurn = ({
     (session.activeSdkUserTurnCount ?? 0) === 0 &&
     (session.pendingUserTurnCount ?? 0) === 0
   ) {
-    clearClaudePreviousTurnState(session);
+    clearClaudePreviousAssistantTracking(session);
+    delete session.lastSuccessfulResultTurnIndex;
+  } else if (session.sdkInitiatedTurnActive === true) {
+    // A wake turn that begins model or stream output supersedes any prior completed result.
+    delete session.lastSuccessfulResultTurnIndex;
   }
   applyClaudeLifecycleEvent({ emit, session, timestamp, event: { kind: "sdk_turn_started" } });
 };

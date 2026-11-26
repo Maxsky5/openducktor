@@ -111,15 +111,23 @@ export const handleClaudeResultMessage = ({
     emitSuccessfulResultText({ emit, message, session, timestamp, completedUserTurnIndex });
   }
   if (!failed && !handledManualCompaction && lifecycleOutcome === "completed") {
-    // A tool-only result carries no assistant text, so the turn index is the only
-    // record that the latest accepted turn finished.
-    session.lastSuccessfulResultTurnIndex = completedUserTurnIndex;
     const hasCurrentFinalText =
       session.lastAssistantTextFinal &&
       session.lastAssistantTextTurnIndex === completedUserTurnIndex;
     const hasCurrentAssistant =
       session.lastAssistantNativeUuid &&
       session.lastAssistantNativeUuidTurnIndex === completedUserTurnIndex;
+    // An empty SDK-initiated result only acknowledges a notification without running a new reply.
+    const completedOwnTurn =
+      !session.sdkInitiatedTurnActive ||
+      resultText.length > 0 ||
+      hasCurrentFinalText ||
+      hasCurrentAssistant;
+    if (completedOwnTurn) {
+      // A tool-only result carries no assistant text, so the turn index is the only
+      // record that the latest accepted turn finished.
+      session.lastSuccessfulResultTurnIndex = completedUserTurnIndex;
+    }
     if (resultText.length === 0 && hasCurrentFinalText) {
       emitClaudeDeferredReplyForkPoint({ emit, session, timestamp });
     }

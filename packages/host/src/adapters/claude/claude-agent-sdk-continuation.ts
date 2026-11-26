@@ -72,8 +72,13 @@ const hasFinalAssistantHistory = (message: AgentSessionHistoryMessage): boolean 
     (part) => part.kind === "step" && part.phase === "finish" && part.reason === "stop",
   );
 
+const hasAssistantTurnWork = (
+  message: Extract<AgentSessionHistoryMessage, { role: "assistant" }>,
+): boolean =>
+  message.text.trim().length > 0 || message.parts.some((part) => part.kind !== "subagent");
+
 const hasUnfinishedHistoryAfterFinal = (message: AgentSessionHistoryMessage): boolean =>
-  message.role === "assistant" ||
+  (message.role === "assistant" && hasAssistantTurnWork(message)) ||
   (message.role === "system" && message.notice?.reason === "session_error");
 
 /**

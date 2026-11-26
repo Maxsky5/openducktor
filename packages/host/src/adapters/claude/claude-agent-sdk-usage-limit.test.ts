@@ -501,4 +501,139 @@ describe("Claude usage-limit recovery", () => {
       error: { reason: "completed_turn" },
     });
   });
+
+  test.each([
+    ["preserves Resume after a weekly-limit stop", false, "allow"],
+    ["keeps a completed turn settled", true, "reject"],
+  ] as const)(
+    "empty notification-only wake %s without emitting a final marker",
+    (_label, priorCompleted, expectedKind) => {
+      const timestamp = "2026-11-26T06:54:00.000Z";
+      const session = createClaudeSession({
+        activity: "idle",
+        acceptedUserMessages: [
+          {
+            messageId: claudeSdkMessageUuidFixture("user-1"),
+            text: "Monitor the PR",
+            parts: [],
+            timestamp,
+          },
+        ],
+      });
+      if (priorCompleted) {
+        session.lastSuccessfulResultTurnIndex = 1;
+        session.lastAssistantTextFinal = true;
+        session.lastAssistantTextTurnIndex = 1;
+      }
+      const events: AgentEvent[] = [];
+      const handle = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"]) =>
+        handleClaudeSdkMessage({
+          session,
+          message,
+          timestamp,
+          emit: (event) => events.push(event),
+          modelSelection: (modelId) => ({ providerId: "claude", modelId, runtimeKind: "claude" }),
+        });
+
+      handle(
+        claudeSdkMessageFixture({
+          type: "user",
+          uuid: claudeSdkMessageUuidFixture("empty-wake-user"),
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          origin: { kind: "task-notification" },
+          message: { role: "user", content: "<task-notification>done</task-notification>" },
+        }),
+      );
+      handle(
+        claudeSdkMessageFixture({
+          type: "result",
+          subtype: "success",
+          uuid: claudeSdkMessageUuidFixture("empty-wake-result"),
+          session_id: "session-1",
+          is_error: false,
+          result: "",
+          stop_reason: "end_turn",
+          terminal_reason: "completed",
+          origin: { kind: "task-notification" },
+        }),
+      );
+
+      expect(events.some((event) => event.type === "assistant_message")).toBe(false);
+      expect(decideClaudeLiveContinuation(session, "session-1").kind).toBe(expectedKind);
+    },
+  );
+
+  test("settles both live host and transcript marker when a wake runs assistant work and finishes without text", () => {
+    const timestamp = "2026-11-26T06:54:00.000Z";
+    const session = createClaudeSession({
+      activity: "idle",
+      acceptedUserMessages: [
+        {
+          messageId: claudeSdkMessageUuidFixture("user-1"),
+          text: "Monitor the PR",
+          parts: [],
+          timestamp,
+        },
+      ],
+    });
+    const events: AgentEvent[] = [];
+    const handle = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"]) =>
+      handleClaudeSdkMessage({
+        session,
+        message,
+        timestamp,
+        emit: (event) => events.push(event),
+        modelSelection: (modelId) => ({ providerId: "claude", modelId, runtimeKind: "claude" }),
+      });
+
+    handle(
+      claudeSdkMessageFixture({
+        type: "user",
+        uuid: claudeSdkMessageUuidFixture("tool-wake-user"),
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        origin: { kind: "task-notification" },
+        message: { role: "user", content: "<task-notification>done</task-notification>" },
+      }),
+    );
+    handle(
+      claudeSdkMessageFixture({
+        type: "assistant",
+        uuid: claudeSdkMessageUuidFixture("tool-wake-assistant"),
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        message: {
+          id: "tool-wake-msg",
+          role: "assistant",
+          content: [{ type: "tool_use", id: "tu-1", name: "Bash", input: { command: "echo ok" } }],
+          stop_reason: "tool_use",
+        },
+      }),
+    );
+    handle(
+      claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        uuid: claudeSdkMessageUuidFixture("tool-wake-result"),
+        session_id: "session-1",
+        is_error: false,
+        result: "",
+        stop_reason: "end_turn",
+        terminal_reason: "completed",
+      }),
+    );
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_message",
+        messageId: claudeSdkMessageUuidFixture("tool-wake-result"),
+        message: "",
+      }),
+    );
+    expect(decideClaudeLiveContinuation(session, "session-1")).toMatchObject({
+      kind: "reject",
+      error: { reason: "completed_turn" },
+    });
+  });
 });
