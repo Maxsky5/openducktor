@@ -32,6 +32,38 @@ describe("selectRenderableDiff", () => {
       "diff --git a/src/target.ts b/src/target.ts\n--- a/src/target.ts\n+++ b/src/target.ts\n@@ -1 +1 @@\n-old\n+new\n",
     );
   });
+
+  const incompletePatch =
+    "--- a/src/incomplete.ts\n+++ b/src/incomplete.ts\n@@ -1,2 +1,2 @@\n-old\n+new\n";
+  const firstValidPatch = "--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-old\n+new\n";
+  const secondValidPatch = "--- a/src/second.ts\n+++ b/src/second.ts\n@@ -1 +1 @@\n-old\n+new\n";
+
+  test("keeps a matching patch with an incomplete hunk", () => {
+    expect(selectRenderableDiff(firstValidPatch + incompletePatch, "src/incomplete.ts")).toBe(
+      incompletePatch,
+    );
+  });
+
+  test.each([
+    {
+      name: "skips an incomplete hunk before a valid candidate",
+      diff: incompletePatch + firstValidPatch,
+      expected: firstValidPatch,
+    },
+    {
+      name: "chooses the first of several valid candidates",
+      diff: firstValidPatch + secondValidPatch,
+      expected: firstValidPatch,
+    },
+    {
+      name: "chooses the first raw candidate if all candidates fail to parse",
+      diff: incompletePatch + "--- a/src/empty.ts\n+++ b/src/empty.ts\n",
+      expected: incompletePatch,
+    },
+  ])("$name when no path matches", ({ diff, expected }) => {
+    expect(selectRenderableDiff(diff, "src/unmatched.ts")).toBe(expected);
+  });
+
   test("keeps an empty context line at the end of the last hunk", () => {
     // Git writes an empty context line as one space.
     const hunk = "@@ -1,3 +1,4 @@\n+// header\n import a;\n import b;\n \n";

@@ -1,6 +1,6 @@
 import "../../test-support/dom-environment";
 import { afterEach, beforeEach, describe, expect, jest, test } from "bun:test";
-import { render } from "@testing-library/react";
+import { render, renderHook } from "@testing-library/react";
 import type { AgentSkillReference } from "@openducktor/core";
 import { act, createElement, useSyncExternalStore } from "react";
 import { agentSessionIdentityKey } from "../../lib/agent-session-identity";
@@ -100,21 +100,20 @@ describe("useAgentChatTranscriptModel", () => {
 
   test("starts cache-miss sessions with lightweight rows until post-paint derivation completes", async () => {
     const session = createLargeSession("session-cache-miss");
-    const harness = await mountHarness({
-      session,
-      showThinkingMessages: true,
+    const { result, unmount } = renderHook(useAgentChatTranscriptModel, {
+      initialProps: { session, showThinkingMessages: true },
     });
 
-    expect(harness.getLatest().transcriptState.rows).toEqual([]);
-    expect(harness.getLatest().isTranscriptModelMissing).toBe(true);
+    expect(result.current.transcriptState.rows).toEqual([]);
+    expect(result.current.isTranscriptModelMissing).toBe(true);
 
-    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
+    await flushTranscriptDerivation(() => result.current.hasCurrentRowsForActiveSession, {
       timeoutMs: 1_000,
     });
 
-    expect(harness.getLatest().transcriptState.rows.length).toBeGreaterThan(0);
-    expect(harness.getLatest().hasCurrentRowsForActiveSession).toBe(true);
-    await harness.unmount();
+    expect(result.current.transcriptState.rows.length).toBeGreaterThan(0);
+    expect(result.current.hasCurrentRowsForActiveSession).toBe(true);
+    unmount();
   });
 
   test("builds a small cache miss on the first render after a session switch", () => {
