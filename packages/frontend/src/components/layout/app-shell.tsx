@@ -108,9 +108,8 @@ function OpenRepositoryModalWhenEmpty({ onEmpty }: { onEmpty: () => void }): nul
 
 const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
   const { run: guardWorkspaceChange } = useWorkspacePreviewTransitionGuard();
-  // A runtime read that failed for a short time, such as during sleep, reads again when the user
-  // returns to the app or the computer wakes.
-  useRefetchFailedRuntimeQueries(windowReturnVisibility, useShellPlatform().systemWake);
+  const { systemWake } = useShellPlatform();
+  useRefetchFailedRuntimeQueries(windowReturnVisibility, systemWake);
   const [repositoryModal, setRepositoryModal] = useState<RepositoryModalRequest>({
     open: false,
     view: undefined,

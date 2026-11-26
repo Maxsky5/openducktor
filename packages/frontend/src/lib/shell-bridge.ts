@@ -10,7 +10,7 @@ import type {
 import { createHostClient } from "@openducktor/host-client";
 import type { HostConnection } from "@openducktor/frontend-core/connection/host-connection";
 import type { NotificationBridge } from "@openducktor/frontend-core/platform/notification-bridge";
-import type { SystemWake } from "@openducktor/frontend-core/platform/app-visibility";
+import type { SystemWake } from "@openducktor/frontend-core/platform/system-wake";
 import type { TerminalBridge } from "@openducktor/frontend-core/terminals/terminal-bridge";
 
 export type ShellCapabilities = {

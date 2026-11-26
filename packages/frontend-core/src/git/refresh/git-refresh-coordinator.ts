@@ -362,8 +362,9 @@ export class GitRefreshCoordinator {
   }
 
   /**
-   * A scheduled refresh checks the branch, the remote, and the target again. When it completes,
-   * the failure of an earlier manual Refresh has ended, so the Refresh state stops showing it. A
+   * A scheduled refresh that passes its branch read, fetch, and target check ends the failure of
+   * an earlier manual Refresh, so the Refresh state stops showing it. The fetch can skip the remote
+   * during its cooldown, but not after a failed fetch. Each failed read stays in its own view. A
    * soft refresh does not fetch, so it keeps the failure.
    */
   #endManualFailure(view: GitRefreshView): void {

@@ -161,3 +161,37 @@ test("a runtime read that runs at a return or a wake and then fails reads again"
     client.clear();
   }
 });
+
+test("a slow running runtime read does not delay the re-read of another failed read", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const catalogRead = Promise.withResolvers<string[]>();
+  const todosKey = sessionKeys[0]!;
+  let todosReads = 0;
+  const unsubscribes = [
+    new QueryObserver(client, {
+      queryKey: repoCatalogKey,
+      queryFn: () => catalogRead.promise,
+    }).subscribe(() => {}),
+    new QueryObserver(client, {
+      queryKey: todosKey,
+      queryFn: async () => {
+        todosReads += 1;
+        if (todosReads === 1) throw new Error("todos unavailable");
+        return ["todos"];
+      },
+    }).subscribe(() => {}),
+  ];
+
+  try {
+    await waitForExpectation(() => expect(client.getQueryState(todosKey)?.status).toBe("error"));
+    const refetch = refetchFailedRuntimeQueries(client);
+
+    await waitForExpectation(() => expect(client.getQueryData(todosKey)).toEqual(["todos"]));
+    expect(client.getQueryState(repoCatalogKey)?.fetchStatus).toBe("fetching");
+    catalogRead.resolve(["catalog"]);
+    await refetch;
+  } finally {
+    for (const unsubscribe of unsubscribes) unsubscribe();
+    client.clear();
+  }
+});

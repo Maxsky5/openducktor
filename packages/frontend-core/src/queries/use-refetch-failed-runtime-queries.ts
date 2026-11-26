@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
-import type { AppVisibility, SystemWake } from "../platform/app-visibility";
+import { useEffect, useRef } from "react";
+import type { AppVisibility } from "../platform/app-visibility";
+import type { SystemWake } from "../platform/system-wake";
 import { refetchFailedRuntimeQueries } from "./runtime-query-invalidation";
 
 /**
@@ -12,15 +13,22 @@ export function useRefetchFailedRuntimeQueries(
   systemWake: SystemWake | undefined,
 ): void {
   const queryClient = useQueryClient();
-  useEffect(
-    () =>
-      visibility.subscribe(() => {
-        if (!visibility.isHidden()) void refetchFailedRuntimeQueries(queryClient);
-      }),
-    [queryClient, visibility],
-  );
-  useEffect(
-    () => systemWake?.subscribe(() => void refetchFailedRuntimeQueries(queryClient)),
-    [queryClient, systemWake],
-  );
+  // One return can report more than one change, such as focus and visibility, or a wake and an
+  // unlock, so one re-read runs at a time.
+  const running = useRef<Promise<void> | null>(null);
+  useEffect(() => {
+    const refetch = () => {
+      running.current ??= refetchFailedRuntimeQueries(queryClient).finally(() => {
+        running.current = null;
+      });
+    };
+    const stopVisibility = visibility.subscribe(() => {
+      if (!visibility.isHidden()) refetch();
+    });
+    const stopWake = systemWake?.subscribe(refetch);
+    return () => {
+      stopVisibility();
+      stopWake?.();
+    };
+  }, [queryClient, systemWake, visibility]);
 }
