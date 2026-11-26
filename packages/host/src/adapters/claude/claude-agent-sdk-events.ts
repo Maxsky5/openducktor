@@ -135,7 +135,7 @@ export const handleClaudeSdkMessage = ({
       return;
     }
     if (isRootSession && message.parent_tool_use_id === null) {
-      applyClaudeLifecycleEvent({ emit, session, timestamp, event: { kind: "sdk_turn_started" } });
+      startRootSdkTurn({ emit, session, timestamp });
     }
     handleAssistantMessage({
       emit,
@@ -150,14 +150,7 @@ export const handleClaudeSdkMessage = ({
     const userToolResultMessage = parseClaudeUserToolResultIngress(message);
     if (isRootSession && isClaudeWakeUserMessage(message, userToolResultMessage)) {
       session.replyStartedAt ??= timestamp;
-      delete session.lastAssistantNativeUuid;
-      delete session.lastAssistantNativeUuidTurnIndex;
-      delete session.lastAssistantTextMessageId;
-      delete session.lastAssistantText;
-      delete session.lastAssistantTextFinal;
-      delete session.lastAssistantTextModel;
-      delete session.lastAssistantTextDurationMs;
-      delete session.lastAssistantTextTurnIndex;
+      clearClaudePreviousTurnState(session);
       session.sdkInitiatedTurnActive = true;
       applyClaudeLifecycleEvent({ emit, session, timestamp, event: { kind: "sdk_turn_started" } });
     }
@@ -167,7 +160,7 @@ export const handleClaudeSdkMessage = ({
   }
   if (message.type === "stream_event") {
     if (isRootSession && message.parent_tool_use_id === null) {
-      applyClaudeLifecycleEvent({ emit, session, timestamp, event: { kind: "sdk_turn_started" } });
+      startRootSdkTurn({ emit, session, timestamp });
     }
     handleClaudeStreamEvent({ emit, message, session, timestamp });
     return;
@@ -279,6 +272,33 @@ export const handleClaudeSdkMessage = ({
   if (message.type === "system" && message.subtype === "permission_denied") {
     handleClaudePermissionDeniedMessage({ emit, message, session, timestamp });
   }
+};
+
+const clearClaudePreviousTurnState = (session: ClaudeEventSession): void => {
+  delete session.lastAssistantNativeUuid;
+  delete session.lastAssistantNativeUuidTurnIndex;
+  delete session.lastAssistantTextMessageId;
+  delete session.lastAssistantText;
+  delete session.lastAssistantTextFinal;
+  delete session.lastAssistantTextModel;
+  delete session.lastAssistantTextDurationMs;
+  delete session.lastAssistantTextTurnIndex;
+  delete session.lastSuccessfulResultTurnIndex;
+};
+
+const startRootSdkTurn = ({
+  emit,
+  session,
+  timestamp,
+}: Pick<SdkMessageHandlerInput, "emit" | "session" | "timestamp">): void => {
+  if (
+    session.foregroundTurnActive !== true &&
+    (session.activeSdkUserTurnCount ?? 0) === 0 &&
+    (session.pendingUserTurnCount ?? 0) === 0
+  ) {
+    clearClaudePreviousTurnState(session);
+  }
+  applyClaudeLifecycleEvent({ emit, session, timestamp, event: { kind: "sdk_turn_started" } });
 };
 
 const handleSessionStateChanged = ({

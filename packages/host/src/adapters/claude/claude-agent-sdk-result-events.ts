@@ -157,6 +157,12 @@ export const handleClaudeResultMessage = ({
   const consumedMessageCount = messageIds.filter((messageId) => acceptedIds.has(messageId)).length;
   if (failed) {
     clearClaudeManualCompaction(session);
+    if (session.lastSuccessfulResultTurnIndex === completedUserTurnIndex) {
+      delete session.lastSuccessfulResultTurnIndex;
+    }
+    if (session.lastAssistantTextTurnIndex === completedUserTurnIndex) {
+      delete session.lastAssistantTextFinal;
+    }
     const errors = message.subtype === "success" ? [] : message.errors;
     const terminalReason = message.subtype === "success" ? undefined : message.terminal_reason;
     const lastError =

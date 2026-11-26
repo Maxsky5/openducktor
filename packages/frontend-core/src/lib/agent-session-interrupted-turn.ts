@@ -9,7 +9,8 @@ import type { OptionalAgentSessionActivityState } from "../types/agent-session-a
 import type { AgentChatMessage } from "../types/agent-orchestrator";
 
 /**
- * True when the transcript holds a user turn whose latest assistant reply is not final.
+ * True when the transcript holds a user turn whose latest assistant reply is not final, or
+ * unfinished wake-turn work after an earlier final reply.
  * Tool output, partial assistant text, an interruption notice, and an error notice keep the
  * turn open. A manual compaction request is a session command, not an interrupted turn. It
  * settles only when a completed compaction notice follows it; otherwise a typed `/compact`
@@ -17,21 +18,30 @@ import type { AgentChatMessage } from "../types/agent-orchestrator";
  */
 export const hasUnfinishedLatestTurn = (messages: readonly AgentChatMessage[]): boolean => {
   let compactionSettled = false;
+  let hasNewTurnWork = false;
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (!message) {
       continue;
     }
     if (message.role === "user") {
-      return isCompactionCommand(message) ? !compactionSettled : true;
+      return isCompactionCommand(message) ? !compactionSettled || hasNewTurnWork : true;
     }
     if (message.meta?.kind === "session_notice" && message.meta.reason === "session_compacted") {
       compactionSettled = message.meta.compactionStatus !== "running";
     }
+    if (
+      message.meta?.kind === "session_notice" &&
+      message.meta.reason === "session_error" &&
+      message.meta.usageLimit !== undefined
+    ) {
+      hasNewTurnWork = true;
+    }
     if (message.role === "assistant" && message.meta?.kind === "assistant") {
       if (message.meta.isFinal === true) {
-        return false;
+        return hasNewTurnWork;
       }
+      hasNewTurnWork = true;
     }
   }
   return false;

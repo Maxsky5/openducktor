@@ -301,4 +301,204 @@ describe("Claude usage-limit recovery", () => {
       expect(history.filter((message) => message.role === "system")).toHaveLength(1);
     },
   );
+
+  test.each([
+    [
+      "task-notification wake turn",
+      () => [
+        claudeSdkMessageFixture({
+          type: "user",
+          uuid: claudeSdkMessageUuidFixture("wake-user"),
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          origin: { kind: "task-notification" },
+          message: { role: "user", content: "<task-notification>finished</task-notification>" },
+        }),
+      ],
+    ],
+    [
+      "scheduled meta wakeup",
+      () => [
+        claudeSdkMessageFixture({
+          type: "user",
+          uuid: claudeSdkMessageUuidFixture("meta-wake"),
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          isSynthetic: true,
+          message: { role: "user", content: "Continue scheduled check." },
+        }),
+      ],
+    ],
+  ] as const)(
+    "allows Resume when a %s hits a usage limit after a completed turn",
+    (_label, wakeMessages) => {
+      const timestamp = "2026-11-26T06:53:39.000Z";
+      const text = "You've hit your weekly limit · resets 6pm (Europe/Paris)";
+      const user = claudeSdkMessageFixture({
+        type: "user",
+        uuid: claudeSdkMessageUuidFixture("user-1"),
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        message: { role: "user", content: "Monitor the PR" },
+      });
+      const completedAssistant = claudeSdkMessageFixture({
+        type: "assistant",
+        uuid: claudeSdkMessageUuidFixture("assistant-1"),
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        message: {
+          id: "completed-response",
+          model: "claude-opus-5-5",
+          role: "assistant",
+          content: [{ type: "text", text: "Waiting for CI." }],
+          stop_reason: "end_turn",
+        },
+      });
+      const completedResult = claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        uuid: claudeSdkMessageUuidFixture("result-1"),
+        user_message_uuid: user.uuid,
+        session_id: "session-1",
+        is_error: false,
+        result: "Waiting for CI.",
+        stop_reason: "end_turn",
+        terminal_reason: "completed",
+      });
+      const limitAssistant = claudeSdkMessageFixture({
+        type: "assistant",
+        uuid: claudeSdkMessageUuidFixture("limit-assistant"),
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        error: "rate_limit",
+        message: {
+          id: "limit-response",
+          model: "<synthetic>",
+          role: "assistant",
+          content: [{ type: "text", text }],
+          stop_reason: "stop_sequence",
+        },
+      });
+      const limitResult = claudeSdkMessageFixture({
+        type: "result",
+        subtype: "error_during_execution",
+        uuid: claudeSdkMessageUuidFixture("limit-result"),
+        session_id: "session-1",
+        is_error: true,
+        errors: [text],
+      });
+      const session = createClaudeSession({
+        activity: "running",
+        acceptedUserMessages: [
+          { messageId: user.uuid, text: "Monitor the PR", parts: [], timestamp },
+        ],
+        pendingUserTurnCount: 1,
+        activeSdkUserTurnCount: 1,
+      });
+      const events: AgentEvent[] = [];
+      const handle = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"]) =>
+        handleClaudeSdkMessage({
+          session,
+          message,
+          timestamp,
+          emit: (event) => events.push(event),
+          modelSelection: (modelId) => ({ providerId: "claude", modelId, runtimeKind: "claude" }),
+        });
+
+      handle(completedAssistant);
+      handle(completedResult);
+      expect(decideClaudeLiveContinuation(session, "session-1")).toMatchObject({
+        kind: "reject",
+        error: { reason: "completed_turn" },
+      });
+
+      const wakes = wakeMessages();
+      for (const message of [
+        ...wakes,
+        rateLimitEvent({ status: "rejected", rateLimitType: "seven_day", resetsAt: 1795712400 }),
+        limitAssistant,
+        limitResult,
+      ]) {
+        handle(message);
+      }
+
+      expect(session.activity).toBe("idle");
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "turn_error",
+          messageId: "limit-response",
+          usageLimit: { resetsAtEpochMs: 1795712400000 },
+        }),
+      );
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "session_turn_finished",
+          turnOutcome: "failed",
+        }),
+      );
+      expect(decideClaudeLiveContinuation(session, "session-1")).toEqual({ kind: "allow" });
+
+      const history = toClaudeHistoryMessages(
+        claudeHistoryMessagesFixture([
+          user,
+          completedAssistant,
+          completedResult,
+          ...wakes,
+          limitAssistant,
+          limitResult,
+        ]),
+        () => timestamp,
+      );
+      expect(decideClaudePersistedContinuation(history, "session-1")).toEqual({ kind: "allow" });
+    },
+  );
+
+  test("rejects Resume after a wake turn completes successfully", () => {
+    const timestamp = "2026-11-26T06:53:39.000Z";
+    const session = createClaudeSession({
+      activity: "idle",
+      acceptedUserMessages: [
+        { messageId: claudeSdkMessageUuidFixture("user-1"), text: "Build", parts: [], timestamp },
+      ],
+      lastSuccessfulResultTurnIndex: 1,
+      lastAssistantTextFinal: true,
+      lastAssistantTextTurnIndex: 1,
+    });
+    const handle = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"]) =>
+      handleClaudeSdkMessage({
+        session,
+        message,
+        timestamp,
+        emit: () => {},
+        modelSelection: (modelId) => ({ providerId: "claude", modelId, runtimeKind: "claude" }),
+      });
+
+    handle(
+      claudeSdkMessageFixture({
+        type: "user",
+        uuid: claudeSdkMessageUuidFixture("wake-user"),
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        origin: { kind: "task-notification" },
+        message: { role: "user", content: "<task-notification>finished</task-notification>" },
+      }),
+    );
+    handle(
+      claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        uuid: claudeSdkMessageUuidFixture("wake-result"),
+        session_id: "session-1",
+        is_error: false,
+        result: "All checks passed.",
+        stop_reason: "end_turn",
+        terminal_reason: "completed",
+      }),
+    );
+
+    expect(decideClaudeLiveContinuation(session, "session-1")).toMatchObject({
+      kind: "reject",
+      error: { reason: "completed_turn" },
+    });
+  });
 });

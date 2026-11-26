@@ -139,6 +139,48 @@ describe("hasUnfinishedLatestTurn", () => {
       hasUnfinishedLatestTurn([userMessage, message({ role: "system", content: "Interrupted" })]),
     ).toBe(true);
   });
+
+  test("treats wake-turn drafts and usage-limit errors after an earlier final reply as unfinished", () => {
+    const usageLimitError = message({
+      role: "system",
+      content: "You've hit your weekly limit · resets 6pm (Europe/Paris)",
+      meta: {
+        kind: "session_notice",
+        tone: "error",
+        reason: "session_error",
+        title: "Error",
+        usageLimit: { resetsAtEpochMs: 1795712400000 },
+      },
+    });
+    const sendFailureError = message({
+      role: "system",
+      content: "Could not deliver message.",
+      meta: {
+        kind: "session_notice",
+        tone: "error",
+        reason: "session_error",
+        title: "Error",
+      },
+    });
+
+    expect(hasUnfinishedLatestTurn([userMessage, assistantFinal, usageLimitError])).toBe(true);
+    expect(hasUnfinishedLatestTurn([userMessage, assistantFinal, toolOutput, assistantDraft])).toBe(
+      true,
+    );
+    expect(
+      hasUnfinishedLatestTurn([
+        userMessage,
+        assistantFinal,
+        toolOutput,
+        assistantDraft,
+        usageLimitError,
+      ]),
+    ).toBe(true);
+    expect(hasUnfinishedLatestTurn([userMessage, assistantFinal, sendFailureError])).toBe(false);
+    expect(
+      hasUnfinishedLatestTurn([userMessage, assistantFinal, usageLimitError, assistantFinal]),
+    ).toBe(false);
+  });
 });
 
 describe("canResumeInterruptedTurn", () => {

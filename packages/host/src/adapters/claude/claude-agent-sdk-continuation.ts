@@ -72,10 +72,18 @@ const hasFinalAssistantHistory = (message: AgentSessionHistoryMessage): boolean 
     (part) => part.kind === "step" && part.phase === "finish" && part.reason === "stop",
   );
 
+const hasUnfinishedHistoryAfterFinal = (message: AgentSessionHistoryMessage): boolean =>
+  message.role === "assistant" ||
+  (message.role === "system" && message.notice?.reason === "session_error");
+
 /**
  * Decides whether the persisted transcript can start a continuation. The transcript is
  * the only source that separates no-user, completed, and unfinished turns after a
  * restart, and for a session that has not accepted a user turn in this process.
+ *
+ * A wake or scheduled turn can run after a completed user turn without adding a new human
+ * user entry. Assistant output or a session error after the last final assistant reply
+ * means that later turn did not finish.
  */
 export const decideClaudePersistedContinuation = (
   history: readonly AgentSessionHistoryMessage[],
@@ -88,7 +96,12 @@ export const decideClaudePersistedContinuation = (
       `Claude session '${externalSessionId}' has no unfinished user turn to continue.`,
     );
   }
-  if (history.slice(latestUserIndex + 1).some(hasFinalAssistantHistory)) {
+  const latestTurn = history.slice(latestUserIndex + 1);
+  const lastFinalIndex = latestTurn.findLastIndex(hasFinalAssistantHistory);
+  if (
+    lastFinalIndex >= 0 &&
+    !latestTurn.slice(lastFinalIndex + 1).some(hasUnfinishedHistoryAfterFinal)
+  ) {
     return reject(
       "completed_turn",
       `Claude session '${externalSessionId}' has a final assistant result.`,
