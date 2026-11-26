@@ -455,3 +455,132 @@ test("gives a running chat a new entry when it starts to wait on background task
   expect(waiting).not.toBe(replying);
   expect(waiting?.status).toEqual({ kind: "running", waitingOnBackground: true });
 });
+
+test("keeps the draft key when moving workspaces and ignores hidden untouched draft removal", async () => {
+  const connection = createTestClientConnection({
+    client: {
+      tasksList: async () => [],
+      agentSessionsListForTasks: async () => [],
+      workspaceSessionListActive: async () => [],
+    },
+  });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <ClientConnectionProvider connection={connection}>
+      <WorkspaceActivityContext.Provider value={createWorkspaceActivityObserverStub()}>
+        {children}
+      </WorkspaceActivityContext.Provider>
+    </ClientConnectionProvider>
+  );
+  const workspaces = [alpha, beta];
+  const draft = connection.drafts.newWorkspaceSessions.createDraft("alpha");
+
+  const { result, rerender } = renderHook<
+    ReturnType<typeof useSessionNavigationModel>["model"],
+    string | null
+  >(
+    (includeUntouchedDraftId) =>
+      useSessionNavigationModel(workspaces, "none", { includeUntouchedDraftId }).model,
+    { initialProps: draft.id, wrapper },
+  );
+
+  await waitFor(() => expect(result.current.groups[2]?.entries).toHaveLength(1));
+  const beforeMove = result.current.groups[2]?.entries[0];
+  expect(beforeMove?.target).toEqual({
+    kind: "workspace_session_draft",
+    workspaceId: "alpha",
+    draftId: draft.id,
+  });
+
+  act(() => {
+    connection.drafts.newWorkspaceSessions.switchWorkspace(draft.id, "beta");
+  });
+
+  const afterMove = result.current.groups[2]?.entries[0];
+  expect(afterMove?.key).toBe(beforeMove?.key);
+  expect(afterMove?.target).toEqual({
+    kind: "workspace_session_draft",
+    workspaceId: "beta",
+    draftId: draft.id,
+  });
+  expect(afterMove?.workspace.workspaceId).toBe("beta");
+
+  // Leaving hides the untouched draft; subsequent deletion must not change the model reference.
+  rerender(null);
+  expect(result.current.groups[2]?.entries).toHaveLength(0);
+  const hiddenModel = result.current;
+
+  act(() => {
+    const release = connection.drafts.newWorkspaceSessions.attachDraftView(draft.id);
+    release();
+  });
+  await Promise.resolve();
+
+  expect(result.current).toBe(hiddenModel);
+});
+
+test("keeps a stable listKey across draft handoff and prunes it after the session leaves the active list", async () => {
+  const saved = chat("saved-1", "/alpha", Date.parse("2026-09-30T08:00:00.000Z"));
+  const connection = createTestClientConnection({
+    client: {
+      tasksList: async () => [],
+      agentSessionsListForTasks: async () => [],
+      workspaceSessionListActive: async () => [saved],
+    },
+  });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <ClientConnectionProvider connection={connection}>
+      <WorkspaceActivityContext.Provider value={createWorkspaceActivityObserverStub()}>
+        {children}
+      </WorkspaceActivityContext.Provider>
+    </ClientConnectionProvider>
+  );
+  const workspaces = [alpha];
+  const { result } = renderHook(() => useSessionNavigationModel(workspaces, "none").model, {
+    wrapper,
+  });
+  await waitFor(() => expect(result.current.groups[2]?.entries).toHaveLength(1));
+
+  let attemptId = "";
+  act(() => {
+    attemptId = connection.startupAttempts.begin({
+      origin: {
+        workspaceId: "alpha",
+        repoPath: "/alpha",
+        scope: { kind: "workspace", draftId: "draft-1" },
+      },
+      label: "Hello",
+      presentation: "inline",
+    });
+    connection.startupAttempts.setSaved(attemptId, {
+      state: "saved",
+      target: { kind: "workspace", record: saved },
+    });
+  });
+
+  const savedEntry = () =>
+    result.current.groups
+      .flatMap((group) => group.entries)
+      .find(
+        (entry) =>
+          entry.target.kind === "workspace_session" && entry.target.sessionId === "saved-1",
+      );
+  expect(savedEntry()?.listKey).toBe("workspace_session_draft:draft-1");
+
+  // Releasing the startup attempt keeps the handoff listKey while the session stays active.
+  act(() => {
+    connection.startupAttempts.release(attemptId);
+  });
+  expect(connection.startupAttempts.getSnapshot()).toHaveLength(0);
+  expect(savedEntry()?.listKey).toBe("workspace_session_draft:draft-1");
+
+  // Archiving/removing the session prunes its stale handoff key when a new list replaces it.
+  act(() => {
+    connection.queryClient.setQueryData(workspaceSessionQueryKeys.list("alpha", false), []);
+  });
+  await waitFor(() => expect(result.current.entryCount).toBe(0));
+  act(() => {
+    connection.queryClient.setQueryData(workspaceSessionQueryKeys.list("alpha", false), [saved]);
+  });
+  await waitFor(() => expect(savedEntry()).toBeDefined());
+  expect(savedEntry()?.listKey).toBeUndefined();
+});

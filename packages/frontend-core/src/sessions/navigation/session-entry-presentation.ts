@@ -81,8 +81,11 @@ export const sessionEntryLocation = (entry: SessionNavigationEntry): SessionEntr
 };
 
 /** The terminal context of the task or chat of an entry, for its active command marks. */
-export const sessionEntryTerminalContext = (entry: SessionNavigationEntry): TerminalContext => {
+export const sessionEntryTerminalContext = (
+  entry: SessionNavigationEntry,
+): TerminalContext | null => {
   const { repoPath, workspaceId } = entry.workspace;
+  if (entry.context.kind === "workspace_draft") return null;
   return entry.context.kind === "task"
     ? { workspaceId, repoPath, taskId: entry.context.task.id }
     : { kind: "workspace_session", repoPath, workspaceId, sessionId: entry.context.session.id };

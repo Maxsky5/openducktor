@@ -625,7 +625,7 @@ export const applyComposerDraftEdit = (
   }
 };
 
-const draftToUserMessageParts = (draft: AgentChatComposerDraft): AgentUserMessagePart[] => {
+export const draftToUserMessageParts = (draft: AgentChatComposerDraft): AgentUserMessagePart[] => {
   const normalizedDraft = normalizeComposerDraft(draft);
   return [
     ...normalizedDraft.segments.flatMap<AgentUserMessagePart>((segment) => {

@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 import type { StartupAttempt, StartupAttemptStatus } from "./startup-attempt-store";
-import { canOpenStartupSession } from "./startup-navigation";
+import {
+  canOpenStartupSession,
+  canOpenWorkspaceStartupRecovery,
+  findWorkspaceSessionStartupAttempt,
+} from "./startup-navigation";
 
 const savedAttempt = (phase: StartupAttemptStatus["phase"]): StartupAttempt => ({
   id: "attempt",
@@ -66,4 +70,53 @@ test("Open needs saved native ownership and its navigation target", () => {
   const { navigationTarget: _target, ...withoutTarget } = savedAttempt("failed");
   expect(canOpenStartupSession(withoutTarget)).toBe(false);
   expect(canOpenStartupSession(null)).toBe(false);
+});
+
+test("canOpenWorkspaceStartupRecovery allows reopening saved-unbound, pending, and unconfirmed workspace attempts", () => {
+  const unboundFailed = savedAttempt("failed");
+  if (
+    unboundFailed.ownership.state !== "saved" ||
+    unboundFailed.ownership.target.kind !== "workspace"
+  ) {
+    throw new Error("Missing saved workspace fixture.");
+  }
+  unboundFailed.ownership.target.record.externalSessionId = null;
+  expect(canOpenWorkspaceStartupRecovery(unboundFailed)).toBe(true);
+
+  const unboundRunning = savedAttempt("running");
+  if (
+    unboundRunning.ownership.state === "saved" &&
+    unboundRunning.ownership.target.kind === "workspace"
+  ) {
+    unboundRunning.ownership.target.record.externalSessionId = null;
+  }
+  expect(canOpenWorkspaceStartupRecovery(unboundRunning)).toBe(true);
+
+  const unconfirmed = savedAttempt("failed");
+  unconfirmed.status.confirmation = "unconfirmed";
+  expect(canOpenWorkspaceStartupRecovery(unconfirmed)).toBe(true);
+
+  expect(
+    canOpenWorkspaceStartupRecovery({
+      ...savedAttempt("failed"),
+      ownership: { state: "not_saved" },
+    }),
+  ).toBe(false);
+  expect(canOpenWorkspaceStartupRecovery(null)).toBe(false);
+});
+
+test("findWorkspaceSessionStartupAttempt returns the newest attempt matching workspace and session id", () => {
+  const older = { ...savedAttempt("failed"), id: "attempt-old" };
+  const newer = { ...savedAttempt("running"), id: "attempt-new" };
+  const otherWorkspace: StartupAttempt = {
+    ...savedAttempt("failed"),
+    id: "attempt-other-ws",
+    origin: { workspaceId: "other-ws", repoPath: "/other", scope: { kind: "workspace" } },
+  };
+  expect(
+    findWorkspaceSessionStartupAttempt([older, otherWorkspace, newer], "workspace", "saved")?.id,
+  ).toBe("attempt-new");
+  expect(
+    findWorkspaceSessionStartupAttempt([older, otherWorkspace], "workspace", "missing"),
+  ).toBeNull();
 });

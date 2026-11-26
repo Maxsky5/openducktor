@@ -1,4 +1,4 @@
-import type { WorkflowLaunchRequest } from "@openducktor/contracts";
+import type { StartupInstruction, WorkflowLaunchRequest } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import { connectionOf } from "../../connection/client-connection";
 import { errorMessage } from "../../lib/errors";
@@ -8,8 +8,63 @@ import {
   observeStartupPreparation,
   releaseStartupPreparationAttempt,
 } from "../startup/startup-prepared-handoff";
+import type { StartupAttemptStore } from "../startup/startup-attempt-store";
+import type { AgentMessageSendReceipt } from "../../types/agent-orchestrator";
 import type { SessionStartWorkflowResult } from "./session-start-workflow";
 import { WorkflowLaunchFailure } from "./session-start-workflow";
+
+const UNCONFIRMED_INSTRUCTION_DELIVERY_MESSAGE =
+  "Message delivery is unconfirmed. Inspect the session before sending again.";
+
+const settledInstructionForReceipt = (
+  receipt: Exclude<AgentMessageSendReceipt, { outcome: "uncertain" }>,
+): StartupInstruction => {
+  switch (receipt.outcome) {
+    case "queued":
+      return { state: "queued" };
+    case "acknowledged":
+      return { state: "accepted", submissionId: receipt.submissionId };
+    case "accepted":
+      return { state: "accepted" };
+  }
+};
+
+async function settleInstructionRetry({
+  attempts,
+  id,
+  receipt,
+  failure,
+  onNotSent,
+}: {
+  attempts: StartupAttemptStore;
+  id: string;
+  receipt: AgentMessageSendReceipt | null;
+  failure: string | undefined;
+  onNotSent: () => void;
+}): Promise<void> {
+  if (receipt && receipt.outcome !== "uncertain") {
+    attempts.setInstruction(id, settledInstructionForReceipt(receipt));
+    attempts.setRecoveryActions(id, []);
+    if (receipt.outcome !== "queued" && receipt.postAcceptanceFailure) {
+      attempts.setWarning(id, receipt.postAcceptanceFailure);
+    }
+    await attempts.complete(id);
+    return;
+  }
+  if (receipt?.outcome === "uncertain") {
+    attempts.setInstruction(id, { state: "unknown", submissionId: receipt.submissionId });
+    attempts.setRecoveryActions(id, []);
+    attempts.fail(id, UNCONFIRMED_INSTRUCTION_DELIVERY_MESSAGE, false);
+    return;
+  }
+  attempts.setInstruction(id, { state: "not_sent" });
+  attempts.fail(
+    id,
+    failure ?? "The session is prepared. The first instruction has not been sent.",
+    true,
+  );
+  onNotSent();
+}
 
 /** Keeps preparation repair and a known unsent instruction bound to the saved task session. */
 export function installWorkflowStartupRecovery({
@@ -44,51 +99,28 @@ export function installWorkflowStartupRecovery({
         label: "Retry message",
         run: async () => {
           if (!attempts.beginInstructionRetry(id)) return;
-          let receipt;
+          let receipt: AgentMessageSendReceipt | null = null;
           let failure: string | undefined;
           try {
             receipt = await retryInstruction();
           } catch (cause) {
             failure = errorMessage(cause);
           }
-          if (receipt && receipt.outcome !== "uncertain") {
-            attempts.setInstruction(
-              id,
-              receipt.outcome === "queued"
-                ? { state: "queued" }
-                : {
-                    state: "accepted",
-                    ...(receipt.outcome === "acknowledged" && {
-                      submissionId: receipt.submissionId,
-                    }),
-                  },
-            );
-            attempts.setRecoveryActions(id, []);
-            if (receipt.outcome !== "queued" && receipt.postAcceptanceFailure)
-              attempts.setWarning(id, receipt.postAcceptanceFailure);
-            await attempts.complete(id);
-          } else if (receipt?.outcome === "uncertain") {
-            attempts.setInstruction(id, { state: "unknown", submissionId: receipt.submissionId });
-            attempts.setRecoveryActions(id, []);
-            attempts.fail(
-              id,
-              "Message delivery is unconfirmed. Inspect the session before sending again.",
-              false,
-            );
-          } else {
-            attempts.setInstruction(id, { state: "not_sent" });
-            attempts.fail(
-              id,
-              failure ?? "The session is prepared. The first instruction has not been sent.",
-            );
-            installWorkflowStartupRecovery({
-              queryClient,
-              sessions,
-              id,
-              request,
-              retryInstruction,
-            });
-          }
+          await settleInstructionRetry({
+            attempts,
+            id,
+            receipt,
+            failure,
+            onNotSent: () => {
+              installWorkflowStartupRecovery({
+                queryClient,
+                sessions,
+                id,
+                request,
+                retryInstruction,
+              });
+            },
+          });
         },
       },
     ]);

@@ -1,16 +1,32 @@
 import {
   type GitBranch,
+  type GitTargetBranch,
   type HostInvokeFailure,
+  type WorkspaceSessionLocation,
   type WorkspaceSessionWorktreeInput,
+  workspaceSessionAllowsTargetBranch,
   workspaceSessionBranchNameSchema,
   workspaceSessionWorktreeNameSchema,
 } from "@openducktor/contracts";
+import { HostInvokeError } from "@openducktor/host-client";
+import { basenameForPath } from "@openducktor/path-support";
+
+/** Returns the display folder name for a worktree path across POSIX and Windows separators. */
+export const worktreeFolderName = (path: string): string => basenameForPath(path) || path;
 
 /** A worktree field error that the host reported for a create request. */
 export type WorkspaceSessionWorktreeFieldError = {
   field: Extract<HostInvokeFailure, { kind: "workspace_session_validation" }>["field"];
   message: string;
 };
+
+export function workspaceSessionValidationError(
+  error: Error | null,
+): WorkspaceSessionWorktreeFieldError | null {
+  return error instanceof HostInvokeError && error.failure?.kind === "workspace_session_validation"
+    ? { field: error.failure.field, message: error.message }
+    : null;
+}
 
 export const INITIAL_WORKSPACE_SESSION_WORKTREE: WorkspaceSessionWorktreeInput = Object.freeze({
   mode: "from_name",
@@ -24,32 +40,31 @@ export const WORKTREE_NAME_RULE =
 export const WORKTREE_NAME_MAX_LENGTH = 80;
 
 export const WORKTREE_NAME_OPTIONAL_HINT =
-  "Leave the name blank to let OpenDucktor name the branch from your first message.";
+  "Leave blank to let OpenDucktor assign a unique worktree directory automatically.";
 
 /**
- * True when the worktree name can stay blank: a worktree on a new branch in a workspace with a
- * naming model. The host then makes the directory and, without a branch name, names the branch from
- * the first message.
+ * True when the worktree directory name can stay blank: any new-branch worktree lets the host
+ * assign a unique managed directory name on send.
  */
-export const worktreeNameOptional = (
-  value: WorkspaceSessionWorktreeInput,
-  hasNamingModel: boolean,
-): boolean => hasNamingModel && value.mode === "from_name";
+export const worktreeNameOptional = (value: WorkspaceSessionWorktreeInput): boolean =>
+  value.mode === "from_name";
 
-/** True when the worktree has a name, or when its name can stay blank. */
-export const worktreeNameReady = (
-  value: WorkspaceSessionWorktreeInput,
-  hasNamingModel: boolean,
-): boolean => value.name.trim().length > 0 || worktreeNameOptional(value, hasNamingModel);
+/** True when the first message names the new branch: a new-branch worktree with no manual branch name. */
+export const branchNamedByFirstMessage = (value: WorkspaceSessionWorktreeInput): boolean =>
+  value.mode === "from_name" && !value.branchName;
 
-/** True when the first message names the new branch: a blank name and no typed branch name. */
-export const branchNamedByFirstMessage = (
-  value: WorkspaceSessionWorktreeInput,
-  hasNamingModel: boolean,
-): boolean =>
-  worktreeNameOptional(value, hasNamingModel) &&
-  value.name.trim().length === 0 &&
-  !value.branchName;
+/**
+ * Adjusts an explicit target branch choice when the work location changes. Leaving Current
+ * checkout clears a Tracked upstream pick so the draft falls back to the repository default
+ * target branch (or becomes unselected when the repository default is also Tracked upstream).
+ */
+export const resolveTargetBranchOnLocationChange = (
+  nextLocation: WorkspaceSessionLocation,
+  pickedTargetBranch: GitTargetBranch | null,
+): GitTargetBranch | null =>
+  pickedTargetBranch && workspaceSessionAllowsTargetBranch(nextLocation, pickedTargetBranch)
+    ? pickedTargetBranch
+    : null;
 
 /** Switches between a new branch and an existing branch. The worktree name stays. */
 export const changeWorktreeMode = (

@@ -140,6 +140,22 @@ export function useAgentChatComposerDraftState({
     };
   }, [visibility]);
 
+  useEffect(() => {
+    const subscribeExternalChange = nextPersistence?.subscribeExternalChange;
+    if (!subscribeExternalChange) return;
+    return subscribeExternalChange(() => {
+      const current = latestStateRef.current;
+      if (current.key !== nextKey || !current.persistence) return;
+      const synced: ComposerDraftState = {
+        key: current.key,
+        persistence: current.persistence,
+        draft: current.persistence.hydrate(),
+      };
+      latestStateRef.current = synced;
+      setState(synced);
+    });
+  }, [nextKey, nextPersistence]);
+
   const commitDraft = useCallback((nextDraft: AgentChatComposerDraft): void => {
     const current = latestStateRef.current;
     editSequenceRef.current += 1;

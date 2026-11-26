@@ -33,6 +33,12 @@ import {
 } from "../agent-orchestrator/session-read-model/workspace-session-records";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
 import type { WorkflowStepTone } from "../../types/agent-workflow";
+import type { AgentChatComposerDraft } from "../../drafts/agent-chat-composer-draft";
+import {
+  type WorkspaceSessionDraft,
+  type WorkspaceSessionDraftLifecycle,
+  workspaceSessionDraftTitle,
+} from "../../drafts/new-workspace-session-draft-store";
 
 /**
  * One server read as the sidebar sees it. Loading and failure never become empty data.
@@ -48,12 +54,30 @@ export type SessionNavigationWorkspace = Pick<
   "workspaceId" | "workspaceName" | "repoPath" | "abbreviation" | "tileColor" | "iconDataUrl"
 >;
 
+export type WorkspaceSessionStartupNavigationState = {
+  title: string | null;
+  isStarting: boolean;
+  originDraftKey?: string;
+};
+
+export type WorkspaceDraftStartupNavigationState = {
+  startupAttemptId: string;
+  isStarting: boolean;
+  failed: boolean;
+  submittedComposer: AgentChatComposerDraft | null;
+};
+
 export type SessionNavigationWorkspaceSources = {
   workspace: SessionNavigationWorkspace;
   tasks: SessionNavigationRead<TaskCard[]>;
   /** Saved task sessions by task ID, for the tasks in `tasks`. */
   taskSessions: ReadonlyMap<string, SessionNavigationRead<AgentSessionRecord[]>>;
   workspaceSessions: SessionNavigationRead<WorkspaceSession[]>;
+  workspaceDrafts?: readonly WorkspaceSessionDraft[];
+  /** Startup state keyed by draft ID, derived from `StartupAttemptStore`. */
+  workspaceDraftStartups?: ReadonlyMap<string, WorkspaceDraftStartupNavigationState>;
+  /** Active or recently handed-off startup state keyed by saved workspace session ID. */
+  workspaceStartupSessions?: ReadonlyMap<string, WorkspaceSessionStartupNavigationState>;
   live: WorkspaceSessionLiveState;
 };
 
@@ -86,6 +110,8 @@ type SessionNavigationTime =
  */
 export type SessionNavigationEntry = {
   key: string;
+  /** Stable React list key across draft -> saved handoff so the sidebar row morphs in place. */
+  listKey?: string;
   target: SessionNavigationTarget;
   workspace: SessionNavigationWorkspace;
   title: string;
@@ -102,7 +128,14 @@ export type SessionNavigationEntry = {
   /** Cached records for the preview. Opening it does not fetch tasks or session history. */
   context:
     | { kind: "task"; task: TaskCard; sessions: readonly AgentSessionRecord[] }
-    | { kind: "workspace"; session: WorkspaceSession };
+    | { kind: "workspace"; session: WorkspaceSession; isStarting?: true }
+    | {
+        kind: "workspace_draft";
+        draftId: string;
+        lifecycle: WorkspaceSessionDraftLifecycle;
+        isStarting: boolean;
+        startupAttemptId: string | null;
+      };
 };
 
 export type SessionNavigationGroupId = "needs_you" | "running" | "recent";
@@ -156,6 +189,7 @@ export const buildSessionNavigationModel = (
   const entries = workspaces.flatMap((sources) => [
     ...taskEntries(sources, grouping),
     ...workspaceEntries(sources),
+    ...workspaceDraftEntries(sources),
   ]);
   const grouped = new Map<SessionNavigationGroupId, SessionNavigationEntry[]>(
     SESSION_NAVIGATION_GROUP_ORDER.map((id) => [id, []]),
@@ -439,31 +473,89 @@ const taskEntries = (
 
 const workspaceEntries = (sources: SessionNavigationWorkspaceSources): SessionNavigationEntry[] => {
   if (sources.workspaceSessions.status !== "ready") return [];
-  const { workspace, live } = sources;
+  const { workspace, live, workspaceStartupSessions } = sources;
   return sources.workspaceSessions.data.flatMap((record): SessionNavigationEntry[] => {
     if (record.archivedAt !== null) return [];
     const liveFacts = sessionLiveFactsOf(live, workspaceSessionIdentity(record));
     const { facts } = liveFacts;
-    return [
-      navigationEntry(
-        { kind: "workspace_session", workspaceId: workspace.workspaceId, sessionId: record.id },
-        {
-          workspace,
-          title: workspaceSessionTitle(record),
-          runtimeKind: record.runtimeKind,
-          workflowTone: null,
-          attention: liveAttention(facts),
-          status: sessionStatus(live, liveFacts),
-          startedAt: record.createdAt,
-          time:
-            record.lastActivityAt === undefined
-              ? { kind: "started", at: record.createdAt }
-              : { kind: "activity", at: record.lastActivityAt },
-          fault: liveFacts.fault,
-          context: { kind: "workspace", session: record },
+    const startup = workspaceStartupSessions?.get(record.id);
+    const baseStatus = sessionStatus(live, liveFacts);
+    const status: SessionNavigationStatus =
+      startup?.isStarting && baseStatus.kind === "settled" && !baseStatus.failed
+        ? { kind: "running" }
+        : baseStatus;
+    const hasRecordTitle =
+      Boolean(record.manualTitle?.trim()) || Boolean(record.generatedTitle?.trim());
+    const title =
+      !hasRecordTitle && startup?.title?.trim()
+        ? startup.title.trim()
+        : workspaceSessionTitle(record);
+    const entry = navigationEntry(
+      { kind: "workspace_session", workspaceId: workspace.workspaceId, sessionId: record.id },
+      {
+        workspace,
+        title,
+        runtimeKind: record.runtimeKind,
+        workflowTone: null,
+        attention: liveAttention(facts),
+        status,
+        startedAt: record.createdAt,
+        time:
+          record.lastActivityAt === undefined
+            ? { kind: "started", at: record.createdAt }
+            : { kind: "activity", at: record.lastActivityAt },
+        fault: liveFacts.fault,
+        context: startup?.isStarting
+          ? { kind: "workspace", session: record, isStarting: true }
+          : { kind: "workspace", session: record },
+      },
+    );
+    if (startup?.originDraftKey) {
+      entry.listKey = startup.originDraftKey;
+    }
+    return [entry];
+  });
+};
+
+const workspaceDraftEntries = (
+  sources: SessionNavigationWorkspaceSources,
+): SessionNavigationEntry[] => {
+  const drafts = sources.workspaceDrafts;
+  if (!drafts || drafts.length === 0) return [];
+  const { workspace, workspaceDraftStartups } = sources;
+  return drafts.map((draft) => {
+    const startup = workspaceDraftStartups?.get(draft.id);
+    const isStarting = startup?.isStarting ?? false;
+    return navigationEntry(
+      {
+        kind: "workspace_session_draft",
+        workspaceId: workspace.workspaceId,
+        draftId: draft.id,
+      },
+      {
+        workspace,
+        title: workspaceSessionDraftTitle(draft, startup?.submittedComposer),
+        runtimeKind: draft.options.selectedModel?.runtimeKind ?? null,
+        workflowTone: null,
+        attention: [],
+        status: isStarting
+          ? { kind: "running" }
+          : {
+              kind: "settled",
+              failed: startup?.failed ?? false,
+            },
+        startedAt: draft.createdAt,
+        time: { kind: "activity", at: draft.updatedAt },
+        fault: null,
+        context: {
+          kind: "workspace_draft",
+          draftId: draft.id,
+          lifecycle: draft.lifecycle,
+          isStarting,
+          startupAttemptId: startup?.startupAttemptId ?? null,
         },
-      ),
-    ];
+      },
+    );
   });
 };
 
@@ -478,8 +570,16 @@ const entryOrderTime = (entry: SessionNavigationEntry): number | null => {
   return entry.time.kind === "none" ? null : entry.time.at;
 };
 
-/** Running uses start time; other groups use activity. Newest first, then the stable key. */
+/**
+ * Drafts sit at the top of Recent ordered newest-updated first, ahead of saved recent sessions.
+ * Running uses start time; other groups use activity. Newest first, then the stable key.
+ */
 const compareEntries = (left: SessionNavigationEntry, right: SessionNavigationEntry): number => {
+  const leftIsDraft = left.context.kind === "workspace_draft";
+  const rightIsDraft = right.context.kind === "workspace_draft";
+  if (leftIsDraft !== rightIsDraft) {
+    return leftIsDraft ? -1 : 1;
+  }
   const leftTime = entryOrderTime(left);
   const rightTime = entryOrderTime(right);
   if (leftTime !== rightTime) {

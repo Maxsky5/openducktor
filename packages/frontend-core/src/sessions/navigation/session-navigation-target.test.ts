@@ -29,5 +29,18 @@ describe("session navigation targets", () => {
     expect(sessionNavigationTargetKey(sessionTarget)).not.toBe(
       sessionNavigationTargetKey({ ...sessionTarget, workspaceId: "other" }),
     );
+    expect(
+      sessionNavigationTargetKey({
+        kind: "workspace_session_draft",
+        workspaceId: "w",
+        draftId: "draft-1",
+      }),
+    ).toBe(
+      sessionNavigationTargetKey({
+        kind: "workspace_session_draft",
+        workspaceId: "other",
+        draftId: "draft-1",
+      }),
+    );
   });
 });

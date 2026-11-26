@@ -50,6 +50,8 @@ export type ComposerPolicyModel = {
   messageQueue: AgentChatMessageQueueModel | null;
   /** The goal of the session, or null when it has none. */
   goalRow?: { readonly status: AgentSessionGoalStatus } | null | undefined;
+  /** External reason blocking Send while keeping the composer editable, or null. */
+  externalSendBlockedReason?: string | null | undefined;
 };
 
 export type ComposerPolicy = {
@@ -105,9 +107,11 @@ const deriveComposerPolicy = ({
   const isComposerInputDisabled = composerInputDisabledFor(model);
   const speedBlockedReason = blockedSpeedReason(model.speed);
   const turnSpeedBlockedReason = steersTurn ? null : speedBlockedReason;
+  const externalBlockedReason = model.externalSendBlockedReason ?? null;
 
   const sendInputBlocked =
     model.canSend === false ||
+    externalBlockedReason !== null ||
     isSubmitting ||
     isComposerInputDisabled ||
     hasSlashAttachmentConflict ||
@@ -118,7 +122,7 @@ const deriveComposerPolicy = ({
   const steerBlockedReason = steersTurn ? draftSteerBlockedReason(draft, model) : null;
   const sendBlockedReason = !settingsReady
     ? "Load session settings before sending. Use Retry settings if the read failed."
-    : (steerBlockedReason ?? turnSpeedBlockedReason);
+    : (externalBlockedReason ?? steerBlockedReason ?? turnSpeedBlockedReason);
   const sendDisabled =
     !settingsReady ||
     sendInputBlocked ||

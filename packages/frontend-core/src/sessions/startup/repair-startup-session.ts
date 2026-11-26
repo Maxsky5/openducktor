@@ -1,3 +1,4 @@
+import type { WorkspaceSessionStartResult } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import { connectionOf } from "../../connection/client-connection";
 import { errorMessage } from "../../lib/errors";
@@ -8,6 +9,62 @@ import {
   observeStartupPreparation,
   releaseStartupPreparationAttempt,
 } from "./startup-prepared-handoff";
+
+async function executeWorkspaceStartupRepair({
+  queryClient,
+  sessions,
+  attemptId,
+  workspaceId,
+  repoPath,
+  sessionId,
+}: {
+  queryClient: QueryClient;
+  sessions: AgentSessionsStore;
+  attemptId: string;
+  workspaceId: string;
+  repoPath: string;
+  sessionId: string;
+}): Promise<WorkspaceSessionStartResult> {
+  const connection = connectionOf(queryClient);
+  const attempts = connection.startupAttempts;
+  releaseStartupPreparationAttempt(queryClient, attemptId);
+  const result = await attempts.operation(
+    attemptId,
+    (startup) =>
+      connection.host.client.workspaceSessionStart({
+        workspaceId,
+        sessionId,
+        startup,
+      }),
+    {
+      beforeDispatch: () => observeStartupPreparation(queryClient, repoPath, attemptId),
+    },
+  );
+  attempts.setSaved(attemptId, {
+    state: "saved",
+    target: {
+      kind: "workspace",
+      record: result.session,
+      ...(result.runtimeSession && { runtimeSession: result.runtimeSession }),
+    },
+  });
+  updateWorkspaceSessionQueries(queryClient, workspaceId, result.session);
+  try {
+    projectWorkspaceSessionResult(
+      {
+        workspaceId,
+        repoPath,
+        record: result.session,
+        session: result.runtimeSession ?? undefined,
+      },
+      sessions,
+      queryClient,
+    );
+  } catch (cause) {
+    console.error("Cannot show the repaired workspace session.", cause);
+  }
+  return result;
+}
 
 /** Repair prepares the retained record. It never repeats a create or fork command. */
 export function installStartupSessionRepair(
@@ -38,49 +95,22 @@ export function installStartupSessionRepair(
         )
           return;
         const target = current.ownership.target;
-        releaseStartupPreparationAttempt(queryClient, id);
-        const operationOptions = {
-          beforeDispatch: () => observeStartupPreparation(queryClient, current.origin.repoPath, id),
-        };
         try {
           if (target.kind === "workspace") {
-            const result = await attempts.operation(
-              id,
-              (startup) =>
-                connection.host.client.workspaceSessionStart({
-                  workspaceId: current.origin.workspaceId,
-                  sessionId: target.record.id,
-                  startup,
-                }),
-              operationOptions,
-            );
-            attempts.setSaved(id, {
-              state: "saved",
-              target: {
-                kind: "workspace",
-                record: result.session,
-                ...(result.runtimeSession && { runtimeSession: result.runtimeSession }),
-              },
+            const result = await executeWorkspaceStartupRepair({
+              queryClient,
+              sessions,
+              attemptId: id,
+              workspaceId: current.origin.workspaceId,
+              repoPath: current.origin.repoPath,
+              sessionId: target.record.id,
             });
-            updateWorkspaceSessionQueries(queryClient, current.origin.workspaceId, result.session);
-            try {
-              projectWorkspaceSessionResult(
-                {
-                  ...current.origin,
-                  record: result.session,
-                  session: result.runtimeSession ?? undefined,
-                },
-                sessions,
-                queryClient,
-              );
-            } catch (cause) {
-              console.error("Cannot show the repaired workspace session.", cause);
-            }
             if (!result.startupProgress?.prepared)
               throw new Error("Session preparation is unconfirmed. Inspect the saved session.");
           } else {
             const scope = current.origin.scope;
             if (scope.kind !== "task") return;
+            releaseStartupPreparationAttempt(queryClient, id);
             const result = await attempts.operation(
               id,
               (startup) =>
@@ -98,12 +128,15 @@ export function installStartupSessionRepair(
                   resumeMode: "reattach",
                   startup,
                 }),
-              operationOptions,
+              {
+                beforeDispatch: () =>
+                  observeStartupPreparation(queryClient, current.origin.repoPath, id),
+              },
             );
             if (!result.startupProgress?.prepared)
               throw new Error("Session preparation is unconfirmed. Inspect the saved session.");
           }
-          await attempts.complete(id);
+          await attempts.complete(id, { preparedOnly: target.kind === "workspace" });
         } catch (cause) {
           const latest = attempts.getAttempt(id);
           if (latest && !["failed", "canceled"].includes(latest.status.phase))

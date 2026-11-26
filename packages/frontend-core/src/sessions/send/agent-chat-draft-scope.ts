@@ -7,6 +7,8 @@ export type AgentChatDraftPersistence = {
   set: (draft: AgentChatComposerDraft) => number;
   readVersion: () => number | null;
   clear: (options?: { onlyIfVersion?: number | null }) => boolean;
+  /** Fires when the backing store mutates the composer draft outside local editor commits. */
+  subscribeExternalChange?: (listener: () => void) => () => void;
   flush: () => Promise<void>;
   subscribeCleared?: (onClear: () => void) => () => void;
 };

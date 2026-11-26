@@ -8,12 +8,14 @@ import type {
 } from "@openducktor/contracts";
 import type { HostConnection } from "../../connection/host-connection";
 import { HostInvokeError } from "@openducktor/host-client";
+import type { AgentChatComposerDraft } from "../../drafts/agent-chat-composer-draft";
 import type { SessionNavigationTarget } from "../navigation/session-navigation-target";
 import {
   canOpenStartupSession,
   startupIsPending,
   startupNavigationTarget,
 } from "./startup-navigation";
+import { startupHasWarningOrFailure } from "./startup-trace";
 
 export type StartupAttemptStatus = {
   phase: "submitting" | "waiting" | "running" | "settling" | "ready" | "failed" | "canceled";
@@ -22,7 +24,7 @@ export type StartupAttemptStatus = {
 };
 
 export type StartupRecoveryAction = {
-  kind: "retry_message" | "repair" | "retry";
+  kind: "retry_message" | "repair" | "retry" | "edit_choices";
   label: string;
   run: () => void | Promise<void>;
 };
@@ -39,6 +41,7 @@ export type StartupAttempt = {
   ownership: StartupOwnership;
   instructionRequired: boolean;
   instruction?: StartupInstruction;
+  submittedComposer?: AgentChatComposerDraft;
   prepared?: StartupPreparedHandoff;
   presentation: StartupPresentation;
   navigationTarget?: SessionNavigationTarget;
@@ -66,9 +69,17 @@ export const createStartupAttemptStore = (
     adopt: (snapshot: StartupOperationSnapshot) => Promise<void>;
     isCurrent: (id: string, handoff: StartupPreparedHandoff) => boolean;
     release: (id: string) => void;
+    onWorkspaceOwnershipSaved?: (input: {
+      workspaceId: string;
+      record: Extract<
+        Extract<StartupOwnership, { state: "saved" }>["target"],
+        { kind: "workspace" }
+      >["record"];
+    }) => void;
   },
 ) => {
   const entries = new Map<string, AttemptEntry>();
+  const inlineViewCounts = new Map<string, number>();
   const listeners = new Set<() => void>();
   let snapshot: readonly StartupAttempt[] = [];
   let disposed = false;
@@ -85,10 +96,33 @@ export const createStartupAttemptStore = (
     publish();
   };
   const release = (id: string) => {
+    inlineViewCounts.delete(id);
     if (entries.delete(id)) {
       preparation.release(id);
       publish();
     }
+  };
+  const continueInBackground = (id: string) => {
+    update(id, (attempt) =>
+      attempt.origin.scope.kind === "task" || startupIsPending(attempt)
+        ? { ...attempt, presentation: "notification" }
+        : attempt,
+    );
+  };
+  const returnToInline = (id: string) => {
+    update(id, (attempt) =>
+      attempt.presentation === "notification" ? { ...attempt, presentation: "inline" } : attempt,
+    );
+  };
+  const notifyWorkspaceOwnershipSaved = (
+    entry: AttemptEntry,
+    ownership: StartupOwnership,
+  ): void => {
+    if (ownership.state !== "saved" || ownership.target.kind !== "workspace") return;
+    preparation.onWorkspaceOwnershipSaved?.({
+      workspaceId: entry.attempt.origin.workspaceId,
+      record: ownership.target.record,
+    });
   };
   const accept = (progress: StartupOperationSnapshot) => {
     if (disposed) return;
@@ -121,7 +155,10 @@ export const createStartupAttemptStore = (
       entry.attempt.ownership.state === "saved" && !newerSaved
         ? entry.attempt.ownership
         : progress.ownership;
-    if (newerSaved) entry.savedOperationIndex = operationIndex;
+    if (newerSaved) {
+      entry.savedOperationIndex = operationIndex;
+      notifyWorkspaceOwnershipSaved(entry, ownership);
+    }
     const final = progress.context.operationId === entry.finalOperationId;
     const latestOperation = progress.context.operationId === entry.operationIds.at(-1);
     let phase: StartupAttemptStatus["phase"] = entry.attempt.status.phase;
@@ -264,21 +301,25 @@ export const createStartupAttemptStore = (
       roleLabel?: string;
       presentation: StartupPresentation;
       instructionRequired?: boolean;
+      submittedComposer?: AgentChatComposerDraft;
     }): string {
       if (disposed) throw new Error("The startup connection has been released.");
       const id = crypto.randomUUID();
+      const baseAttempt: StartupAttempt = {
+        id,
+        origin: input.origin,
+        label: input.label,
+        ...(input.roleLabel && { roleLabel: input.roleLabel }),
+        ...(input.submittedComposer && { submittedComposer: input.submittedComposer }),
+        presentation: input.presentation,
+        status: { phase: "submitting", confirmation: "current" },
+        operations: [],
+        ownership: { state: "unknown" },
+        instructionRequired: input.instructionRequired ?? false,
+      };
+      const initialTarget = startupNavigationTarget(baseAttempt, baseAttempt.ownership);
       entries.set(id, {
-        attempt: {
-          id,
-          origin: input.origin,
-          label: input.label,
-          ...(input.roleLabel && { roleLabel: input.roleLabel }),
-          presentation: input.presentation,
-          status: { phase: "submitting", confirmation: "current" },
-          operations: [],
-          ownership: { state: "unknown" },
-          instructionRequired: input.instructionRequired ?? false,
-        },
+        attempt: initialTarget ? { ...baseAttempt, navigationTarget: initialTarget } : baseAttempt,
         operationIds: [],
         finalOperationId: null,
         completedOperationId: null,
@@ -357,13 +398,19 @@ export const createStartupAttemptStore = (
     },
     setSaved(id: string, ownership: Extract<StartupOwnership, { state: "saved" }>) {
       const entry = entries.get(id);
-      if (entry) entry.savedOperationIndex = entry.operationIds.length - 1;
+      if (entry) {
+        entry.savedOperationIndex = entry.operationIds.length - 1;
+        notifyWorkspaceOwnershipSaved(entry, ownership);
+      }
       update(id, (attempt) => {
         const navigationTarget = startupNavigationTarget(attempt, ownership);
         return { ...attempt, ownership, ...(navigationTarget && { navigationTarget }) };
       });
     },
-    async complete(id: string): Promise<void> {
+    setSubmittedComposer(id: string, submittedComposer: AgentChatComposerDraft) {
+      update(id, (attempt) => ({ ...attempt, submittedComposer }));
+    },
+    async complete(id: string, options?: { preparedOnly?: boolean }): Promise<void> {
       const entry = entries.get(id);
       if (!entry) return;
       const operationId = entry.finalOperationId;
@@ -393,6 +440,7 @@ export const createStartupAttemptStore = (
           };
         }
         if (
+          !options?.preparedOnly &&
           attempt.instructionRequired &&
           (!attempt.instruction || !["accepted", "queued"].includes(attempt.instruction.state))
         )
@@ -452,12 +500,40 @@ export const createStartupAttemptStore = (
     setRecoveryActions(id: string, recoveryActions: readonly StartupRecoveryAction[]) {
       update(id, (attempt) => ({ ...attempt, recoveryActions }));
     },
-    continueInBackground(id: string) {
-      update(id, (attempt) =>
-        attempt.origin.scope.kind === "task"
-          ? { ...attempt, presentation: "notification" }
-          : attempt,
-      );
+    continueInBackground,
+    returnToInline,
+    /**
+     * Acquires an inline-view lease for `id`. When the last lease releases without suppression,
+     * a microtask grace window lets same-commit handoffs and StrictMode remounts keep ownership;
+     * otherwise pending starts move to background notifications and clean ready summaries release.
+     */
+    attachInlineView(
+      id: string,
+      options?: { returnFromNotification?: boolean },
+    ): (releaseOptions?: { suppressBackground?: boolean }) => void {
+      inlineViewCounts.set(id, (inlineViewCounts.get(id) ?? 0) + 1);
+      if (options?.returnFromNotification) {
+        returnToInline(id);
+      }
+      let released = false;
+      return (releaseOptions) => {
+        if (released) return;
+        released = true;
+        const nextCount = (inlineViewCounts.get(id) ?? 0) - 1;
+        if (nextCount <= 0) inlineViewCounts.delete(id);
+        else inlineViewCounts.set(id, nextCount);
+        if (releaseOptions?.suppressBackground) return;
+        queueMicrotask(() => {
+          if (disposed || (inlineViewCounts.get(id) ?? 0) > 0) return;
+          const current = entries.get(id)?.attempt;
+          if (!current || current.presentation !== "inline") return;
+          if (startupIsPending(current)) {
+            continueInBackground(id);
+          } else if (current.status.phase === "ready" && !startupHasWarningOrFailure(current)) {
+            release(id);
+          }
+        });
+      };
     },
     dismiss(id: string) {
       const attempt = entries.get(id)?.attempt;
@@ -466,6 +542,8 @@ export const createStartupAttemptStore = (
     handoff(id: string): boolean {
       const attempt = entries.get(id)?.attempt;
       if (!canOpenStartupSession(attempt)) return false;
+      if (attempt.presentation === "inline" && attempt.origin.scope.kind === "workspace")
+        return true;
       if (attempt.status.phase === "ready") release(id);
       else update(id, (current) => ({ ...current, presentation: "notification" }));
       return true;
@@ -486,6 +564,7 @@ export const createStartupAttemptStore = (
       unsubscribe?.();
       for (const id of entries.keys()) preparation.release(id);
       entries.clear();
+      inlineViewCounts.clear();
       publish();
       listeners.clear();
     },
