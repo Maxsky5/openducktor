@@ -41,6 +41,11 @@ export type ClientConnectionOptions = {
   /** Device storage for host-scoped drafts. A remote host gets memory storage. */
   storage: ClientStorage;
   /**
+   * Device storage for the UI layout of this host, such as the session panels. It keeps the layout
+   * after a reload, also for a remote host. The default is `storage`.
+   */
+  layoutStorage?: ClientStorage;
+  /**
    * False when `storage` ends with the connection, such as the memory storage of a remote host.
    * Disposal then drops unsaved drafts, so it does not wait for their attachment uploads. The
    * default is true.
@@ -73,6 +78,8 @@ export type ClientConnection = {
   readonly queryClient: QueryClient;
   /** Device storage for the state of this host, such as drafts and UI choices. */
   readonly storage: ClientStorage;
+  /** Device storage for the UI layout of this host. Only this host reads and writes its keys. */
+  readonly layoutStorage: ClientStorage;
   readonly feedback: ClientFeedback;
   readonly stageAttachment: AttachmentStager;
   readonly drafts: ClientDrafts;
@@ -119,6 +126,7 @@ export const createClientConnection = ({
   host,
   queryClient,
   storage,
+  layoutStorage = storage,
   saveDraftsOnDispose = true,
   feedback,
   stageAttachment,
@@ -172,6 +180,7 @@ export const createClientConnection = ({
     host,
     queryClient,
     storage,
+    layoutStorage,
     feedback,
     stageAttachment,
     drafts,
