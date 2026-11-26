@@ -129,7 +129,7 @@ export const RuntimeIcon = memo(function RuntimeIcon({
       return (
         <Svg width={size} height={size} viewBox={antigravity.viewBox}>
           <Defs>
-            <LinearGradient id="antigravity-brand" x1="0" y1="1" x2="0.4" y2="0">
+            <LinearGradient id="antigravity-brand" {...antigravity.gradientVector}>
               {antigravity.gradientStops.map((stop) => (
                 <Stop key={stop.offset} offset={stop.offset} stopColor={stop.color} />
               ))}
