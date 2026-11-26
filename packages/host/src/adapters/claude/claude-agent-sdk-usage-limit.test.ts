@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { SDKRateLimitEvent, SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk";
+import type { SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import {
   decideClaudeLiveContinuation,
@@ -13,6 +13,10 @@ import {
   claudeSdkMessageFixture,
   claudeSdkMessageUuidFixture,
 } from "./claude-agent-sdk-test-messages";
+import {
+  claudeRateLimitEventFixture as rateLimitEvent,
+  claudeTaskNotificationWakeFixture as taskNotificationWake,
+} from "./claude-agent-sdk-usage-limit.test-support";
 
 const createHandler = (session: ReturnType<typeof createClaudeSession>, timestamp: string) => {
   const events: AgentEvent[] = [];
@@ -26,27 +30,6 @@ const createHandler = (session: ReturnType<typeof createClaudeSession>, timestam
     });
   return { events, handle };
 };
-
-const taskNotificationWake = (
-  id: string,
-  overrides: { isSynthetic?: boolean; shouldQuery?: boolean } = {},
-) =>
-  claudeSdkMessageFixture({
-    type: "user",
-    uuid: claudeSdkMessageUuidFixture(id),
-    session_id: "session-1",
-    parent_tool_use_id: null,
-    origin: { kind: "task-notification" },
-    message: { role: "user", content: "<task-notification>done</task-notification>" },
-    ...overrides,
-  });
-
-const rateLimitEvent = (info: SDKRateLimitInfo): SDKRateLimitEvent => ({
-  type: "rate_limit_event",
-  session_id: "session-1",
-  uuid: "00000000-0000-4000-8000-000000000004",
-  rate_limit_info: info,
-});
 
 describe("Claude usage-limit recovery", () => {
   test.each([
@@ -676,4 +659,89 @@ describe("Claude usage-limit recovery", () => {
       expect(decideClaudeLiveContinuation(session, "session-1")).toEqual({ kind: "allow" });
     },
   );
+
+  test("settles empty SDKResultSuccess turns for local slash commands", () => {
+    const timestamp = "2026-10-08T07:55:00.000Z";
+
+    // Silent local slash command (no local_command_output, empty result, num_turns: 0, stop_reason: null).
+    const silentSession = createClaudeSession({
+      activity: "running",
+      foregroundTurnActive: true,
+      pendingUserTurnCount: 1,
+      acceptedUserMessages: [{ messageId: "cmd-1", text: "/cost", parts: [], timestamp }],
+    });
+    const silent = createHandler(silentSession, timestamp);
+    silent.handle(
+      claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        uuid: claudeSdkMessageUuidFixture("silent-local-cmd-res"),
+        session_id: "session-1",
+        user_message_uuid: "cmd-1",
+        local_command: "/cost",
+        is_error: false,
+        num_turns: 0,
+        result: "",
+        stop_reason: null,
+      }),
+    );
+
+    expect(silentSession.lastSuccessfulResultTurnIndex).toBe(1);
+    expect(silent.events).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_message",
+        messageId: claudeSdkMessageUuidFixture("silent-local-cmd-res"),
+        message: "",
+      }),
+    );
+    expect(decideClaudeLiveContinuation(silentSession, "session-1")).toMatchObject({
+      kind: "reject",
+      error: { reason: "completed_turn" },
+    });
+
+    // Output-bearing local slash command: local_command_output already emits the final assistant message.
+    const outputSession = createClaudeSession({
+      activity: "running",
+      foregroundTurnActive: true,
+      pendingUserTurnCount: 1,
+      acceptedUserMessages: [{ messageId: "cmd-2", text: "/cost", parts: [], timestamp }],
+    });
+    const withOutput = createHandler(outputSession, timestamp);
+    withOutput.handle(
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "local_command_output",
+        uuid: claudeSdkMessageUuidFixture("local-cmd-out"),
+        session_id: "session-1",
+        content: "Total cost: $0.12",
+      }),
+    );
+    withOutput.handle(
+      claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        uuid: claudeSdkMessageUuidFixture("output-local-cmd-res"),
+        session_id: "session-1",
+        user_message_uuid: "cmd-2",
+        local_command: "/cost",
+        is_error: false,
+        num_turns: 0,
+        result: "",
+        stop_reason: null,
+      }),
+    );
+
+    expect(outputSession.lastSuccessfulResultTurnIndex).toBe(1);
+    expect(withOutput.events.filter((event) => event.type === "assistant_message")).toEqual([
+      expect.objectContaining({
+        type: "assistant_message",
+        messageId: claudeSdkMessageUuidFixture("local-cmd-out"),
+        message: "Total cost: $0.12",
+      }),
+    ]);
+    expect(decideClaudeLiveContinuation(outputSession, "session-1")).toMatchObject({
+      kind: "reject",
+      error: { reason: "completed_turn" },
+    });
+  });
 });

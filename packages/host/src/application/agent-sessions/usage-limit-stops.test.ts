@@ -213,20 +213,26 @@ describe("usage-limit stops", () => {
     expect(stops.entry(ref)).toBeNull();
   });
 
-  test("defers a due Claude stop while foreground work is active and re-schedules it when idle", () => {
-    const { stops, stop } = planningStop();
+  test("defers a scheduled stop while foreground work is active and wakes it when idle", () => {
+    const changes: AgentSessionLiveRef[] = [];
+    const stops = createUsageLimitStops((changedRef) => changes.push(changedRef));
+    stops.setEnabled(true);
+    stops.observe(limitError(RESET));
+    const stop = stops.observe(turnFailed);
+    if (!stop) throw new Error("Expected a stop to plan.");
     stops.planned(stop, true);
     stops.observe(sessionUpsert("running", true));
-    stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS);
 
-    expect(stops.startResume(stop, { kind: "active_turn" })).toBe(false);
+    // Active sessions are gated directly in takeDue without starting due-time checks.
+    expect(stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS).due).toEqual([]);
     expect(stops.entry(ref)).toMatchObject({
       state: "scheduled",
       resumeAtEpochMs: RESET + USAGE_LIMIT_RESUME_GRACE_MS,
     });
-    expect(stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS + 1_000).due).toEqual([]);
 
+    changes.length = 0;
     stops.observe(sessionUpsert("idle", false));
+    expect(changes).toEqual([ref]);
 
     const due = stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS + 1_000).due;
     expect(due).toEqual([stop]);
@@ -239,17 +245,157 @@ describe("usage-limit stops", () => {
     ).toBe(true);
   });
 
-  test("re-schedules immediately if a Claude wake went idle during the due-time check", () => {
+  test("defers when due-time live read finds an active turn, or retries immediately if idle arrived meanwhile", () => {
     const { stops, stop } = planningStop();
     stops.planned(stop, true);
-    stops.observe(sessionUpsert("running", true));
-    stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS);
-
-    // Wake finishes before startResume runs.
-    stops.observe(sessionUpsert("idle", false));
-
-    expect(stops.startResume(stop, { kind: "active_turn" })).toBe(false);
     expect(stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS).due).toEqual([stop]);
+
+    // Live read discovered an active turn before an upsert arrived.
+    expect(stops.startResume(stop, { kind: "active_turn" })).toBe(false);
+    expect(stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS + 1_000).due).toEqual([]);
+
+    stops.observe(sessionUpsert("idle", false));
+    expect(stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS + 1_000).due).toEqual([stop]);
+
+    // Wake finishes before startResume reports active_turn.
+    stops.observe(sessionUpsert("idle", false));
+    expect(stops.startResume(stop, { kind: "active_turn" })).toBe(false);
+    expect(stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS + 1_000).due).toEqual([stop]);
+  });
+
+  test("clears stale active foreground entries when a repo snapshot omits the session", () => {
+    const otherRef: AgentSessionLiveRef = { ...ref, repoPath: "/other-repo" };
+    const changes: AgentSessionLiveRef[] = [];
+    const stops = createUsageLimitStops((changedRef) => changes.push(changedRef));
+    stops.setEnabled(true);
+    stops.observe(limitError(RESET));
+    const stop = stops.observe(turnFailed);
+    if (!stop) throw new Error("Expected a stop to plan.");
+    stops.planned(stop, true);
+    stops.observe(sessionUpsert("running", true));
+    stops.observe({
+      type: "session_upsert",
+      session: {
+        ref: otherRef,
+        activity: "running",
+        foregroundTurnActive: true,
+        title: "Other",
+        startedAt: new Date(BASE).toISOString(),
+        pendingApprovals: [],
+        pendingQuestions: [],
+        contextUsage: null,
+      },
+    });
+
+    // An authoritative empty snapshot for /repo clears /repo's active session and wakes its stop.
+    changes.length = 0;
+    stops.observe({
+      type: "snapshot",
+      repoPath: ref.repoPath,
+      sessions: [],
+      messageQueues: [],
+    });
+    expect(changes).toEqual([ref]);
+    expect(stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS).due).toEqual([stop]);
+
+    // Unrelated repo sessions stay active after /repo's snapshot.
+    const otherLimit: AgentSessionLiveEnvelope = {
+      type: "transcript_event",
+      event: {
+        externalSessionId: otherRef.externalSessionId,
+        timestamp: new Date(BASE).toISOString(),
+        sessionRef: otherRef,
+        type: "turn_error",
+        messageId: "other-limit-1",
+        message: "Limit reached.",
+        usageLimit: { resetsAtEpochMs: RESET },
+      },
+    };
+    const otherTurnFailed: AgentSessionLiveEnvelope = {
+      type: "transcript_event",
+      event: {
+        externalSessionId: otherRef.externalSessionId,
+        timestamp: new Date(BASE).toISOString(),
+        sessionRef: otherRef,
+        type: "session_turn_finished",
+        completionId: "other-result-1",
+        messageIds: [],
+        turnOutcome: "failed",
+      },
+    };
+    stops.observe(otherLimit);
+    const otherStop = stops.observe(otherTurnFailed);
+    if (!otherStop) throw new Error("Expected other stop to plan.");
+    stops.planned(otherStop, true);
+    expect(stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS).due).toEqual([]);
+  });
+
+  test("invalidates an in-flight history restore when a newer live usage-limit stop arrives and is cancelled", () => {
+    const found = {
+      stopId: "limit-disk-1",
+      occurredAtEpochMs: BASE - 60_000,
+      resetsAtEpochMs: RESET,
+    };
+    const stops = createUsageLimitStops(() => {});
+    stops.setEnabled(true);
+    const pending = stops.beginRestore(ref);
+
+    stops.observe({
+      type: "transcript_event",
+      event: {
+        ...eventBase,
+        type: "turn_error",
+        messageId: "limit-live-2",
+        message: "Limit reached.",
+        usageLimit: { resetsAtEpochMs: RESET + 60_000 },
+      },
+    });
+    expect(stops.cancel(ref, "limit-live-2")).toBe(true);
+
+    expect(pending.restore(found, BASE)).toBeNull();
+    expect(stops.entry(ref)).toBeNull();
+  });
+
+  test("cancels a scheduled Codex stop on non-limit session_error", () => {
+    const codexRef: AgentSessionLiveRef = { ...ref, runtimeKind: "codex" };
+    const codexBase = {
+      externalSessionId: codexRef.externalSessionId,
+      timestamp: new Date(BASE).toISOString(),
+      sessionRef: codexRef,
+    };
+    const stops = createUsageLimitStops(() => {});
+    stops.setEnabled(true);
+    stops.observe({
+      type: "transcript_event",
+      event: {
+        ...codexBase,
+        type: "turn_error",
+        messageId: "codex-limit-1",
+        message: "Usage limit reached.",
+        usageLimit: { resetsAtEpochMs: RESET },
+      },
+    });
+    const stop = stops.observe({
+      type: "transcript_event",
+      event: {
+        ...codexBase,
+        type: "session_idle",
+        turnOutcome: "failed",
+      },
+    });
+    if (!stop) throw new Error("Expected Codex stop to plan.");
+    stops.planned(stop, true);
+    expect(stops.entry(codexRef)).toMatchObject({ state: "scheduled" });
+
+    stops.observe({
+      type: "transcript_event",
+      event: {
+        ...codexBase,
+        type: "session_error",
+        message: "Codex turn failed.",
+      },
+    });
+    expect(stops.entry(codexRef)).toBeNull();
   });
 
   test("ignores running progress for background or tool_progress updates while cancelling on new tool calls", () => {

@@ -40,6 +40,7 @@ import {
 import { handleClaudeStreamEvent } from "./claude-agent-sdk-stream-events";
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import { handleClaudeSubagentSystemMessage } from "./claude-agent-sdk-subagents";
+import { clearClaudePreviousAssistantTracking } from "./claude-agent-sdk-turn-completion";
 import { parseClaudeUserToolResultIngress } from "./claude-agent-sdk-ingress-schemas";
 import {
   clearClaudeStreamToolInputs,
@@ -276,17 +277,6 @@ export const handleClaudeSdkMessage = ({
   if (message.type === "system" && message.subtype === "permission_denied") {
     handleClaudePermissionDeniedMessage({ emit, message, session, timestamp });
   }
-};
-
-const clearClaudePreviousAssistantTracking = (session: ClaudeEventSession): void => {
-  delete session.lastAssistantNativeUuid;
-  delete session.lastAssistantNativeUuidTurnIndex;
-  delete session.lastAssistantTextMessageId;
-  delete session.lastAssistantText;
-  delete session.lastAssistantTextFinal;
-  delete session.lastAssistantTextModel;
-  delete session.lastAssistantTextDurationMs;
-  delete session.lastAssistantTextTurnIndex;
 };
 
 const startRootSdkTurn = ({

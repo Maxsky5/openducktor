@@ -31,11 +31,6 @@ export type UsageLimitStopPhase =
   | "scheduled"
   /** The due time passed, and the checks before the resume run. Clients still see `scheduled`. */
   | "due"
-  /**
-   * The due time passed while a foreground turn was active. Clients still see `scheduled`, and
-   * the stop re-enters `scheduled` when the session returns to idle.
-   */
-  | "waiting_for_idle"
   | "resuming"
   | "failed";
 
@@ -101,8 +96,8 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
   const ended = new Set<string>();
   /** Tokens for in-flight history reads. Membership is cleared on live work or release. */
   const pendingRestores = new Map<string, Set<symbol>>();
-  /** Supported sessions whose latest observed live snapshot has an active foreground turn. */
-  const activeForegroundKeys = new Set<string>();
+  /** Supported sessions with an active foreground turn, mapped to their repoPath for snapshot reconciliation. */
+  const activeForegroundRepoByKey = new Map<string, string>();
 
   const isCurrent = (stop: TrackedUsageLimitStop): boolean =>
     stops.get(agentSessionRefKey(stop.ref)) === stop;
@@ -131,11 +126,11 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
   };
 
   const noteIdle = (key: string): void => {
-    activeForegroundKeys.delete(key);
+    const wasActive = activeForegroundRepoByKey.delete(key);
     const stop = stops.get(key);
     if (!stop) return;
     if (stop.phase === "due") stop.sawIdleWhileDue = true;
-    else if (stop.phase === "waiting_for_idle") setPhase(stop, "scheduled");
+    else if (wasActive && stop.phase === "scheduled") changed(stop.ref);
   };
 
   /** Moves an eligible stop to the root check. The caller runs the check. */
@@ -166,7 +161,8 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
       !stop ||
       nextUsageLimitStop(stop, { kind: "limit_error", stopId: event.messageId }) !== "same_stop"
     ) {
-      // A new stop replaces the previous one, also while its resume runs.
+      // A new stop supersedes any in-flight history read and replaces the previous stop.
+      invalidatePendingRestores(key);
       end(key);
       stops.set(key, {
         ref: event.sessionRef,
@@ -192,10 +188,6 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
         // A due stop waits again for the new time. Its running checks then stop.
         else setPhase(stop, "scheduled");
         return null;
-      case "waiting_for_idle":
-        if (!hasEligibleReset(stop)) end(key);
-        else changed(stop.ref);
-        return null;
       default:
         return null;
     }
@@ -208,13 +200,56 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
       noteIdle(key);
       return;
     }
-    activeForegroundKeys.add(key);
-    // Foreground work during the failed turn counts as activity on the session. Later transient
-    // foreground pulses wait for real turn output, a user message, a host operation, or idle
-    // resolution at due time rather than cancelling the stop immediately.
-    const stop = stops.get(key);
-    if (stop?.turnEnded === false && stop.phase !== "resuming") {
-      invalidatePendingRestores(key);
+    activeForegroundRepoByKey.set(key, session.ref.repoPath);
+  };
+
+  const observeTranscriptEvent = (
+    event: Extract<AgentSessionLiveEnvelope, { type: "transcript_event" }>["event"],
+  ): TrackedUsageLimitStop | null => {
+    if (!supportsUsageLimitAutoResume(event.sessionRef.runtimeKind)) return null;
+    switch (event.type) {
+      case "turn_error": {
+        const key = agentSessionRefKey(event.sessionRef);
+        if (event.usageLimit && event.messageId) return observeLimitError(key, event);
+        const stop = stops.get(key);
+        if (stop?.phase !== "resuming" && stop?.turnEnded !== false) newWork(key);
+        return null;
+      }
+      case "session_error": {
+        if (stops.size === 0 && pendingRestores.size === 0) return null;
+        const key = agentSessionRefKey(event.sessionRef);
+        const stop = stops.get(key);
+        if (stop?.phase !== "resuming" && stop?.turnEnded !== false) newWork(key);
+        return null;
+      }
+      case "session_idle":
+      case "session_turn_finished": {
+        const key = agentSessionRefKey(event.sessionRef);
+        if (event.type === "session_idle") noteIdle(key);
+        const stop = stops.get(key);
+        if (!stop || !event.turnOutcome) return null;
+        // Only the end of the failed turn counts here. Later work ends the stop elsewhere.
+        const signal: UsageLimitStopSignal = { kind: "turn_end", outcome: event.turnOutcome };
+        if (nextUsageLimitStop(stop, signal) !== "turn_ended") return null;
+        stop.turnEnded = true;
+        return toPlan(stop);
+      }
+      default: {
+        if (stops.size === 0 && pendingRestores.size === 0) return null;
+        const key = agentSessionRefKey(event.sessionRef);
+        const stop = stops.get(key);
+        if (!stop && !pendingRestores.has(key)) return null;
+        if (isAcceptedUserMessage(event)) {
+          newWork(key);
+        } else if (
+          stop?.phase !== "resuming" &&
+          stop?.turnEnded !== false &&
+          isNewTurnWorkEvent(event)
+        ) {
+          newWork(key);
+        }
+        return null;
+      }
     }
   };
 
@@ -222,44 +257,8 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
     /** Applies one live change. Returns the stop that needs a root check before its plan. */
     observe: (envelope: AgentSessionLiveEnvelope): TrackedUsageLimitStop | null => {
       switch (envelope.type) {
-        case "transcript_event": {
-          const { event } = envelope;
-          if (!supportsUsageLimitAutoResume(event.sessionRef.runtimeKind)) return null;
-          if (
-            event.type !== "turn_error" &&
-            event.type !== "session_idle" &&
-            stops.size === 0 &&
-            pendingRestores.size === 0
-          ) {
-            return null;
-          }
-          const key = agentSessionRefKey(event.sessionRef);
-          if (event.type === "turn_error") {
-            if (event.usageLimit && event.messageId) return observeLimitError(key, event);
-            const stop = stops.get(key);
-            if (stop?.phase !== "resuming" && stop?.turnEnded !== false) newWork(key);
-            return null;
-          }
-          if (event.type === "session_idle" || event.type === "session_turn_finished") {
-            if (event.type === "session_idle") noteIdle(key);
-            const stop = stops.get(key);
-            if (!stop || !event.turnOutcome) return null;
-            // Only the end of the failed turn counts here. Later work ends the stop elsewhere.
-            const signal: UsageLimitStopSignal = { kind: "turn_end", outcome: event.turnOutcome };
-            if (nextUsageLimitStop(stop, signal) !== "turn_ended") return null;
-            stop.turnEnded = true;
-            return toPlan(stop);
-          }
-          const stop = stops.get(key);
-          if (!stop && !pendingRestores.has(key)) return null;
-          if (isAcceptedUserMessage(event)) {
-            newWork(key);
-          } else if (stop?.phase !== "resuming" && isNewTurnWorkEvent(event)) {
-            if (stop?.turnEnded === false) invalidatePendingRestores(key);
-            else newWork(key);
-          }
-          return null;
-        }
+        case "transcript_event":
+          return observeTranscriptEvent(envelope.event);
         case "session_upsert":
           observeSession(envelope.session);
           return null;
@@ -268,9 +267,19 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
           noteIdle(agentSessionRefKey(envelope.ref));
           return null;
         }
-        case "snapshot":
-          for (const session of envelope.sessions) observeSession(session);
+        case "snapshot": {
+          const seen = new Set<string>();
+          for (const session of envelope.sessions) {
+            if (supportsUsageLimitAutoResume(session.ref.runtimeKind)) {
+              seen.add(agentSessionRefKey(session.ref));
+            }
+            observeSession(session);
+          }
+          for (const [key, repoPath] of activeForegroundRepoByKey) {
+            if (repoPath === envelope.repoPath && !seen.has(key)) noteIdle(key);
+          }
           return null;
+        }
         case "session_operation_updated": {
           const { observation } = envelope;
           if (!supportsUsageLimitAutoResume(observation.ref.runtimeKind)) return null;
@@ -299,7 +308,6 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
       // A due stop waits again, so its running checks stop. Clients see no plan while it is off.
       for (const stop of stops.values())
         if (stop.phase === "scheduled" || stop.phase === "due") setPhase(stop, "scheduled");
-        else if (stop.phase === "waiting_for_idle") changed(stop.ref);
     },
     /** Marks the scheduled stops whose due time passed. Returns them and the next due time. */
     takeDue: (now: number): DueStops => {
@@ -307,8 +315,8 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
       let nextDueAt: number | undefined;
       // The setting is off. The stops become due again when it turns on.
       if (!enabled) return { due, nextDueAt };
-      for (const stop of stops.values()) {
-        if (stop.phase !== "scheduled") continue;
+      for (const [key, stop] of stops) {
+        if (stop.phase !== "scheduled" || activeForegroundRepoByKey.has(key)) continue;
         const dueAt = dueAtOf(stop);
         if (dueAt <= now) {
           stop.phase = "due";
@@ -329,13 +337,12 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
         end(key);
         return false;
       }
-      const stillActive =
-        activeForegroundKeys.has(key) || (check.kind === "active_turn" && !current.sawIdleWhileDue);
-      if (stillActive) {
-        setPhase(current, "waiting_for_idle");
+      if (check.kind === "active_turn") {
+        if (!current.sawIdleWhileDue) activeForegroundRepoByKey.set(key, stop.ref.repoPath);
+        setPhase(current, "scheduled");
         return false;
       }
-      if (check.kind === "active_turn") {
+      if (activeForegroundRepoByKey.has(key)) {
         setPhase(current, "scheduled");
         return false;
       }
@@ -445,7 +452,6 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
       switch (stop.phase) {
         case "scheduled":
         case "due":
-        case "waiting_for_idle":
           return enabled ? { ...base, state: "scheduled" } : null;
         case "resuming":
           return { ...base, state: "resuming" };
@@ -460,7 +466,7 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
       stops.clear();
       ended.clear();
       pendingRestores.clear();
-      activeForegroundKeys.clear();
+      activeForegroundRepoByKey.clear();
     },
   };
 };
