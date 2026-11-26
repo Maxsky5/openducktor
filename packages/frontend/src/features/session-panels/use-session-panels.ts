@@ -39,6 +39,7 @@ import {
   pickPanelTabKind,
   reconcileSessionPanelLayout,
   removeViewPanelTab,
+  resolvePanelTabs,
   type ResolvedHostTab,
   type ResolvedPanelTab,
   type SessionPanelContext,
@@ -52,6 +53,7 @@ import {
   showViewPanelTab,
   shownPanelTabs,
 } from "./session-panel-layout";
+import type { TerminalListStatus } from "./session-panel-bottom-rules";
 import { useSessionPanelLayoutStore } from "./session-panel-layout-store";
 import {
   type BrowserAddressFocus,
@@ -188,6 +190,17 @@ const closeHostTab = <Kind extends HostTabKind>(
 ): void => actions[kind].close(panel, tab);
 
 const mountKey = (scopeKey: string, tabId: string): string => `${scopeKey}:${tabId}`;
+
+/** The state of the terminal list of the page for the owner. A failure wins over a stale list. */
+const terminalListStatus = (
+  isOwnerList: boolean,
+  discoveryError: string | null,
+  synced: boolean,
+): TerminalListStatus => {
+  if (!isOwnerList) return "other_owner";
+  if (discoveryError !== null) return "failed";
+  return synced ? "synced" : "loading";
+};
 
 type PanelTerminalMounts = { right: MountedTerminal[]; bottom: MountedTerminal[] };
 
@@ -336,8 +349,8 @@ const useOwnerLayout = (owner: SessionPanelOwner | null, context: SessionPanelCo
     if (!current || ownerKey === null) return;
     const error = layoutStore.takeReadError(current);
     if (error) {
-      toast.error("Could not restore the saved panel layout", {
-        description: `${error} The default layout is shown.`,
+      toast.error("Could not restore the saved panels", {
+        description: `${error} The default panels are shown.`,
       });
     }
   }, [layoutStore, ownerKey]);
@@ -413,8 +426,23 @@ export function useSessionPanels({
   );
   const { layout, layouts } = useOwnerLayout(owner, context);
   const rightTabs = useMemo(() => shownPanelTabs(layout, "right", context), [context, layout]);
-  const bottomTabs = useMemo(() => shownPanelTabs(layout, "bottom", context), [context, layout]);
-  const visibility = useSessionPanelVisibility(ownerKey, bottomTabs, isActive);
+  const bottomResolution = useMemo(
+    () => resolvePanelTabs(layout, "bottom", context),
+    [context, layout],
+  );
+  const bottomTabs = bottomResolution.shown;
+  const { discoveryError } = terminals;
+  const visibility = useSessionPanelVisibility({
+    owner,
+    bottomTabs,
+    bottomClosingTabs: bottomResolution.closing,
+    terminalList: terminalListStatus(
+      isOwnerTerminals,
+      discoveryError,
+      context.hostTabs.terminal.synced,
+    ),
+    isActive,
+  });
   const { isRightOpen, isBottomOpen, setBottomOpen, toggleRight, showRight, requestFocus } =
     visibility;
   const rightSelected = selectedPanelTabId(layout, "right", context, rightTabs);
@@ -468,7 +496,6 @@ export function useSessionPanels({
     ownerKey,
     latest,
     update,
-    setBottomOpen,
     requestFocus,
   });
   const { addressFocus, actions: browserActions } = useSessionPanelBrowserTabs({
@@ -483,7 +510,7 @@ export function useSessionPanels({
 
   const pendingBottomOpen = useRef<string | null>(null);
   const hasBottomEntries = layout.panels.bottom.length > 0;
-  const { createTerminal, discoveryError, isLoading: isLoadingTerminals } = terminals;
+  const { createTerminal, isLoading: isLoadingTerminals } = terminals;
   useEffect(() => {
     if (pendingBottomOpen.current === null) return;
     if (

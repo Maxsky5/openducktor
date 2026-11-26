@@ -1,8 +1,29 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { isUserStartedTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { PanelId } from "./panel-tab-kinds";
-import type { ResolvedPanelTab } from "./session-panel-layout";
-import { useRightPanelOpen } from "./use-right-panel-open";
+import {
+  type BottomPanelFacts,
+  bottomStateAfterChoice,
+  decideBottomPanel,
+  isBottomPanelShown,
+  NO_BOTTOM_CHECK,
+} from "./session-panel-bottom-rules";
+import {
+  type ResolvedPanelTab,
+  type SessionPanelOwner,
+  sessionPanelOwnerKey,
+} from "./session-panel-layout";
+import {
+  NO_SAVED_PANELS,
+  type SessionPanelsOpenState,
+  useSessionPanelLayoutStore,
+} from "./session-panel-layout-store";
 
 /** `slide` moves a panel in and out like a sheet. `instant` shows or hides it at once. */
 export type PanelMotion = "slide" | "instant";
@@ -17,12 +38,9 @@ type PanelPresences = Record<PanelId, PanelPresence>;
 type PanelMotions = Record<PanelId, PanelMotion>;
 type PanelCounts = Record<PanelId, number>;
 
+/** The state of one view. The open states and the bottom panel rules belong to the owner. */
 type OwnerViewState = {
   ownerKey: string | null;
-  /** Implicit visibility follows the terminals that the user started. */
-  bottomVisibility: { value: boolean; isExplicit: boolean };
-  /** The shown bottom tabs of the last render, so the panel can hide when it loses its last tab. */
-  bottomTabCount: number;
   focusRequest: PanelCounts;
   /** How the next visibility change of each panel shows. */
   motion: PanelMotions;
@@ -49,8 +67,6 @@ export type SessionPanelVisibility = {
 
 const initialOwnerViewState = (ownerKey: string | null): OwnerViewState => ({
   ownerKey,
-  bottomVisibility: { value: false, isExplicit: false },
-  bottomTabCount: 0,
   focusRequest: { right: 0, bottom: 0 },
   motion: { right: "instant", bottom: "instant" },
   presence: { right: "closed", bottom: "closed" },
@@ -75,110 +91,130 @@ const settledPresence = (presence: PanelPresence): PanelPresence => {
   return presence;
 };
 
-const isBottomPanelShown = (
-  state: OwnerViewState,
-  bottomTabs: readonly ResolvedPanelTab[],
-): boolean => {
-  if (state.ownerKey === null) return false;
-  if (state.bottomVisibility.isExplicit) return state.bottomVisibility.value;
-  // Browser tabs go to the bottom panel only after a user action, so they show it like the
-  // terminals that the user started.
-  return bottomTabs.some(
-    (tab) => tab.kind === "browser" || (tab.kind === "terminal" && isUserStartedTab(tab.terminal)),
-  );
-};
-
 /**
- * Applies the rules that follow a render. The bottom panel hides when it loses its last tab, by a
- * close, a move, or a host list that no longer has its terminals. An empty panel that the user
- * opens stays open. A hidden view has no size and runs no transition, so its panels do not slide
- * and it keeps no focus request. Returns the same state when no rule applies.
+ * Follows the visibility of each panel. A bottom panel that hides by itself slides out. A hidden
+ * view has no size and runs no transition, so its panels do not slide and it keeps no focus
+ * request. Returns the same state when nothing changes.
  */
 const syncOwnerViewState = (
   state: OwnerViewState,
-  bottomTabs: readonly ResolvedPanelTab[],
-  isRightOpen: boolean,
-  isActive: boolean,
+  input: { isRightOpen: boolean; isBottomOpen: boolean; bottomHides: boolean; isActive: boolean },
 ): OwnerViewState => {
-  const lostLastTab = state.bottomTabCount > 0 && bottomTabs.length === 0;
-  let counted = state;
-  if (lostLastTab) {
-    counted = {
-      ...state,
-      bottomTabCount: 0,
-      bottomVisibility: { value: false, isExplicit: true },
-      motion: { ...state.motion, bottom: "slide" },
-    };
-  } else if (state.bottomTabCount !== bottomTabs.length) {
-    counted = { ...state, bottomTabCount: bottomTabs.length };
+  const { isRightOpen, isBottomOpen, bottomHides, isActive } = input;
+  let next = state;
+  if (bottomHides && next.motion.bottom !== "slide") {
+    next = { ...next, motion: { ...next.motion, bottom: "slide" } };
   }
-  if (!isActive && (counted.focusRequest.right > 0 || counted.focusRequest.bottom > 0)) {
-    counted = { ...counted, focusRequest: { right: 0, bottom: 0 } };
+  if (!isActive && (next.focusRequest.right > 0 || next.focusRequest.bottom > 0)) {
+    next = { ...next, focusRequest: { right: 0, bottom: 0 } };
   }
-  let right = nextPresence(counted.presence.right, isRightOpen, counted.motion.right);
-  let bottom = nextPresence(
-    counted.presence.bottom,
-    isBottomPanelShown(counted, bottomTabs),
-    counted.motion.bottom,
-  );
+  let right = nextPresence(next.presence.right, isRightOpen, next.motion.right);
+  let bottom = nextPresence(next.presence.bottom, isBottomOpen, next.motion.bottom);
   if (!isActive) {
     right = settledPresence(right);
     bottom = settledPresence(bottom);
   }
-  if (right === counted.presence.right && bottom === counted.presence.bottom) return counted;
-  return { ...counted, presence: { right, bottom } };
+  if (right === next.presence.right && bottom === next.presence.bottom) return next;
+  return { ...next, presence: { right, bottom } };
+};
+
+/** The right panel shows unless the owner saved it closed. */
+const isSavedRightOpen = (panels: SessionPanelsOpenState): boolean => panels.right ?? true;
+
+type SessionPanelVisibilityInput = {
+  owner: SessionPanelOwner | null;
+  bottomTabs: readonly ResolvedPanelTab[];
+  bottomClosingTabs: readonly ResolvedPanelTab[];
+  terminalList: BottomPanelFacts["terminalList"];
+  isActive: boolean;
 };
 
 /**
- * Owns which panels of the selected owner show, how they slide, and their focus requests. The
- * right panel open state is global. The bottom panel state resets when the owner changes.
+ * Owns which panels of the selected owner show, how they slide, and their focus requests. Each task
+ * and chat saves the open state of its panels in the panel layout store. Each open and close by the
+ * user or an action saves the state of the owner. Only the shown view applies the automatic bottom
+ * panel rules and saves their result, so a kept view of the same owner never overwrites a choice.
  */
-export function useSessionPanelVisibility(
-  ownerKey: string | null,
-  bottomTabs: readonly ResolvedPanelTab[],
-  isActive: boolean,
-): SessionPanelVisibility {
-  const rightPanel = useRightPanelOpen();
-  const isRightOpen = ownerKey !== null && rightPanel.isOpen;
+export function useSessionPanelVisibility({
+  owner,
+  bottomTabs,
+  bottomClosingTabs,
+  terminalList,
+  isActive,
+}: SessionPanelVisibilityInput): SessionPanelVisibility {
+  const store = useSessionPanelLayoutStore();
+  const ownerKey = owner ? sessionPanelOwnerKey(owner) : null;
+  const readOwnerPanels = useCallback(
+    () => (owner ? store.readPanels(owner) : NO_SAVED_PANELS),
+    [owner, store],
+  );
+  const panels = useSyncExternalStore(store.subscribe, readOwnerPanels);
+  const isRightOpen = owner !== null && isSavedRightOpen(panels);
+
+  const facts: BottomPanelFacts = {
+    tabs: bottomTabs,
+    closingTabs: bottomClosingTabs,
+    terminalList,
+  };
+  const bottomCheck = owner ? store.readBottomCheck(owner) : NO_BOTTOM_CHECK;
+  const decision =
+    owner !== null && isActive ? decideBottomPanel(panels.bottom, bottomCheck, facts) : null;
+  const isBottomOpen =
+    owner !== null && (decision ? decision.isShown : isBottomPanelShown(panels.bottom, facts));
+  const bottomHides = decision?.hides ?? false;
+  const nextBottomState = decision?.state ?? panels.bottom;
+  const nextBottomCheck = decision?.check ?? bottomCheck;
+
   const [viewState, setViewState] = useState(() => initialOwnerViewState(ownerKey));
   const view = syncOwnerViewState(
     viewState.ownerKey === ownerKey ? viewState : initialOwnerViewState(ownerKey),
-    bottomTabs,
-    isRightOpen,
-    isActive,
+    { isRightOpen, isBottomOpen, bottomHides, isActive },
   );
   if (view !== viewState) setViewState(view);
 
-  const ownerKeyRef = useRef(ownerKey);
+  // The render already shows the result of the rules. The store takes it after the commit.
+  useEffect(() => {
+    if (!owner) return;
+    if (nextBottomCheck !== bottomCheck) store.writeBottomCheck(owner, nextBottomCheck);
+    // Only a decision of the shown view changes the state, so a kept view never saves its snapshot.
+    if (nextBottomState !== panels.bottom) store.setBottomState(owner, nextBottomState);
+  }, [bottomCheck, nextBottomCheck, nextBottomState, owner, panels.bottom, store]);
+
+  const ownerRef = useRef(owner);
+  const factsRef = useRef(facts);
   useLayoutEffect(() => {
-    ownerKeyRef.current = ownerKey;
+    ownerRef.current = owner;
+    factsRef.current = facts;
   });
   const updateView = useCallback((change: (state: OwnerViewState) => OwnerViewState): void => {
-    const currentOwnerKey = ownerKeyRef.current;
-    setViewState((state) => (state.ownerKey === currentOwnerKey ? change(state) : state));
+    const current = ownerRef.current;
+    const currentKey = current ? sessionPanelOwnerKey(current) : null;
+    setViewState((state) => (state.ownerKey === currentKey ? change(state) : state));
   }, []);
-  const setBottomOpen = useCallback(
-    (value: boolean, motion: PanelMotion = "slide"): void =>
-      updateView((state) => ({
-        ...state,
-        bottomVisibility: { value, isExplicit: true },
-        motion: { ...state.motion, bottom: motion },
-      })),
-    [updateView],
+  /** Shows or hides a panel of the current owner, and saves its open state. */
+  const setPanelOpen = useCallback(
+    (panel: PanelId, isOpen: boolean, motion: PanelMotion): void => {
+      const current = ownerRef.current;
+      if (!current) return;
+      updateView((state) => ({ ...state, motion: { ...state.motion, [panel]: motion } }));
+      if (panel === "right") store.setRightOpen(current, isOpen);
+      else store.setBottomState(current, bottomStateAfterChoice(isOpen, factsRef.current));
+    },
+    [store, updateView],
   );
-  const { toggle, open, close } = rightPanel;
+  const setBottomOpen = useCallback(
+    (value: boolean, motion: PanelMotion = "slide"): void => setPanelOpen("bottom", value, motion),
+    [setPanelOpen],
+  );
   const toggleRight = useCallback((): void => {
-    updateView((state) => ({ ...state, motion: { ...state.motion, right: "slide" } }));
-    toggle();
-  }, [toggle, updateView]);
-  const showRight = useCallback((): void => {
-    updateView((state) => ({ ...state, motion: { ...state.motion, right: "slide" } }));
-    open();
-  }, [open, updateView]);
-  const hideRightAtOnce = useCallback((): void => {
-    updateView((state) => ({ ...state, motion: { ...state.motion, right: "instant" } }));
-    close();
-  }, [close, updateView]);
+    const current = ownerRef.current;
+    if (current) setPanelOpen("right", !isSavedRightOpen(store.readPanels(current)), "slide");
+  }, [setPanelOpen, store]);
+  const showRight = useCallback((): void => setPanelOpen("right", true, "slide"), [setPanelOpen]);
+  const hideRightAtOnce = useCallback(
+    (): void => setPanelOpen("right", false, "instant"),
+    [setPanelOpen],
+  );
   const requestFocus = useCallback(
     (panel: PanelId): void =>
       updateView((state) => ({
@@ -202,7 +238,7 @@ export function useSessionPanelVisibility(
 
   return {
     isRightOpen,
-    isBottomOpen: isBottomPanelShown(view, bottomTabs),
+    isBottomOpen,
     presence: view.presence,
     focusRequest: view.focusRequest,
     setBottomOpen,

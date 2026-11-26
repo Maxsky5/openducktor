@@ -142,29 +142,31 @@ export function useSessionPanelBrowserTabs({
     }
   }, [browser, closingTabIds, isSynced]);
 
-  // The agent tabs of the last render, so a new agent tab can show the right panel once.
-  const knownAgentTabs = useRef<{ ownerKey: string | null; tabIds: ReadonlySet<string> }>({
+  // The agent tabs of the last synced list. Null until the list of the owner syncs, so the tabs that
+  // the first list discovers, and the saved tabs that the panels start, do not show the right panel.
+  const knownAgentTabs = useRef<{ ownerKey: string | null; tabIds: ReadonlySet<string> | null }>({
     ownerKey: null,
-    tabIds: new Set(),
+    tabIds: null,
   });
   useEffect(() => {
     const known = knownAgentTabs.current;
-    const agentTabIds = new Set(
-      (browser?.tabs ?? [])
-        .filter((tab) => tab.createdBy === "agent" && tab.started)
-        .map((tab) => tab.tabId),
-    );
-    knownAgentTabs.current = { ownerKey, tabIds: agentTabIds };
-    if (known.ownerKey !== ownerKey) return;
+    const knownTabIds = known.ownerKey === ownerKey ? known.tabIds : null;
+    if (!isSynced || browser === null) {
+      knownAgentTabs.current = { ownerKey, tabIds: knownTabIds };
+      return;
+    }
+    const agentTabs = browser.tabs.filter((tab) => tab.createdBy === "agent");
+    knownAgentTabs.current = { ownerKey, tabIds: new Set(agentTabs.map((tab) => tab.tabId)) };
+    if (knownTabIds === null) return;
     const rightTabIds = new Set(
       layout.panels.right.flatMap((entry) => (entry.kind === "browser" ? [entry.tabId] : [])),
     );
-    const hasNewAgentTab = [...agentTabIds].some(
-      (tabId) => !known.tabIds.has(tabId) && rightTabIds.has(tabId),
+    const hasNewAgentTab = agentTabs.some(
+      (tab) => tab.started && !knownTabIds.has(tab.tabId) && rightTabIds.has(tab.tabId),
     );
     // The panel shows without a focus request, so keyboard focus stays where the user has it.
     if (hasNewAgentTab && !latest.current.isRightOpen) showRight();
-  }, [browser, latest, layout, ownerKey, showRight]);
+  }, [browser, isSynced, latest, layout, ownerKey, showRight]);
 
   const pickBrowser = useCallback(
     (panel: PanelId): void => {

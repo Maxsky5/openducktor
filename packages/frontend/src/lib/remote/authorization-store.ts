@@ -1,10 +1,7 @@
-import {
-  canonicalRemoteEndpoint,
-  createRemoteAuthorizationStore,
-} from "@openducktor/host-client/remote";
+import { createRemoteAuthorizationStore } from "@openducktor/host-client/remote";
+import { remoteHostStorageKey } from "./remote-host-storage-key";
 
-const key = (endpoint: string) =>
-  `openducktor:remote-authorization:v1:${encodeURIComponent(canonicalRemoteEndpoint(endpoint))}`;
+const key = (endpoint: string) => remoteHostStorageKey("remote-authorization", endpoint);
 export const browserRemoteAuthorizationStore = createRemoteAuthorizationStore({
   get: async (endpoint) => localStorage.getItem(key(endpoint)),
   set: async (endpoint, text) => localStorage.setItem(key(endpoint), text),

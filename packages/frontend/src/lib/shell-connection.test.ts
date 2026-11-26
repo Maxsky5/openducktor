@@ -11,6 +11,9 @@ import { createElement, type ReactNode } from "react";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createShellConnection, releaseShellConnection } from "./shell-connection";
 
+const REMOTE_A = { kind: "remote", endpoint: "https://host-a.example.com" } as const;
+const REMOTE_B = { kind: "remote", endpoint: "https://host-b.example.com" } as const;
+
 describe("createShellConnection", () => {
   test("uses the selected bridge and query client, and page memory for a remote host", async () => {
     const workspaceStageLocalAttachment = mock(async () => ({ path: "/host/staged/image.png" }));
@@ -21,7 +24,7 @@ describe("createShellConnection", () => {
     });
     const queryClient = createClientQueryClient();
 
-    const connection = createShellConnection(bridge, queryClient, "remote");
+    const connection = createShellConnection(bridge, queryClient, REMOTE_A);
 
     const identity = { workspaceId: "workspace-1", workspaceSessionId: "session-1" };
     connection.drafts.chat.set(identity, null, {
@@ -43,11 +46,38 @@ describe("createShellConnection", () => {
     );
   });
 
+  test("keeps the layout storage of each remote host on this device after a reload", async () => {
+    const connect = (target: Parameters<typeof createShellConnection>[2]) =>
+      createShellConnection(createShellBridgeFixture(), createClientQueryClient(), target);
+    const first = connect(REMOTE_A);
+    try {
+      first.layoutStorage.setItem("layout", "saved");
+    } finally {
+      await first.dispose();
+    }
+    try {
+      const reloaded = connect(REMOTE_A);
+      const otherHost = connect(REMOTE_B);
+      try {
+        expect(reloaded.layoutStorage.getItem("layout")).toBe("saved");
+        expect(otherHost.layoutStorage.getItem("layout")).toBeNull();
+        expect(otherHost.layoutStorage.length).toBe(0);
+        // The local host does not see the keys of a remote host.
+        expect(localStorage.getItem("layout")).toBeNull();
+      } finally {
+        await reloaded.dispose();
+        await otherHost.dispose();
+      }
+    } finally {
+      localStorage.clear();
+    }
+  });
+
   test("rejects a device file that is not a browser file", async () => {
     const connection = createShellConnection(
       createShellBridgeFixture(),
       createClientQueryClient(),
-      "local",
+      { kind: "local" },
     );
     expect(connection.storage).toBe(localStorage);
     try {

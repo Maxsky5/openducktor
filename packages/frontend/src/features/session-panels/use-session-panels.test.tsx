@@ -1,184 +1,44 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import {
-  type BrowserTabSummary,
-  type RepoAction,
-  type TerminalSummary,
-} from "@openducktor/contracts";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { type RepoAction } from "@openducktor/contracts";
 import { act, fireEvent, renderHook } from "@testing-library/react";
-import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
-import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
-import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import { type ReactNode, useCallback, useMemo, useState } from "react";
-import type { TerminalSessionsModel } from "@openducktor/frontend-core/terminals/use-terminals";
 import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import { inAppLinkTarget } from "@/lib/link-open";
 import { withMockedToast } from "@/test-utils/mock-toast";
-import {
-  browserTabIdFixture,
-  createBrowserTabSummaryFixture,
-  createSessionPanelBrowserFixture,
-  createTerminalSessionsFixture,
-} from "@/test-utils/session-panel-fixtures";
-import type { PanelId, ToolTabKind } from "./panel-tab-kinds";
+import { createTerminalSessionsFixture } from "@/test-utils/session-panel-fixtures";
 import {
   appendRightPanelEntry,
-  type BrowserTabEntry,
   browserTabEntry,
   findPanelTab,
-  type PanelTabEntry,
   type SessionPanelOwner,
-  type SessionPanelSelectionKey,
   sessionPanelOwnerKey,
 } from "./session-panel-layout";
+import { sessionPanelLayoutStorageKey } from "./session-panel-layout-store";
+import { useSessionPanels } from "./use-session-panels";
+
 import {
-  type SessionPanelLayoutStore,
-  sessionPanelLayoutStorageKey,
-  useSessionPanelLayoutStore,
-} from "./session-panel-layout-store";
-import { RIGHT_PANEL_OPEN_STORAGE_KEY } from "./use-right-panel-open";
-import { type SessionPanelBrowserModel, useSessionPanels } from "./use-session-panels";
-import { SessionViewContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
+  DEFAULT_RIGHT_IDS,
+  entryIdOf,
+  expectPanelSlidesOut,
+  hostTab,
+  layoutStore,
+  newTaskOwner,
+  NO_TERMINAL_TABS,
+  renderBrowserPanels,
+  renderPanels,
+  savedBrowserEntry,
+  saveLayout,
+  saveOpen,
+  type SelectionProps,
+  startTestConnection,
+  TAB_1,
+  TAB_2,
+  terminalTab,
+  testConnection,
+  WITHOUT_CI_CHECKS,
+  wrapper,
+} from "./session-panels-test-harness";
 
-const WITHOUT_CI_CHECKS: ReadonlySet<ToolTabKind> = new Set(["ci_checks"]);
-const NO_TERMINAL_TABS: TerminalTab[] = [];
-
-type SelectionProps = { selectionKey: SessionPanelSelectionKey };
-
-const newTaskOwner = (): SessionPanelOwner => ({
-  kind: "task",
-  workspaceId: `workspace-${globalThis.crypto.randomUUID()}`,
-  taskId: "task-1",
-});
-
-// Each test gets its own connection, so it starts with no saved panel layouts.
-let connection: ClientConnection;
-const wrapper = ({ children }: { children: ReactNode }) => (
-  <ClientConnectionProvider connection={connection}>{children}</ClientConnectionProvider>
-);
-
-beforeEach(() => {
-  connection = createTestClientConnection();
-});
-
-/** The panel layout store of the test connection. */
-const layoutStore = (): SessionPanelLayoutStore =>
-  renderHook(() => useSessionPanelLayoutStore(), { wrapper }).result.current;
-
-afterEach(() => {
-  localStorage.removeItem(RIGHT_PANEL_OPEN_STORAGE_KEY);
-});
-
-const terminalTab = (terminalId: string, startedBy: TerminalSummary["startedBy"] = "user") => {
-  const summary: TerminalSummary = {
-    terminalId,
-    label: `Shell ${terminalId}`,
-    context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
-    initialWorkingDir: "/repo",
-    createdAt: "2026-10-09T00:00:00.000Z",
-    lifecycle: "running",
-    exit: null,
-    startedBy,
-  };
-  const tab: TerminalTab = {
-    tabId: `tab:${terminalId}`,
-    terminalId,
-    summary,
-    awaitingLifecycleSync: false,
-    error: null,
-    requestState: "ready",
-  };
-  return tab;
-};
-
-type HarnessProps = { overrides: Partial<TerminalSessionsModel> };
-
-/**
- * Renders the controller with a terminal model that adds a creating tab in the same update as the
- * start, as `useTerminals` does. `setActive` shows or hides the session view of the controller.
- */
-const renderPanels = (
-  owner: SessionPanelOwner | null,
-  initialOverrides: Partial<TerminalSessionsModel>,
-) => {
-  const scopeKey = owner ? sessionPanelOwnerKey(owner) : null;
-  const starts: (RepoAction | undefined)[] = [];
-  let isActive = true;
-  let latestOverrides = initialOverrides;
-  const view = renderHook(
-    ({ overrides }: HarnessProps) => {
-      const [startedTabs, setStartedTabs] = useState<TerminalTab[]>([]);
-      const createTerminal = useCallback((action?: RepoAction): string | null => {
-        starts.push(action);
-        const tabId = `creating:${starts.length}`;
-        setStartedTabs((tabs) => [...tabs, creatingTab(tabId)]);
-        return tabId;
-      }, []);
-      const terminals = useMemo(
-        () =>
-          createTerminalSessionsFixture({
-            scopeKey,
-            isAvailable: owner !== null,
-            createTerminal,
-            ...overrides,
-            tabs: [...(overrides.tabs ?? []), ...startedTabs],
-          }),
-        [createTerminal, overrides, startedTabs],
-      );
-      return useSessionPanels({
-        owner,
-        selectionKey: "build",
-        unavailableKinds: WITHOUT_CI_CHECKS,
-        terminals,
-      });
-    },
-    {
-      initialProps: { overrides: initialOverrides },
-      wrapper: ({ children }: { children: ReactNode }) => (
-        <ClientConnectionProvider connection={connection}>
-          <SessionViewContext value={{ id: "view", isActive }}>{children}</SessionViewContext>
-        </ClientConnectionProvider>
-      ),
-    },
-  );
-  return {
-    ...view,
-    starts,
-    setTerminals: (overrides: Partial<TerminalSessionsModel>) => {
-      latestOverrides = overrides;
-      view.rerender({ overrides });
-    },
-    setActive: (active: boolean) => {
-      isActive = active;
-      view.rerender({ overrides: latestOverrides });
-    },
-  };
-};
-
-const creatingTab = (tabId: string): TerminalTab => ({
-  tabId,
-  terminalId: null,
-  summary: null,
-  label: "/repo",
-  actionId: null,
-  error: null,
-  outcomeUnknown: false,
-  requestState: "creating",
-});
-
-/** Ends the close transition of a panel, as the panel split does on the page. */
-const expectPanelSlidesOut = (view: ReturnType<typeof renderPanels>, panel: PanelId): void => {
-  expect(view.result.current[panel].isVisible).toBe(true);
-  expect(view.result.current[panel].presence).toBe("closing");
-  act(() => view.result.current[panel].onSettled());
-  expect(view.result.current[panel].presence).toBe("closed");
-  expect(view.result.current[panel].isVisible).toBe(false);
-};
-
-const entryIdOf = (tabs: { id: string; kind: string }[], kind: string): string => {
-  const tab = tabs.find((entry) => entry.kind === kind);
-  if (!tab) throw new Error(`Expected a ${kind} tab.`);
-  return tab.id;
-};
+beforeEach(startTestConnection);
 
 describe("useSessionPanels", () => {
   test("offers no right panel toggle and no bottom panel without a task or chat", () => {
@@ -373,9 +233,10 @@ describe("useSessionPanels", () => {
   });
 
   test("shows a hidden right panel when a terminal moves into it", () => {
-    localStorage.setItem(RIGHT_PANEL_OPEN_STORAGE_KEY, "false");
+    const owner = newTaskOwner();
+    saveOpen(owner, "right", false);
     const tab = terminalTab("terminal-1");
-    const view = renderPanels(newTaskOwner(), { tabs: [tab] });
+    const view = renderPanels(owner, { tabs: [tab] });
     expect(view.result.current.right.isVisible).toBe(false);
 
     act(() =>
@@ -512,39 +373,6 @@ describe("useSessionPanels", () => {
     expectPanelSlidesOut(view, "right");
   });
 
-  test("kept session views share the right panel open state", () => {
-    const shown = renderPanels(newTaskOwner(), {});
-    const kept = renderPanels(newTaskOwner(), {});
-    try {
-      act(() => shown.result.current.rightToggle?.onToggle());
-      expect(kept.result.current.rightToggle?.isOpen).toBe(false);
-      act(() => kept.result.current.rightToggle?.onToggle());
-      expect(shown.result.current.rightToggle?.isOpen).toBe(true);
-    } finally {
-      shown.unmount();
-      kept.unmount();
-    }
-  });
-
-  test("a hidden view ends its panel slides and takes shared changes at once", () => {
-    const kept = renderPanels(newTaskOwner(), {});
-    const shown = renderPanels(newTaskOwner(), {});
-    try {
-      act(() => kept.result.current.rightToggle?.onToggle());
-      expect(kept.result.current.right.presence).toBe("closing");
-      act(() => kept.setActive(false));
-      expect(kept.result.current.right.presence).toBe("closed");
-
-      // A hidden view has no size and no transition, so a slide in it could not end.
-      act(() => shown.result.current.rightToggle?.onToggle());
-      expect(shown.result.current.right.presence).toBe("opening");
-      expect(kept.result.current.right.presence).toBe("open");
-    } finally {
-      shown.unmount();
-      kept.unmount();
-    }
-  });
-
   test("a view that becomes hidden drops its terminal focus requests", () => {
     const view = renderPanels(newTaskOwner(), { tabs: [terminalTab("terminal-1")] });
     const reopenBottom = () => {
@@ -621,7 +449,7 @@ describe("useSessionPanels", () => {
   test("tells the user once when it cannot restore a saved layout", async () => {
     await withMockedToast(async ({ toastErrorMock }) => {
       const owner = newTaskOwner();
-      connection.storage.setItem(
+      testConnection().storage.setItem(
         sessionPanelLayoutStorageKey(owner),
         JSON.stringify({
           version: 2,
@@ -643,106 +471,12 @@ describe("useSessionPanels", () => {
       view.unmount();
       renderPanels(owner, {});
       expect(toastErrorMock).toHaveBeenCalledTimes(1);
-      expect(toastErrorMock).toHaveBeenCalledWith("Could not restore the saved panel layout", {
-        description: expect.stringContaining("The default layout is shown."),
+      expect(toastErrorMock).toHaveBeenCalledWith("Could not restore the saved panels", {
+        description: expect.stringContaining("The default panels are shown."),
       });
     });
   });
 });
-
-const TAB_1 = browserTabIdFixture(1);
-const TAB_2 = browserTabIdFixture(2);
-const DEFAULT_RIGHT_IDS = ["document", "diffs", "files"];
-
-const savedBrowserEntry = (tabId: string): BrowserTabEntry => ({
-  id: `browser:${tabId}`,
-  kind: "browser",
-  tabId,
-});
-
-/** Saves the default tool tabs of a task and the given browser entries before the page shows. */
-const saveLayout = (
-  owner: SessionPanelOwner,
-  right: PanelTabEntry[],
-  bottom: PanelTabEntry[] = [],
-): void =>
-  layoutStore().update(owner, (layout) => ({
-    ...layout,
-    panels: {
-      right: [
-        { id: "document", kind: "document" },
-        { id: "diffs", kind: "diffs" },
-        { id: "files", kind: "files" },
-        ...right,
-      ],
-      bottom,
-    },
-  }));
-
-type BrowserHarnessProps = { browser: Partial<SessionPanelBrowserModel> };
-
-/** The calls that the panels made to the browser feature, in order. */
-type BrowserFeatureCalls = { started: string[]; closed: string[] };
-
-/** Renders the controller with a browser model that records each call to the browser feature. */
-const renderBrowserPanels = (
-  owner: SessionPanelOwner,
-  initialBrowser: Partial<SessionPanelBrowserModel>,
-  { isActive: initialActive = true }: { isActive?: boolean } = {},
-) => {
-  const scopeKey = sessionPanelOwnerKey(owner);
-  const calls: BrowserFeatureCalls = { started: [], closed: [] };
-  let isActive = initialActive;
-  let latestBrowser = initialBrowser;
-  const view = renderHook(
-    ({ browser }: BrowserHarnessProps) => {
-      const terminals = useMemo(() => createTerminalSessionsFixture({ scopeKey }), []);
-      // The browser feature owns `openingTabIds` and `closingTabIds`. Each test gives them.
-      const model = useMemo(
-        () =>
-          createSessionPanelBrowserFixture({
-            scopeKey,
-            startTab: (tabId) => calls.started.push(tabId),
-            closeTab: async (tabId) => {
-              calls.closed.push(tabId);
-            },
-            ...browser,
-          }),
-        [browser],
-      );
-      return useSessionPanels({
-        owner,
-        selectionKey: "build",
-        unavailableKinds: WITHOUT_CI_CHECKS,
-        terminals,
-        browser: model,
-      });
-    },
-    {
-      initialProps: { browser: initialBrowser },
-      wrapper: ({ children }: { children: ReactNode }) => (
-        <ClientConnectionProvider connection={connection}>
-          <SessionViewContext value={{ id: "view", isActive }}>{children}</SessionViewContext>
-        </ClientConnectionProvider>
-      ),
-    },
-  );
-  return {
-    ...view,
-    calls,
-    setBrowser: (browser: Partial<SessionPanelBrowserModel>) => {
-      latestBrowser = browser;
-      view.rerender({ browser });
-    },
-    setActive: (active: boolean) => {
-      isActive = active;
-      view.rerender({ browser: latestBrowser });
-    },
-  };
-};
-
-const hostTab = (tabId: string, overrides: Partial<BrowserTabSummary> = {}): BrowserTabSummary =>
-  createBrowserTabSummaryFixture({ tabId, ...overrides });
 
 describe("useSessionPanels browser tabs", () => {
   test("offers a Browser card in both panels with its blocked reason", () => {
@@ -861,11 +595,12 @@ describe("useSessionPanels browser tabs", () => {
   });
 
   test("opens a link of the page in a new tab at the end of the right panel and shows the panel", async () => {
-    localStorage.setItem(RIGHT_PANEL_OPEN_STORAGE_KEY, "false");
+    const owner = newTaskOwner();
+    saveOpen(owner, "right", false);
     const addresses: Array<string | null> = [];
     let listed: () => void = () => {};
     // Before the host list syncs, the panels keep every entry.
-    const view = renderBrowserPanels(newTaskOwner(), {
+    const view = renderBrowserPanels(owner, {
       isSynced: false,
       // The open resolves when the host list has the tab.
       openTab: (_tabId, address) => {
@@ -919,8 +654,8 @@ describe("useSessionPanels browser tabs", () => {
   });
 
   test("shows a hidden right panel without a focus change when an agent opens a tab", () => {
-    localStorage.setItem(RIGHT_PANEL_OPEN_STORAGE_KEY, "false");
     const owner = newTaskOwner();
+    saveOpen(owner, "right", false);
     const view = renderBrowserPanels(owner, {});
     const userTab = hostTab(TAB_1);
 

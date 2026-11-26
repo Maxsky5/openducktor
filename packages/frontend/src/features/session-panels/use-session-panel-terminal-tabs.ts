@@ -41,13 +41,11 @@ export function useSessionPanelTerminalTabs({
   ownerKey,
   latest,
   update,
-  setBottomOpen,
   requestFocus,
 }: {
   ownerKey: string | null;
   latest: RefObject<LatestPanelState>;
   update: SessionPanelLayoutUpdate;
-  setBottomOpen: (value: boolean) => void;
   requestFocus: (panel: PanelId) => void;
 }): SessionPanelTerminalTabs {
   const [candidate, setCandidate] = useState<CloseCandidate | null>(null);
@@ -73,7 +71,7 @@ export function useSessionPanelTerminalTabs({
       }
       const isCurrentOwner = (): boolean => latest.current.ownerKey === startOwnerKey;
       const wasSelected = selected[panel] === entryId;
-      // The tab hides while it closes. The controller hides an emptied bottom panel.
+      // The tab hides while it closes. A panel whose last tab closes hides without a save.
       update((current, context) => selectPanelTabNeighbor(current, context, panel, entryId));
       let closed = false;
       try {
@@ -86,14 +84,13 @@ export function useSessionPanelTerminalTabs({
           description: errorMessage(cause),
         });
       }
-      if (!closed && isCurrentOwner()) {
-        if (wasSelected)
-          update((current, context) => selectPanelTab(current, context, panel, entryId));
-        if (panel === "bottom") setBottomOpen(true);
+      // The tab shows again, and its panel keeps the open state that the user chose meanwhile.
+      if (!closed && isCurrentOwner() && wasSelected) {
+        update((current, context) => selectPanelTab(current, context, panel, entryId));
       }
       return closed;
     },
-    [latest, setBottomOpen, update],
+    [latest, update],
   );
 
   const actions = useMemo<HostTabActions<"terminal">>(

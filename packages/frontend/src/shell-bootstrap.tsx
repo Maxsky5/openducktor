@@ -154,7 +154,7 @@ export async function bootstrapOpenDucktorShell(
   }
   if (!bridge) throw new Error("The local host connection is unavailable.");
   if (local && bridge.notifications !== local.notifications) local.notifications.dispose();
-  const connection = createShellConnection(bridge, queryClient, target.kind);
+  const connection = createShellConnection(bridge, queryClient, target);
   leavePage = watchPage({
     ...bridge,
     // The release unmounts the app, then clears the client state, then closes the transport.

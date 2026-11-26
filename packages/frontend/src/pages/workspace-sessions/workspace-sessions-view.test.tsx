@@ -16,7 +16,6 @@ import { Link, MemoryRouter, useLocation, useNavigate } from "react-router";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { installPanelLayout } from "@/test-utils/panel-layout";
 import { QueryProvider } from "@/test-utils/query-provider";
-import { RIGHT_PANEL_OPEN_STORAGE_KEY } from "@/features/session-panels/use-right-panel-open";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
 import { ThemeProvider } from "@/components/layout/theme-provider";
@@ -53,6 +52,8 @@ import {
   createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
 import { BrowserRuntimeProvider } from "@/features/browser";
+import type { SessionPanelOwner } from "@/features/session-panels";
+import { createSessionPanelLayoutStore } from "@/features/session-panels/session-panel-layout-store";
 import WorkspaceSessionsPage from "./workspace-sessions-page";
 import { useWorkspaceSessionPreview } from "./use-workspace-session-preview";
 import { workspaceSessionSelectionStorageKey } from "./use-workspace-session-selection";
@@ -90,7 +91,6 @@ beforeEach(() => {
 afterEach(() => {
   chatStub.mockRestore();
   viewportStub.mockRestore();
-  localStorage.removeItem(RIGHT_PANEL_OPEN_STORAGE_KEY);
 });
 
 const sessionRecord = (id: string): WorkspaceSession => ({
@@ -1114,23 +1114,23 @@ function DirtyPreview({ startOpen = true }: { startOpen?: boolean }) {
   );
 }
 
-test("chats share right panel visibility and keep their own selected tab", async () => {
+test("each chat keeps its own right panel state and selected tab", async () => {
   const hostClient: Partial<HostClient> = {
     workspaceSessionListActive: async () => [sessionRecord("First"), sessionRecord("Second")],
     workspaceGetSettingsSnapshot: () => new Promise(() => {}),
   };
   const view = await act(async () => renderSessions(hostClient, undefined, "/chats?session=First"));
+  const openChat = async (name: "first" | "second", heading: string) => {
+    await act(async () => fireEvent.click(view.getByRole("link", { name: `Open ${name} chat` })));
+    await waitFor(() =>
+      expect(view.getByRole("heading", { name: heading, level: 2 })).toBeTruthy(),
+    );
+  };
   try {
     await view.findByRole("button", { name: "Hide right panel" });
     await act(async () => fireEvent.click(view.getByRole("button", { name: "Hide right panel" })));
     expect(view.queryByRole("tablist", { name: "Right panel tabs" })).toBeNull();
-    await act(async () => fireEvent.click(view.getByRole("link", { name: "Open second chat" })));
-    await waitFor(() =>
-      expect(view.getByRole("heading", { name: "Second", level: 2 })).toBeTruthy(),
-    );
-    expect(view.getByRole("button", { name: "Show right panel" })).toBeTruthy();
-    expect(view.queryByRole("tablist", { name: "Right panel tabs" })).toBeNull();
-    await act(async () => fireEvent.click(view.getByRole("button", { name: "Show right panel" })));
+    await openChat("second", "Second");
     await view.findByRole("tablist", { name: "Right panel tabs" });
     await act(async () =>
       fireEvent.mouseDown(view.getByRole("tab", { name: "Files" }), { button: 0 }),
@@ -1141,32 +1141,36 @@ test("chats share right panel visibility and keep their own selected tab", async
     await waitFor(() =>
       expect(view.getByRole("tab", { name: "Files" }).getAttribute("aria-selected")).toBe("true"),
     );
-    await act(async () => fireEvent.click(view.getByRole("link", { name: "Open first chat" })));
+    await openChat("first", "First");
+    expect(view.getByRole("button", { name: "Show right panel" })).toBeTruthy();
+    expect(view.queryByRole("tablist", { name: "Right panel tabs" })).toBeNull();
+    await act(async () => fireEvent.click(view.getByRole("button", { name: "Show right panel" })));
     await view.findByRole("tablist", { name: "Right panel tabs" });
     expect(view.getByRole("tab", { name: "Diffs" }).getAttribute("aria-selected")).toBe("true");
-    await act(async () => fireEvent.click(view.getByRole("link", { name: "Open second chat" })));
+    await openChat("second", "Second");
     await waitFor(() =>
       expect(view.getByRole("tab", { name: "Files" }).getAttribute("aria-selected")).toBe("true"),
     );
-    expect(localStorage.getItem(RIGHT_PANEL_OPEN_STORAGE_KEY)).toBe("true");
   } finally {
     view.unmount();
   }
 }, 5_000);
 
-test("the right panel uses the saved panel choice", async () => {
-  localStorage.setItem(RIGHT_PANEL_OPEN_STORAGE_KEY, "false");
+test("the right panel uses the saved state of the chat", async () => {
+  const workspaceId = crypto.randomUUID();
+  const owner: SessionPanelOwner = { kind: "chat", workspaceId, sessionId: "First" };
+  createSessionPanelLayoutStore(hostStorage).setRightOpen(owner, false);
   const hostClient: Partial<HostClient> = {
     workspaceSessionListActive: async () => [sessionRecord("First")],
     workspaceGetSettingsSnapshot: () => new Promise(() => {}),
   };
-  const view = renderSessions(hostClient, "First");
+  const view = renderSessions(hostClient, "First", "/chats", workspaceId);
   try {
     await view.findByRole("button", { name: "Show right panel" });
     expect(view.queryByRole("tablist", { name: "Right panel tabs" })).toBeNull();
     fireEvent.click(view.getByRole("button", { name: "Show right panel" }));
     await view.findByRole("tablist", { name: "Right panel tabs" });
-    expect(localStorage.getItem(RIGHT_PANEL_OPEN_STORAGE_KEY)).toBe("true");
+    expect(createSessionPanelLayoutStore(hostStorage).readPanels(owner).right).toBe(true);
   } finally {
     view.unmount();
   }

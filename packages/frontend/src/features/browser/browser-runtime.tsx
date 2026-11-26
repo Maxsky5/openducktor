@@ -27,6 +27,7 @@ import {
   type BrowserTabsStore,
   createBrowserTabsStore,
 } from "@openducktor/frontend-core/browser/browser-tabs-store";
+import { type BrowserClosingTabs, createBrowserClosingTabs } from "./browser-closing-tabs";
 import { type BrowserFocusRegistry, createBrowserFocusRegistry } from "./browser-focus-registry";
 import type { BrowserFrameControls } from "./browser-frame-display";
 
@@ -35,6 +36,8 @@ type BrowserRuntimeBase = {
   readonly slots: BrowserSurfaceRegistry<BrowserSlot>;
   readonly focus: BrowserFocusRegistry;
   readonly requests: BrowserTabRequests;
+  /** The tabs that this client closes now. All views share them. */
+  readonly closingTabs: BrowserClosingTabs;
 };
 
 /** Electron: each tab page is a native view, with the browser channel and host overlays. */
@@ -80,6 +83,7 @@ const createBrowserRuntime = (host: HostConnection, bridge: BrowserBridge): Brow
       start: (tabId) => hostClient.browserTabStart({ tabId }).then(() => undefined),
       close: (tabId) => hostClient.browserTabClose({ tabId }),
     }),
+    closingTabs: createBrowserClosingTabs(store),
   };
   return bridge.surface === "electron"
     ? {
