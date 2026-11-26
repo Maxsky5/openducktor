@@ -5,10 +5,6 @@ import type {
   WorkspaceSessionLiveState,
 } from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
-import {
-  HOST_CONNECTION_WAITING_MESSAGE,
-  HOST_UNREACHABLE_FAILURE,
-} from "@openducktor/frontend-core/lib/host-failure";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionActivityState } from "@openducktor/frontend-core/types/agent-session-activity";
 import { buildPaletteTaskView } from "./command-palette-task-model";
@@ -137,12 +133,7 @@ describe("command palette task model", () => {
     });
     const failed = buildPaletteTaskView({
       task: inProgressTask(),
-      sessions: { status: "error", failure: { kind: "other", message: "Host offline" } },
-      live: liveState([]),
-    });
-    const waiting = buildPaletteTaskView({
-      task: inProgressTask(),
-      sessions: { status: "error", failure: HOST_UNREACHABLE_FAILURE },
+      sessions: { status: "error", message: "Host offline" },
       live: liveState([]),
     });
 
@@ -151,7 +142,6 @@ describe("command palette task model", () => {
     expect(loading.nextStep).toBeNull();
     expect(failed.open).toBeNull();
     expect(failed.sessionsNote).toBe("Sessions could not load: Host offline");
-    expect(waiting.sessionsNote).toBe(HOST_CONNECTION_WAITING_MESSAGE);
     expect(failed.actions.map((action) => action.key)).toEqual([
       "close_task",
       "edit",

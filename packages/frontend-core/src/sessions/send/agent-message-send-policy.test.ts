@@ -34,7 +34,6 @@ test.each([
         kind: "failed",
         workspaceRepoPath: "/repo",
         source: "live-stream",
-        failureKind: "other",
         message: "Stream failed",
       },
     },

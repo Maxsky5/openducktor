@@ -170,7 +170,6 @@ describe("groupTaskSessions", () => {
         workspaceRepoPath: "/repo",
         message: "Live stream ended",
         source: "live-stream",
-        failureKind: "other",
       },
       [summary("b-1", "build", "running", "TASK-1", true)],
     );

@@ -48,7 +48,6 @@ import {
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
 import { createSessionPanelFixture } from "@/test-utils/session-panel-fixtures";
 import { repoConfigFixture } from "@openducktor/frontend-core/test-support/repo-config-fixture";
-import { HOST_UNREACHABLE_FAILURE } from "@openducktor/frontend-core/lib/host-failure";
 
 function mockTools(
   renderTools: (props: Parameters<typeof toolsModule.useWorkspaceSessionTools>[0]) => ReactElement,
@@ -1100,12 +1099,11 @@ test.each(["records", "live"] as const)(
                   workspaceRepoPath: "/repo",
                   message: "Live status failed",
                   source: "live-stream",
-                  failureKind: "other",
                 }
               : { kind: "ready", workspaceRepoPath: "/repo" },
-          workspaceSessionRecordsError: { kind: "other", message: "Chat records failed" },
+          workspaceSessionRecordsError: "Chat records failed",
           getSessionFault: () => null,
-          reloadSessionReadModel: async () => {
+          reloadSessionReadModel: () => {
             retries += 1;
           },
         }}
@@ -1124,49 +1122,3 @@ test.each(["records", "live"] as const)(
     }
   },
 );
-
-test("shows a record failure with another cause beside a quiet live-session wait", () => {
-  const view = render(
-    <AgentSessionReadModelStateContext
-      value={{
-        sessionReadModelLoadState: {
-          kind: "failed",
-          workspaceRepoPath: "/repo",
-          message: "Waiting for the host connection...",
-          source: "live-stream",
-          failureKind: "host-unreachable",
-        },
-        workspaceSessionRecordsError: { kind: "other", message: "Chat records failed" },
-        getSessionFault: () => null,
-        reloadSessionReadModel: async () => {},
-      }}
-    >
-      <WorkspaceSessionReadModelNotice />
-    </AgentSessionReadModelStateContext>,
-  );
-  try {
-    expect(view.getByRole("alert").textContent).toContain("Chat records failed");
-  } finally {
-    view.unmount();
-  }
-});
-
-test("waits quietly when the workspace session records lost the host connection", () => {
-  const view = render(
-    <AgentSessionReadModelStateContext
-      value={{
-        sessionReadModelLoadState: { kind: "ready", workspaceRepoPath: "/repo" },
-        workspaceSessionRecordsError: HOST_UNREACHABLE_FAILURE,
-        getSessionFault: () => null,
-        reloadSessionReadModel: async () => {},
-      }}
-    >
-      <WorkspaceSessionReadModelNotice />
-    </AgentSessionReadModelStateContext>,
-  );
-  try {
-    expect(view.queryByRole("alert")).toBeNull();
-  } finally {
-    view.unmount();
-  }
-});

@@ -234,7 +234,6 @@ describe("useSessionBackgroundTasks", () => {
         workspaceRepoPath: "/repo",
         message: "Live stream ended",
         source: "live-stream",
-        failureKind: "other",
       });
       await harness.update(props);
       expect(harness.getLatest()).toBeNull();

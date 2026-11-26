@@ -21,28 +21,6 @@ const failure = (
 });
 
 describe("notification failure state", () => {
-  test("waits quietly for a lost host without hiding another failure", () => {
-    const quiet = {
-      ...failure("lost", "Host is unreachable."),
-      channel: "coordination" as const,
-      waitsForHost: true as const,
-    };
-    const os = failure("os", "Native notifications are unavailable.");
-    const withQuiet = recordNotificationFailure(createNotificationFailureState(), quiet);
-
-    expect(selectNotificationFailure(withQuiet)).toBeNull();
-    expect(selectNotificationFailure(recordNotificationFailure(withQuiet, os))).toBe(os);
-
-    // A reportable coordination failure replaces the quiet wait.
-    const reportable = {
-      ...failure("replay", "Replay is unavailable."),
-      channel: "coordination" as const,
-    };
-    const withReportable = recordNotificationFailure(withQuiet, reportable);
-    expect(selectNotificationFailure(withReportable)).toBe(reportable);
-    expect(recordNotificationFailure(withReportable, quiet)).toBe(withReportable);
-  });
-
   test("keeps a sound error visible while OS permission is missing", () => {
     const permission = { ...failure("permission"), osStatus: "denied" as const };
     const sound = { ...failure("sound"), channel: "sound" as const };

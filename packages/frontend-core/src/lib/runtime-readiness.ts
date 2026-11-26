@@ -1,5 +1,4 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import { HOST_CONNECTION_WAITING_MESSAGE, reportsFailure } from "./host-failure";
 import { describeHostRuntimeUnavailable } from "./host-runtime-status";
 import type { HostRuntimeStatusContextValue } from "../types/session-slices";
 
@@ -111,21 +110,17 @@ export const readRuntimeKindReadiness = (
   runtimeStatus: RuntimeStatusReadinessInput,
   runtime: Pick<RuntimeDescriptor, "kind" | "label">,
 ): RuntimeReadinessSnapshot => {
-  if (reportsFailure(runtimeStatus.streamError)) {
+  if (runtimeStatus.streamError !== null) {
     return {
       state: "blocked",
-      message: `Runtime status is not current because live updates stopped: ${runtimeStatus.streamError.message} Select Recheck to read it again.`,
+      message: `Runtime status is not current because live updates stopped: ${runtimeStatus.streamError} Select Recheck to read it again.`,
     };
   }
-  if (reportsFailure(runtimeStatus.readError)) {
+  if (runtimeStatus.readError !== null) {
     return {
       state: "blocked",
-      message: `Runtime status could not be read: ${runtimeStatus.readError.message} Select Recheck to read it again.`,
+      message: `Runtime status could not be read: ${runtimeStatus.readError} Select Recheck to read it again.`,
     };
-  }
-  // Only a lost host connection is left. The status reads again after reconnect.
-  if (runtimeStatus.streamError !== null || runtimeStatus.readError !== null) {
-    return { state: "checking", message: HOST_CONNECTION_WAITING_MESSAGE };
   }
   const status = runtimeStatus.statusByKind[runtime.kind];
   if (status === undefined || !runtimeStatus.isCurrent) {

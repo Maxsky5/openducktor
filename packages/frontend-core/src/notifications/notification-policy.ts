@@ -37,8 +37,6 @@ export type NotificationDispatchFailure = {
   osStatus?: Exclude<NotificationDeliveryResult["status"], "shown">;
   /** The OS permission that blocked a `denied` delivery. */
   osPermission?: NotificationDeliveryPermission;
-  /** Coordination that lost the host connection waits quietly for it. */
-  waitsForHost?: true;
 };
 
 type ReportedFailure = Pick<

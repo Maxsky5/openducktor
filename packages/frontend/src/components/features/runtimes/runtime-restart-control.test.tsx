@@ -200,7 +200,7 @@ describe("RuntimeRestartControl", () => {
         message: "Lost.",
       }),
     );
-    expect(view.getByText(/Host is unreachable\./)).toBeDefined();
+    expect(view.getByText(/Lost\./)).toBeDefined();
     expect(getConfirmButton(view).hasAttribute("disabled")).toBe(true);
     await act(async () => {
       await events.emit({

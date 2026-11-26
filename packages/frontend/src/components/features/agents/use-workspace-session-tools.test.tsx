@@ -26,6 +26,7 @@ import {
   createTestHostConnection,
 } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { createHostConnectionStore } from "@openducktor/frontend-core/connection/host-connection-state";
+import { followHostConnection } from "@openducktor/frontend-core/connection/query-online-state";
 import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
@@ -1392,24 +1393,34 @@ test("a focus refresh that lost the host keeps the panel without an error", asyn
     lostReads += 1;
     return new HostUnreachableError(new TypeError("Failed to fetch"));
   };
-  const toolsConnection = createToolsConnection(
-    withLocalChanges({
-      gitGetComparisonTarget: async () => {
-        if (!reachable) throw unreachable();
-        return { kind: "available", reference: targetReference };
-      },
-      gitFetchRemote: async () => {
-        if (!reachable) throw unreachable();
-        return { outcome: "skipped_no_remote", output: "" };
-      },
-      gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
-        if (!reachable) throw unreachable();
-        return worktreeStatus(targetBranch);
-      },
-      gitGetBranches: async () => [],
+  const connectionState = createHostConnectionStore();
+  const toolsConnection = createTestClientConnection({
+    host: createTestHostConnection({
+      connectionState,
+      client: withLocalChanges({
+        gitGetComparisonTarget: async () => {
+          if (!reachable) throw unreachable();
+          return { kind: "available", reference: targetReference };
+        },
+        gitFetchRemote: async () => {
+          if (!reachable) throw unreachable();
+          return { outcome: "skipped_no_remote", output: "" };
+        },
+        gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
+          if (!reachable) throw unreachable();
+          return worktreeStatus(targetBranch);
+        },
+        gitGetBranches: async () => [],
+      }),
     }),
+  });
+  toolsConnection.queryClient.setQueryData(
+    settingsSnapshotQueryOptions().queryKey,
+    createSettingsSnapshotFixture(),
   );
   const queryClient = toolsConnection.queryClient;
+  // A local host makes its reads wait while the connection is lost.
+  const stopOnlineState = followHostConnection(queryClient, connectionState);
   const view = render(
     <ClientConnectionProvider connection={toolsConnection}>
       <ThemeProvider>
@@ -1420,6 +1431,8 @@ test("a focus refresh that lost the host keeps the panel without an error", asyn
   try {
     await waitForTargetScope();
     reachable = false;
+    // The transport reports the lost connection before a request fails.
+    act(() => connectionState.setState("reconnecting"));
     await act(async () => {
       globalThis.dispatchEvent(new Event("focus"));
     });
@@ -1430,6 +1443,7 @@ test("a focus refresh that lost the host keeps the panel without an error", asyn
     expect(screen.queryByRole("alert")).toBeNull();
     expect(report).not.toHaveBeenCalled();
   } finally {
+    stopOnlineState();
     view.unmount();
     queryClient.clear();
     report.mockRestore();

@@ -11,7 +11,7 @@ import {
 } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { connectionHost } from "../connection/client-connection";
-import { hostFailureText } from "../lib/host-failure";
+import { errorMessage } from "../lib/errors";
 import { targetBranchSelectionValue } from "../lib/target-branch";
 import {
   continuedCheckoutRead,
@@ -153,7 +153,6 @@ function comparisonUnavailableReason(
     return input.target
       ? `Checking comparison ${targetBranchSelectionValue(input.target)}...`
       : "Reading the default comparison target...";
-  // The comparison stays unavailable, but a lost host connection waits quietly.
-  if (comparison.isError) return hostFailureText(comparison.error);
+  if (comparison.isError) return errorMessage(comparison.error);
   return comparison.data?.kind === "unavailable" ? comparison.data.reason : null;
 }

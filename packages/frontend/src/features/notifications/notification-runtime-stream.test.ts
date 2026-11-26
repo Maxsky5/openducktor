@@ -363,33 +363,23 @@ test.each(["attachment", "live"] as const)(
 );
 
 test.each([
-  [
-    "a local request that did not reach the host",
-    new HostUnreachableError(new TypeError("x")),
-    true,
-  ],
+  ["a local request that did not reach the host", new HostUnreachableError(new TypeError("x"))],
   [
     "a lost remote connection",
     remoteError("transport_failure", "The remote connection was lost.", "Retry."),
-    true,
   ],
-  ["a reply that is too large", new RemoteReplyTooLargeError(32 * 1024 * 1024), false],
-])("marks a live stream failure from %s as a lost host: %p", async (_label, failure, lost) => {
+])("leaves a live stream failure from %s to the host connection state", async (_label, cause) => {
   const h = harness();
-  const reported = Promise.withResolvers<void>();
-  h.onFailure.mockImplementationOnce(() => reported.resolve());
   const stop = h.runtime.subscribe();
   try {
     h.finishAttachment();
     await h.attachment;
-    h.fail(failure);
-    await reported.promise;
+    h.fail(cause);
+    // A failure with another cause still reports. It proves that the lost connection did not.
+    const other = new RemoteReplyTooLargeError(32 * 1024 * 1024);
+    h.fail(other);
     expect(h.onFailure).toHaveBeenCalledTimes(1);
-    expect(h.onFailure).toHaveBeenCalledWith(
-      lost
-        ? expect.objectContaining({ channel: "coordination", waitsForHost: true })
-        : expect.not.objectContaining({ waitsForHost: true }),
-    );
+    expect(h.onFailure).toHaveBeenCalledWith(expect.objectContaining({ message: other.message }));
   } finally {
     stop();
   }

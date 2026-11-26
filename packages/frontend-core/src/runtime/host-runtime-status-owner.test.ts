@@ -11,7 +11,6 @@ import {
   createHostRuntimeStatusFixture,
 } from "../test-support/shared-test-fixtures";
 import { createHostRuntimeStatusOwner } from "./host-runtime-status-owner";
-import { HOST_UNREACHABLE_FAILURE } from "../lib/host-failure";
 
 const snapshot = (
   hostInstanceId: string,
@@ -147,7 +146,7 @@ describe("createHostRuntimeStatusOwner", () => {
     harness.owner.stop();
   });
 
-  test("reports a stream warning as not current and reads one baseline after reconnect", async () => {
+  test("marks the status not current on a stream warning and reads one baseline after reconnect", async () => {
     const harness = createHarness();
     harness.owner.start();
     await waitForExpectation(() => expect(harness.runtimeStatus).toHaveBeenCalledTimes(1));
@@ -159,8 +158,9 @@ describe("createHostRuntimeStatusOwner", () => {
       kind: "stream-warning",
       message: "Connection lost.",
     });
+    // The host connection state shows a lost connection. It is not a stream failure.
     expect(harness.owner.getConnection()).toMatchObject({
-      streamError: HOST_UNREACHABLE_FAILURE,
+      streamError: null,
       hasBaseline: false,
     });
 
@@ -234,30 +234,6 @@ describe("createHostRuntimeStatusOwner", () => {
     harness.owner.stop();
   });
 
-  test("keeps a connection failure that the transport reports while it subscribes", async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const owner = createHostRuntimeStatusOwner({
-      queryClient,
-      ports: {
-        subscribeRuntimeChanges: async (listener) => {
-          listener({
-            __openducktorConnectionControl: true,
-            kind: "stream-warning",
-            message: "Lost.",
-          });
-          return () => {};
-        },
-        runtimeStatus: async () => snapshot("host-1", []),
-      },
-      onRuntimeGenerationChange: () => {},
-    });
-    owner.start();
-
-    await waitForExpectation(() => expect(owner.getConnection().hasBaseline).toBe(true));
-    expect(owner.getConnection().streamError).toEqual(HOST_UNREACHABLE_FAILURE);
-    owner.stop();
-  });
-
   test("a failure and recovery before the first open end with a current baseline", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const owner = createHostRuntimeStatusOwner({
@@ -319,10 +295,7 @@ describe("createHostRuntimeStatusOwner", () => {
     });
     harness.owner.start();
     await waitForExpectation(() =>
-      expect(harness.owner.getConnection().streamError).toEqual({
-        kind: "other",
-        message: "Event stream unavailable.",
-      }),
+      expect(harness.owner.getConnection().streamError).toBe("Event stream unavailable."),
     );
     harness.lastBaseline().resolve(snapshot("host-1", []));
     await waitForExpectation(() => expect(harness.owner.getConnection().hasBaseline).toBe(true));
@@ -402,7 +375,7 @@ describe("createHostRuntimeStatusOwner", () => {
         ).toBeNull();
         expect(harness.owner.getConnection()).toMatchObject({
           hasBaseline: false,
-          readError: { kind: "other", message: expect.stringContaining("Timed out") },
+          readError: expect.stringContaining("Timed out"),
         });
         const recovered = harness.owner.refresh();
         await waitForExpectation(() =>
@@ -448,17 +421,15 @@ describe("createHostRuntimeStatusOwner", () => {
       const stopLateSubscription = mock(() => {});
       let staleListener: RuntimeChangeListener | undefined;
       try {
+        harness.subscribeRuntimeChanges.mockImplementationOnce(async () => {
+          throw new Error("Event stream unavailable.");
+        });
         harness.owner.start();
         await waitForExpectation(() => expect(harness.runtimeStatus).toHaveBeenCalledTimes(1));
         harness.lastBaseline().resolve(snapshot("host-1", []));
         await waitForExpectation(() =>
           expect(harness.owner.getConnection().hasBaseline).toBe(true),
         );
-        harness.emit({
-          __openducktorConnectionControl: true,
-          kind: "stream-warning",
-          message: "Lost.",
-        });
         harness.subscribeRuntimeChanges.mockImplementationOnce((listener) => {
           staleListener = listener;
           return registered.promise;
@@ -470,7 +441,7 @@ describe("createHostRuntimeStatusOwner", () => {
         clock.expire();
         if (when === "with timeout") registered.resolve(stopLateSubscription);
         await waitForExpectation(() =>
-          expect(harness.owner.getConnection().streamError?.message).toContain("Timed out"),
+          expect(harness.owner.getConnection().streamError).toContain("Timed out"),
         );
         await waitForExpectation(() => expect(harness.runtimeStatus).toHaveBeenCalledTimes(2));
         harness.lastBaseline().resolve(snapshot("host-1", []));
@@ -620,7 +591,7 @@ describe("createHostRuntimeStatusOwner", () => {
     expect(received).toEqual([
       "runtime_impact_changed",
       "runtime_changed",
-      `stream:${HOST_UNREACHABLE_FAILURE.message}:1`,
+      "stream:Lost.:1",
       "stream:live:2",
     ]);
     harness.owner.stop();

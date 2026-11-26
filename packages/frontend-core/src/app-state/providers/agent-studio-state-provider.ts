@@ -10,7 +10,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { toHostFeedbackFailure } from "../../lib/host-failure";
+import { errorMessage } from "../../lib/errors";
 import type { ActiveWorkspace } from "../../types/session-slices";
 import {
   failedTaskRecordsLoadState,
@@ -202,11 +202,7 @@ function WorkspaceSessionController({
         ...state.readModelState,
         sessionReadModelLoadState: failedTaskRecordsLoadState({
           workspaceRepoPath: workspace.repoPath,
-          // A read that lost the host waits quietly. The reconnect reads it again.
-          failure: toHostFeedbackFailure(
-            taskQuery.error,
-            (message) => `Failed to load workspace tasks: ${message}`,
-          ),
+          message: `Failed to load workspace tasks: ${errorMessage(taskQuery.error)}`,
           liveStreamFailure,
         }),
         reloadSessionReadModel: () => {

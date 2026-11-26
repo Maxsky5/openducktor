@@ -17,7 +17,6 @@ import type {
   WorkspaceSessionDraft,
 } from "../../drafts/new-workspace-session-draft-store";
 import { errorMessage } from "../../lib/errors";
-import { type HostFeedbackFailure, toHostFeedbackFailure } from "../../lib/host-failure";
 import {
   buildSessionNavigationModel,
   type SessionNavigationEntry,
@@ -310,12 +309,10 @@ const toRead = <Data>(result: ReadResult<Data>): SessionNavigationRead<Data> => 
     return {
       status: "ready",
       data: result.data,
-      refreshError: result.status === "error" ? toHostFeedbackFailure(result.error) : null,
+      refreshError: result.status === "error" ? errorMessage(result.error) : null,
     };
   }
-  if (result.status === "error") {
-    return { status: "error", failure: toHostFeedbackFailure(result.error) };
-  }
+  if (result.status === "error") return { status: "error", message: errorMessage(result.error) };
   return { status: "loading" };
 };
 
@@ -347,7 +344,7 @@ export const combineTaskSessionReads = (
 /** A broken record stream means the chat list can be out of date. */
 export const withRecordStreamError = (
   read: SessionNavigationRead<WorkspaceSession[]> | undefined,
-  sessionRecordsError: HostFeedbackFailure | null,
+  sessionRecordsError: string | null,
 ): SessionNavigationRead<WorkspaceSession[]> => {
   if (!read) return { status: "loading" };
   if (read.status !== "ready" || sessionRecordsError === null || read.refreshError !== null) {
@@ -387,7 +384,6 @@ const shareSessionNavigationModel = (
     isLoading: next.isLoading,
     loadingWorkspaceIds: replaceEqualDeep(previous.loadingWorkspaceIds, next.loadingWorkspaceIds),
     issues: replaceEqualDeep(previous.issues, next.issues),
-    waitingWorkspaceIds: replaceEqualDeep(previous.waitingWorkspaceIds, next.waitingWorkspaceIds),
     taskBlocks: replaceEqualDeep(previous.taskBlocks, next.taskBlocks),
   };
   const unchanged =
@@ -396,7 +392,6 @@ const shareSessionNavigationModel = (
     shared.isLoading === previous.isLoading &&
     shared.loadingWorkspaceIds === previous.loadingWorkspaceIds &&
     shared.issues === previous.issues &&
-    shared.waitingWorkspaceIds === previous.waitingWorkspaceIds &&
     shared.taskBlocks === previous.taskBlocks;
   return unchanged ? previous : shared;
 };

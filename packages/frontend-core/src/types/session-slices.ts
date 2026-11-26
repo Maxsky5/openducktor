@@ -6,7 +6,6 @@ import type {
   RuntimeKind,
   WorkspaceRecord,
 } from "@openducktor/contracts";
-import type { HostFeedbackFailure } from "../lib/host-failure";
 import type {
   AgentModelSelection,
   AgentSessionScope,
@@ -79,8 +78,8 @@ export type HostRuntimeStatusContextValue = {
   /** True only with live updates and a successful baseline read. */
   isCurrent: boolean;
   isLoading: boolean;
-  readError: HostFeedbackFailure | null;
-  streamError: HostFeedbackFailure | null;
+  readError: string | null;
+  streamError: string | null;
   isRefreshing: boolean;
   refresh: () => Promise<void>;
   runtimeEvents: HostRuntimeEvents;
@@ -88,8 +87,7 @@ export type HostRuntimeStatusContextValue = {
 
 export type AgentSessionReadModelStateContextValue = {
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
-  /** A host-unreachable failure keeps actions blocked without its own message. */
-  workspaceSessionRecordsError: HostFeedbackFailure | null;
+  workspaceSessionRecordsError: string | null;
   reloadSessionReadModel: () => void;
   getSessionFault: (session: AgentSessionIdentity | null) => AgentSessionTransientFault | null;
 };

@@ -6,7 +6,6 @@ import { createTestClientConnection } from "../../test-support/test-client-conne
 import { setupTestingLibraryFakeTimers } from "../../test-support/testing-library-fake-timers";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
-import { HOST_UNREACHABLE_MESSAGE, HostUnreachableError } from "@openducktor/host-client";
 import { toLocalChanges } from "../../test-support/local-changes-fixture";
 import { type GitPanelReadsInput, useGitPanelReads } from "./use-git-panel-reads";
 
@@ -108,44 +107,6 @@ test("a failed local read rejects its refresh and shows the scope error without 
     expect(local.error).toContain("Status read denied");
     expect(local.localChanges).toBeNull();
     expect(hook.result.current.isLoading).toBe(false);
-  } finally {
-    hook.unmount();
-    queryClient.clear();
-  }
-});
-
-test("a local read that lost the host rejects its refresh and keeps the last files", async () => {
-  let reachable = true;
-  const { hook, queryClient } = renderReads({
-    gitGetLocalChanges: async () => {
-      if (!reachable) throw new HostUnreachableError(new TypeError("Failed to fetch"));
-      return toLocalChanges(status("src/local.ts", "uncommitted"));
-    },
-  });
-  try {
-    await waitFor(() => expect(hook.result.current.loadedScopesByScope.uncommitted).toBe(true));
-    reachable = false;
-    let outcome = "";
-    await act(async () => {
-      outcome = await hook.result.current.readLocal().then(
-        () => "resolved",
-        (error: Error) => error.message,
-      );
-    });
-    expect(outcome).toBe(HOST_UNREACHABLE_MESSAGE);
-    // The connection indicator explains the wait, so the scope shows no error.
-    const local = hook.result.current.scopeStatesByScope.uncommitted;
-    expect(local.error).toBeNull();
-    expect(local.localChanges).not.toBeNull();
-    expect(local.fileStatuses[0]?.path).toBe("src/local.ts");
-    // The kept files are not current.
-    expect(local.statusHash).toBeNull();
-
-    reachable = true;
-    await act(async () => {
-      await hook.result.current.readLocal();
-    });
-    expect(hook.result.current.scopeStatesByScope.uncommitted.error).toBeNull();
   } finally {
     hook.unmount();
     queryClient.clear();

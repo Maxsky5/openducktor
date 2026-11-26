@@ -26,11 +26,6 @@ import {
 } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 import type { WorkspaceSessionLiveState } from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
 import { roleIconForHint } from "@/lib/agent-role-presentation";
-import {
-  HOST_CONNECTION_WAITING_MESSAGE,
-  type HostFeedbackFailure,
-  isQuietHostFailure,
-} from "@openducktor/frontend-core/lib/host-failure";
 import { isAgentSessionActivityActive } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import {
@@ -43,12 +38,6 @@ import {
 } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { PaletteRowAction } from "./command-palette-types";
-
-/** A lost host connection waits quietly. The connection indicator explains it. */
-const sessionsFailureNote = (failure: HostFeedbackFailure): string =>
-  isQuietHostFailure(failure)
-    ? HOST_CONNECTION_WAITING_MESSAGE
-    : `Sessions could not load: ${failure.message}`;
 
 export type TaskSessionTarget = { role: AgentRole; identity: AgentSessionIdentity };
 
@@ -93,7 +82,9 @@ export const buildPaletteTaskView = ({
     return {
       open: null,
       sessionsNote:
-        sessions?.status === "error" ? sessionsFailureNote(sessions.failure) : "Loading sessions…",
+        sessions?.status === "error"
+          ? `Sessions could not load: ${sessions.message}`
+          : "Loading sessions…",
       nextStep: null,
       actions: destructiveLast(taskActions(task)),
       sessionOptionsByRole: {},

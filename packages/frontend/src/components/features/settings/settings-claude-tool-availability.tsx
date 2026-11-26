@@ -26,11 +26,6 @@ import {
   RuntimePolicyRoleOverrides,
 } from "./settings-runtime-policy-layout";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
-import {
-  isQuietHostFailure,
-  reportsFailure,
-  selectHostFailure,
-} from "@openducktor/frontend-core/lib/host-failure";
 
 export function ClaudeToolAvailabilitySettings({
   config,
@@ -50,11 +45,8 @@ export function ClaudeToolAvailabilitySettings({
       : skippedClaudeToolCatalogQueryOptions(),
   );
   let error: string | null = null;
-  const statusFailure = selectHostFailure(status.readError, status.streamError);
-  // A lost host connection keeps the catalog loading. The connection indicator explains it.
-  const waitsForHost = isQuietHostFailure(statusFailure);
-  if (reportsFailure(statusFailure)) error = statusFailure.message;
-  else if (!waitsForHost && !status.isLoading && !runtimeId)
+  if (status.readError || status.streamError) error = status.readError ?? status.streamError;
+  else if (!status.isLoading && !runtimeId)
     error = "Claude is not ready. Check Claude in Diagnostics, then reopen tool availability.";
   else if (query.isError) error = errorMessage(query.error);
   const catalog = !error && query.data?.runtimeId === runtimeId ? query.data : undefined;
@@ -65,7 +57,7 @@ export function ClaudeToolAvailabilitySettings({
       onChange={onChange}
       catalog={catalog}
       error={error}
-      loading={!error && (query.isPending || waitsForHost)}
+      loading={!error && query.isPending}
       onRetry={() => {
         if (runtimeId && hostInstanceId && !status.readError && !status.streamError)
           void query.refetch();

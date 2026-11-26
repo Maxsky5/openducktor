@@ -16,7 +16,6 @@ import {
   resolvingRuntimeReadinessTarget,
   runtimeReadinessTargetForRuntime,
 } from "./runtime-readiness";
-import { HOST_UNREACHABLE_FAILURE } from "./host-failure";
 
 const runtimeDefinitions = [
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -99,49 +98,11 @@ describe("deriveRuntimeReadiness", () => {
     const readiness = derive({
       statusByKind: { opencode: createHostRuntimeStatusFixture({ kind: "opencode" }) },
       target: runtimeReadinessTargetForRuntime("opencode"),
-      runtimeStatus: {
-        streamError: { kind: "other", message: "Connection lost." },
-        isCurrent: false,
-      },
+      runtimeStatus: { streamError: "Connection lost.", isCurrent: false },
     });
 
     expect(readiness.state).toBe("blocked");
     expect(readiness.message).toContain("Connection lost.");
-  });
-
-  test("keeps another runtime status failure visible while the host connection is lost", () => {
-    const readiness = derive({
-      statusByKind: { opencode: createHostRuntimeStatusFixture({ kind: "opencode" }) },
-      target: runtimeReadinessTargetForRuntime("opencode"),
-      runtimeStatus: {
-        streamError: HOST_UNREACHABLE_FAILURE,
-        readError: { kind: "other", message: "Runtime status is invalid." },
-        isCurrent: false,
-      },
-    });
-
-    expect(readiness.state).toBe("blocked");
-    expect(readiness.message).toContain("Runtime status is invalid.");
-  });
-
-  test("waits without an error while the host connection is lost", () => {
-    const statusByKind = { opencode: createHostRuntimeStatusFixture({ kind: "opencode" }) };
-    const target = runtimeReadinessTargetForRuntime("opencode");
-
-    expect(
-      derive({
-        statusByKind,
-        target,
-        runtimeStatus: { streamError: HOST_UNREACHABLE_FAILURE, isCurrent: false },
-      }),
-    ).toEqual({ state: "checking", message: "Waiting for the host connection..." });
-    expect(
-      derive({
-        statusByKind,
-        target,
-        runtimeStatus: { readError: HOST_UNREACHABLE_FAILURE, isCurrent: false },
-      }),
-    ).toEqual({ state: "checking", message: "Waiting for the host connection..." });
   });
 
   test("waits while the baseline is not yet current", () => {

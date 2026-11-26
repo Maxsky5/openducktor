@@ -6,7 +6,7 @@ import { createClientQueryClient } from "@openducktor/frontend-core/connection/c
 import { createHostConnectionStore } from "@openducktor/frontend-core/connection/host-connection-state";
 import { repoTaskDataQueryOptions } from "@openducktor/frontend-core/queries/tasks";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import { QueryObserver, useQuery } from "@tanstack/react-query";
+import { onlineManager, QueryObserver, useQuery } from "@tanstack/react-query";
 import { render, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
@@ -78,7 +78,7 @@ describe("createShellConnection", () => {
     { target: { kind: "local" } as const, reads: 2 },
     { target: REMOTE_A, reads: 1 },
   ])(
-    "a $target.kind host reads $reads time(s) after its connection recovers",
+    "a $target.kind host waits and reads $reads time(s) after its connection recovers",
     async ({ target, reads }) => {
       const connectionState = createHostConnectionStore();
       const queryClient = createClientQueryClient();
@@ -95,6 +95,8 @@ describe("createShellConnection", () => {
       try {
         await queryClient.refetchQueries();
         connectionState.setState("reconnecting");
+        // Only the reads of a local host wait. The remote client waits for its own reconnect.
+        expect(onlineManager.isOnline()).toBe(target.kind === "remote");
         connectionState.setState("connected");
         await queryClient.getQueryCache().find({ queryKey: ["host-read"] })?.promise;
         expect(count).toBe(reads);

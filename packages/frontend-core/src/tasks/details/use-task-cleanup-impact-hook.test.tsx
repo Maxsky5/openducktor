@@ -2,8 +2,10 @@ import type { WorkspaceRef } from "@openducktor/contracts";
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import { onlineManager, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import type { ClientConnection } from "../../connection/client-connection";
+import { connectedHostConnectionState } from "../../connection/host-connection-state";
+import { followHostConnection } from "../../connection/query-online-state";
 import { agentSessionQueryKeys } from "../../queries/agent-sessions";
 import { taskWorktreeQueryKeys } from "../../queries/build-runtime";
 import {
@@ -89,12 +91,16 @@ describe("useTaskCleanupImpact", () => {
     }
   });
 
-  test.each([true, false])(
-    "loads cold cleanup data once when the browser online hint is %s",
-    async (online) => {
-      const previous = onlineManager.isOnline();
-      onlineManager.setOnline(online);
+  test.each(["online", "offline"])(
+    "loads cold cleanup data once when the browser reports that it is %s",
+    async (browserState) => {
       const { calls, connection } = createHost();
+      // Only the host connection drives the online state of host reads.
+      const stopOnlineState = followHostConnection(
+        connection.queryClient,
+        connectedHostConnectionState,
+      );
+      window.dispatchEvent(new Event(browserState));
       const harness = createHarness({ enabled: true, taskIds: ["task-2", "task-1"] }, connection);
 
       try {
@@ -116,7 +122,7 @@ describe("useTaskCleanupImpact", () => {
           await harness.unmount();
           await connection.dispose();
         } finally {
-          onlineManager.setOnline(previous);
+          stopOnlineState();
         }
       }
     },
@@ -193,12 +199,16 @@ describe("useTaskCleanupImpact", () => {
     }
   });
 
-  test.each([true, false])(
-    "shows a cleanup read failure when the browser online hint is %s",
-    async (online) => {
-      const previous = onlineManager.isOnline();
-      onlineManager.setOnline(online);
+  test.each(["online", "offline"])(
+    "shows a cleanup read failure when the browser reports that it is %s",
+    async (browserState) => {
       const { calls, connection } = createHost();
+      // Only the host connection drives the online state of host reads.
+      const stopOnlineState = followHostConnection(
+        connection.queryClient,
+        connectedHostConnectionState,
+      );
+      window.dispatchEvent(new Event(browserState));
       calls.agentSessionsListForTasks.mockImplementation(async () => {
         throw new Error("batch session read failed");
       });
@@ -218,7 +228,7 @@ describe("useTaskCleanupImpact", () => {
           await harness.unmount();
           await connection.dispose();
         } finally {
-          onlineManager.setOnline(previous);
+          stopOnlineState();
         }
       }
     },

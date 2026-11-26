@@ -5,8 +5,7 @@ import {
 } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
-import { hostFailureText } from "../../lib/host-failure";
-import { branchReadFailed } from "../workspace-session/use-workspace-session-branch";
+import { errorMessage } from "../../lib/errors";
 import {
   canonicalTargetBranch,
   INVALID_TASK_TARGET_BRANCH_LABEL,
@@ -218,7 +217,6 @@ function useTaskSessionComparison(input: TaskComparisonInput) {
     staleTime: Infinity,
     refetchOnMount: false,
   });
-  const branchFailed = branchReadFailed(branch, branch.data !== undefined);
   const { target, targetError, needsDefault } = taskComparisonTarget(input);
   const { loadRepoSettings } = input;
   const loadDefault = useCallback(async () => {
@@ -231,12 +229,11 @@ function useTaskSessionComparison(input: TaskComparisonInput) {
     workingDirectory: input.directory,
     target,
     targetError,
-    // Without a known checkout, a read that lost the host shows the quiet waiting text.
-    branchError: branchFailed ? hostFailureText(branch.error) : null,
+    branchError: branch.isError ? errorMessage(branch.error) : null,
     // A commit keeps the read keys, so the panel shows its data while it reads again.
     branchKey: JSON.stringify([input.branchKey, checkoutReadIdentity(branch.data)]),
     checkoutIdentity: checkoutReadIdentity(branch.data),
-    branchReady: branch.data !== undefined && !branchFailed,
+    branchReady: branch.data !== undefined && !branch.isError,
   });
   const queryClient = useQueryClient();
   // The read uses this render's directory, so a late result cannot enter another task.
@@ -249,8 +246,8 @@ function useTaskSessionComparison(input: TaskComparisonInput) {
   }, [directory, queryClient, repoPath]);
   return {
     comparison,
-    currentBranch: branchFailed ? null : (branch.data ?? null),
-    branchSettled: branch.data !== undefined || branchFailed,
+    currentBranch: branch.isError ? null : (branch.data ?? null),
+    branchSettled: branch.data !== undefined || branch.isError,
     readBranch,
     /** Reads the settings again when the default target failed to load. */
     retryDefault: needsDefault ? loadDefault : null,
@@ -275,7 +272,7 @@ function taskComparisonTarget(input: TaskComparisonInput) {
     target: null,
     targetError:
       input.targetState.validationError ??
-      (input.repoSettingsError ? hostFailureText(input.repoSettingsError) : null),
+      (input.repoSettingsError ? errorMessage(input.repoSettingsError) : null),
     needsDefault: true,
   };
 }

@@ -12,7 +12,6 @@ import {
 } from "../../queries/git";
 import type { DiffScope, DiffScopeState } from "../contracts";
 import { toLocalScopeSnapshot, toScopeSnapshot } from "../model/normalization";
-import { isConnectionFailure } from "../../lib/command-outcome";
 import { createEmptyScopeState, toFailedScopeState } from "../model/scope-state";
 
 export type GitPanelReadsInput = {
@@ -59,19 +58,9 @@ const NO_COMPARISON = createEmptyScopeState();
 
 const toScopeState = (data: DiffScopeState | undefined, error: Error | null): DiffScopeState => {
   const state = data ?? createEmptyScopeState();
-  if (!error) return state;
-  // A lost host keeps the last result, without hashes because it is not current. The connection
-  // indicator explains the wait.
-  if (isConnectionFailure(error)) {
-    return { ...state, hashVersion: null, statusHash: null, diffHash: null };
-  }
   // The text format matches the host error that the panel shows.
-  return toFailedScopeState(state, String(error));
+  return error ? toFailedScopeState(state, String(error)) : state;
 };
-
-/** A read that lost the host has no answer, so its view stays loading. */
-const isAnswered = (read: { data: unknown; error: Error | null }): boolean =>
-  read.data !== undefined || (read.error !== null && !isConnectionFailure(read.error));
 
 /**
  * Observes the local changes and Branch changes of one Git context. Query keeps each context in
@@ -193,8 +182,8 @@ export function useGitPanelReads({
     }),
     [comparison.data, comparison.error, hasComparison, local.data, local.error],
   );
-  const localLoaded = isAnswered(local);
-  const comparisonLoaded = hasComparison && isAnswered(comparison);
+  const localLoaded = local.data !== undefined || local.isError;
+  const comparisonLoaded = hasComparison && (comparison.data !== undefined || comparison.isError);
   const loadedScopesByScope = useMemo(
     () => ({ uncommitted: localLoaded, target: comparisonLoaded }),
     [comparisonLoaded, localLoaded],

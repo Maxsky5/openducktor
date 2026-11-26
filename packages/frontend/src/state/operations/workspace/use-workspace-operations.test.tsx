@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { render, waitFor } from "@testing-library/react";
 import { act, createElement, type PropsWithChildren, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { HostUnreachableError, type HostClient } from "@openducktor/host-client";
+import type { HostClient } from "@openducktor/host-client";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
@@ -1150,41 +1150,6 @@ describe("use-workspace-operations", () => {
 
       expect(harness.getLatest().branchSyncDegraded).toBe(true);
       expect(toastError).toHaveBeenCalledTimes(1);
-    } finally {
-      await harness.unmount();
-      toastError.mockRestore();
-      restoreBrowserGlobals();
-    }
-  });
-
-  test("a focus probe that lost the host does not report a degraded branch sync", async () => {
-    const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
-    let hostReachable = true;
-    const gitGetCurrentBranch = mock(async () => {
-      if (!hostReachable) throw new HostUnreachableError(new TypeError("Failed to fetch"));
-      return { name: "main", detached: false };
-    });
-    const gitGetBranches = mock(async () => [{ name: "main", isCurrent: true, isRemote: false }]);
-    const toastError = spyOn(toast, "error").mockImplementation(() => "");
-    const harness = createHookHarness(
-      {
-        activeRepo: "/repo-a",
-        setActiveRepo: mock(() => {}),
-        clearTaskData: () => {},
-      },
-      createWorkspaceHostClient({ gitGetCurrentBranch, gitGetBranches }),
-    );
-
-    try {
-      await harness.mount();
-      const callsBeforeOutage = gitGetCurrentBranch.mock.calls.length;
-      hostReachable = false;
-      await triggerFocus();
-      await flush();
-      expect(gitGetCurrentBranch.mock.calls.length).toBeGreaterThan(callsBeforeOutage);
-      // The connection indicator reports the lost host.
-      expect(harness.getLatest().branchSyncDegraded).toBe(false);
-      expect(toastError).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
       toastError.mockRestore();

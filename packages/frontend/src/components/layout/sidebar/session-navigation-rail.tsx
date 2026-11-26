@@ -1,6 +1,5 @@
 import { SessionPositionHint } from "@/features/shortcuts/position-hint";
-import { CircleAlert, LoaderCircle, WifiOff } from "lucide-react";
-import { HOST_CONNECTION_WAITING_MESSAGE } from "@openducktor/frontend-core/lib/host-failure";
+import { CircleAlert, LoaderCircle } from "lucide-react";
 import { memo, useId, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -71,13 +70,6 @@ export function SessionNavigationRail({
           <LoaderCircle
             className="size-4 animate-spin text-sidebar-muted-foreground"
             aria-label="Loading sessions"
-            role="status"
-          />
-        ) : null}
-        {model.waitingWorkspaceIds.length > 0 ? (
-          <WifiOff
-            className="size-4 text-sidebar-muted-foreground"
-            aria-label={HOST_CONNECTION_WAITING_MESSAGE}
             role="status"
           />
         ) : null}

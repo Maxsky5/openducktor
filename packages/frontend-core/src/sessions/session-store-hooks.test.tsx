@@ -99,7 +99,6 @@ test("keeps a running summary without its Background style while the live state 
     workspaceRepoPath: "/repo",
     message: "Live stream ended",
     source: "live-stream",
-    failureKind: "other",
   };
   rerender();
   expect(result.current).toMatchObject([{ activityState: "running", waitingOnBackground: false }]);

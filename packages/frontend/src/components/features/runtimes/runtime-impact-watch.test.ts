@@ -3,7 +3,6 @@ import type { RuntimeLifecycleImpact } from "@openducktor/contracts";
 import { startHostRuntimeEventsHarness } from "@/test-utils/host-runtime-events-harness";
 import { createHostRuntimeStatusFixture } from "@/test-utils/shared-test-fixtures";
 import { type RuntimeImpactState, watchRuntimeImpact } from "./runtime-impact-watch";
-import { HOST_UNREACHABLE_MESSAGE } from "@openducktor/host-client";
 
 const impact = (confirmation: string): RuntimeLifecycleImpact => ({
   kinds: [],
@@ -64,7 +63,7 @@ describe("watchRuntimeImpact", () => {
     expect(harness.latest()).toEqual({
       impact: impact("token-1"),
       isLoading: false,
-      error: HOST_UNREACHABLE_MESSAGE,
+      error: "Event stream lost",
     });
     watch.close();
     harness.owner.stop();
@@ -80,9 +79,9 @@ describe("watchRuntimeImpact", () => {
     expect(harness.reads).toHaveLength(2);
     // A new failure during the recovery read keeps the review blocked.
     harness.emit(streamWarning);
-    await expect(recovery).rejects.toThrow(HOST_UNREACHABLE_MESSAGE);
+    await expect(recovery).rejects.toThrow("Event stream lost");
     await harness.resolveRead(1, impact("token-2"));
-    expect(harness.latest()?.error).toBe(HOST_UNREACHABLE_MESSAGE);
+    expect(harness.latest()?.error).toBe("Event stream lost");
 
     harness.emit(reconnected);
     await harness.resolveRead(2, impact("token-3"));
@@ -105,7 +104,7 @@ describe("watchRuntimeImpact", () => {
 
     harness.emit(reconnected);
     await harness.resolveRead(1, impact("token-old"));
-    expect(harness.latest()?.error).toBe(HOST_UNREACHABLE_MESSAGE);
+    expect(harness.latest()?.error).toBe("Event stream lost");
     expect(harness.reads).toHaveLength(3);
 
     await harness.resolveRead(2, impact("token-new"));
@@ -199,7 +198,7 @@ describe("watchRuntimeImpact", () => {
     expect(harness.latest()).toEqual({
       impact: impact("token-1"),
       isLoading: false,
-      error: HOST_UNREACHABLE_MESSAGE,
+      error: "Event stream lost",
     });
 
     harness.emit(reconnected);

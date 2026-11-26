@@ -112,17 +112,17 @@ export const createNotificationRuntime = ({
     occurrence: NotificationOccurrence,
     cause: unknown,
   ): void => {
+    // The host connection state shows a lost connection.
+    if (isConnectionFailure(cause)) return;
     activeCoordinationFailures.add(phase);
     const message = cause instanceof Error ? cause.message : String(cause);
-    const failure: NotificationDispatchFailure = {
+    onFailure({
       channel: "coordination",
       kind: occurrence.kind,
       occurrenceId: occurrence.occurrenceId,
       repoPath: occurrence.repoPath,
       message: message.slice(0, 500),
-    };
-    if (isConnectionFailure(cause)) failure.waitsForHost = true;
-    onFailure(failure);
+    });
   };
 
   const recoverCoordinationFailure = (phase: CoordinationFailurePhase): void => {

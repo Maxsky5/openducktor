@@ -212,7 +212,7 @@ describe("buildDiagnosticsPanelModel", () => {
       createInput({
         runtimeStatus: createHostRuntimeStatusContextValue({
           isCurrent: false,
-          streamError: { kind: "other", message: "Connection lost." },
+          streamError: "Connection lost.",
         }),
       }),
     );
@@ -492,7 +492,7 @@ describe("buildDiagnosticsPanelModel without a live connection", () => {
       connectionLive: false,
       runtimeStatus: createHostRuntimeStatusContextValue({
         statusByKind: { opencode: createHostRuntimeStatusFixture({ kind: "opencode" }) },
-        streamError: { kind: "other", message: "Runtime updates are unavailable." },
+        streamError: "Runtime updates are unavailable.",
         isCurrent: false,
       }),
       pathCheck: failedRead({ ok: true, error: null }, "2026-02-22T07:00:00.000Z"),

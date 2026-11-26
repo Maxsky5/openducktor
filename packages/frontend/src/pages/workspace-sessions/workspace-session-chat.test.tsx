@@ -4,10 +4,6 @@ import type {
   AgentModelSelection,
   LoadAgentSessionHistoryInput,
 } from "@openducktor/core";
-import {
-  HOST_CONNECTION_WAITING_MESSAGE,
-  HOST_UNREACHABLE_FAILURE,
-} from "@openducktor/frontend-core/lib/host-failure";
 import { expect, mock, spyOn, test } from "bun:test";
 import {
   DEFAULT_AGENT_RUNTIMES,
@@ -253,7 +249,6 @@ type WorkspaceChatScenario =
   | "streaming"
   | "draft"
   | "record-failure"
-  | "record-wait"
   | "switch-return"
   | "observation-failure";
 
@@ -334,10 +329,7 @@ const createWorkspaceChatHarness = ({
 
   function Harness({ children }: { children?: ReactNode }): ReactElement {
     const [phase, setPhase] = useState<"fault" | "loading" | "ready">(
-      scenario === "retry" ||
-        scenario === "record-failure" ||
-        scenario === "record-wait" ||
-        scenario === "observation-failure"
+      scenario === "retry" || scenario === "record-failure" || scenario === "observation-failure"
         ? "fault"
         : "ready",
     );
@@ -345,18 +337,13 @@ const createWorkspaceChatHarness = ({
     failObservation = () => setPhase("fault");
     const readModel: AgentSessionReadModelStateContextValue = {
       workspaceSessionRecordsError:
-        scenario === "record-failure" && phase !== "ready"
-          ? { kind: "other", message: "Chat records failed" }
-          : scenario === "record-wait" && phase !== "ready"
-            ? HOST_UNREACHABLE_FAILURE
-            : null,
+        scenario === "record-failure" && phase !== "ready" ? "Chat records failed" : null,
       sessionReadModelLoadState:
         scenario === "observation-failure" && phase === "fault"
           ? {
               kind: "failed",
               workspaceRepoPath: "/repo",
               source: "live-stream",
-              failureKind: "other",
               message: "Observation failed",
             }
           : {
@@ -367,7 +354,7 @@ const createWorkspaceChatHarness = ({
         phase === "fault" && scenario === "retry"
           ? { source: "workspace-target", message: "Runtime directory mismatch" }
           : null,
-      reloadSessionReadModel: async () => {
+      reloadSessionReadModel: () => {
         observationRetries += 1;
         setPhase("loading");
       },
@@ -1024,7 +1011,7 @@ test("workspace Recheck disables repeat input and shows pending feedback", async
   function BlockedChat() {
     const [isRefreshing, setRefreshing] = useState(false);
     const status = createHostRuntimeStatusContextValue({
-      readError: { kind: "other", message: "Runtime check failed" },
+      readError: "Runtime check failed",
       isRefreshing,
       refresh: async () => {
         refreshCount += 1;
@@ -1246,7 +1233,7 @@ test("returning to a retained chat expands requests without clearing drafts, whi
   // The full chat render includes settings queries and retained Activity transitions.
 }, 5000);
 
-test.each(["retry", "streaming", "record-failure", "record-wait"] as const)(
+test.each(["retry", "streaming", "record-failure"] as const)(
   "workspace chat %s preserves readiness and completed turns",
   async (scenario) => {
     const workspace = { workspaceId: "A", workspaceName: "Test", repoPath: "/repo" };
@@ -1277,8 +1264,6 @@ test.each(["retry", "streaming", "record-failure", "record-wait"] as const)(
       sessionAssociation: { kind: "repository", workspaceId: "A" },
       historyLoadState: "loaded",
       status: scenario === "streaming" ? "running" : "idle",
-      // A status message of a usable session must not replace the waiting text.
-      ...(scenario === "record-wait" && { runtimeStatusMessage: "Running" }),
       messages,
       pendingApprovals: [],
       pendingQuestions: [],
@@ -1364,12 +1349,6 @@ test.each(["retry", "streaming", "record-failure", "record-wait"] as const)(
       if (scenario === "record-failure") {
         await view.findByText("Chat records failed");
         expect(view.getByText("Completed answer")).toBeTruthy();
-      } else if (scenario === "record-wait") {
-        // A quiet wait for the host explains the blocked chat without an error.
-        expect((await view.findAllByText(HOST_CONNECTION_WAITING_MESSAGE)).length).toBeGreaterThan(
-          0,
-        );
-        expect(view.queryByText(HOST_UNREACHABLE_FAILURE.message)).toBeNull();
       } else {
         await act(async () => {
           fireEvent.click(view.getByRole("button", { name: "Retry" }));

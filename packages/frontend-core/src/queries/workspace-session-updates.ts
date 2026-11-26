@@ -1,22 +1,16 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { connectionOf } from "../connection/client-connection";
-import {
-  HOST_UNREACHABLE_FAILURE,
-  type HostFeedbackFailure,
-  toHostFeedbackFailure,
-} from "../lib/host-failure";
-import { CONNECTION_STREAM_WARNING_EVENT_KIND } from "../recovery/connection-control-events";
+import { errorMessage } from "../lib/errors";
+import { CONNECTION_RECONNECTED_EVENT_KIND } from "../recovery/connection-control-events";
 import { updateWorkspaceSessionQueries, workspaceSessionQueryKeys } from "./workspace-sessions";
 
-type StatusListener = (failure: HostFeedbackFailure | null) => void;
+type StatusListener = (error: string | null) => void;
 type Subscription = {
   listeners: Set<StatusListener>;
-  error: HostFeedbackFailure | null;
+  error: string | null;
   closed: boolean;
   starting: boolean;
   failed: boolean;
-  /** The stream reported a lost connection. Only its reconnect clears it. */
-  streamWarning: boolean;
   stop?: () => void;
 };
 
@@ -35,14 +29,13 @@ export const observeWorkspaceSessionRecords = (
       closed: false,
       starting: false,
       failed: true,
-      streamWarning: false,
     };
     subscriptions.set(queryClient, subscription);
   }
   const current = subscription;
   current.listeners.add(onStatus);
   onStatus(current.error);
-  const report = (error: HostFeedbackFailure | null): void => {
+  const report = (error: string | null): void => {
     if (current.closed) return;
     current.error = error;
     for (const listener of current.listeners) listener(error);
@@ -54,26 +47,19 @@ export const observeWorkspaceSessionRecords = (
       .host.subscribeWorkspaceSessionUpdates((event) => {
         if (current.closed) return;
         if ("__openducktorConnectionControl" in event) {
-          if (event.kind === CONNECTION_STREAM_WARNING_EVENT_KIND) {
-            // The shared stream reports only a lost host connection.
-            current.streamWarning = true;
-            report(HOST_UNREACHABLE_FAILURE);
-          } else {
-            current.streamWarning = false;
-            report(null);
-            if (event.missedEvents) {
-              void queryClient.invalidateQueries({
-                queryKey: workspaceSessionQueryKeys.all,
-                refetchType: "all",
-              });
-              void queryClient.invalidateQueries({
-                queryKey: ["workspace-session-archive-preview"],
-              });
-            }
+          // A stream warning is a lost host connection. The host connection state shows it, and
+          // the reconnect reads again what the stream missed.
+          if (event.kind === CONNECTION_RECONNECTED_EVENT_KIND && event.missedEvents) {
+            void queryClient.invalidateQueries({
+              queryKey: workspaceSessionQueryKeys.all,
+              refetchType: "all",
+            });
+            void queryClient.invalidateQueries({
+              queryKey: ["workspace-session-archive-preview"],
+            });
           }
           return;
         }
-        report(null);
         updateWorkspaceSessionQueries(queryClient, event.workspaceId, event.session);
       })
       .then((stop) => {
@@ -81,14 +67,13 @@ export const observeWorkspaceSessionRecords = (
         if (current.closed) stop();
         else {
           current.stop = stop;
-          // A warning that arrived while subscribing stays until the reconnect.
-          if (!current.streamWarning) report(null);
+          report(null);
         }
       })
       .catch((cause: unknown) => {
         current.starting = false;
         current.failed = true;
-        report(toHostFeedbackFailure(cause));
+        report(errorMessage(cause));
       });
   }
   return () => {
