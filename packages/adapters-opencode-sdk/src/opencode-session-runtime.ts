@@ -11,7 +11,7 @@ import {
   goalCommandStartsWork,
   resolveRuntimeGoalAvailability,
 } from "@openducktor/core";
-import type { SessionInfo, V2Event, OpenCodeClient } from "@opencode/client";
+import type { ModelRef, SessionInfo, V2Event, OpenCodeClient } from "@opencode/client";
 import {
   isManualSessionCompactionSlashCommand,
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -32,6 +32,7 @@ import {
   nativeRequest,
   operationError,
   readMigration,
+  type OperationIdentity,
   type OpenCodeRequestDraft,
 } from "./opencode-client";
 import {
@@ -150,6 +151,8 @@ export const createPrepareOpencodeSessionRuntime =
     options: OpencodeSdkAdapterOptions & {
       readDirectory: ReadOpencodeDirectory;
       resolveMcpServerConfig: ManagedMcpServerResolver;
+      /** OpenCode runs `generate.*` in the location of its global config directory. */
+      globalConfigDirectory: string;
     },
   ): PrepareOpencodeSessionRuntime =>
   async (input) => {
@@ -283,6 +286,80 @@ export const createPrepareOpencodeSessionRuntime =
             };
             mcpChanges.add(wake);
           });
+    /** The waits for a model change, by the canonical directory of their location. */
+    const modelChanges = new Map<() => void, string>();
+    let modelVersion = 0;
+    const wakeModels = (directory?: string) => {
+      modelVersion++;
+      for (const [wake, waiting] of modelChanges)
+        if (directory === undefined || directory === waiting) wake();
+    };
+    abort.signal.addEventListener("abort", () => wakeModels());
+    /**
+     * OpenCode loads its model catalog with plugins after a location starts, and a request does not
+     * wait for them. Its global config location also stops after an idle time, so it often starts
+     * again for `generate.*`.
+     */
+    const awaitGenerationModel = async (
+      identity: OperationIdentity,
+      model: ModelRef,
+      signal: AbortSignal,
+    ): Promise<void> => {
+      const location = { directory: options.globalConfigDirectory };
+      const deadline = Date.now() + 30_000;
+      while (!released && !abort.signal.aborted) {
+        signal.throwIfAborted();
+        const version = modelVersion;
+        const models = await client.model.list({ location }, { signal });
+        if (
+          models.data.some(
+            (item) => item.providerID === model.providerID && item.id === model.id && item.enabled,
+          )
+        )
+          return;
+        if (version !== modelVersion) continue;
+        // OpenCode names the location by its canonical directory in the answer and in its events.
+        const directory = models.location.directory;
+        await new Promise<void>((resolve, reject) => {
+          const stop = () => {
+            clearTimeout(timer);
+            signal.removeEventListener("abort", cancel);
+            modelChanges.delete(wake);
+          };
+          const wake = () => {
+            stop();
+            resolve();
+          };
+          const cancel = () => {
+            stop();
+            reject(signal.reason);
+          };
+          const timer = setTimeout(
+            () => {
+              stop();
+              reject(
+                operationError(
+                  identity,
+                  "generate text",
+                  "runtime_unavailable",
+                  `OpenCode did not load the model '${model.providerID}/${model.id}' within 30 seconds.`,
+                  "Connect the model provider in OpenCode, or select another model.",
+                ),
+              );
+            },
+            Math.max(0, deadline - Date.now()),
+          );
+          modelChanges.set(wake, directory);
+          signal.addEventListener("abort", cancel, { once: true });
+        });
+      }
+      throw operationError(
+        identity,
+        "generate text",
+        "runtime_unavailable",
+        "The owned runtime connection closed.",
+      );
+    };
     let controller: OpencodeSdkAdapter;
     const connectMcp = async (
       identity: {
@@ -306,7 +383,7 @@ export const createPrepareOpencodeSessionRuntime =
             "The native MCP binding changed during setup. Restart OpenCode from Diagnostics.",
           );
       };
-      if (!mcpConfigured.has(directory)) {
+      const install = async () => {
         const existing = await controller.client.mcp.list({ location: { directory } });
         if (existing.data.some((server) => server.name === "openducktor"))
           throw operationError(
@@ -321,7 +398,7 @@ export const createPrepareOpencodeSessionRuntime =
           identity.sessionScope?.workspaceId,
         );
         requireCurrent();
-        await controller.client.mcp.add({
+        await controller.client.experimental.mcp.add({
           server: "openducktor",
           location: { directory },
           config: {
@@ -333,13 +410,16 @@ export const createPrepareOpencodeSessionRuntime =
         });
         requireCurrent();
         mcpConfigured.add(directory);
-      }
+      };
       while (!released && !abort.signal.aborted) {
         const version = mcpVersion;
+        // OpenCode keeps the override only in the services of a location, so its shutdown drops it.
+        if (!mcpConfigured.has(directory)) await install();
         const list = await controller.client.mcp.list({ location: { directory } });
         requireCurrent();
         const server = list.data.find((item) => item.name === "openducktor");
-        if (!server)
+        if (!server) {
+          if (!mcpConfigured.has(directory)) continue;
           throw operationError(
             identity,
             "connect the OpenDucktor MCP bridge",
@@ -347,6 +427,7 @@ export const createPrepareOpencodeSessionRuntime =
             "The installed native MCP override is missing.",
             "Restart the selected runtime and retry.",
           );
+        }
         if (server.status.status === "connected") return;
         if (server.status.status !== "pending")
           throw operationError(
@@ -401,6 +482,11 @@ export const createPrepareOpencodeSessionRuntime =
     controller = new OpencodeSdkAdapter(input.connection, options, {
       readDirectory: options.readDirectory,
       ensureMcp,
+      awaitGenerationModel,
+      restoreMcp: (ref) =>
+        installedMcp.has(ref.workingDirectory) && !mcpConfigured.has(ref.workingDirectory)
+          ? ensureMcp(ref)
+          : Promise.resolve(),
       projectHistory: (sessionID, messages) =>
         (projectors.get(sessionID) ?? new OpenCodeLiveMessageProjector()).projectHistory(messages),
       admitted: (binding) => {
@@ -942,8 +1028,35 @@ export const createPrepareOpencodeSessionRuntime =
       )
         background.executionEnded(externalSessionId);
       try {
-        // Only a call whose result says that its job still runs can start a background task.
-        if (event.type === "session.tool.success" && event.data.metadata?.status === "running") {
+        const parentID = binding.detail.parentID;
+        if (parentID) {
+          if (event.type === "session.execution.started")
+            background.childExecutionStarted(
+              externalSessionId,
+              parentID,
+              event.id,
+              { agent: binding.detail.agent ?? "subagent", title: binding.detail.title },
+              base.timestamp,
+            );
+          if (event.type === "session.step.started") background.childStepStarted(externalSessionId);
+          if (
+            event.type === "session.execution.succeeded" ||
+            event.type === "session.execution.failed" ||
+            event.type === "session.execution.interrupted"
+          )
+            background.childExecutionEnded(
+              externalSessionId,
+              parentID,
+              event.type === "session.execution.succeeded",
+              base.timestamp,
+            );
+        }
+        // Only a call whose result says that its job still runs, or a media call, which always
+        // starts a job, can start a background task.
+        if (
+          event.type === "session.tool.success" &&
+          (event.data.metadata?.status === "running" || event.data.metadata?.jobID !== undefined)
+        ) {
           const message = projector.messages.get(event.data.assistantMessageID);
           const part =
             message?.type === "assistant"
@@ -1000,6 +1113,13 @@ export const createPrepareOpencodeSessionRuntime =
       try {
         for await (const event of client.event.subscribe({ signal: abort.signal })) {
           if (event.type === "mcp.status.changed") wakeMcp();
+          if (event.type === "model.updated" && event.location)
+            wakeModels(event.location.directory);
+          if (event.type === "location.shutdown" && event.location) {
+            // The next use of the directory installs the bridge in its new services.
+            mcpConfigured.delete(event.location.directory);
+            wakeMcp();
+          }
           if (event.type === "server.connected" && !initialConnected) readyResolve();
           processing = processing.then(() => handleEvent(event));
           processing.catch((cause) => {

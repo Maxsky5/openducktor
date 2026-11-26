@@ -195,6 +195,7 @@ test.each([
           prepareRuntime: createPrepareOpencodeSessionRuntime({
             resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
             resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+            globalConfigDirectory: "/home/user/.config/opencode",
             resolveMcpServerConfig: async () => {
               throw new Error("Restoration must not install MCP");
             },

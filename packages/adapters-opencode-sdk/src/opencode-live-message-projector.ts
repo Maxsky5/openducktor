@@ -21,6 +21,7 @@ import {
   messageEvents,
   messageProjectionContext,
   projectInboxUser,
+  automationName,
   projectVisibleInboxUser,
   projectMessages,
 } from "./opencode-message-projection";
@@ -227,6 +228,7 @@ export class OpenCodeLiveMessageProjector {
         type: "user",
         ...item.payload,
       };
+      if (automationName(message) !== undefined) return this.recordMessage(sessionID, message);
       this.messages.set(message.id, message);
       return projectVisibleInboxUser({ ...item, time: { created } }, "read");
     }

@@ -12,7 +12,7 @@ export const readOpenCodeTranscript = async (
 ): Promise<SessionMessageInfo[]> => {
   const [messages, entries] = await Promise.all([
     readMessages(client, detail.id),
-    client.session.instructions.entry.list({ sessionID: detail.id }),
+    client.experimental.session.instructions.entry.list({ sessionID: detail.id }),
   ]);
   const entry = entries.find((item) => item.key === OPENCODE_WORKFLOW_INSTRUCTION_KEY);
   if (!entry) return messages;

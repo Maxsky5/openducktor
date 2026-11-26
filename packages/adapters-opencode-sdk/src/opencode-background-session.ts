@@ -87,6 +87,8 @@ export const createOpenCodeBackgroundSession = ({
           id: entry.target.shellID,
           location: { directory: entry.target.directory },
         });
+      else if (entry.target.kind === "job")
+        await client.experimental.job.cancel({ id: entry.target.jobID });
       else await client.session.interrupt({ sessionID: entry.target.childID });
     });
 
@@ -145,6 +147,25 @@ export const createOpenCodeBackgroundSession = ({
       timestamp: string,
     ): void =>
       changeBackground(sessionID, timestamp, () => tasks.startCall(sessionID, directory, part)),
+    /** A child execution starts. A round that no call of the parent started is a parent task. */
+    childExecutionStarted: (
+      childID: string,
+      parentID: string,
+      runID: string,
+      child: { readonly agent: string; readonly title?: string | undefined },
+      timestamp: string,
+    ): void =>
+      changeBackground(parentID, timestamp, () =>
+        tasks.startRound(childID, parentID, runID, child),
+      ),
+    childStepStarted: (childID: string): void => tasks.stepRound(childID),
+    /** A child execution ends. A round that sends no report ends its task here. */
+    childExecutionEnded: (
+      childID: string,
+      parentID: string,
+      succeeded: boolean,
+      timestamp: string,
+    ): void => changeBackground(parentID, timestamp, () => tasks.endRound(childID, succeeded)),
     notice: (sessionID: string, item: SessionInboxInfo, timestamp: string): void =>
       changeBackground(sessionID, timestamp, () => tasks.notice(sessionID, item)),
     settle: (sessionID: string, inboxID: string, delivered: boolean, timestamp: string): void =>

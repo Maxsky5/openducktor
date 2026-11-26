@@ -627,6 +627,33 @@ describe("OpenCode V2 subagent projection and history", () => {
     expect(projector.apply(delivery)).toEqual([]);
     expect(projector.messages).toHaveProperty("size", 2);
   });
+  test("keeps a background subagent running after a report that names its running work", () => {
+    const report = (id: string, state: "running" | "completed", created: number) =>
+      ({
+        id,
+        type: "synthetic",
+        time: { created },
+        description: "Research",
+        text: `<background-result kind="subagent" sessionID="ses_child" state="${state}" description="Research">\nFound\n</background-result>`,
+        metadata: {
+          source: "subagent",
+          childID: "ses_child",
+          agent: "research",
+          state: "completed",
+        },
+      }) satisfies SessionMessageInfo;
+    const launch = backgroundLaunch();
+    expect(
+      projectMessages([launch, report("msg_first_report", "running", 9)])[0]?.parts[0],
+    ).toMatchObject({ kind: "subagent", status: "running" });
+    expect(
+      projectMessages([
+        launch,
+        report("msg_first_report", "running", 9),
+        report("msg_last_report", "completed", 12),
+      ])[0]?.parts[0],
+    ).toMatchObject({ kind: "subagent", status: "completed", endedAtMs: 12 });
+  });
   test("links a continued child only after native progress confirms it", () => {
     const projector = new OpenCodeLiveMessageProjector();
     const snapshot: SessionMessageInfo = {

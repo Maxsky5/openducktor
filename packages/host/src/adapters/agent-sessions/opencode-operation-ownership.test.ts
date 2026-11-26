@@ -99,6 +99,8 @@ const createHarness = async (loseModelResponse = false) => {
     {
       readDirectory: async (_directory, read) => read(),
       ensureMcp: async () => {},
+      restoreMcp: async () => {},
+      awaitGenerationModel: async () => {},
       admitted: () => {},
       projectHistory: () => {
         throw new Error("Unexpected history read");

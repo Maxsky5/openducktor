@@ -11,6 +11,7 @@ import { Effect, Exit } from "effect";
 import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter";
 import type { OpenDucktorMcpServerConfigResolver } from "../../adapters/mcp/openducktor-mcp-server-config";
 import { createOpenCodeRuntimeStarter } from "../../adapters/opencode/opencode-runtime-starter";
+import { resolveOpenCodeGlobalConfigDirectory } from "../../adapters/opencode/opencode-standalone-process";
 import type { TaskSessionLifecycleCoordinator } from "../../application/tasks/worktrees/task-session-lifecycle-coordinator";
 import {
   causeToHostBoundaryError,
@@ -113,6 +114,7 @@ export const createOpenCodeRuntimeComposition = ({
         resolveCreationSettings: (scope) => Effect.runPromise(creationSettings.resolve(scope)),
         resolveMcpServerConfig: resolveOpencodeMcpServerConfig,
         resolveWorkflowRolePolicy,
+        globalConfigDirectory: resolveOpenCodeGlobalConfigDirectory(readEnv()),
       }),
     }),
   });

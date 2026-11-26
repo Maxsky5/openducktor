@@ -129,6 +129,8 @@ const metadataSchema = z.object({
   exit: z.number().optional(),
   signal: z.string().optional(),
   timeout: z.boolean().optional(),
+  // The process daemon stopped the command, so it has no exit code or signal of its own.
+  killed: z.literal(true).optional(),
   truncated: z.boolean().optional(),
 });
 
@@ -145,19 +147,27 @@ const parseResult = (message: SessionMessageSynthetic): Result => {
   const metadata = parseMetadata(message);
   let output = message.text;
   if (metadata.shellID !== undefined) {
-    // ShellResult.notification wraps output for the model; metadata holds the shell ID.
-    const prefix = `<shell id="${metadata.jobID ?? metadata.shellID}" state="${metadata.state}" command="${message.description}">\n`;
-    const suffix = "\n</shell>";
-    if (message.description === undefined || !output.startsWith(prefix) || !output.endsWith(suffix))
+    // ShellResult.notification wraps output for the model; metadata holds the shell ID. OpenCode
+    // 2.4.0 writes a background result. History that earlier versions saved keeps `<shell>`.
+    const attributes = `id="${metadata.jobID ?? metadata.shellID}" state="${metadata.state}" command="${message.description}"`;
+    const envelope = [
+      {
+        prefix: `<background-result kind="shell" ${attributes}>\n`,
+        suffix: "\n</background-result>",
+      },
+      { prefix: `<shell ${attributes}>\n`, suffix: "\n</shell>" },
+    ].find(({ prefix, suffix }) => output.startsWith(prefix) && output.endsWith(suffix));
+    if (message.description === undefined || !envelope)
       throw new Error(
         `OpenCode returned an invalid shell result envelope for '${message.id}'. Check the command output in OpenCode, then reload this conversation.`,
       );
-    output = output.slice(prefix.length, -suffix.length);
+    output = output.slice(envelope.prefix.length, -envelope.suffix.length);
   }
   const failed =
     metadata.state === "error" ||
     metadata.timeout === true ||
     metadata.signal !== undefined ||
+    metadata.killed === true ||
     isFailedShellExit(metadata.exit);
   const cancelled = metadata.state === "cancelled";
   const result: Result = {
@@ -177,6 +187,7 @@ const parseResult = (message: SessionMessageSynthetic): Result => {
   else if (metadata.timeout) result.error = "Shell command timed out.";
   else if (metadata.signal !== undefined)
     result.error = `Shell command was killed by ${metadata.signal}.`;
+  else if (metadata.killed) result.error = "Shell command was killed before it finished.";
   else if (failed) result.error = shellExitError(metadata.exit);
   return result;
 };

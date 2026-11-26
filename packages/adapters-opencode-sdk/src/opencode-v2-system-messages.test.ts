@@ -77,9 +77,66 @@ describe("OpenCode V2 system content", () => {
     ).toMatchObject([{ type: "session_policy_notice", message: expected }]);
   });
 
+  test("shows a prompt of an OpenCode automation as a notice, not as user input", () => {
+    const metadata = {
+      automation: { id: "aut_1", name: "Nightly check", run: 1, dueAt: 5, late: false },
+    };
+    const prompt: SessionMessageInfo = {
+      id: "msg_automation",
+      type: "user",
+      text: "Run the checks.",
+      metadata,
+      time: { created: 5 },
+    };
+    expect(projectMessages([prompt])).toMatchObject([
+      {
+        messageId: "msg_automation",
+        role: "system",
+        text: 'Automation "Nightly check" sent this prompt:\nRun the checks.',
+      },
+    ]);
+
+    const projector = new OpenCodeLiveMessageProjector();
+    expect(
+      projector.apply(
+        {
+          id: "evt_automation_enqueued",
+          created: 5,
+          type: "session.inbox.enqueued",
+          durable,
+          data: {
+            sessionID: ref.externalSessionId,
+            inboxID: "msg_automation",
+            item: {
+              type: "user",
+              delivery: "steer",
+              payload: { text: "Run the checks.", metadata },
+            },
+          },
+        },
+        true,
+      ),
+    ).toEqual([]);
+    expect(
+      projector.apply({
+        id: "evt_automation_delivered",
+        created: 6,
+        type: "session.inbox.delivered",
+        durable: { ...durable, seq: 2 },
+        data: { sessionID: ref.externalSessionId, inboxID: "msg_automation" },
+      }),
+    ).toMatchObject([
+      {
+        type: "session_policy_notice",
+        messageId: "msg_automation",
+        message: 'Automation "Nightly check" sent this prompt:\nRun the checks.',
+      },
+    ]);
+  });
+
   test("keeps unknown notices and user text that looks like shell markup", () => {
     const text =
-      '<shell id="sh_checks" state="completed" command="bun run test">\nVisible example\n</shell>';
+      '<background-result kind="shell" id="sh_checks" state="completed" command="bun run test">\nVisible example\n</background-result>';
     const messages: SessionMessageInfo[] = [
       {
         id: "msg_plugin",

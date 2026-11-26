@@ -29,7 +29,15 @@ const prepareTree = async (
       return cursorPage([session({ id: CHILD, parentID: ref.externalSessionId })]);
     if (url.pathname === `/api/session/${CHILD}`)
       return response(session({ id: CHILD, parentID: ref.externalSessionId }));
-    return override?.(request);
+    const overridden = override?.(request);
+    if (overridden) return overridden;
+    // OpenCode cancels the undelivered result, such as the report of a stopped child round.
+    const cancel = /^\/api\/session\/([^/]+)\/inbox\/([^/]+)$/.exec(url.pathname);
+    if (request.method === "DELETE" && cancel) {
+      events.cancelled(cancel[1]!, cancel[2]!);
+      return noContent();
+    }
+    return undefined;
   });
   const runtime = await fixture.prepare();
   const restored = await runtime.connection.readSessionSources(ref.repoPath, [
@@ -51,32 +59,77 @@ const prepareTree = async (
   };
   const push = (event: V2Event) => fixture.channel.push(event);
   const id = () => `evt_${++nextId}`;
+  const running = new Set<string>();
+  const stepped = new Set<string>();
+  let reports = 0;
+  /**
+   * OpenCode 2.3.0 and later report each round of a child to its parent after the end event of
+   * the child execution. A round that succeeded with no model step sends no report.
+   */
+  const report = (sessionID: string, state: "completed" | "cancelled") => {
+    if (sessionID !== CHILD || !running.delete(sessionID)) return;
+    if (!stepped.delete(sessionID) && state === "completed") return;
+    push({
+      id: id(),
+      type: "session.inbox.enqueued",
+      created: nextId,
+      durable: durable(ref.externalSessionId),
+      data: {
+        sessionID: ref.externalSessionId,
+        inboxID: `msg_child_report_${++reports}`,
+        item: { type: "synthetic", delivery: "steer", payload: subagentReport(state) },
+      },
+    });
+  };
   const events = {
-    started: (sessionID: string) =>
+    started: (sessionID: string) => {
+      running.add(sessionID);
+      stepped.delete(sessionID);
       push({
         id: id(),
         type: "session.execution.started",
         created: nextId,
         durable: durable(sessionID),
         data: { sessionID },
-      }),
-    succeeded: (sessionID: string) =>
+      });
+    },
+    succeeded: (sessionID: string) => {
       push({
         id: id(),
         type: "session.execution.succeeded",
         created: nextId,
         durable: durable(sessionID),
         data: { sessionID },
-      }),
+      });
+      report(sessionID, "completed");
+    },
+    /** A model step of the current execution. */
+    step: (sessionID: string) => {
+      stepped.add(sessionID);
+      push({
+        id: id(),
+        type: "session.step.started",
+        created: nextId,
+        durable: durable(sessionID),
+        data: {
+          sessionID,
+          assistantMessageID: `msg_step_${nextId}`,
+          agent: "build",
+          model,
+          started: nextId,
+        },
+      });
+    },
     /** A tool call that completes while its work keeps running in the background. */
     backgroundCall: (
       sessionID: string,
       call: string,
-      name: "shell" | "subagent",
+      name: "shell" | "subagent" | "generate_image" | "generate_video",
       input: Record<string, JsonValue>,
       metadata: Record<string, JsonValue>,
     ) => {
       const assistantMessageID = `msg_${call}`;
+      stepped.add(sessionID);
       push({
         id: id(),
         type: "session.step.started",
@@ -109,19 +162,22 @@ const prepareTree = async (
           id: call,
           content: [{ type: "text", text: "Moved to the background" }],
           executed: false,
-          metadata: { ...metadata, status: "running" },
+          // A media call completes when its job starts and has no status.
+          metadata: name.startsWith("generate_") ? metadata : { ...metadata, status: "running" },
         },
       });
     },
     /** The end of an execution that an interrupt stopped. */
-    interrupted: (sessionID: string) =>
+    interrupted: (sessionID: string) => {
       push({
         id: id(),
         type: "session.execution.interrupted",
         created: nextId,
         durable: durable(sessionID),
         data: { sessionID, reason: "user" },
-      }),
+      });
+      report(sessionID, "cancelled");
+    },
     notice: (sessionID: string, inboxID: string, payload: NoticePayload) =>
       push({
         id: id(),
@@ -209,13 +265,20 @@ type NoticePayload = {
   metadata: Record<string, JsonValue>;
 };
 
-/** The notice of `ShellResult.notification` in OpenCode 2.2.5. */
+/** The report of `SubagentCompletion.deliver` in OpenCode 2.4.1. */
+const subagentReport = (state: "completed" | "cancelled"): NoticePayload => ({
+  text: `<background-result kind="subagent" sessionID="${CHILD}" state="${state}" description="Child">\n${state === "completed" ? "Done" : "Subagent cancelled"}\n</background-result>`,
+  description: "Child",
+  metadata: { source: "subagent", childID: CHILD, agent: "build", state },
+});
+
+/** The notice of `ShellResult.notification` in OpenCode 2.4.1. */
 const shellNotice = (
   shellID: string,
   command: string,
   state: "completed" | "error" = "completed",
 ): NoticePayload => ({
-  text: `<shell id="${shellID}" state="${state}" command="${command}">\nDone\n</shell>`,
+  text: `<background-result kind="shell" id="${shellID}" state="${state}" command="${command}">\nDone\n</background-result>`,
   description: command,
   metadata: { source: "shell", shellID, jobID: shellID, state },
 });
@@ -349,7 +412,7 @@ describe("OpenCode background tasks", () => {
 
       // The subagent result goes to the parent. The child shell still runs.
       events.notice(ref.externalSessionId, "msg_research_done", {
-        text: `<subagent sessionID="${CHILD}" state="completed" description="Find references">\nFound\n</subagent>`,
+        text: `<background-result kind="subagent" sessionID="${CHILD}" state="completed" description="Find references">\nFound\n</background-result>`,
         description: "Find references",
         metadata: { source: "subagent", childID: CHILD, agent: "research", state: "completed" },
       });
@@ -368,7 +431,7 @@ describe("OpenCode background tasks", () => {
   test("tracks a continued subagent again, and ignores the start of a task that already ended", async () => {
     const { runtime, events, flush, take } = await prepareTree();
     const research = {
-      text: `<subagent sessionID="${CHILD}" state="completed">\nFound\n</subagent>`,
+      text: `<background-result kind="subagent" sessionID="${CHILD}" state="completed" description="Find references">\nFound\n</background-result>`,
       metadata: { source: "subagent", childID: CHILD, agent: "research", state: "completed" },
     };
     const callResearch = (call: string) =>
@@ -404,6 +467,165 @@ describe("OpenCode background tasks", () => {
       );
       await flush();
       expect(lifecycle(take()).filter((entry) => "background" in entry)).toEqual([]);
+    } finally {
+      await runtime.release();
+    }
+  });
+
+  test("keeps the parent running while its child runs a round of its own, until the report", async () => {
+    const { runtime, events, flush, take } = await prepareTree();
+    try {
+      events.backgroundCall(
+        CHILD,
+        "call_build",
+        "shell",
+        { command: "bun run build" },
+        { shellID: "sh_build", truncated: false },
+      );
+      await flush();
+      take();
+      // The shell result wakes the child. OpenCode 2.3.0 and later report that round to the parent.
+      events.notice(CHILD, "msg_build_done", shellNotice("sh_build", "bun run build"));
+      events.started(CHILD);
+      events.delivered(CHILD, "msg_build_done");
+      events.step(CHILD);
+      await flush();
+      const round = lifecycle(take());
+      expect(round).not.toContainEqual({ idle: ref.externalSessionId, outcome: undefined });
+      expect(round.filter((item) => "background" in item).at(-1)).toEqual({
+        background: ref.externalSessionId,
+        tasks: [expect.stringMatching(new RegExp(`^subagent:${CHILD}:`))],
+        resultPending: false,
+      });
+
+      events.succeeded(CHILD);
+      await flush();
+      const reported = lifecycle(take());
+      expect(reported).not.toContainEqual({ idle: ref.externalSessionId, outcome: undefined });
+      expect(reported.filter((item) => "background" in item).at(-1)).toEqual({
+        background: ref.externalSessionId,
+        tasks: [],
+        resultPending: true,
+      });
+
+      events.delivered(ref.externalSessionId, "msg_child_report_1");
+      await flush();
+      expect(lifecycle(take())).toEqual([
+        { background: ref.externalSessionId, tasks: [], resultPending: false },
+        { idle: ref.externalSessionId, outcome: undefined },
+      ]);
+    } finally {
+      await runtime.release();
+    }
+  });
+
+  test("ends a child round that took no model step, because it sends no report", async () => {
+    const { runtime, events, flush, take } = await prepareTree();
+    try {
+      events.started(CHILD);
+      await flush();
+      expect(lifecycle(take()).filter((item) => "background" in item)).toEqual([
+        {
+          background: ref.externalSessionId,
+          tasks: [expect.stringMatching(new RegExp(`^subagent:${CHILD}:`))],
+          resultPending: false,
+        },
+      ]);
+      events.succeeded(CHILD);
+      await flush();
+      expect(lifecycle(take()).filter((item) => !("status" in item))).toEqual([
+        { idle: CHILD, outcome: "completed" },
+        { background: ref.externalSessionId, tasks: [], resultPending: false },
+        { idle: ref.externalSessionId, outcome: undefined },
+      ]);
+    } finally {
+      await runtime.release();
+    }
+  });
+
+  test("tracks a continued subagent after a report of a round that it did not see start", async () => {
+    const { runtime, events, flush, take } = await prepareTree();
+    try {
+      // The round started in an earlier runtime process.
+      events.notice(ref.externalSessionId, "msg_earlier_report", subagentReport("completed"));
+      events.delivered(ref.externalSessionId, "msg_earlier_report");
+      await flush();
+      take();
+      events.backgroundCall(
+        ref.externalSessionId,
+        "call_again",
+        "subagent",
+        { agent: "research", prompt: "Check again" },
+        { sessionID: CHILD },
+      );
+      await flush();
+      expect(
+        lifecycle(take())
+          .filter((item) => "background" in item)
+          .at(-1),
+      ).toEqual({
+        background: ref.externalSessionId,
+        tasks: [`subagent:${CHILD}:call_again`],
+        resultPending: false,
+      });
+    } finally {
+      await runtime.release();
+    }
+  });
+
+  test.each([
+    ["generate_image", "Generate image", "image_1"],
+    ["generate_video", "Generate video", "video_1"],
+  ] as const)("tracks and stops the job of %s", async (tool, title, jobID) => {
+    let events!: TreeEvents;
+    const tree = await prepareTree(({ url, method }) => {
+      if (method === "POST" && url.pathname === `/api/experimental/job/${jobID}/cancel`) {
+        events.notice(ref.externalSessionId, `msg_${jobID}_done`, {
+          text: `<background-result kind="${tool === "generate_image" ? "image" : "video"}" id="${jobID}" state="cancelled">\nCancelled\n</background-result>`,
+          metadata: { source: tool, jobID, state: "cancelled", path: "/repo/out" },
+        });
+        return noContent();
+      }
+      if (url.pathname.endsWith("/interrupt")) return interruptReply(events, url);
+      return undefined;
+    });
+    events = tree.events;
+    const { fixture, runtime, flush, take } = tree;
+    try {
+      events.backgroundCall(
+        ref.externalSessionId,
+        `call_${jobID}`,
+        tool,
+        { prompt: "A duck on a lake" },
+        { path: "/repo/out", model, jobID },
+      );
+      await flush();
+      expect(
+        take()
+          .filter((signal) => signal.type === "background_updated")
+          .at(-1),
+      ).toMatchObject({
+        externalSessionId: ref.externalSessionId,
+        tasks: [
+          {
+            taskId: `job:${jobID}`,
+            kind: "task",
+            title,
+            description: "A duck on a lake",
+            stop: { allowed: true },
+          },
+        ],
+      });
+      await runtime.connection.stopSession(ref);
+      expect(
+        fixture.requests.filter(({ url }) => url.pathname.startsWith("/api/experimental/job/")),
+      ).toHaveLength(1);
+      await flush();
+      expect(
+        lifecycle(take())
+          .filter((item) => "background" in item)
+          .at(-1),
+      ).toEqual({ background: ref.externalSessionId, tasks: [], resultPending: false });
     } finally {
       await runtime.release();
     }
@@ -739,7 +961,7 @@ describe("OpenCode background tasks", () => {
     try {
       callResearch("call_first");
       events.notice(ref.externalSessionId, "msg_first_done", {
-        text: `<subagent sessionID="${CHILD}" state="completed">\nFound\n</subagent>`,
+        text: `<background-result kind="subagent" sessionID="${CHILD}" state="completed" description="Find references">\nFound\n</background-result>`,
         metadata: { source: "subagent", childID: CHILD, agent: "research", state: "completed" },
       });
       events.delivered(ref.externalSessionId, "msg_first_done");
@@ -1312,7 +1534,13 @@ describe("OpenCode background tasks", () => {
         events.interrupted(CHILD);
         await stopping;
         await flush();
-        expect(lifecycle(take()).at(-1)).toEqual({ idle: CHILD, outcome: "interrupted" });
+        // The stopped child round reports to the root, and Stop session cancels that report.
+        expect(lifecycle(take()).slice(-4)).toEqual([
+          { idle: CHILD, outcome: "interrupted" },
+          { background: ref.externalSessionId, tasks: [], resultPending: true },
+          { background: ref.externalSessionId, tasks: [], resultPending: false },
+          { idle: ref.externalSessionId, outcome: undefined },
+        ]);
       } finally {
         await runtime.release();
       }

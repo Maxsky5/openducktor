@@ -111,6 +111,8 @@ export const createController = (
     {
       readDirectory: async (_directory, read) => read(),
       ensureMcp: async () => {},
+      restoreMcp: async () => {},
+      awaitGenerationModel: async () => {},
       admitted: () => {},
       projectHistory: (_sessionID, messages) => projectMessages(messages),
     },

@@ -26,7 +26,12 @@ import {
   location,
   model,
 } from "./opencode-v2.test-support";
-import { backgroundLaunch, durable, prepareFixture } from "./opencode-v2-live.test-support";
+import {
+  OPENCODE_GLOBAL_CONFIG_DIRECTORY,
+  backgroundLaunch,
+  durable,
+  prepareFixture,
+} from "./opencode-v2-live.test-support";
 
 const sessionCreated = (detail: SessionInfo): Extract<V2Event, { type: "session.created" }> => {
   const event: Extract<V2Event, { type: "session.created" }> = {
@@ -2428,6 +2433,164 @@ describe("OpenCode V2 live observation", () => {
       await runtime.release();
     }
   });
+  describe("text generation", () => {
+    const naming = {
+      repoPath: ref.repoPath,
+      model: { runtimeKind: "opencode", providerId: model.providerID, modelId: model.id },
+      instructions: "Name the branch.",
+      prompt: "Fix login",
+    } as const;
+    const generationFixture = (loaded: () => boolean) => {
+      const generated: unknown[] = [];
+      const fixture = prepareFixture(({ url, body }) => {
+        if (url.pathname === "/api/model")
+          return Response.json({
+            location: { ...location, directory: url.searchParams.get("location[directory]") },
+            data: loaded() ? [{ ...model, enabled: true }] : [{ ...model, enabled: false }],
+          });
+        if (url.pathname === "/api/experimental/generate/text") {
+          generated.push(body);
+          return response({ text: "fix/login" });
+        }
+        return undefined;
+      });
+      const modelReads = () =>
+        fixture.requests
+          .filter(({ url }) => url.pathname === "/api/model")
+          .map(({ url }) => url.searchParams.get("location[directory]"));
+      return { fixture, generated, modelReads };
+    };
+    const modelsUpdated = (id: string, directory: string): V2Event => ({
+      id,
+      created: 1,
+      type: "model.updated",
+      location: { directory },
+      data: {},
+    });
+
+    test("generates at once when the global config location has the model", async () => {
+      const { fixture, generated, modelReads } = generationFixture(() => true);
+      const runtime = await fixture.prepare();
+      try {
+        expect(await runtime.connection.generateText(naming, new AbortController().signal)).toBe(
+          "fix/login",
+        );
+        expect(modelReads()).toEqual([OPENCODE_GLOBAL_CONFIG_DIRECTORY]);
+        expect(generated).toHaveLength(1);
+      } finally {
+        await runtime.release();
+      }
+    });
+
+    test("waits until the global config location loads the model", async () => {
+      let loaded = false;
+      const { fixture, generated, modelReads } = generationFixture(() => loaded);
+      const runtime = await fixture.prepare();
+      try {
+        const answer = runtime.connection.generateText(naming, new AbortController().signal);
+        await setImmediate();
+        loaded = true;
+        // A model change of another location does not mean that the global location loaded it.
+        fixture.channel.push(modelsUpdated("evt_models_repo", ref.workingDirectory));
+        await setImmediate();
+        expect(generated).toEqual([]);
+        fixture.channel.push(modelsUpdated("evt_models_global", OPENCODE_GLOBAL_CONFIG_DIRECTORY));
+        expect(await answer).toBe("fix/login");
+        expect(modelReads()).toEqual([
+          OPENCODE_GLOBAL_CONFIG_DIRECTORY,
+          OPENCODE_GLOBAL_CONFIG_DIRECTORY,
+        ]);
+        expect(generated).toHaveLength(1);
+      } finally {
+        await runtime.release();
+      }
+    });
+
+    test("stops the wait when the caller gives up", async () => {
+      const { fixture, generated } = generationFixture(() => false);
+      const runtime = await fixture.prepare();
+      const abort = new AbortController();
+      try {
+        const answer = runtime.connection.generateText(naming, abort.signal);
+        await setImmediate();
+        abort.abort(new Error("Naming timed out."));
+        await expect(answer).rejects.toThrow("Naming timed out.");
+        expect(generated).toEqual([]);
+      } finally {
+        await runtime.release();
+      }
+    });
+  });
+
+  test("installs the MCP bridge again after OpenCode shuts down the location", async () => {
+    const servers = new Map<string, string>();
+    let mcpAdds = 0;
+    const prompts: string[] = [];
+    const fixture = prepareFixture(({ url, body }) => {
+      if (url.pathname === "/api/mcp")
+        return Response.json({
+          location: { directory: ref.workingDirectory },
+          data: [...servers].map(([name, status]) => ({ name, status: { status } })),
+        });
+      if (url.pathname === "/api/experimental/mcp/openducktor") {
+        mcpAdds++;
+        servers.set("openducktor", "connected");
+        return noContent();
+      }
+      if (url.pathname.endsWith("/instructions/entries/openducktor.workflow")) return noContent();
+      if (url.pathname.endsWith("/prompt")) {
+        prompts.push(String(body.text));
+        return response({
+          id: `msg_prompt_${prompts.length}`,
+          sessionID: ref.externalSessionId,
+          type: "user",
+          payload: { text: body.text },
+          delivery: "queue",
+          time: { created: 10 },
+        });
+      }
+      return undefined;
+    });
+    const runtime = await fixture.prepare();
+    const input = {
+      ...ref,
+      runtimePolicy: { kind: "opencode" as const },
+      sessionScope: { kind: "repository" as const, workspaceId: "repo" },
+    };
+    const send = (text: string, delivery: "new_turn" | "steer") =>
+      runtime.connection.sendUserMessage({ ...input, delivery, parts: [{ kind: "text", text }] });
+    const shutDown = async (id: string) => {
+      fixture.channel.push({
+        id,
+        created: 1,
+        type: "location.shutdown",
+        location: { directory: ref.workingDirectory },
+        data: {},
+      });
+      await setImmediate();
+    };
+    try {
+      await runtime.connection.resumeSession(input);
+      expect(mcpAdds).toBe(1);
+      // The new services of the directory have no runtime MCP override.
+      servers.clear();
+      await shutDown("evt_shutdown_1");
+      await send("Continue after the restart", "new_turn");
+      expect(mcpAdds).toBe(2);
+      expect(prompts).toEqual(["Continue after the restart"]);
+      // The new services of the directory load a user server with the same name.
+      servers.clear();
+      servers.set("openducktor", "connected");
+      await shutDown("evt_shutdown_2");
+      await expect(send("Use the user server", "steer")).rejects.toThrow(
+        "The native configuration already contains an MCP server named 'openducktor'.",
+      );
+      expect(mcpAdds).toBe(2);
+      expect(prompts).toEqual(["Continue after the restart"]);
+    } finally {
+      await runtime.release();
+    }
+  });
   test("restores only authorized roots and binds MCP when the conversation resumes", async () => {
     const fixture = prepareFixture();
     const runtime = await fixture.prepare();
@@ -2510,7 +2673,7 @@ describe("OpenCode V2 live observation", () => {
               sessionID: ref.externalSessionId,
               type: "synthetic",
               payload: {
-                text: '<shell id="sh_background" state="completed" command="bun run test">\nNative background shell result\n</shell>',
+                text: '<background-result kind="shell" id="sh_background" state="completed" command="bun run test">\nNative background shell result\n</background-result>',
                 description: "bun run test",
                 metadata: {
                   source: "shell",

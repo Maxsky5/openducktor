@@ -157,6 +157,7 @@ describe("OpenCode V2 pending input", () => {
     );
     expect(request.supportedReplyOutcomes).toEqual(["approve_once", "reject"]);
     expect(request.persistentGrant).toBeUndefined();
-    expect(request.rejectsAllPendingApprovals).toBe(true);
+    // Since OpenCode 2.3.1, a reject cancels only the other pending requests of the same step.
+    expect(request).not.toHaveProperty("rejectsAllPendingApprovals");
   });
 });

@@ -98,7 +98,9 @@ export const readMigration = async (
   identity: OperationIdentity,
   operation: string,
 ) => {
-  const migration = openCodeMigrationObservationSchema.parse(await client.migration.v1.status());
+  const migration = openCodeMigrationObservationSchema.parse(
+    await client.experimental.migration.v1.status(),
+  );
   if (migration.status !== "completed") {
     throw new OpenCodeOperationError({
       repoPath: identity.repoPath,

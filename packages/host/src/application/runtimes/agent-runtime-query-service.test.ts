@@ -568,6 +568,8 @@ test.each(["history", "child ancestry", "diff", "import inspection"] as const)(
         readDirectory: (directory, read) =>
           Effect.runPromise(h.worktreeReads.runWorktreeRead(directory, Effect.promise(read))),
         ensureMcp: async () => {},
+        restoreMcp: async () => {},
+        awaitGenerationModel: async () => {},
         admitted: () => {},
         projectHistory: () => {
           throw new Error("History must use the prepared runtime");
@@ -593,6 +595,7 @@ test.each(["history", "child ancestry", "diff", "import inspection"] as const)(
       ...controller.options,
       createClient: () => controller.client,
       readDirectory: controller.hooks.readDirectory,
+      globalConfigDirectory: "/home/user/.config/opencode",
       resolveMcpServerConfig: async () => {
         throw new Error("A native read must not install MCP");
       },

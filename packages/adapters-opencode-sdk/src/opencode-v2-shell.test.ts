@@ -10,7 +10,7 @@ import { durable } from "./opencode-v2-live.test-support";
 import { model, ref } from "./opencode-v2.test-support";
 
 const command = 'printf "one > two"\nbun run test';
-const output = '54 tests passed\n<shell id="output-is-not-a-message">';
+const output = '54 tests passed\n<background-result kind="shell" id="output-is-not-a-message">';
 const makeNotice = (
   metadata: Record<string, string | number | boolean> = {},
 ): SessionMessageSynthetic => ({
@@ -18,7 +18,7 @@ const makeNotice = (
   type: "synthetic",
   time: { created: 10 },
   description: command,
-  text: `<shell id="job_checks" state="${metadata.state ?? "completed"}" command="${command}">\n${output}\n</shell>`,
+  text: `<background-result kind="shell" id="job_checks" state="${metadata.state ?? "completed"}" command="${command}">\n${output}\n</background-result>`,
   metadata: {
     source: "shell",
     shellID: "sh_checks",
@@ -52,6 +52,14 @@ const launch = (): SessionMessageAssistant => ({
 });
 
 describe("OpenCode V2 shell projection", () => {
+  test("reads the shell result wrapper that OpenCode saved before 2.4.0", () => {
+    const saved = makeNotice();
+    saved.text = `<shell id="job_checks" state="completed" command="${command}">\n${output}\n</shell>`;
+    expect(projectMessages([launch(), saved])[0]?.parts).toMatchObject([
+      { callId: "call_checks", status: "completed", output },
+    ]);
+  });
+
   test("shows an unlinked shell result as a tool card without its context wrapper", () => {
     const history = projectMessages([makeNotice()]);
     expect(history).toMatchObject([
@@ -100,6 +108,12 @@ describe("OpenCode V2 shell projection", () => {
       status: "error",
       outcome: "failed",
       error: "Shell command was killed by SIGTERM.",
+    },
+    {
+      metadata: { state: "completed", killed: true },
+      status: "error",
+      outcome: "failed",
+      error: "Shell command was killed before it finished.",
     },
   ])(
     "settles the original background call for $metadata",
@@ -244,7 +258,7 @@ describe("OpenCode V2 shell projection", () => {
         durable: { ...durable, seq: 3 },
         data: {
           sessionID: ref.externalSessionId,
-          text: `The following shell command was executed by the user:\n<shell id="sh_checks" state="completed" command="${command}">\n${output}\n\nExited with code 1\n</shell>`,
+          text: `The following shell command was executed by the user:\n<background-result kind="shell" id="sh_checks" state="completed" command="${command}">\n${output}\n\nExit code: 1\n</background-result>`,
           metadata: { source: "shell", shellID: "sh_checks", state: "completed", exit: 1 },
         },
       }),
@@ -268,7 +282,7 @@ describe("OpenCode V2 shell projection", () => {
         id: "msg_user_signal_notice",
         type: "synthetic",
         time: { created: 10 },
-        text: 'The following shell command was executed by the user:\n<shell id="sh_user_signal" state="completed" command="kill -TERM $$">\nCaptured tail\n\nKilled by SIGTERM\n</shell>',
+        text: 'The following shell command was executed by the user:\n<background-result kind="shell" id="sh_user_signal" state="completed" command="kill -TERM $$">\nCaptured tail\n\nExit code: 143 (SIGTERM)\n</background-result>',
         metadata: {
           source: "shell",
           shellID: "sh_user_signal",

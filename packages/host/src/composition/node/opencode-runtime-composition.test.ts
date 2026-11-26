@@ -122,6 +122,8 @@ describe("OpenCode runtime composition directory guard", () => {
         {
           readDirectory: createReadDirectory(),
           ensureMcp: async () => {},
+          restoreMcp: async () => {},
+          awaitGenerationModel: async () => {},
           admitted: () => {},
           projectHistory: () => {
             throw new Error("Unexpected history read");

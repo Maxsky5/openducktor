@@ -10,7 +10,8 @@ import { z } from "zod";
 /** The native handle that stops one background task. */
 type OpenCodeBackgroundTarget =
   | { readonly kind: "shell"; readonly shellID: string; readonly directory: string }
-  | { readonly kind: "subagent"; readonly childID: string };
+  | { readonly kind: "subagent"; readonly childID: string }
+  | { readonly kind: "job"; readonly jobID: string };
 
 export type OpenCodeBackgroundEntry = {
   /**
@@ -22,6 +23,8 @@ export type OpenCodeBackgroundEntry = {
   readonly target: OpenCodeBackgroundTarget;
   /** The session that owns the tool call. Its inbox receives the end notice. */
   readonly sessionID: string;
+  /** A round that the child runs without a call of its parent, such as after a shell result. */
+  readonly round?: true;
 };
 
 /** A watch for the next execution end of a session. `stop` ends the watch. */
@@ -31,7 +34,7 @@ export type OpenCodeExecutionEndWatch = {
 };
 
 // Mirrors the tool results of `packages/core/src/tool/plugin/shell.ts` and `subagent.ts` of
-// OpenCode 2.2.5. A background call completes with `status: "running"`.
+// OpenCode 2.2.5 to 2.4.1. A background call completes with `status: "running"`.
 const shellInputSchema = z.object({ command: z.string().trim().min(1) });
 const shellMetadataSchema = z.object({ shellID: z.string().min(1) });
 const subagentInputSchema = z.object({
@@ -39,8 +42,14 @@ const subagentInputSchema = z.object({
   description: z.string().optional(),
 });
 const subagentMetadataSchema = z.object({ sessionID: z.string().min(1) });
+// Mirrors `generate_image` and `generate_video` of OpenCode 2.4.1. The call completes when its job
+// starts, and the job sends a notice when it ends.
+const mediaToolSchema = z.enum(["generate_image", "generate_video"]);
+const mediaTitles = { generate_image: "Generate image", generate_video: "Generate video" } as const;
+const mediaInputSchema = z.object({ prompt: z.string().optional() });
+const mediaMetadataSchema = z.object({ jobID: z.string().min(1) });
 
-// Mirrors `ShellResult.notification` and `SubagentCompletion.deliver` of OpenCode 2.2.5.
+// Mirrors `ShellResult.notification` and `SubagentCompletion.deliver` of OpenCode 2.2.5 to 2.4.1.
 const noticeState = z.enum(["completed", "cancelled", "error"]);
 const shellNoticeSchema = z.object({
   source: z.literal("shell"),
@@ -53,11 +62,14 @@ const subagentNoticeSchema = z.object({
   childID: z.string().min(1),
   state: noticeState,
 });
+const mediaNoticeSchema = z.object({ jobID: z.string().min(1), state: noticeState });
 
 // OpenCode gives each shell a new ascending ID (`Shell.ID.ascending` in `packages/core/src/shell.ts`).
 const shellKey = (shellID: string) => `shell:${shellID}`;
 // A continued subagent runs its child session again, so its tool call names the run.
 const subagentKey = (childID: string) => `subagent:${childID}`;
+// OpenCode gives each media job a new ID.
+const jobKey = (jobID: string) => `job:${jobID}`;
 
 const malformed = (what: string, error: z.ZodError): Error =>
   new Error(
@@ -100,8 +112,23 @@ const readEntry = (
   directory: string,
   part: SessionMessageAssistantTool,
 ): OpenCodeBackgroundEntry | undefined => {
-  if (part.state.status !== "completed" || part.state.metadata?.status !== "running")
-    return undefined;
+  if (part.state.status !== "completed") return undefined;
+  const media = mediaToolSchema.safeParse(part.name).data;
+  if (media) {
+    const metadata = mediaMetadataSchema.safeParse(part.state.metadata);
+    if (!metadata.success) throw malformed(`${part.name} result`, metadata.error);
+    const key = jobKey(metadata.data.jobID);
+    const task: AgentSessionBackgroundTask = {
+      taskId: key,
+      kind: "task",
+      title: mediaTitles[media],
+      stop: { allowed: true },
+    };
+    const prompt = mediaInputSchema.safeParse(part.state.input).data?.prompt?.trim();
+    if (prompt) task.description = prompt;
+    return { key, task, target: { kind: "job", jobID: metadata.data.jobID }, sessionID };
+  }
+  if (part.state.metadata?.status !== "running") return undefined;
   if (part.name === "shell") {
     const input = shellInputSchema.safeParse(part.state.input);
     if (!input.success) throw malformed("background shell call", input.error);
@@ -146,6 +173,12 @@ const readNoticeKey = (item: SessionInboxInfo): string | undefined => {
     if (!notice.success) throw malformed("shell notice", notice.error);
     return notice.data.shellID === undefined ? undefined : shellKey(notice.data.shellID);
   }
+  const media = mediaToolSchema.safeParse(source).data;
+  if (media) {
+    const notice = mediaNoticeSchema.safeParse(item.payload.metadata);
+    if (!notice.success) throw malformed(`${media} notice`, notice.error);
+    return jobKey(notice.data.jobID);
+  }
   if (source !== "subagent") return undefined;
   const notice = subagentNoticeSchema.safeParse(item.payload.metadata);
   if (!notice.success) throw malformed("subagent notice", notice.error);
@@ -157,6 +190,11 @@ const readNoticeKey = (item: SessionInboxInfo): string | undefined => {
  * completes with `status: "running"`, and ends only on its notice in the session inbox. The
  * notice stays a pending result until the inbox delivers or cancels it. A fast task can send its
  * notice before its start, so a notice of an unknown task waits for that start.
+ *
+ * Since OpenCode 2.3.0, a child session reports to its parent each time it goes idle
+ * (`packages/core/src/session/execution/subagent-report.ts`). A child can also run a round that no
+ * call of its parent started, for example after the result of its own background shell. That round
+ * is a task of the parent too, from the start of the child execution to its report.
  */
 export class OpenCodeBackgroundTasks extends BackgroundWorkLedger<OpenCodeBackgroundEntry> {
   /**
@@ -170,6 +208,8 @@ export class OpenCodeBackgroundTasks extends BackgroundWorkLedger<OpenCodeBackgr
   private readonly woken = new Set<string>();
   /** Waits for the end of an execution, per session. */
   private readonly executionWaiters = new BackgroundWaiters();
+  /** The child sessions whose current execution took a model step, so its round sends a report. */
+  private readonly steppedRounds = new Set<string>();
 
   constructor(private readonly parentOf: (sessionID: string) => string | undefined) {
     super((rootID) => ({
@@ -190,8 +230,64 @@ export class OpenCodeBackgroundTasks extends BackgroundWorkLedger<OpenCodeBackgr
     }
     const inboxID = early.get(entry.key);
     early.delete(entry.key);
-    if (inboxID === undefined) return false;
+    if (inboxID === undefined) {
+      // A child reports every round, so a settled report of an earlier round does not end the run
+      // of a later call. A shell ID names one run only.
+      if (entry.target.kind !== "subagent") return false;
+      this.start(entry);
+      return true;
+    }
     this.addResult(inboxID, sessionID);
+    return true;
+  }
+
+  /**
+   * Starts the task of a round of the child `childID` when no call of its parent started one.
+   * Returns false when nothing changed.
+   */
+  startRound(
+    childID: string,
+    parentID: string,
+    runID: string,
+    child: { readonly agent: string; readonly title?: string | undefined },
+  ): boolean {
+    this.steppedRounds.delete(childID);
+    const key = subagentKey(childID);
+    if (this.get(key)) return false;
+    const task: AgentSessionBackgroundTask = {
+      taskId: `${key}:${runID}`,
+      kind: "subagent",
+      title: child.agent,
+      stop: { allowed: true },
+    };
+    const description = child.title?.trim();
+    if (description) task.description = description;
+    this.start({
+      key,
+      task,
+      target: { kind: "subagent", childID },
+      sessionID: parentID,
+      round: true,
+    });
+    return true;
+  }
+
+  /** Records that the current execution of the child took a model step. */
+  stepRound(childID: string): void {
+    this.steppedRounds.add(childID);
+  }
+
+  /**
+   * Ends the round task of a child execution that sends no report. OpenCode reports a round that
+   * failed, was interrupted, or took a model step (`SubagentReport.resolveBody`). Returns false when
+   * nothing changed.
+   */
+  endRound(childID: string, succeeded: boolean): boolean {
+    const stepped = this.steppedRounds.delete(childID);
+    if (!succeeded || stepped) return false;
+    const entry = this.get(subagentKey(childID));
+    if (!entry?.round) return false;
+    this.end(entry.key);
     return true;
   }
 
@@ -300,6 +396,7 @@ export class OpenCodeBackgroundTasks extends BackgroundWorkLedger<OpenCodeBackgr
   override removeSession(sessionID: string, cause: Error): boolean {
     const changed = super.removeSession(sessionID, cause);
     this.early.delete(sessionID);
+    this.steppedRounds.delete(sessionID);
     this.woken.delete(sessionID);
     this.executionWaiters.reject(sessionID, cause);
     return changed;

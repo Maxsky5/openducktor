@@ -5,6 +5,7 @@ import type {
   SessionInboxUser,
   SessionMessageInfo,
   SessionMessageAssistant,
+  SessionMessageUser,
 } from "@opencode/client";
 import {
   isOpenCodeContinuationInput,
@@ -220,12 +221,21 @@ export const projectInboxUser = (
   state,
 });
 
-/** The user message of an inbox item. A continuation has none. */
+// Mirrors the prompt metadata of `packages/core/src/automation.ts` of OpenCode 2.4.1.
+const automationMetadataSchema = z.object({ automation: z.object({ name: z.string().min(1) }) });
+
+/** The name of the OpenCode automation that sent a prompt. A prompt of the user has none. */
+export const automationName = (input: Pick<SessionMessageUser, "metadata">): string | undefined =>
+  automationMetadataSchema.safeParse(input.metadata).data?.automation.name;
+
+/** The user message of an inbox item. A continuation and an automation prompt have none. */
 export const projectVisibleInboxUser = (
   item: SessionInboxInfo,
   state: "queued" | "read" = "queued",
 ): AcceptedAgentUserMessage[] =>
-  item.type === "user" && !isOpenCodeContinuationInput(item.payload)
+  item.type === "user" &&
+  !isOpenCodeContinuationInput(item.payload) &&
+  automationName(item.payload) === undefined
     ? [projectInboxUser(item, state)]
     : [];
 
@@ -257,6 +267,14 @@ const subagentCompletions = (
     if (
       childID === undefined ||
       (state !== "completed" && state !== "error" && state !== "cancelled")
+    )
+      continue;
+    // A child that goes idle with background work left reports `state="running"` in the text
+    // only, and reports again when that work ends (`SubagentCompletion.deliver` of OpenCode 2.4.1).
+    if (
+      message.text.startsWith(
+        `<background-result kind="subagent" sessionID="${childID}" state="running"`,
+      )
     )
       continue;
     for (const callID of openCalls.get(childID) ?? [])
@@ -527,6 +545,14 @@ export const projectMessage = (
       parts: [],
     });
   }
+  const automation = message.type === "user" ? automationName(message) : undefined;
+  if (automation !== undefined && message.type === "user")
+    return agentSessionHistoryMessageSchema.parse({
+      ...base,
+      role: "system",
+      text: `Automation "${automation}" sent this prompt:\n${message.text}`,
+      parts: [],
+    });
   if (message.type === "user")
     return agentSessionHistoryMessageSchema.parse({
       ...base,

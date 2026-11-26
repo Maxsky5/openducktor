@@ -23,7 +23,6 @@ export const projectApproval = (
       command,
       toolName: tool,
     }),
-    rejectsAllPendingApprovals: true,
     supportedReplyOutcomes: request.save?.length
       ? ["approve_once", "approve_always", "reject"]
       : ["approve_once", "reject"],
