@@ -104,4 +104,151 @@ describe("usage-limit stops", () => {
       resumeAtEpochMs: RESET + USAGE_LIMIT_RESUME_GRACE_MS,
     });
   });
+
+  test("ignores a Claude foreground-active pulse and background part updates until real turn work arrives", () => {
+    const { stops, stop } = planningStop();
+    stops.planned(stop, true);
+
+    stops.observe({
+      type: "session_upsert",
+      session: {
+        ref,
+        activity: "running",
+        foregroundTurnActive: true,
+        title: "Build",
+        startedAt: new Date(BASE).toISOString(),
+        pendingApprovals: [],
+        pendingQuestions: [],
+        contextUsage: null,
+      },
+    });
+    stops.observe({
+      type: "transcript_event",
+      event: {
+        ...eventBase,
+        type: "assistant_part",
+        part: {
+          kind: "subagent",
+          messageId: "bg-1",
+          partId: "sub-1",
+          correlationKey: "call-bg-1",
+          status: "completed",
+        },
+      },
+    });
+    stops.observe({
+      type: "transcript_event",
+      event: {
+        ...eventBase,
+        type: "assistant_part",
+        part: {
+          kind: "tool",
+          messageId: "bg-2",
+          partId: "tool-bg-1",
+          tool: "Bash",
+          toolType: "bash",
+          callId: "call-bash-1",
+          status: "completed",
+        },
+      },
+    });
+    stops.observe({
+      type: "transcript_event",
+      event: {
+        ...eventBase,
+        type: "session_turn_finished",
+        completionId: "notif-result-1",
+        messageIds: [],
+        turnOutcome: "completed",
+      },
+    });
+    stops.observe({
+      type: "transcript_event",
+      event: {
+        ...eventBase,
+        type: "session_idle",
+        turnOutcome: "completed",
+      },
+    });
+
+    expect(stops.entry(ref)).toMatchObject({
+      state: "scheduled",
+      resumeAtEpochMs: RESET + USAGE_LIMIT_RESUME_GRACE_MS,
+    });
+
+    stops.observe({
+      type: "transcript_event",
+      event: {
+        ...eventBase,
+        type: "assistant_part",
+        part: {
+          kind: "tool",
+          messageId: "wake-reply-1",
+          partId: "tool-new-1",
+          tool: "Read",
+          toolType: "read",
+          callId: "call-read-1",
+          status: "running",
+        },
+      },
+    });
+
+    expect(stops.entry(ref)).toBeNull();
+  });
+
+  test("ends a due Claude stop when a foreground turn is still active at due time", () => {
+    const { stops, stop } = planningStop();
+    stops.planned(stop, true);
+    stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS);
+
+    expect(
+      stops.startResume(stop, {
+        blockedOnInput: false,
+        hasActiveTurn: true,
+        now: RESET + USAGE_LIMIT_RESUME_GRACE_MS,
+        recovery: { kind: "recovered" },
+      }),
+    ).toBe(false);
+    expect(stops.entry(ref)).toBeNull();
+  });
+
+  test("ends a scheduled Claude stop on assistant output or a non-limit turn error", () => {
+    const cases: AgentSessionLiveEnvelope[] = [
+      {
+        type: "transcript_event",
+        event: {
+          ...eventBase,
+          type: "assistant_delta",
+          channel: "text",
+          messageId: "wake-1",
+          delta: "Checking background output.",
+        },
+      },
+      {
+        type: "transcript_event",
+        event: {
+          ...eventBase,
+          type: "assistant_message",
+          messageId: "wake-2",
+          message: "Done.",
+        },
+      },
+      {
+        type: "transcript_event",
+        event: {
+          ...eventBase,
+          type: "turn_error",
+          messageId: "wake-err-1",
+          message: "Unexpected runtime error.",
+        },
+      },
+    ];
+
+    for (const envelope of cases) {
+      const { stops, stop } = planningStop();
+      stops.planned(stop, true);
+      stops.observe(envelope);
+      expect(stops.entry(ref)).toBeNull();
+    }
+  });
 });

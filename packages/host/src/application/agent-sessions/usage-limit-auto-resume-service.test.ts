@@ -9,10 +9,19 @@ import {
   globalConfigSchema,
   type UsageLimitAutoResume,
 } from "@openducktor/contracts";
+import type { SDKRateLimitEvent } from "@anthropic-ai/claude-agent-sdk";
+import type { AgentEvent, UsageLimitRecovery, UsageLimitStop } from "@openducktor/core";
 import { Deferred, Effect } from "effect";
 import { TestClock } from "effect/testing";
+import { createClaudeLiveSessionState } from "../../adapters/agent-sessions/claude-live-session-state";
+import { decideClaudeLiveContinuation } from "../../adapters/claude/claude-agent-sdk-continuation";
+import { handleClaudeSdkMessage } from "../../adapters/claude/claude-agent-sdk-events";
+import { createClaudeSession } from "../../adapters/claude/claude-agent-sdk-session-io.test-support";
+import {
+  claudeSdkMessageFixture,
+  claudeSdkMessageUuidFixture,
+} from "../../adapters/claude/claude-agent-sdk-test-messages";
 import { type HostError, HostOperationError } from "../../effect/host-errors";
-import type { UsageLimitRecovery, UsageLimitStop } from "@openducktor/core";
 import { runtimeQueryError } from "../../ports/runtime-query-error";
 import { SessionOperationError } from "../../ports/session-operation-error";
 import { createLiveWorkflowObservations } from "./live-workflow-observations";
@@ -682,6 +691,296 @@ describe("usage-limit auto-resume", () => {
         expect(h.published).toEqual([
           { ref: claudeRef, stopId: "limit-1", resumeAtEpochMs: DUE, state: "scheduled" },
         ]);
+      }),
+    );
+  });
+
+  test("keeps a Claude weekly-limit auto-resume scheduled across an empty notification wake and background completion", async () => {
+    const h = createHarness();
+    const liveState = createClaudeLiveSessionState();
+    const timestamp = new Date(BASE).toISOString();
+    const session = createClaudeSession({
+      activity: "running",
+      foregroundTurnActive: true,
+      input: {
+        repoPath: claudeRef.repoPath,
+        runtimeKind: "claude",
+        workingDirectory: claudeRef.workingDirectory,
+        runtimePolicy: { kind: "claude" },
+        sessionScope,
+        systemPrompt: "Build",
+      },
+      summary: {
+        externalSessionId: claudeRef.externalSessionId,
+        runtimeKind: "claude",
+        workingDirectory: claudeRef.workingDirectory,
+        title: "Build",
+        startedAt: timestamp,
+        status: "running",
+        sessionAssociation: sessionScope,
+      },
+      acceptedUserMessages: [{ messageId: "user-1", text: "Build", parts: [], timestamp }],
+      pendingUserTurnCount: 1,
+    });
+    const emit = (event: AgentEvent): void => {
+      for (const change of liveState.applyEvent(session, event)) {
+        if (change.type === "session_upsert") {
+          h.state.live = { type: "live", session: change.snapshot };
+          h.service.observe({ type: "session_upsert", session: change.snapshot });
+        } else if (change.type === "transcript_event") {
+          h.service.observe({ type: "transcript_event", event: change.event });
+        }
+      }
+    };
+    const handle = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"]) =>
+      handleClaudeSdkMessage({
+        session,
+        message,
+        timestamp,
+        emit,
+        modelSelection: (modelId) => ({ providerId: "claude", modelId, runtimeKind: "claude" }),
+      });
+    const rateLimit: SDKRateLimitEvent = {
+      type: "rate_limit_event",
+      session_id: claudeRef.externalSessionId,
+      uuid: claudeSdkMessageUuidFixture("rate-limit-1"),
+      rate_limit_info: {
+        status: "rejected",
+        rateLimitType: "seven_day",
+        resetsAt: Math.floor(RESET / 1000),
+      },
+    };
+
+    await h.run(
+      Effect.gen(function* () {
+        handle(rateLimit);
+        handle(
+          claudeSdkMessageFixture({
+            type: "assistant",
+            session_id: claudeRef.externalSessionId,
+            uuid: claudeSdkMessageUuidFixture("limit-response"),
+            error: "rate_limit",
+            message: {
+              id: "limit-response",
+              content: [{ type: "text", text: "You've hit your weekly limit." }],
+              stop_reason: "end_turn",
+            },
+          }),
+        );
+        handle(
+          claudeSdkMessageFixture({
+            type: "result",
+            subtype: "error_during_execution",
+            session_id: claudeRef.externalSessionId,
+            uuid: claudeSdkMessageUuidFixture("limit-result"),
+            user_message_uuid: "user-1",
+            errors: ["You've hit your weekly limit."],
+          }),
+        );
+        yield* flush;
+
+        expect(h.published).toEqual([
+          { ref: claudeRef, stopId: "limit-response", resumeAtEpochMs: DUE, state: "scheduled" },
+        ]);
+
+        // Empty background task-notification wake and late system task_notification.
+        handle(
+          claudeSdkMessageFixture({
+            type: "user",
+            session_id: claudeRef.externalSessionId,
+            uuid: claudeSdkMessageUuidFixture("notif-wake-user"),
+            origin: { kind: "task-notification" },
+            message: {
+              role: "user",
+              content: "<task-notification><status>completed</status></task-notification>",
+            },
+          }),
+        );
+        handle(
+          claudeSdkMessageFixture({
+            type: "system",
+            subtype: "task_notification",
+            session_id: claudeRef.externalSessionId,
+            uuid: claudeSdkMessageUuidFixture("notif-system"),
+            task_id: "bg-task-1",
+            tool_use_id: "call-bg-1",
+            status: "completed",
+            output_file: "/tmp/bg.out",
+            summary: "Background agent finished",
+          }),
+        );
+        handle(
+          claudeSdkMessageFixture({
+            type: "result",
+            subtype: "success",
+            session_id: claudeRef.externalSessionId,
+            uuid: claudeSdkMessageUuidFixture("notif-empty-result"),
+            result: "",
+          }),
+        );
+        yield* flush;
+
+        expect(h.published).toEqual([
+          { ref: claudeRef, stopId: "limit-response", resumeAtEpochMs: DUE, state: "scheduled" },
+        ]);
+        expect(decideClaudeLiveContinuation(session, claudeRef.externalSessionId)).toEqual({
+          kind: "allow",
+        });
+
+        yield* h.advanceTo(DUE);
+        expect(h.resumes).toEqual([
+          { ...claudeRef, sessionScope, resumeMode: "continue_interrupted_turn" },
+        ]);
+      }),
+    );
+  });
+
+  test("cancels a Claude auto-resume when a later notification wake produces real assistant output", async () => {
+    const h = createHarness();
+    const liveState = createClaudeLiveSessionState();
+    const timestamp = new Date(BASE).toISOString();
+    const session = createClaudeSession({
+      activity: "running",
+      foregroundTurnActive: true,
+      input: {
+        repoPath: claudeRef.repoPath,
+        runtimeKind: "claude",
+        workingDirectory: claudeRef.workingDirectory,
+        runtimePolicy: { kind: "claude" },
+        sessionScope,
+        systemPrompt: "Build",
+      },
+      summary: {
+        externalSessionId: claudeRef.externalSessionId,
+        runtimeKind: "claude",
+        workingDirectory: claudeRef.workingDirectory,
+        title: "Build",
+        startedAt: timestamp,
+        status: "running",
+        sessionAssociation: sessionScope,
+      },
+      acceptedUserMessages: [{ messageId: "user-1", text: "Build", parts: [], timestamp }],
+      pendingUserTurnCount: 1,
+    });
+    const emit = (event: AgentEvent): void => {
+      for (const change of liveState.applyEvent(session, event)) {
+        if (change.type === "session_upsert") {
+          h.state.live = { type: "live", session: change.snapshot };
+          h.service.observe({ type: "session_upsert", session: change.snapshot });
+        } else if (change.type === "transcript_event") {
+          h.service.observe({ type: "transcript_event", event: change.event });
+        }
+      }
+    };
+    const handle = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"]) =>
+      handleClaudeSdkMessage({
+        session,
+        message,
+        timestamp,
+        emit,
+        modelSelection: (modelId) => ({ providerId: "claude", modelId, runtimeKind: "claude" }),
+      });
+
+    await h.run(
+      Effect.gen(function* () {
+        handle({
+          type: "rate_limit_event",
+          session_id: claudeRef.externalSessionId,
+          uuid: claudeSdkMessageUuidFixture("rate-limit-2"),
+          rate_limit_info: {
+            status: "rejected",
+            rateLimitType: "seven_day",
+            resetsAt: Math.floor(RESET / 1000),
+          },
+        });
+        handle(
+          claudeSdkMessageFixture({
+            type: "assistant",
+            session_id: claudeRef.externalSessionId,
+            uuid: claudeSdkMessageUuidFixture("limit-response-2"),
+            error: "rate_limit",
+            message: {
+              id: "limit-response-2",
+              content: [{ type: "text", text: "You've hit your weekly limit." }],
+              stop_reason: "end_turn",
+            },
+          }),
+        );
+        handle(
+          claudeSdkMessageFixture({
+            type: "result",
+            subtype: "error_during_execution",
+            session_id: claudeRef.externalSessionId,
+            uuid: claudeSdkMessageUuidFixture("limit-result-2"),
+            user_message_uuid: "user-1",
+            errors: ["You've hit your weekly limit."],
+          }),
+        );
+        yield* flush;
+        expect(h.published.at(-1)).toMatchObject({ state: "scheduled" });
+
+        handle(
+          claudeSdkMessageFixture({
+            type: "user",
+            session_id: claudeRef.externalSessionId,
+            uuid: claudeSdkMessageUuidFixture("real-wake-user"),
+            origin: { kind: "task-notification" },
+            message: {
+              role: "user",
+              content: "<task-notification><status>completed</status></task-notification>",
+            },
+          }),
+        );
+        handle(
+          claudeSdkMessageFixture({
+            type: "assistant",
+            session_id: claudeRef.externalSessionId,
+            uuid: claudeSdkMessageUuidFixture("real-wake-assistant"),
+            message: {
+              id: "real-wake-assistant",
+              content: [{ type: "text", text: "Processed the completed background task." }],
+              stop_reason: "end_turn",
+            },
+          }),
+        );
+        handle(
+          claudeSdkMessageFixture({
+            type: "result",
+            subtype: "success",
+            session_id: claudeRef.externalSessionId,
+            uuid: claudeSdkMessageUuidFixture("real-wake-result"),
+            result: "Processed the completed background task.",
+          }),
+        );
+        yield* h.advanceTo(DUE);
+
+        expect(h.published.at(-1)).toBeNull();
+        expect(h.resumes).toEqual([]);
+      }),
+    );
+  });
+
+  test("does not resume a Claude session when a foreground turn is still running at the reset", async () => {
+    const h = createHarness();
+    await h.run(
+      Effect.gen(function* () {
+        yield* h.stop();
+        h.state.live = {
+          type: "live",
+          session: {
+            ref: claudeRef,
+            activity: "running",
+            foregroundTurnActive: true,
+            title: "Build",
+            startedAt: new Date(BASE).toISOString(),
+            pendingApprovals: [],
+            pendingQuestions: [],
+            contextUsage: null,
+          },
+        };
+        yield* h.advanceTo(DUE);
+        expect(h.resumes).toEqual([]);
+        expect(h.published.at(-1)).toBeNull();
       }),
     );
   });

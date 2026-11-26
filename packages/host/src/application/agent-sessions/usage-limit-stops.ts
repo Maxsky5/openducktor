@@ -51,8 +51,37 @@ export type DueStops = { due: TrackedUsageLimitStop[]; nextDueAt: number | undef
 /** What the due-time checks found. `recovery` is the answer of the runtime for the account. */
 export type DueCheck = {
   blockedOnInput: boolean;
+  hasActiveTurn?: boolean;
   now: number;
   recovery: UsageLimitRecovery;
+};
+
+type TranscriptEvent = Extract<AgentSessionLiveEnvelope, { type: "transcript_event" }>["event"];
+
+/**
+ * Assistant output that proves a turn ran new model work. Background subagent updates and
+ * completed background tool updates can arrive after a failed turn without starting a new reply.
+ */
+const isNewTurnWorkEvent = (event: TranscriptEvent): boolean => {
+  switch (event.type) {
+    case "assistant_delta":
+    case "assistant_message":
+      return true;
+    case "assistant_part":
+      switch (event.part.kind) {
+        case "image_generation":
+        case "text":
+        case "reasoning":
+        case "step":
+          return true;
+        case "tool":
+          return event.part.status === "pending" || event.part.status === "running";
+        case "subagent":
+          return false;
+      }
+    default:
+      return false;
+  }
 };
 
 export const supportsUsageLimitAutoResume = (runtimeKind: RuntimeKind): boolean =>
@@ -174,9 +203,16 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
     const stop = stops.get(key);
     // The resume of the owner shows foreground work too. The resume result ends that stop.
     if (stop?.phase === "resuming") return;
-    // Foreground work during the failed turn is that turn. Only later work ends the stop.
-    if (stop?.turnEnded === false) countWork(key);
-    else newWork(key);
+    // Foreground work during the failed turn is that turn.
+    if (stop?.turnEnded === false) {
+      countWork(key);
+      return;
+    }
+    // Claude briefly flips foreground active for an empty notification-only wake. Wait for real
+    // turn output, a user message, a host operation, or an active turn at due time before ending
+    // a pending Claude stop.
+    if (session.ref.runtimeKind === "claude") return;
+    newWork(key);
   };
 
   return {
@@ -185,13 +221,23 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
       switch (envelope.type) {
         case "transcript_event": {
           const { event } = envelope;
-          if (event.type === "turn_error")
-            return observeLimitError(agentSessionRefKey(event.sessionRef), event);
+          const key = agentSessionRefKey(event.sessionRef);
+          if (event.type === "turn_error") {
+            if (event.usageLimit && event.messageId) return observeLimitError(key, event);
+            const stop = stops.get(key);
+            if (stop?.phase !== "resuming" && stop?.turnEnded !== false) newWork(key);
+            return null;
+          }
           if (isAcceptedUserMessage(event)) {
-            newWork(agentSessionRefKey(event.sessionRef));
+            newWork(key);
+          } else if (isNewTurnWorkEvent(event)) {
+            const stop = stops.get(key);
+            if (stop?.phase !== "resuming") {
+              if (stop?.turnEnded === false) countWork(key);
+              else newWork(key);
+            }
           }
           if (event.type !== "session_turn_finished" && event.type !== "session_idle") return null;
-          const key = agentSessionRefKey(event.sessionRef);
           const stop = stops.get(key);
           if (!stop || !event.turnOutcome) return null;
           // Only the end of the failed turn counts here. Later work ends the stop elsewhere.
@@ -257,7 +303,7 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
       const key = agentSessionRefKey(stop.ref);
       const current = stops.get(key);
       if (current !== stop || current.phase !== "due") return false;
-      if (check.blockedOnInput || !hasEligibleReset(current)) {
+      if (check.blockedOnInput || check.hasActiveTurn || !hasEligibleReset(current)) {
         end(key);
         return false;
       }

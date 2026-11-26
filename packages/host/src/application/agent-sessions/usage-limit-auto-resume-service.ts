@@ -26,7 +26,7 @@ import type { SettingsConfigPort, SettingsConfigView } from "../../ports/setting
 import { SessionOperationError } from "../../ports/session-operation-error";
 import { sessionLiveRef } from "./agent-session-continuation-errors";
 import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
-import { hasBlockingInput } from "./session-foreground-readiness";
+import { hasBlockingInput, hasForegroundTurn } from "./session-foreground-readiness";
 import { resolveOwnedSessionRoot } from "./session-owner-resolution";
 import {
   createUsageLimitStops,
@@ -166,6 +166,7 @@ export const createUsageLimitAutoResumeService = (
       );
       const started = stops.startResume(stop, {
         blockedOnInput: live.type === "live" && hasBlockingInput(live.session),
+        hasActiveTurn: live.type === "live" && hasForegroundTurn(live.session),
         now: yield* Clock.currentTimeMillis,
         recovery,
       });
