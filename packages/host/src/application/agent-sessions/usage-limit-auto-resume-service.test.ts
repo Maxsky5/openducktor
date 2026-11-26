@@ -1103,6 +1103,91 @@ describe("usage-limit auto-resume", () => {
     );
   });
 
+  test.each([
+    { name: "synthetic wake", kind: "synthetic" },
+    { name: "non-query wake", kind: "non_query" },
+    { name: "display-only result", kind: "display_only" },
+  ] as const)(
+    "dispatches and keeps live continuation eligible after an empty $name result",
+    async ({ kind }) => {
+      const h = createHarness();
+      const { session, handle, stopOnWeeklyLimit } = createClaudeReplay(h);
+
+      await h.run(
+        Effect.gen(function* () {
+          handle(
+            claudeSdkMessageFixture({
+              type: "assistant",
+              session_id: claudeRef.externalSessionId,
+              uuid: claudeSdkMessageUuidFixture(`pre-limit-${kind}`),
+              message: {
+                id: `pre-limit-${kind}`,
+                content: [
+                  {
+                    type: "tool_use",
+                    id: `call-pre-${kind}`,
+                    name: "Bash",
+                    input: { command: "echo hi" },
+                  },
+                ],
+                stop_reason: "tool_use",
+              },
+            }),
+          );
+          stopOnWeeklyLimit(`limit-response-${kind}`);
+          yield* flush;
+
+          if (kind === "synthetic") {
+            handle(
+              claudeSdkMessageFixture({
+                type: "user",
+                session_id: claudeRef.externalSessionId,
+                uuid: claudeSdkMessageUuidFixture("syn-wake-user"),
+                isSynthetic: true,
+                origin: { kind: "task-notification" },
+                message: { role: "user", content: "<task-notification>done</task-notification>" },
+              }),
+            );
+          } else if (kind === "non_query") {
+            handle(
+              claudeSdkMessageFixture({
+                type: "user",
+                session_id: claudeRef.externalSessionId,
+                uuid: claudeSdkMessageUuidFixture("nq-wake-user"),
+                shouldQuery: false,
+                origin: { kind: "task-notification" },
+                message: { role: "user", content: "<task-notification>done</task-notification>" },
+              }),
+            );
+          }
+
+          handle(
+            claudeSdkMessageFixture({
+              type: "result",
+              subtype: "success",
+              session_id: claudeRef.externalSessionId,
+              uuid: claudeSdkMessageUuidFixture(`empty-res-${kind}`),
+              is_error: false,
+              num_turns: 0,
+              result: "",
+              stop_reason: null,
+            }),
+          );
+          yield* flush;
+
+          expect(decideClaudeLiveContinuation(session, claudeRef.externalSessionId)).toEqual({
+            kind: "allow",
+          });
+
+          yield* h.advanceTo(DUE);
+          expect(h.resumes).toEqual([
+            { ...claudeRef, sessionScope, resumeMode: "continue_interrupted_turn" },
+          ]);
+        }),
+      );
+    },
+  );
+
   test("does not resume a Claude session while a foreground turn is running at the reset", async () => {
     const h = createHarness();
     await h.run(

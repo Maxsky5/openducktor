@@ -160,7 +160,6 @@ export const createUsageLimitAutoResumeService = (
         stops.cancel(stop.ref, stop.stopId);
         return;
       }
-      const idleCountBefore = stops.idleCount(stop.ref);
       const live = yield* deps.live.read(stop.ref);
       if (!stops.isDue(stop)) return;
       const blockedOnInput = live.type === "live" && hasBlockingInput(live.session);
@@ -169,7 +168,6 @@ export const createUsageLimitAutoResumeService = (
         stops.startResume(stop, {
           blockedOnInput,
           hasActiveTurn,
-          idleCountBefore,
           now: yield* Clock.currentTimeMillis,
           recovery: { kind: "unknown" },
         });
@@ -179,7 +177,6 @@ export const createUsageLimitAutoResumeService = (
       const started = stops.startResume(stop, {
         blockedOnInput: false,
         hasActiveTurn: false,
-        idleCountBefore,
         now: yield* Clock.currentTimeMillis,
         recovery,
       });

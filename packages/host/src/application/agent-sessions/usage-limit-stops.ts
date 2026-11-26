@@ -52,6 +52,8 @@ export type TrackedUsageLimitStop = {
 
 type MutableStop = {
   -readonly [Field in keyof TrackedUsageLimitStop]: TrackedUsageLimitStop[Field];
+} & {
+  sawIdleWhileDue: boolean;
 };
 
 /** The stops whose due time passed, and the next due time of the others. */
@@ -61,7 +63,6 @@ export type DueStops = { due: TrackedUsageLimitStop[]; nextDueAt: number | undef
 export type DueCheck = {
   blockedOnInput: boolean;
   hasActiveTurn?: boolean;
-  idleCountBefore?: number;
   now: number;
   recovery: UsageLimitRecovery;
 };
@@ -94,12 +95,8 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
   const ended = new Set<string>();
   /** Counts new work of each session, so a history read can tell that the session moved on. */
   const workCounts = new Map<string, number>();
-  /** Sessions whose latest observed live snapshot has an active foreground turn. */
+  /** Supported sessions whose latest observed live snapshot has an active foreground turn. */
   const activeForegroundKeys = new Set<string>();
-  /** Counts transitions to idle so an in-flight due check can tell that a wake already ended. */
-  const idleCounts = new Map<string, number>();
-  /** Tool call IDs already observed per session, so later progress updates do not count as new work. */
-  const knownToolCallIds = new Map<string, Set<string>>();
 
   const isCurrent = (stop: TrackedUsageLimitStop): boolean =>
     stops.get(agentSessionRefKey(stop.ref)) === stop;
@@ -127,20 +124,12 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
     end(key);
   };
 
-  const recordToolCallId = (key: string, callId: string): void => {
-    let calls = knownToolCallIds.get(key);
-    if (!calls) {
-      calls = new Set();
-      knownToolCallIds.set(key, calls);
-    }
-    calls.add(callId);
-  };
-
   const noteIdle = (key: string): void => {
     activeForegroundKeys.delete(key);
-    idleCounts.set(key, (idleCounts.get(key) ?? 0) + 1);
     const stop = stops.get(key);
-    if (stop?.phase === "waiting_for_idle") setPhase(stop, "scheduled");
+    if (!stop) return;
+    if (stop.phase === "due") stop.sawIdleWhileDue = true;
+    else if (stop.phase === "waiting_for_idle") setPhase(stop, "scheduled");
   };
 
   /** Moves an eligible stop to the root check. The caller runs the check. */
@@ -181,6 +170,7 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
         turnEnded: false,
         phase: "observed",
         failure: undefined,
+        sawIdleWhileDue: false,
       });
       return null;
     }
@@ -206,6 +196,7 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
   };
 
   const observeSession = (session: AgentSessionLiveSnapshot): void => {
+    if (!supportsUsageLimitAutoResume(session.ref.runtimeKind)) return;
     const key = agentSessionRefKey(session.ref);
     if (!hasForegroundTurn(session)) {
       noteIdle(key);
@@ -232,6 +223,7 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
       switch (envelope.type) {
         case "transcript_event": {
           const { event } = envelope;
+          if (!supportsUsageLimitAutoResume(event.sessionRef.runtimeKind)) return null;
           const key = agentSessionRefKey(event.sessionRef);
           if (event.type === "turn_error") {
             if (event.usageLimit && event.messageId) return observeLimitError(key, event);
@@ -241,17 +233,11 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
           }
           if (isAcceptedUserMessage(event)) {
             newWork(key);
-          } else {
-            const isNewWork = isNewTurnWorkEvent(event, knownToolCallIds.get(key));
-            if (event.type === "assistant_part" && event.part.kind === "tool") {
-              recordToolCallId(key, event.part.callId);
-            }
-            if (isNewWork) {
-              const stop = stops.get(key);
-              if (stop?.phase !== "resuming") {
-                if (stop?.turnEnded === false) countWork(key);
-                else newWork(key);
-              }
+          } else if (isNewTurnWorkEvent(event)) {
+            const stop = stops.get(key);
+            if (stop?.phase !== "resuming") {
+              if (stop?.turnEnded === false) countWork(key);
+              else newWork(key);
             }
           }
           if (event.type === "session_idle") noteIdle(key);
@@ -268,8 +254,9 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
           observeSession(envelope.session);
           return null;
         case "session_removed": {
+          if (!supportsUsageLimitAutoResume(envelope.ref.runtimeKind)) return null;
           const key = agentSessionRefKey(envelope.ref);
-          knownToolCallIds.delete(key);
+          workCounts.delete(key);
           noteIdle(key);
           return null;
         }
@@ -278,6 +265,7 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
           return null;
         case "session_operation_updated": {
           const { observation } = envelope;
+          if (!supportsUsageLimitAutoResume(observation.ref.runtimeKind)) return null;
           const key = agentSessionRefKey(observation.ref);
           if (!observation.pending) return null;
           // A Stop, or a Resume that the owner did not start, ends the planned auto-resume.
@@ -316,6 +304,7 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
         const dueAt = dueAtOf(stop);
         if (dueAt <= now) {
           stop.phase = "due";
+          stop.sawIdleWhileDue = false;
           due.push(stop);
         } else nextDueAt = Math.min(nextDueAt ?? dueAt, dueAt);
       }
@@ -332,10 +321,7 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
         end(key);
         return false;
       }
-      const becameIdleDuringCheck =
-        check.hasActiveTurn === true &&
-        check.idleCountBefore !== undefined &&
-        (idleCounts.get(key) ?? 0) !== check.idleCountBefore;
+      const becameIdleDuringCheck = check.hasActiveTurn === true && current.sawIdleWhileDue;
       const stillActive =
         activeForegroundKeys.has(key) || (check.hasActiveTurn === true && !becameIdleDuringCheck);
       if (stillActive) {
@@ -402,8 +388,6 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
     hasStop: (ref: AgentSessionLiveRef): boolean => stops.has(agentSessionRefKey(ref)),
     /** The work count before a history read, to compare after it. */
     workCount: (ref: AgentSessionLiveRef): number => workCounts.get(agentSessionRefKey(ref)) ?? 0,
-    /** The idle count before a due check, to detect a wake that finished while the check ran. */
-    idleCount: (ref: AgentSessionLiveRef): number => idleCounts.get(agentSessionRefKey(ref)) ?? 0,
     /**
      * Adds a stop that runtime history reports after a host start. A passed reset waits for a
      * manual Resume. New work or a live stop during the read is newer than the history.
@@ -431,6 +415,7 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
         turnEnded: true,
         phase: "observed",
         failure: undefined,
+        sawIdleWhileDue: false,
       };
       if (ended.has(stopKey(stop))) return null;
       stops.set(key, stop);
@@ -460,8 +445,6 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
       ended.clear();
       workCounts.clear();
       activeForegroundKeys.clear();
-      idleCounts.clear();
-      knownToolCallIds.clear();
     },
   };
 };

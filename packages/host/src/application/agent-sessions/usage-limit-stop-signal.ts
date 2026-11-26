@@ -3,19 +3,17 @@ import { z } from "zod";
 
 type TranscriptEvent = Extract<AgentSessionLiveEnvelope, { type: "transcript_event" }>["event"];
 
-const backgroundTaskMetadataSchema = z.object({
-  backgroundTaskId: z.string().min(1),
-});
+const toolProgressMetadataSchema = z.union([
+  z.object({ backgroundTaskId: z.string().min(1) }),
+  z.object({ elapsedTimeSeconds: z.number() }),
+]);
 
 /**
  * Assistant output that proves a turn ran new model work. Background subagent updates,
- * background tool progress, and updates to existing tool calls can arrive after a failed turn
- * without starting a new reply.
+ * background tool updates (`backgroundTaskId`), and `tool_progress` heartbeats
+ * (`elapsedTimeSeconds`) can arrive after a failed turn without starting a new reply.
  */
-export const isNewTurnWorkEvent = (
-  event: TranscriptEvent,
-  knownToolCalls: ReadonlySet<string> | undefined,
-): boolean => {
+export const isNewTurnWorkEvent = (event: TranscriptEvent): boolean => {
   switch (event.type) {
     case "assistant_delta":
     case "assistant_message":
@@ -29,8 +27,7 @@ export const isNewTurnWorkEvent = (
           return true;
         case "tool":
           if (event.part.status !== "pending" && event.part.status !== "running") return false;
-          if (backgroundTaskMetadataSchema.safeParse(event.part.metadata).success) return false;
-          return !knownToolCalls?.has(event.part.callId);
+          return !toolProgressMetadataSchema.safeParse(event.part.metadata).success;
         case "subagent":
           return false;
       }

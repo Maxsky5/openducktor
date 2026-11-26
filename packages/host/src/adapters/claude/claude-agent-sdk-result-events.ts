@@ -117,12 +117,17 @@ export const handleClaudeResultMessage = ({
     const hasCurrentAssistant =
       session.lastAssistantNativeUuid &&
       session.lastAssistantNativeUuidTurnIndex === completedUserTurnIndex;
-    // An empty SDK-initiated result only acknowledges a notification without running a new reply.
+    const hasResultTurnEvidence =
+      message.num_turns > 0 || (message.subtype === "success" && message.stop_reason !== null);
+    // An empty non-query or notification-only result does no model work and must not mark an
+    // interrupted turn complete.
     const completedOwnTurn =
-      !session.sdkInitiatedTurnActive ||
       resultText.length > 0 ||
-      hasCurrentFinalText ||
-      hasCurrentAssistant;
+      Boolean(hasCurrentFinalText) ||
+      Boolean(hasCurrentAssistant) ||
+      (isClaudeForegroundTurnActive(session) &&
+        !session.sdkInitiatedTurnActive &&
+        hasResultTurnEvidence);
     if (completedOwnTurn) {
       // A tool-only result carries no assistant text, so the turn index is the only
       // record that the latest accepted turn finished.
@@ -134,10 +139,10 @@ export const handleClaudeResultMessage = ({
     // On resume, Claude Code sends an empty result for notifications that it writes only to the
     // transcript.
     const endsOwnTurnWithoutText =
+      completedOwnTurn &&
       resultText.length === 0 &&
       isClaudeForegroundTurnActive(session) &&
-      !hasCurrentFinalText &&
-      (!session.sdkInitiatedTurnActive || hasCurrentAssistant);
+      !hasCurrentFinalText;
     if (endsOwnTurnWithoutText) {
       emitFinalAssistantMarker({ emit, message, session, timestamp });
     }
@@ -170,6 +175,10 @@ export const handleClaudeResultMessage = ({
     }
     if (session.lastAssistantTextTurnIndex === completedUserTurnIndex) {
       delete session.lastAssistantTextFinal;
+    }
+    if (session.lastAssistantNativeUuidTurnIndex === completedUserTurnIndex) {
+      delete session.lastAssistantNativeUuid;
+      delete session.lastAssistantNativeUuidTurnIndex;
     }
     const errors = message.subtype === "success" ? [] : message.errors;
     const terminalReason = message.subtype === "success" ? undefined : message.terminal_reason;

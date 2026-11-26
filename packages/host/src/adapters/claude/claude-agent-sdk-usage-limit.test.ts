@@ -636,4 +636,118 @@ describe("Claude usage-limit recovery", () => {
       error: { reason: "completed_turn" },
     });
   });
+
+  test.each([
+    { name: "a synthetic wake user frame", kind: "synthetic" },
+    { name: "a non-query wake user frame", kind: "non_query" },
+    { name: "a display-only result with no user frame", kind: "display_only" },
+  ] as const)(
+    "does not mark an interrupted turn complete on an empty result from $name",
+    ({ kind }) => {
+      const timestamp = "2026-10-08T07:53:48.000Z";
+      const session = createClaudeSession({
+        activity: "running",
+        foregroundTurnActive: true,
+        pendingUserTurnCount: 1,
+        acceptedUserMessages: [
+          {
+            messageId: "user-1",
+            text: "Build",
+            parts: [],
+            timestamp,
+          },
+        ],
+      });
+      const events: AgentEvent[] = [];
+      const handle = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"]) =>
+        handleClaudeSdkMessage({
+          session,
+          message,
+          timestamp,
+          emit: (event) => events.push(event),
+          modelSelection: (modelId) => ({ providerId: "claude", modelId, runtimeKind: "claude" }),
+        });
+
+      // The interrupted turn ran a tool call before hitting the weekly limit.
+      handle(
+        claudeSdkMessageFixture({
+          type: "assistant",
+          uuid: claudeSdkMessageUuidFixture(`pre-limit-tool-${kind}`),
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          message: {
+            id: `pre-limit-tool-${kind}`,
+            role: "assistant",
+            content: [{ type: "tool_use", id: "tu-pre-1", name: "Bash", input: { command: "ls" } }],
+            stop_reason: "tool_use",
+          },
+        }),
+      );
+      handle(
+        claudeSdkMessageFixture({
+          type: "assistant",
+          uuid: claudeSdkMessageUuidFixture(`limit-err-${kind}`),
+          session_id: "session-1",
+          error: "rate_limit",
+          message: {
+            id: `limit-err-${kind}`,
+            content: [{ type: "text", text: "You've hit your weekly limit." }],
+            stop_reason: "end_turn",
+          },
+        }),
+      );
+      handle(
+        claudeSdkMessageFixture({
+          type: "result",
+          subtype: "error_during_execution",
+          uuid: claudeSdkMessageUuidFixture(`limit-res-${kind}`),
+          session_id: "session-1",
+          user_message_uuid: "user-1",
+          errors: ["You've hit your weekly limit."],
+        }),
+      );
+      events.length = 0;
+
+      if (kind === "synthetic") {
+        handle(
+          claudeSdkMessageFixture({
+            type: "user",
+            uuid: claudeSdkMessageUuidFixture("synthetic-wake"),
+            session_id: "session-1",
+            isSynthetic: true,
+            origin: { kind: "task-notification" },
+            message: { role: "user", content: "<task-notification>done</task-notification>" },
+          }),
+        );
+      } else if (kind === "non_query") {
+        handle(
+          claudeSdkMessageFixture({
+            type: "user",
+            uuid: claudeSdkMessageUuidFixture("non-query-wake"),
+            session_id: "session-1",
+            shouldQuery: false,
+            origin: { kind: "task-notification" },
+            message: { role: "user", content: "<task-notification>done</task-notification>" },
+          }),
+        );
+      }
+
+      handle(
+        claudeSdkMessageFixture({
+          type: "result",
+          subtype: "success",
+          uuid: claudeSdkMessageUuidFixture(`empty-notif-res-${kind}`),
+          session_id: "session-1",
+          is_error: false,
+          num_turns: 0,
+          result: "",
+          stop_reason: null,
+        }),
+      );
+
+      expect(session.lastSuccessfulResultTurnIndex).toBeUndefined();
+      expect(events.filter((event) => event.type === "assistant_message")).toEqual([]);
+      expect(decideClaudeLiveContinuation(session, "session-1")).toEqual({ kind: "allow" });
+    },
+  );
 });

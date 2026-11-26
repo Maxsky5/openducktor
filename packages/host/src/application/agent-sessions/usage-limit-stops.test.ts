@@ -212,14 +212,12 @@ describe("usage-limit stops", () => {
         contextUsage: null,
       },
     });
-    const idleCountBefore = stops.idleCount(ref);
     stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS);
 
     expect(
       stops.startResume(stop, {
         blockedOnInput: false,
         hasActiveTurn: true,
-        idleCountBefore,
         now: RESET + USAGE_LIMIT_RESUME_GRACE_MS,
         recovery: { kind: "recovered" },
       }),
@@ -250,7 +248,6 @@ describe("usage-limit stops", () => {
       stops.startResume(stop, {
         blockedOnInput: false,
         hasActiveTurn: false,
-        idleCountBefore: stops.idleCount(ref),
         now: RESET + USAGE_LIMIT_RESUME_GRACE_MS + 1_000,
         recovery: { kind: "recovered" },
       }),
@@ -273,7 +270,6 @@ describe("usage-limit stops", () => {
         contextUsage: null,
       },
     });
-    const idleCountBefore = stops.idleCount(ref);
     stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS);
 
     // Wake finishes before startResume runs.
@@ -295,7 +291,6 @@ describe("usage-limit stops", () => {
       stops.startResume(stop, {
         blockedOnInput: false,
         hasActiveTurn: true,
-        idleCountBefore,
         now: RESET + USAGE_LIMIT_RESUME_GRACE_MS,
         recovery: { kind: "unknown" },
       }),
@@ -303,31 +298,11 @@ describe("usage-limit stops", () => {
     expect(stops.takeDue(RESET + USAGE_LIMIT_RESUME_GRACE_MS).due).toEqual([stop]);
   });
 
-  test("ignores running progress for background or existing tool calls while cancelling on new tool calls", () => {
-    const stops = createUsageLimitStops(() => {});
-    stops.setEnabled(true);
-    stops.observe({
-      type: "transcript_event",
-      event: {
-        ...eventBase,
-        type: "assistant_part",
-        part: {
-          kind: "tool",
-          messageId: "turn-1",
-          partId: "call-existing-1",
-          tool: "Bash",
-          toolType: "bash",
-          callId: "call-existing-1",
-          status: "running",
-        },
-      },
-    });
-    stops.observe(limitError(RESET));
-    const stop = stops.observe(turnFailed);
-    if (!stop) throw new Error("Expected a stop to plan.");
+  test("ignores running progress for background or tool_progress updates while cancelling on new tool calls", () => {
+    const { stops, stop } = planningStop();
     stops.planned(stop, true);
 
-    // Existing call progress without background metadata.
+    // Elapsed tool_progress heartbeat without background metadata.
     stops.observe({
       type: "transcript_event",
       event: {
@@ -345,7 +320,7 @@ describe("usage-limit stops", () => {
         },
       },
     });
-    // Background task progress even if the original call predated this process.
+    // Background task progress update.
     stops.observe({
       type: "transcript_event",
       event: {
@@ -386,6 +361,49 @@ describe("usage-limit stops", () => {
       },
     });
     expect(stops.entry(ref)).toBeNull();
+  });
+
+  test("ignores unsupported runtimes and releases per-session work state on session removal", () => {
+    const stops = createUsageLimitStops(() => {});
+    const opencodeRef: AgentSessionLiveRef = {
+      ...ref,
+      runtimeKind: "opencode",
+      externalSessionId: "opencode-1",
+    };
+
+    stops.observe({
+      type: "transcript_event",
+      event: {
+        externalSessionId: opencodeRef.externalSessionId,
+        timestamp: new Date(BASE).toISOString(),
+        sessionRef: opencodeRef,
+        type: "assistant_part",
+        part: {
+          kind: "tool",
+          messageId: "m-1",
+          partId: "p-1",
+          tool: "Bash",
+          toolType: "bash",
+          callId: "call-1",
+          status: "running",
+        },
+      },
+    });
+    expect(stops.workCount(opencodeRef)).toBe(0);
+
+    stops.observe({
+      type: "transcript_event",
+      event: {
+        ...eventBase,
+        type: "assistant_message",
+        messageId: "m-2",
+        message: "Done.",
+      },
+    });
+    expect(stops.workCount(ref)).toBe(1);
+
+    stops.observe({ type: "session_removed", ref });
+    expect(stops.workCount(ref)).toBe(0);
   });
 
   test("ends a scheduled Claude stop on assistant output or a non-limit turn error", () => {
