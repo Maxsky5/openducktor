@@ -19,8 +19,12 @@ const chat = (markdown: string, streaming = false): ReactElement => (
 
 type OpenFile = (href: string, trigger: HTMLAnchorElement) => void;
 
-const withFiles = (open: OpenFile, children: ReactNode): ReactElement => (
-  <ChatFileLinkContext value={{ openFile: open, relativePathsAreWindows: false }}>
+const withFiles = (
+  open: OpenFile,
+  children: ReactNode,
+  relativePathsAreWindows = false,
+): ReactElement => (
+  <ChatFileLinkContext value={{ openFile: open, relativePathsAreWindows }}>
     {children}
   </ChatFileLinkContext>
 );
@@ -147,6 +151,24 @@ describe("AgentChatMarkdownRenderer", () => {
 });
 
 describe("chat file links", () => {
+  test("opens an inline backslash path only when complete in a Windows workspace", () => {
+    const open = mock<OpenFile>(() => {});
+    const path = "src\\main.ts:42";
+    const openSpan = `Read \`${path}`;
+    const closedSpan = `${openSpan}\``;
+    const view = render(withFiles(open, chat(openSpan, true), true));
+    expect(view.queryByRole("link", { name: path })).toBeNull();
+
+    view.rerender(withFiles(open, chat(closedSpan, true), true));
+    const link = view.getByRole("link", { name: path });
+    expect(link.querySelector("svg use")?.getAttribute("href")).toContain("typescript");
+    fireEvent.click(link);
+    expect(open).toHaveBeenCalledWith(path, link);
+
+    view.rerender(withFiles(open, chat(closedSpan, true)));
+    expect(view.queryByRole("link", { name: path })).toBeNull();
+  });
+
   test("links each inline path at its closing backtick and opens the full destination", () => {
     const open = mock<OpenFile>(() => {});
     const path = "apps/api/src/lib/auth.ts:42:3";

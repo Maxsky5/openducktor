@@ -32,6 +32,7 @@ type Props = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
   streaming: boolean;
   options: HtmlOptions;
   chip: MarkdownLocalLinks["chip"];
+  windows: boolean;
   islands?: ReactiveIslands | undefined;
 };
 
@@ -41,6 +42,7 @@ export function MarkdownWithInlineFileLinks({
   streaming,
   islands,
   chip,
+  windows,
   options: htmlOptions,
   ...props
 }: Props) {
@@ -65,7 +67,7 @@ export function MarkdownWithInlineFileLinks({
     return next;
   }, [htmlOptions, htmlIslands, id]);
   const [initial] = useState(() => {
-    const formatter = createInlineFileLinkRenderer(options, chip);
+    const formatter = createInlineFileLinkRenderer(options, chip, windows);
     try {
       const markup = { __html: formatter.render(children, streaming, streaming).html };
       return { formatter, options, markup };

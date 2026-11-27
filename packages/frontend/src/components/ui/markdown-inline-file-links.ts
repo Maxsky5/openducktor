@@ -12,12 +12,17 @@ const HTML_TOKENS =
   /<(a|pre)(?=[ >])[^>]*>[\s\S]*?<\/\1>|<(p|li|h[1-6]|th|td)(?=[ >])[^>]*>|<code(?: data-markdown="code")?>([^<]*)<\/code>/g;
 const BLOCK_TAGS = /<(p|li|h[1-6]|th|td)(?=[ >])[^>]*>/g;
 const MARKED_BLOCK_TAGS = /<(p|li|h[1-6]|th|td) data-markdown="\1"(?=[ >])/g;
-const POSSIBLE_FILE_CODE = /<code data-markdown="code">[\w.-]+\//;
+const POSSIBLE_FILE_CODE = /<code data-markdown="code">[\w.-]+[/\\]/;
 
 type Cursor = { offset: number; block: number; tag: string; code: number };
 type FileSpan = Cursor & { markup: string; path: string };
 
-function* fileSpans(html: string, from: Cursor, formatted: boolean): Generator<FileSpan> {
+function* fileSpans(
+  html: string,
+  from: Cursor,
+  formatted: boolean,
+  windows: boolean,
+): Generator<FileSpan> {
   let { block, tag, code } = from;
   for (const match of html.slice(from.offset).matchAll(HTML_TOKENS)) {
     const [markup, , blockTag, path] = match;
@@ -29,11 +34,12 @@ function* fileSpans(html: string, from: Cursor, formatted: boolean): Generator<F
     }
     if (path === undefined) continue;
     code++;
+    if (path.length > MAX_PATH_LENGTH) continue;
+    const relative = windows ? path.replaceAll("\\", "/") : path;
     if (
-      path.length <= MAX_PATH_LENGTH &&
-      !WEB_ADDRESS.test(path) &&
-      RELATIVE_FILE.test(path) &&
-      !DOT_SEGMENT.test(path.startsWith("./") ? path.slice(2) : path)
+      !WEB_ADDRESS.test(relative) &&
+      RELATIVE_FILE.test(relative) &&
+      !DOT_SEGMENT.test(relative.startsWith("./") ? relative.slice(2) : relative)
     ) {
       yield { markup, path, block, tag, code, offset: from.offset + match.index + markup.length };
     }
@@ -58,11 +64,15 @@ function stableBlockCount(tags: RegExp) {
   };
 }
 
-function linkCompleteHtml(html: string, chip: MarkdownLocalLinks["chip"]): string {
+function linkCompleteHtml(
+  html: string,
+  chip: MarkdownLocalLinks["chip"],
+  windows: boolean,
+): string {
   if (!POSSIBLE_FILE_CODE.test(html)) return html;
   let offset = 0;
   let linked = "";
-  for (const span of fileSpans(html, startOfHtml(0), true)) {
+  for (const span of fileSpans(html, startOfHtml(0), true, windows)) {
     linked +=
       html.slice(offset, span.offset - span.markup.length) +
       renderMarkdownLocalLink(span.path, span.markup, chip, "inline-code");
@@ -87,6 +97,7 @@ type CheckedPrefix = {
 export function createInlineFileLinkRenderer(
   initial: HtmlOptions,
   initialChip: MarkdownLocalLinks["chip"],
+  windows: boolean,
 ): HtmlRenderer & { setLinkChip(chip: MarkdownLocalLinks["chip"]): void } {
   const renderer = createHtmlRenderer(initial);
   let options = initial;
@@ -106,7 +117,7 @@ export function createInlineFileLinkRenderer(
 
   function linkPending(update: HtmlUpdate, source: string, incomplete: boolean): string {
     const html = update.pending;
-    if (!incomplete) return linkCompleteHtml(html, chip);
+    if (!incomplete) return linkCompleteHtml(html, chip, windows);
     if (!POSSIBLE_FILE_CODE.test(html)) {
       checked = undefined;
       return html;
@@ -135,13 +146,23 @@ export function createInlineFileLinkRenderer(
     checked = prefix;
     let offset = prefix?.display.offset ?? 0;
     let linked = prefix?.linked ?? "";
-    const confirmed = fileSpans(strictHtml, prefix?.strict ?? startOfHtml(strictBlocks), false);
+    const confirmed = fileSpans(
+      strictHtml,
+      prefix?.strict ?? startOfHtml(strictBlocks),
+      false,
+      windows,
+    );
     let match = confirmed.next().value;
     let lastMatch: { display: Cursor; strict: Cursor } | undefined;
 
     // Block and code ordinals identify occurrences. Equal paths can appear in different blocks,
     // including a tentative span in the reply body before a completed span in the footnotes.
-    for (const span of fileSpans(html, prefix?.display ?? startOfHtml(displayBlocks), true)) {
+    for (const span of fileSpans(
+      html,
+      prefix?.display ?? startOfHtml(displayBlocks),
+      true,
+      windows,
+    )) {
       while (match && positionDifference(match, span) < 0) match = confirmed.next().value;
       if (
         !match ||
@@ -195,9 +216,9 @@ export function createInlineFileLinkRenderer(
         return update;
       }
 
-      const addition = update.reset ? "" : linkCompleteHtml(update.addition, chip);
+      const addition = update.reset ? "" : linkCompleteHtml(update.addition, chip, windows);
       const stable = update.reset
-        ? linkCompleteHtml(update.stable, chip)
+        ? linkCompleteHtml(update.stable, chip, windows)
         : (result?.stable ?? "") + addition;
       let pending: string | undefined;
       // Keep pending lazy so a Words delta can append text or update an open fence in place.

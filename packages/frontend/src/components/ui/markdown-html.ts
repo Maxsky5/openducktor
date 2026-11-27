@@ -12,7 +12,7 @@ export type MarkdownLocalLinks = {
   handles(href: string): boolean;
   open(href: string, anchor: HTMLAnchorElement): void;
   /** Detect unambiguous file paths in inline code. */
-  inlineFilePaths?: boolean;
+  inlineFilePaths?: "posix" | "windows";
   /** Trusted markup for a local link chip. */
   chip?: MarkdownLocalLinkChip;
 };
