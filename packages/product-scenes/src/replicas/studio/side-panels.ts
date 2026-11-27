@@ -34,14 +34,16 @@ export function slideOpen(
 ): void {
   panel.hidden = false;
   handle.hidden = false;
-  const open = panel.getBoundingClientRect()[size];
+  // The layout size, which a scale transform of the stage does not change.
+  const open = size === "width" ? panel.offsetWidth : panel.offsetHeight;
   gsap.set(content, { [size]: open });
   scene.run(
+    // The basis has its unit, because GSAP takes the unit of the CSS basis, such as a percent.
     gsap.fromTo(
       panel,
-      { flexBasis: 0 },
+      { flexBasis: "0px" },
       {
-        flexBasis: open,
+        flexBasis: `${open}px`,
         duration: PANEL_OPEN,
         ease: EASE.arrive,
         clearProps: "flexBasis",

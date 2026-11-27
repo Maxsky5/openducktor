@@ -78,7 +78,7 @@ export function OpenInMenu({ tool, menu = false, appIcon = false }: OpenInMenuPr
             <Icon className="i14" />
           </span>
         )}
-        {tool.label}
+        <span className="oi-name">{tool.label}</span>
       </Button>
       <Button variant="outline" size="sm" className="oi-trigger" data-oi-trigger>
         <ChevronDown className={appIcon ? "i14" : "i12"} />

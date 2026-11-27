@@ -1,17 +1,48 @@
 @layer views {
   :where(.stage) {
     /*
-     * New session: the window is as tall as the New session dialog with the filled fields of New
-     * worktree and the margin of its positioner, so the dialog shows every field without a scroll,
-     * as in a window of normal height. A phone stage keeps the height of the other scenes, and the
-     * dialog body scrolls.
+     * New session: the window is wide enough for the chat next to the right panel of the ready
+     * session, and tall enough for the popover of Auto branch under the options bar of the draft,
+     * as the stage of the draft starts at 30% of the window height. A phone stage keeps the size of
+     * the other scenes.
      */
     .ns-window {
-      --window-height: 936;
+      --design-width: 1100;
+      --window-height: 680;
     }
+    /* The right panel of the ready session takes 37% of the row: TOOLS_PANEL_SIZES of
+       workspace-session-content.tsx. */
+    .ns-window .tpage-right {
+      flex-basis: 37%;
+    }
+    .ns-right {
+      display: flex;
+      flex-direction: column;
+    }
+    /* The top bar of the session is wider than 640 pixels, so it keeps Open In with its label. */
+    .ns-window .oi {
+      display: flex;
+    }
+    /* A phone stage shows the chat of the session and no side panel. */
     @container stage (width <= 500px) {
       .ns-window {
+        --design-width: 440;
         --window-height: 640;
+      }
+      .ns-window :is(.tpage-right, [data-right-handle]) {
+        display: none;
+      }
+      /* The top bar is 640 pixels wide or less, so Add action, Archive, and Open In show only their
+         icons, as @max-[640px]/session-header hides their labels. */
+      .ns-window :is(.ra-add-label, .sh-split-main > span, .oi-name) {
+        display: none;
+      }
+      .ns-window .oi-default {
+        padding: 0 calc(4 * var(--u));
+      }
+      /* The composer keeps its attach button, as the app does. */
+      .ns-window .st-attach {
+        display: grid;
       }
     }
   }

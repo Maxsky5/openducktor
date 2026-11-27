@@ -121,6 +121,10 @@
         color-mix(in oklab, var(--primary-foreground) 25%, transparent);
       border-radius: 0 calc(10 * var(--u)) calc(10 * var(--u)) 0;
     }
+    /* The default Button has hover:bg-primary/90, an opaque mix with the sidebar under it. */
+    .sb-create > .sb-create-menu[data-hover] {
+      background: color-mix(in srgb, var(--primary) 90%, var(--sidebar));
+    }
     .sb-controls {
       display: flex;
       flex: 0 0 auto;
@@ -166,11 +170,12 @@
       height: calc(32 * var(--u));
       color: var(--sidebar-muted-foreground);
     }
+    /* The groups of session-navigation-list.tsx: one flex-col without a gap, where each group has
+       gap-1 pb-4. */
     .sb-sessions {
       display: flex;
       flex: 1;
       flex-direction: column;
-      gap: calc(12 * var(--u));
       min-height: 0;
       padding: 0 calc(12 * var(--u)) calc(12 * var(--u));
       overflow: hidden;

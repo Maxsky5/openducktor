@@ -11,12 +11,15 @@ import { motionState } from "./state";
 /** Seconds of one rendered frame, when a renderer plays a scene or a film up to a time. */
 const FRAME = 1 / 60;
 
+/** Times closer than this are the same time: GSAP rounds the time of a timeline to 7 decimals. */
+const SAME_TIME = 1e-6;
+
 /**
  * Calls `show` with each frame time after `from`, up to `to`, so a renderer that moves forward runs
  * each change of a scene at its time: the steps of a scene measure the page when they run.
  */
 export function stepForward(from: number, to: number, show: (time: number) => void): void {
-  for (let at = from; at < to;) {
+  for (let at = from; to - at > SAME_TIME;) {
     at = Math.min(to, at + FRAME);
     show(at);
   }
@@ -94,7 +97,7 @@ export function mountScene<Template extends string>(
         throw new Error(`Seek to a time from 0 to below ${length.toFixed(2)} s, not ${time} s.`);
       playing = false;
       update();
-      if (time < current().time()) {
+      if (time < current().time() - SAME_TIME) {
         loop?.stop();
         loop = startLoop();
       }

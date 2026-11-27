@@ -7,6 +7,9 @@ import type { AppCurve } from "./gsap";
  */
 const DESKTOP_EASE_OUT: AppCurve = "desktop-ease-out";
 
+/** cubic-bezier(0.23, 1, 0.32, 1): the glides and the entries of a new session of the desktop app. */
+const DESKTOP_GLIDE: AppCurve = "desktop-glide";
+
 export const EASE = {
   /** An element comes in or grows, and slows down at the end. */
   enter: "power2.out",
@@ -20,6 +23,11 @@ export const EASE = {
   arrive: "power3.out",
   /** A dialog closes, and its overlay fades out. */
   dismiss: "power1.in",
+  /**
+   * The composer of a new session glides to its dock, and the startup card and the sent message
+   * come in: the curve of useComposerDockGlide and inline-session-startup.css.
+   */
+  glide: DESKTOP_GLIDE,
   /** A row, a tool call, or a fold of the chat of the app, on --motion-ease-out. */
   chat: DESKTOP_EASE_OUT,
   /**

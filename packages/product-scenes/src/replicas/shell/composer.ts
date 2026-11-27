@@ -50,12 +50,26 @@ export function composerDraft(scene: Scene, root: HTMLElement) {
   const ready = (at: number): void =>
     scene.at(at, () => button.toggleAttribute("data-ready", true));
 
-  /** Types `text` from `at`. Returns the end of the typing. */
-  const type = (text: string, at: number, charsPerSecond: number): number => {
+  /**
+   * Types `text` from `at`. `onText` gets each new text, for a view that shows the draft in more
+   * than one place. Returns the end of the typing.
+   */
+  const type = (
+    text: string,
+    at: number,
+    charsPerSecond: number,
+    onText?: (shown: string) => void,
+  ): number => {
     focus(at);
     draft(at);
     ready(at);
-    return typeText(scene, typed, text, at, { charsPerSecond });
+    return typeText(
+      scene,
+      typed,
+      text,
+      at,
+      onText ? { charsPerSecond, onText } : { charsPerSecond },
+    );
   };
 
   /** Empties the draft at `at`, as a send does. */

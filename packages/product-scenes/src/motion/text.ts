@@ -117,7 +117,12 @@ export type Typing = {
   onText?: (text: string) => void;
 };
 
-/** Types `text` into `element` at a human pace. The element is empty at build time. Returns the end time. */
+/**
+ * Types `text` into `element` at a human pace. The element is empty at build time. While keys
+ * arrive, the element has `data-keying`, so its caret does not blink. The blink then starts again
+ * from its visible half, so the caret stays solid a little after the last key, as in a real
+ * field. Returns the end time.
+ */
 export function typeText(
   scene: Scene,
   element: HTMLElement,
@@ -129,6 +134,10 @@ export function typeText(
   const duration = text.length / charsPerSecond;
   element.textContent = "";
   onText?.("");
+  if (text.length > 0) {
+    scene.at(at, () => element.toggleAttribute("data-keying", true));
+    scene.at(at + duration, () => element.removeAttribute("data-keying"));
+  }
   scene.timeline.to(
     progress,
     {

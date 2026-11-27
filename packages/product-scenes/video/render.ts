@@ -12,6 +12,7 @@ import { chromium } from "playwright-core";
 import { createServer } from "vite";
 import { FILM_NAMES, FILMS, type FilmName } from "../src/films/registry";
 import type { LoopSceneName } from "../src/registry";
+import { seconds, stageWidth } from "./options";
 import { filmName, VIDEO_SCENES, videoScene } from "./scenes";
 
 /** The size of each video format, in pixels. */
@@ -23,7 +24,7 @@ const FORMATS = new Map<string, { width: number; height: number }>([
 
 const VIDEO_DIR = import.meta.dir;
 
-const USAGE = `Usage: bun run render:video -- --scene <name> | --film <name> [--format 16:9|1:1|9:16] [--theme light|dark] [--keys mac|pc] [--fps 60] [--scale 1|2] [--blur N] [--from S] [--seconds N] [--out file.mp4] [--frames dir] [--snap S1,S2]
+const USAGE = `Usage: bun run render:video -- --scene <name> | --film <name> [--format 16:9|1:1|9:16] [--stage PX] [--theme light|dark] [--keys mac|pc] [--fps 60] [--scale 1|2] [--blur N] [--from S] [--seconds N] [--out file.mp4] [--frames dir] [--snap S1,S2]
 Scenes: ${VIDEO_SCENES.join(", ")}
 Films: ${FILM_NAMES.join(", ")}`;
 
@@ -54,17 +55,12 @@ type Job = {
   keys: string;
   /** The pixels of the video for each CSS pixel of the page: 2 renders a 1920 x 1080 frame in 4K. */
   scale: number;
+  /** The stage width of a scene in CSS pixels, such as 390 for the phone layout. */
+  stage: number | undefined;
   /** The video file, or the folder of the still images. */
   out: string;
   output: Video | Snaps;
 };
-
-/** Reads a time in seconds that is 0 or more. */
-function seconds(value: string, option: string): number {
-  const time = Number(value);
-  if (!(time >= 0)) throw new Error(`Set ${option} to a time in seconds, 0 or more.`);
-  return time;
-}
 
 function readJob(): Job {
   const { values } = parseArgs({
@@ -73,6 +69,7 @@ function readJob(): Job {
       scene: { type: "string" },
       film: { type: "string" },
       format: { type: "string" },
+      stage: { type: "string" },
       theme: { type: "string", default: "light" },
       keys: { type: "string", default: "mac" },
       fps: { type: "string" },
@@ -103,6 +100,7 @@ function readJob(): Job {
   if (values.keys !== "mac" && values.keys !== "pc") throw new Error("Set --keys to mac or pc.");
   const scale = Number(values.scale);
   if (scale !== 1 && scale !== 2) throw new Error("Set --scale to 1 or 2.");
+  const stage = stageWidth(values.stage, subject.kind === "film");
 
   let output: Video | Snaps;
   if (values.snap === undefined) {
@@ -150,6 +148,7 @@ function readJob(): Job {
     theme: values.theme,
     keys: values.keys,
     scale,
+    stage,
     out: resolve(values.out ?? join(VIDEO_DIR, "out", file)),
     output,
   };
@@ -225,7 +224,8 @@ function pageQuery(job: Job): URLSearchParams {
   if (job.subject.kind === "film")
     return new URLSearchParams({ film: job.subject.name, theme, keys });
   const size = { width: String(job.width), height: String(job.height) };
-  return new URLSearchParams({ scene: job.subject.name, theme, keys, ...size });
+  const stage = job.stage === undefined ? {} : { stage: String(job.stage) };
+  return new URLSearchParams({ scene: job.subject.name, theme, keys, ...size, ...stage });
 }
 
 /** The frame times of the video: from `--from`, for `--seconds` or up to the end. */

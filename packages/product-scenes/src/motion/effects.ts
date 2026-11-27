@@ -102,7 +102,11 @@ export function riseIn(
 }
 
 /** Grows an element from zero height, so the elements after it move instead of jumping. */
-export function growIn(element: HTMLElement, duration = 0.4): gsap.core.Tween {
+export function growIn(
+  element: HTMLElement,
+  duration = 0.4,
+  ease: string = EASE.enter,
+): gsap.core.Tween {
   const style = getComputedStyle(element);
   const grown = {
     height: element.offsetHeight,
@@ -119,7 +123,7 @@ export function growIn(element: HTMLElement, duration = 0.4): gsap.core.Tween {
       ...grown,
       autoAlpha: 1,
       duration,
-      ease: EASE.enter,
+      ease,
       clearProps: GROWN,
       onComplete: () => element.removeAttribute(RESIZING),
     },

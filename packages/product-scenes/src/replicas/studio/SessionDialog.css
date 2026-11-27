@@ -1,8 +1,8 @@
 @layer replica {
   :where(.stage) {
-    /* DialogContent with sm:max-w-2xl gap-0 p-0: rounded-xl border bg-popover shadow-xl, and at
-       most the height of the window less 2rem. The header and the footer stay, and the body
-       scrolls between them. */
+    /* The dialog shell of the Fork session and the Import session dialogs: DialogContent with
+       sm:max-w-2xl gap-0 p-0, rounded-xl border bg-popover shadow-xl, and at most the height of
+       the window less 2rem. The header and the footer stay, and the body scrolls between them. */
     .sc-overlay {
       padding: calc(16 * var(--u));
     }
@@ -73,23 +73,7 @@
       color: var(--muted-foreground);
       font-weight: 400;
     }
-    .sc-hint {
-      color: var(--muted-foreground);
-      font-size: calc(12 * var(--u));
-      line-height: calc(16 * var(--u));
-    }
-    /* Custom role: grid-cols-[minmax(0,1fr)_auto] gap-2, with Manage roles as an outline button. */
-    .sc-role {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: center;
-      gap: calc(8 * var(--u));
-    }
-    .sc-role > .ui-button {
-      gap: calc(8 * var(--u));
-      box-shadow: none;
-    }
-    /* DialogFooter: border-t px-6 py-4, Cancel at the start and Create session at the end. */
+    /* DialogFooter: border-t px-6 py-4, Cancel at the start and the confirm button at the end. */
     .sc-foot {
       display: flex;
       flex: none;

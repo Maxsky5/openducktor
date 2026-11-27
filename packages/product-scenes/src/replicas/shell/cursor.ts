@@ -1,5 +1,6 @@
 // The fake pointer of a replica: Pointer.tsx draws the cursor and its click ring.
 import { must } from "../../motion/dom";
+import { designPixel } from "../../motion/effects";
 import { offsetIn, type Point } from "../../motion/offset";
 import { gsap } from "../../motion/gsap";
 import type { Scene } from "../../motion/scene";
@@ -55,9 +56,15 @@ export function pointer(scene: Scene, root: HTMLElement) {
   const point = (find: () => HTMLElement | Point, at: number, travel = 0.9): number => {
     scene.at(at, () => {
       const target = placeOf(find(), root);
-      // A hidden pointer comes in from below and to the right of the target.
-      if (Number(gsap.getProperty(cursor, "opacity")) <= 0.5)
-        gsap.set(cursor, { x: target.x + 90, y: target.y + 70 });
+      // A hidden pointer comes in from below and to the right of the target, from a place inside
+      // the window.
+      if (Number(gsap.getProperty(cursor, "opacity")) <= 0.5) {
+        const edge = 24 * designPixel(root);
+        gsap.set(cursor, {
+          x: Math.min(target.x + 90, root.clientWidth - edge),
+          y: Math.min(target.y + 70, root.clientHeight - edge),
+        });
+      }
       scene.run(gsap.to(cursor, { autoAlpha: 1, duration: 0.2 }));
       scene.run(
         gsap.to(cursor, {
@@ -140,12 +147,20 @@ export function pointer(scene: Scene, root: HTMLElement) {
     else delete cursor.dataset.shape;
   };
 
+  /** Shows the I-beam in place of the arrow from `at` until `until`, while the tip is on text. */
+  const textBeam = (at: number, until: number): void => {
+    scene.at(at, () => {
+      cursor.dataset.shape = "text";
+    });
+    scene.at(until, () => delete cursor.dataset.shape);
+  };
+
   /** Fades the pointer out. */
   const hide = (at: number): void => {
     scene.timeline.to(cursor, { autoAlpha: 0, duration: 0.3 }, at);
   };
 
-  return { point, click, drag, tip, visible, crosshair, hide };
+  return { point, click, drag, tip, visible, crosshair, textBeam, hide };
 }
 
 export type Pointer = ReturnType<typeof pointer>;

@@ -21,9 +21,13 @@ export function createMenu(
   trigger: HTMLElement,
   menu: HTMLElement,
 ) {
-  /** The visitor clicks the arrow from `at`, and the menu opens. Returns the click time. */
+  /**
+   * The visitor clicks the arrow from `at`, and the menu opens. The arrow shows its hover just
+   * before the click, until the menu closes. Returns the click time.
+   */
   const open = (at: number): number => {
     const opened = cursor.click(() => trigger, at, 0.9);
+    scene.at(opened - 0.15, () => trigger.toggleAttribute("data-hover", true));
     scene.at(opened + 0.05, () => {
       root.append(menu);
       const unit = designPixel(root);
@@ -52,6 +56,7 @@ export function createMenu(
     const item = (): HTMLElement => must(menu, `[data-create-item="${action}"]`);
     const picked = cursor.click(item, at, travel);
     scene.at(picked - 0.15, () => item().toggleAttribute("data-hover", true));
+    scene.at(picked + 0.05, () => trigger.removeAttribute("data-hover"));
     scene.at(picked + 0.05, () =>
       scene.run(
         gsap.to(menu, {

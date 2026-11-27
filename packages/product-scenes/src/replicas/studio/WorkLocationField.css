@@ -1,7 +1,7 @@
 @layer replica {
   :where(.stage) {
     /* The fieldset: its legend has mb-2 text-sm font-medium. The radio group is grid gap-3, with
-       one column for each card from the sm breakpoint. */
+       two columns from the sm breakpoint. */
     .wl-legend {
       display: block;
       margin-bottom: calc(8 * var(--u));
@@ -11,12 +11,8 @@
     }
     .wl-options {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: calc(12 * var(--u));
-    }
-    /* Two cards make two columns from the sm breakpoint. */
-    .wl-options[data-columns="2"] {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: calc(12 * var(--u));
     }
     /* An outline button: grid grid-cols-[auto_minmax(0,1fr)_auto] content-start gap-x-3 gap-y-1
        p-3 text-left, with border-input, or dark:border-muted-foreground/60. The selected card keeps
@@ -64,8 +60,7 @@
     }
     /* Below the sm breakpoint, the cards make one column. */
     @container stage (width <= 699px) {
-      .wl-options,
-      .wl-options[data-columns="2"] {
+      .wl-options {
         grid-template-columns: minmax(0, 1fr);
       }
     }

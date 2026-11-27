@@ -29,7 +29,13 @@ export type NavEntry = {
   id: string;
   workspace: WorkspaceName;
   title: string;
-  runtime: RuntimeKind;
+  /**
+   * The runtime of the session, which the row shows. A draft that keeps the default model of the
+   * repository has none, as session-navigation-read-model.ts gives it no runtime.
+   */
+  runtime?: RuntimeKind | undefined;
+  /** The runtime that a later step gives the session. The markup holds its icon hidden. */
+  laterRuntime?: RuntimeKind;
   /** A task session. A chat has no role, no task status, and no tone. */
   role?: RoleId;
   status?: LaneId;
@@ -43,12 +49,29 @@ export type NavEntry = {
   selected?: boolean;
   /** The session runs a repository action or another command in a terminal. */
   commands?: boolean;
+  /**
+   * A new workspace session: its draft before the first message, or the session while it starts.
+   * The row shows the Draft or the Starting badge, and a draft shows the icon of a new session.
+   */
+  draft?: DraftState | undefined;
   /** The session does not show yet, or no longer shows, so the markup hides it. */
   later?: boolean;
 };
 
-/** The fields of an entry that a scene changes. */
-export type NavPatch = Partial<Omit<NavEntry, "id" | "workspace" | "title" | "runtime" | "role">>;
+/** The state of a new workspace session in the list. */
+export type DraftState = "draft" | "starting";
+
+/** The badge labels of a new workspace session, from session-navigation-list.tsx. */
+export const DRAFT_LABELS = {
+  draft: "Draft",
+  starting: "Starting",
+} as const satisfies Record<DraftState, string>;
+
+/**
+ * The fields of an entry that a scene changes. A new session gets its title from its message, and
+ * its runtime when the host saves it.
+ */
+export type NavPatch = Partial<Omit<NavEntry, "id" | "workspace" | "laterRuntime" | "role">>;
 
 /** A session that needs you goes first, then a running session. The others are recent. */
 export function navGroup(entry: NavEntry): NavGroupId {

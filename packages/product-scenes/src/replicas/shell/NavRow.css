@@ -70,6 +70,17 @@
       padding: 0 calc(6 * var(--u));
       font-size: calc(10 * var(--u));
     }
+    /* The badge of a new workspace session: h-4 px-1.5 text-[10px] with border-border bg-muted
+       text-muted-foreground for a draft, and the info colors while the session starts. */
+    .nav-draft {
+      border-color: var(--border);
+      color: var(--muted-foreground);
+    }
+    .nav-draft[data-draft="starting"] {
+      border-color: var(--info-border);
+      background: var(--info-surface);
+      color: var(--info-muted);
+    }
     .nav-time {
       flex: 0 0 auto;
       color: var(--sidebar-foreground);
@@ -85,6 +96,12 @@
       width: calc(16 * var(--u));
       height: calc(16 * var(--u));
       color: var(--sidebar-muted-foreground);
+    }
+    /* sessionEntryIcon of session-navigation-entry-model.ts: a draft shows MessageCirclePlus, and
+       a session that starts or runs shows MessagesSquare. */
+    .nav-icon:not([data-draft="draft"]) > .nav-new,
+    .nav-icon[data-draft="draft"] > .nav-chat {
+      display: none;
     }
     /* The tones of agent-workflow-styles.ts. */
     .nav-icon[data-tone="in_progress"] {
@@ -134,6 +151,9 @@
       flex: 0 0 auto;
       place-items: center;
       color: var(--status-running-foreground);
+    }
+    .nav-runtime {
+      display: contents;
     }
     .nav-row .runtime-logo {
       flex: 0 0 auto;

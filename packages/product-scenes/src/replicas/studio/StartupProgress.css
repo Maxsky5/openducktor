@@ -1,10 +1,10 @@
 @layer replica {
   :where(.stage) {
-    /* The body of the progress: px-4 py-3, with the trace as flex flex-col gap-3. */
+    /* The body of the progress: px-4 py-3, with the trace as flex flex-col gap-2.5. */
     .su {
       display: flex;
       flex-direction: column;
-      gap: calc(12 * var(--u));
+      gap: calc(10 * var(--u));
       padding: calc(12 * var(--u)) calc(16 * var(--u));
     }
     /* The origin and the count: text-xs text-muted-foreground, with tabular numbers. */
@@ -20,38 +20,59 @@
     .su-count {
       font-variant-numeric: tabular-nums;
     }
+    /* The list: flex w-full flex-col gap-0.5. */
     .su-steps {
       display: flex;
       flex-direction: column;
-      gap: calc(4 * var(--u));
-      margin: 0 calc(-8 * var(--u));
+      gap: calc(2 * var(--u));
     }
-    /* A row: the trace line with min-h-9 px-2 py-1.5, then the chevron column. A running row has
-       bg-info-surface, and its title has font-medium text-info-surface-foreground. A pending row
-       has opacity-60. A completed title has text-foreground. */
     .su-step {
+      min-width: 0;
+      list-style: none;
+    }
+    /* A row: the trace line, then the chevron column with gap-1, in w-full rounded-lg pr-2. A
+       running row has bg-info-surface/65, and a row with details has hover:bg-muted/60. */
+    .su-row {
       display: flex;
       align-items: center;
-      gap: calc(8 * var(--u));
-      min-height: calc(36 * var(--u));
-      padding: calc(6 * var(--u)) calc(8 * var(--u));
-      border-radius: calc(10 * var(--u));
-      color: var(--muted-foreground);
-      font-size: calc(13 * var(--u));
+      gap: calc(4 * var(--u));
+      padding-right: calc(8 * var(--u));
+      border-radius: calc(12 * var(--u));
+      transition: background-color 150ms;
     }
-    .su-step[data-state="pending"] > :not(.su-chevron) {
+    .su-step[data-state="running"] > .su-row {
+      background: color-mix(in oklab, var(--info-surface) 65%, transparent);
+    }
+    .su-row[data-hover] {
+      background: color-mix(in oklab, var(--muted) 60%, transparent);
+    }
+    /* The trace line: min-h-8 px-2 py-1.5 gap-2 text-sm text-muted-foreground, with the title in
+       text-[13px]. A pending line has opacity-60. A running line has font-medium text-foreground,
+       and a completed line has text-foreground. */
+    .su-line {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+      min-height: calc(32 * var(--u));
+      padding: calc(6 * var(--u)) calc(8 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    .su-step[data-state="pending"] .su-line {
       opacity: 0.6;
     }
-    .su-step[data-state="running"] {
-      background: var(--info-surface);
-      color: var(--info-surface-foreground);
+    .su-step[data-state="running"] .su-line {
+      color: var(--foreground);
       font-weight: 500;
     }
-    .su-step[data-state="completed"] {
+    .su-step[data-state="completed"] .su-line {
       color: var(--foreground);
     }
-    /* The icon: size-5 rounded-full with a size-3.5 icon. A running icon spins on bg-info-surface,
-       and a completed icon has bg-success-surface text-success-icon. */
+    /* The icon: size-5 rounded-full with a size-3.5 icon. A running icon spins on bg-info-surface
+       text-info-surface-foreground, and a completed icon has bg-success-surface text-success-icon. */
     .su-icon {
       display: grid;
       flex: none;
@@ -65,25 +86,27 @@
       width: calc(14 * var(--u));
       height: calc(14 * var(--u));
     }
-    .su-step[data-state="completed"] > .su-icon {
+    .su-step[data-state="completed"] .su-icon {
       background: var(--success-surface);
       color: var(--success-icon);
     }
-    .su-step[data-state="running"] > .su-icon {
+    .su-step[data-state="running"] .su-icon {
       background: var(--info-surface);
+      color: var(--info-surface-foreground);
     }
     .su-label {
       flex: 1;
       min-width: 0;
       overflow: hidden;
+      font-size: calc(13 * var(--u));
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     /* The state label: text-[11px] text-muted-foreground/70. A completed step shows none. */
-    .su-step > small {
+    .su-line > small {
+      flex: none;
       color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
       font-size: calc(11 * var(--u));
-      font-weight: 400;
       font-variant-numeric: tabular-nums;
     }
     .su-step:not([data-state="pending"]) .su-pending,
@@ -91,12 +114,37 @@
     .su-step:not([data-state="completed"]) .su-completed {
       display: none;
     }
+    /* The chevron column: a size-4 TraceIcon with ChevronRight. It turns 90 degrees while the
+       details are open. A step whose details come when it completes has no chevron before. */
     .su-chevron {
       display: grid;
       flex: none;
       place-items: center;
       width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
       color: var(--muted-foreground);
+      transition: transform 150ms;
+    }
+    .su-chevron > svg {
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+    }
+    .su-step[data-details="completed"]:not([data-state="completed"]) .su-chevron > svg {
+      visibility: hidden;
+    }
+    .su-step[data-open] .su-chevron {
+      transform: rotate(90deg);
+    }
+    /* The open details: ml-[18px] mt-1 mb-1.5 border-l border-border/80 pl-3.5 pr-1 py-1 text-xs
+       leading-relaxed text-muted-foreground. */
+    .su-details {
+      margin: calc(4 * var(--u)) 0 calc(6 * var(--u)) calc(18 * var(--u));
+      padding: calc(4 * var(--u)) calc(4 * var(--u)) calc(4 * var(--u)) calc(14 * var(--u));
+      border-left: calc(1 * var(--u)) solid color-mix(in oklab, var(--border) 80%, transparent);
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: 1.625;
+      overflow-wrap: anywhere;
     }
   }
 }

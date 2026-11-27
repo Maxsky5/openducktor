@@ -19,7 +19,9 @@ export function SessionHeader({ title, children }: SessionHeaderProps): ReactEle
   return (
     <div className="sh">
       <div className="sh-title">{title}</div>
-      <div className="sh-actions">{children}</div>
+      <div className="sh-actions" data-header-actions="">
+        {children}
+      </div>
     </div>
   );
 }

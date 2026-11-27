@@ -22,6 +22,10 @@ export type GitCounts = { ahead: number; behind: number; push: number };
 
 type GitHeaderProps = {
   counts: GitCounts;
+  /** The branch of the session and its target branch. The default is the sample task. */
+  branches?: { current: string; target: string } | undefined;
+  /** The panel offers Detect PR, as the panel of a task does. */
+  detect?: boolean | undefined;
   /** The number of files on the Branch changes tab. */
   files: number;
   /** The task has a pull request, so Detect PR does not show. */
@@ -61,19 +65,25 @@ function Action({
   );
 }
 
-export function GitHeader({ counts, files, pullRequest = false }: GitHeaderProps): ReactElement {
+export function GitHeader({
+  counts,
+  branches = { current: TASK_BRANCH, target: TARGET_BRANCH },
+  detect = true,
+  files,
+  pullRequest = false,
+}: GitHeaderProps): ReactElement {
   const [uncommitted, branch, history] = GIT_HEADER_TEXT.tabs;
   return (
     <div className="gh">
       <div className="gh-branches">
         <span className="gh-chip gh-current">
           <GitBranch className="i14" />
-          <span>{TASK_BRANCH}</span>
+          <span>{branches.current}</span>
         </span>
         <ArrowRight className="i14 gh-to" />
         <span className="gh-chip gh-target">
           <Target className="i14" />
-          <span>{TARGET_BRANCH}</span>
+          <span>{branches.target}</span>
           <ChevronDown className="i12" />
         </span>
         <span className="gh-counts" data-counts="" hidden={counts.ahead + counts.behind === 0}>
@@ -100,7 +110,7 @@ export function GitHeader({ counts, files, pullRequest = false }: GitHeaderProps
         <Action id="push" count={counts.push} tone="ahead">
           <ArrowUp className="i14" />
         </Action>
-        <span className="gh-detect" data-detect="" hidden={pullRequest}>
+        <span className="gh-detect" data-detect="" hidden={pullRequest || !detect}>
           <Link2 className="i16" />
           {GIT_HEADER_TEXT.detect}
         </span>

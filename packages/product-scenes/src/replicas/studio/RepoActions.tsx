@@ -1,7 +1,8 @@
 // The repository actions of repo-actions-split-button.tsx: two joined outline buttons. The first
 // runs the default action and shows only its icon. The chevron opens the menu of the other
 // actions and Manage actions. The menu stays closed in the static frame, and a scene opens it. A
-// view can give its own actions in place of the sample repository actions.
+// view can give its own actions in place of the sample repository actions. A repository without
+// actions shows `AddAction`.
 import {
   Bug,
   ChevronDown,
@@ -10,6 +11,7 @@ import {
   ListChecks,
   type LucideIcon,
   Play,
+  Plus,
   Settings2,
   Wrench,
 } from "lucide-react";
@@ -62,6 +64,22 @@ export function RepoActions({ actions: byId = REPO_ACTIONS }: RepoActionsProps):
           Manage actions
         </span>
       </span>
+    </span>
+  );
+}
+
+/** The label of AddActionButton in repo-actions-split-button.tsx. */
+export const ADD_ACTION_LABEL = "Add action";
+
+/**
+ * AddActionButton of repo-actions-split-button.tsx: an outline button h-7 gap-1.5 px-2 text-xs with
+ * Plus and its label, for a repository without actions.
+ */
+export function AddAction(): ReactElement {
+  return (
+    <span className="ra-add">
+      <Plus />
+      <span className="ra-add-label">{ADD_ACTION_LABEL}</span>
     </span>
   );
 }

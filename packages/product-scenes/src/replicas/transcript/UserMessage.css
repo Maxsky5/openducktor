@@ -20,6 +20,14 @@
       white-space: pre-wrap;
       overflow-wrap: break-word;
     }
+    /* DraftSubmittedMessageBubble of workspace-session-draft-view.tsx, until the session is ready:
+       no top padding, and a text-sm line of 20 pixels. */
+    .st-user[data-pending] {
+      padding-top: 0;
+    }
+    .st-user[data-pending] p {
+      line-height: calc(20 * var(--u));
+    }
     .st-user time {
       margin-top: calc(4 * var(--u));
       padding: 0 calc(4 * var(--u));

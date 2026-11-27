@@ -77,7 +77,9 @@
     }
     /*
      * A phone stage shows one pane of a window with data-pane: the sidebar or the page. The panes
-     * fade, and they keep their place, because a scene measures the pointer targets in them.
+     * fade, and they keep their place, because a scene measures the pointer targets in them. The
+     * outgoing pane fades out first, and the incoming pane fades in after it, so the two panes never
+     * show at once.
      */
     @container stage (width <= 500px) {
       .app-window[data-pane] .rail {
@@ -93,7 +95,7 @@
         position: absolute;
         inset: calc(34 * var(--u)) 0 0;
         width: auto;
-        transition: opacity 250ms ease;
+        transition: opacity 150ms ease 120ms;
       }
       .app-window[data-pane] .sidebar {
         border-right: 0;
@@ -102,6 +104,7 @@
       .app-window[data-pane="sidebar"] .app-main {
         opacity: 0;
         pointer-events: none;
+        transition: opacity 120ms ease;
       }
     }
   }

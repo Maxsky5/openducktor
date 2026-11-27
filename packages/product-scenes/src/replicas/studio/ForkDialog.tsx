@@ -1,9 +1,8 @@
 // The Fork session dialog of workspace-session-fork-dialog.tsx, with the words of FORK_CHAT_TEXT in
 // workspace-session-fork-form.ts: Work location with Same folder and New worktree, the source
-// folder, and the fields of New worktree. It uses the dialog shell of SessionCreateDialog.css, as
-// the app gives both dialogs the same DialogContent. After Fork session, the dialog shows the
-// startup progress in the `progress` slot: the box gets `data-progress`, it narrows, and the
-// description, the form, and the footer hide.
+// folder, and the fields of New worktree. It uses the dialog shell of SessionDialog.css. After
+// Fork session, the dialog shows the startup progress in the `progress` slot: the box gets
+// `data-progress`, it narrows, and the description, the form, and the footer hide.
 import { Folder, GitBranch, GitFork, LoaderCircle, X } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { Button } from "../ui/Button";
@@ -11,7 +10,7 @@ import { Input } from "../ui/Input";
 import { WorkLocationField, type WorkLocationOption } from "./WorkLocationField";
 import { WorktreeNameField } from "./WorktreeFields";
 import "./StartDialog.css";
-import "./SessionCreateDialog.css";
+import "./SessionDialog.css";
 import "./ForkDialog.css";
 
 /** Where the fork works, by the values of workspace-session-fork-form.ts. */

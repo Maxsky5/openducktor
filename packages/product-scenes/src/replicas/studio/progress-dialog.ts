@@ -1,5 +1,5 @@
-// The steps that the dialogs with the startup progress share: the New session dialog, the Fork
-// session dialog, and the start dialog with Goal mode. The dialog opens over a window, its body
+// The steps that the dialogs with the startup progress share: the Fork session dialog and the
+// start dialog with Goal mode. The dialog opens over a window, its body
 // scrolls, its submit button shows the spinner, the dialog narrows to the startup progress, each
 // step changes its state, and the dialog closes when the session is ready.
 import { all, must } from "../../motion/dom";

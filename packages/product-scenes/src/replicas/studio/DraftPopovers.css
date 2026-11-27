@@ -1,0 +1,152 @@
+@layer replica {
+  :where(.stage) {
+    /* PopoverContent: rounded-lg border border-border bg-popover shadow-lg. A scene places it
+       under its trigger with the sideOffset of the popover. */
+    .sd-pop {
+      position: absolute;
+      z-index: 20;
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: var(--popover);
+      color: var(--popover-foreground);
+      box-shadow: var(--shadow-lg);
+    }
+    /* The Combobox of the location: w-72 p-0, with one command group in p-1. */
+    .sd-menu {
+      display: flex;
+      flex-direction: column;
+      width: calc(288 * var(--u));
+      padding: calc(4 * var(--u));
+    }
+    /* CommandItem: flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm. The item
+       under the pointer has bg-accent text-accent-foreground. */
+    .sd-option {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(8 * var(--u));
+      padding: calc(6 * var(--u)) calc(8 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: var(--foreground);
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    .sd-option[data-active] {
+      background: var(--accent);
+      color: var(--accent-foreground);
+    }
+    .sd-option-text {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .sd-option-label {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      white-space: nowrap;
+    }
+    .sd-option-label > svg {
+      flex: none;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      color: var(--muted-foreground);
+    }
+    /* The description: text-xs text-muted-foreground, in the accent foreground on the item under
+       the pointer. */
+    .sd-option-description {
+      overflow: hidden;
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .sd-option[data-active] .sd-option-description {
+      color: var(--accent-foreground);
+    }
+    /* The check: ml-2 size-4 text-primary, opacity-100 on the selected location. */
+    .sd-check {
+      flex: none;
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+      margin-left: calc(8 * var(--u));
+      color: var(--primary);
+      opacity: 0;
+    }
+    .sd-check[data-checked] {
+      opacity: 1;
+    }
+    /* The branch popover: w-80 p-3.5 with flex-col gap-3. */
+    .sd-branch-pop {
+      display: flex;
+      flex-direction: column;
+      gap: calc(12 * var(--u));
+      width: calc(320 * var(--u));
+      padding: calc(14 * var(--u));
+    }
+    /* TabsList: grid h-8 w-full grid-cols-2 rounded-lg bg-muted/70 p-0.5, with rounded-md text-xs
+       tabs. */
+    .sd-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      width: 100%;
+      height: calc(32 * var(--u));
+      padding: calc(2 * var(--u));
+      background: color-mix(in oklab, var(--muted) 70%, transparent);
+    }
+    .sd-tab {
+      height: calc(100% - 1 * var(--u));
+      padding: calc(4 * var(--u)) calc(8 * var(--u));
+      font-size: calc(12 * var(--u));
+    }
+    /* The branch name: grid gap-1.5 with the text-xs font-medium label, the h-8 input in the font
+       of code with its placeholder in the font of the app, and the text-[11px] hint. */
+    .sd-field {
+      display: grid;
+      gap: calc(6 * var(--u));
+    }
+    .sd-field > b {
+      color: var(--foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+    }
+    .sd-input {
+      height: calc(32 * var(--u));
+      font-family: var(--mono);
+      font-size: calc(12 * var(--u));
+    }
+    .sd-input > .ui-input-placeholder {
+      color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
+      font-family: "Space Grotesk Variable", "Space Grotesk", sans-serif;
+    }
+    .sd-field > p {
+      color: var(--muted-foreground);
+      font-size: calc(11 * var(--u));
+      line-height: calc(16.5 * var(--u));
+    }
+    /* The closed Custom folder name: an inline-flex trigger with text-[11px] font-medium
+       text-muted-foreground and a size-3 ChevronRight in gap-1, at the top of its Collapsible,
+       whose text-sm line box with the baseline of the trigger is 23.5 pixels tall. */
+    .sd-collapsible {
+      min-height: calc(23.5 * var(--u));
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    .sd-folder {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(11 * var(--u));
+      font-weight: 500;
+      line-height: calc(16.5 * var(--u));
+    }
+    .sd-folder > svg {
+      width: calc(12 * var(--u));
+      height: calc(12 * var(--u));
+    }
+  }
+}

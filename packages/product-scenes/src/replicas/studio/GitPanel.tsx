@@ -30,6 +30,18 @@ type GitPanelProps = {
   pullRequest?: boolean;
   /** The diff under each open file. */
   diff?: ReactNode;
+  /** The branch of the session and its target branch. The default is the sample task. */
+  branches?: { current: string; target: string };
+  /** The panel offers Detect PR, as the panel of a task does. */
+  detect?: boolean;
+  /** The text of the list without files, from emptyDiffCopy of empty-diff-copy.ts. */
+  empty?: { title: string; description?: string };
+};
+
+/** The empty text of a task worktree before the agent edits a file. */
+const NO_CHANGES = {
+  title: "No changes detected",
+  description: "File modifications will appear here once the agent starts editing.",
 };
 
 /** The letter of each file change: FILE_STATUS_LETTER of agent-studio-git-panel/constants.ts. */
@@ -79,18 +91,27 @@ export function GitPanel({
   push = ahead,
   pullRequest = false,
   diff,
+  branches,
+  detect,
+  empty = NO_CHANGES,
 }: GitPanelProps): ReactElement {
   const totalAdd = files.reduce((sum, file) => sum + file.add, 0);
   const totalDel = files.reduce((sum, file) => sum + file.del, 0);
   return (
     <div className="st-git" data-panel="diffs" data-git={files.length > 0 ? "filled" : "empty"}>
-      <GitHeader counts={{ ahead, behind, push }} files={files.length} pullRequest={pullRequest} />
+      <GitHeader
+        counts={{ ahead, behind, push }}
+        branches={branches}
+        detect={detect}
+        files={files.length}
+        pullRequest={pullRequest}
+      />
       <div className="st-git-empty">
         <span>
           <FolderGit2 className="i20" />
         </span>
-        <b>No changes detected</b>
-        <small>File modifications will appear here once the agent starts editing.</small>
+        <b>{empty.title}</b>
+        {empty.description && <small>{empty.description}</small>}
       </div>
       <div className="st-files-head">
         <span data-file-count="">{filesLabel(files.length)}</span>

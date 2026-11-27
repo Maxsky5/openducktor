@@ -84,7 +84,7 @@ export const SCENES = {
     timeline: async () => (await import("./scenes/agent-browser/timeline")).build,
   },
   "new-session": {
-    size: { width: 960, height: 936 },
+    size: { width: 1100, height: 680 },
     timeline: async () => (await import("./scenes/new-session/timeline")).build,
   },
   fork: {
