@@ -4,9 +4,8 @@ import {
   parseChatFileLink,
 } from "@openducktor/frontend-core/sessions/messages/chat-file-link";
 import { escapeHtml } from "@pierre/words/html";
-import { memo, type ReactElement, useLayoutEffect, useMemo } from "react";
+import { memo, type ReactElement, useMemo } from "react";
 import { toast } from "sonner";
-import { mountFileTypeIconSprite } from "@/components/ui/file-type-icons";
 import type { MarkdownLinks } from "@/components/ui/markdown-html";
 import type { MarkdownRendererVariant } from "@/components/ui/markdown-renderer";
 import { MarkdownStreamRenderer } from "@/components/ui/markdown-stream-renderer";
@@ -50,7 +49,6 @@ export const AgentChatMarkdownRenderer = memo(function AgentChatMarkdownRenderer
   className,
 }: AgentChatMarkdownRendererProps): ReactElement | null {
   const fileLinks = useChatFileLinks();
-  useLayoutEffect(mountFileTypeIconSprite, []);
   // A local citation opens the file preview of the task worktree.
   const links = useMemo<MarkdownLinks>(
     () => ({

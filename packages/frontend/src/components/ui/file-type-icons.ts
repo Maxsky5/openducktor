@@ -111,3 +111,9 @@ export const mountFileTypeIconSprite = (): void => {
   document.body.append(host);
   spriteHost = host;
 };
+
+export const mountFileTypeIconSpriteForLinks = (rootId: string): void => {
+  if (spriteHost?.isConnected) return;
+  const icon = document.getElementById(rootId)?.querySelector("[data-file-link-chip] > svg > use");
+  if (icon) mountFileTypeIconSprite();
+};

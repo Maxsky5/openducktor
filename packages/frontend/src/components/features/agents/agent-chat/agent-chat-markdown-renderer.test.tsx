@@ -33,6 +33,7 @@ describe("AgentChatMarkdownRenderer", () => {
       "canonical spec",
     );
     expect(view.container.querySelectorAll("li")).toHaveLength(2);
+    expect(document.querySelectorAll("[data-file-type-icon-sprite]")).toHaveLength(0);
   });
 
   test("renders a streamed reply as the same reply rendered at once", () => {
@@ -202,10 +203,13 @@ describe("chat file links", () => {
 
   test("opens a streamed link only once it is complete", () => {
     const open = mock<OpenFile>(() => {});
-    const view = render(withFiles(open, chat("[file](src/a", true)));
+    const prefix = "[Config](config)\n\n[`file`](src/a";
+    const view = render(withFiles(open, chat(prefix, true)));
 
-    expect(view.queryByRole("link")).toBeNull();
-    view.rerender(withFiles(open, chat("[`file`](src/a%20b.ts:42)", true)));
+    expect(view.getByRole("link", { name: "Config" })).toBeTruthy();
+    expect(view.queryByRole("link", { name: "file" })).toBeNull();
+    expect(document.querySelectorAll("[data-file-type-icon-sprite]")).toHaveLength(0);
+    view.rerender(withFiles(open, chat(`${prefix}%20b.ts:42)`, true)));
     const link = view.getByRole("link", { name: "file" });
     const icon = link.querySelector('svg[aria-hidden="true"] use');
 

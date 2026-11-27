@@ -7,12 +7,13 @@ import type { TaskAssetRenderContext } from "@openducktor/contracts";
 import type { PluginConfig } from "@pierre/words/html";
 import { Markdown, type ReactiveIslands } from "@pierre/words/react";
 import type { MouseEvent, ReactElement } from "react";
-import { memo, useMemo, useState } from "react";
+import { memo, useId, useLayoutEffect, useMemo, useState } from "react";
 import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { useShellPlatform } from "@/lib/shell-platform";
 import { cn } from "@/lib/utils";
 import { Dialog } from "./dialog";
 import { useDialogPresence } from "./dialog-presence";
+import { mountFileTypeIconSpriteForLinks } from "./file-type-icons";
 import { mayHaveCodeFence, useCodeHighlighter } from "./markdown-code";
 import {
   createDiagramRenderer,
@@ -31,6 +32,7 @@ import {
   createMarkdownUrlTransform,
   HOST_IMAGE_ISLAND,
   type MarkdownLinks,
+  type MarkdownLocalLinks,
   parseHostImageData,
 } from "./markdown-html";
 import { IslandLink } from "./markdown-island-link";
@@ -98,6 +100,21 @@ function DiagramPreviewDialog({
   );
 }
 
+function useFileLinkSpriteRootId(
+  markdown: string,
+  streaming: boolean,
+  hasLinks: boolean,
+  localLinks: MarkdownLocalLinks | null,
+): string | undefined {
+  const markdownId = useId();
+  const rootId = hasLinks && localLinks?.chip ? markdownId : undefined;
+  // Words commits the link markup in its layout effect. Check it before the browser paints.
+  useLayoutEffect(() => {
+    if (rootId) mountFileTypeIconSpriteForLinks(rootId);
+  }, [rootId, markdown, streaming]);
+  return rootId;
+}
+
 export const MarkdownView = memo(function MarkdownView({
   markdown,
   streaming,
@@ -138,6 +155,7 @@ export const MarkdownView = memo(function MarkdownView({
     [images, resolveTaskAssetSource, taskAssetContext],
   );
   const localLinks = links !== "text" ? (links?.local ?? null) : null;
+  const fileLinkRootId = useFileLinkSpriteRootId(markdown, streaming, hasLinks, localLinks);
   // The URL rule is always on. Words formats in place also with it, but a change of the rule
   // formats all the text again. A label shows any image, also one whose source the browser
   // cannot load.
@@ -205,6 +223,7 @@ export const MarkdownView = memo(function MarkdownView({
   return (
     <>
       <Markdown
+        id={fileLinkRootId}
         mode={streaming ? "streaming" : "static"}
         isAnimating={streaming}
         math={!lightweight}
