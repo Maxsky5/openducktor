@@ -58,7 +58,7 @@ const nativeCatalog = (variants: ModelInfo["variants"] = []) =>
   );
 
 describe("OpenCode catalog", () => {
-  test("reads every catalog at once, because no OpenCode list waits for plugins", async () => {
+  test("reads each catalog surface in parallel after plugin readiness", async () => {
     const data = nativeCatalog();
     const lists = ["/api/model", "/api/command", "/api/agent", "/api/skill"];
     const listed = new Set<string>();
@@ -120,7 +120,7 @@ describe("OpenCode catalog", () => {
     ).toBe(true);
   });
 
-  test("reads the cold checkout's model and profiles after OpenCode loads its plugins", async () => {
+  test("includes the cold checkout's plugin catalogs in the first response", async () => {
     const workingDirectory = "/repo/new-worktree";
     const canonicalDirectory = "/canonical/new-worktree";
     const data = nativeCatalog();
@@ -141,10 +141,7 @@ describe("OpenCode catalog", () => {
           data: [{ id: "opencode.agent", state: { status: "active" } }],
         });
       }
-      // Before the fix, the model surface took this empty snapshot during activation.
-      if (path === "/api/model/default") initialRead.resolve();
-      if (!pluginsLoaded && (path === "/api/model" || path === "/api/agent")) return response([]);
-      if (data.has(path)) return response(data.get(path));
+      if (data.has(path)) return response(pluginsLoaded ? data.get(path) : []);
       return undefined;
     });
 
@@ -166,10 +163,45 @@ describe("OpenCode catalog", () => {
         Response.json({ location: { directory: canonicalDirectory }, data: [] }),
       );
 
-      const models = (await catalog).models;
+      const { models, slashCommands, subagents, skills } = await catalog;
       if (models?.status !== "available") throw new Error("Expected the model catalog");
       expect(models.catalog.profiles?.map(({ id }) => id)).toEqual(["build", "review"]);
       expect(models.catalog.models.map(({ modelId }) => modelId)).toEqual(["mimo-flash"]);
+      expect(
+        slashCommands?.status === "available" &&
+          slashCommands.catalog.commands.map(({ trigger }) => trigger),
+      ).toEqual(["inspect", "compact"]);
+      expect(
+        subagents?.status === "available" && subagents.catalog.subagents.map(({ id }) => id),
+      ).toEqual(["review"]);
+      expect(skills?.status === "available" && skills.catalog.skills.map(({ id }) => id)).toEqual([
+        "native.review",
+      ]);
+    } finally {
+      await runtime.release();
+    }
+  });
+
+  test("reports plugin readiness failure for all catalog surfaces", async () => {
+    const data = nativeCatalog();
+    const fixture = prepareFixture(({ url }) => {
+      if (url.pathname === "/api/plugin")
+        return Response.json({ message: "Plugin inventory unavailable" }, { status: 503 });
+      if (data.has(url.pathname)) return response(data.get(url.pathname));
+      return undefined;
+    });
+
+    const runtime = await fixture.prepare();
+    try {
+      const { models, slashCommands, subagents, skills } =
+        await runtime.queries.loadRuntimeCatalog(ref);
+
+      for (const surface of [models, slashCommands, subagents, skills]) {
+        expect(surface).toMatchObject({
+          status: "failed",
+          cause: expect.any(Error),
+        });
+      }
     } finally {
       await runtime.release();
     }

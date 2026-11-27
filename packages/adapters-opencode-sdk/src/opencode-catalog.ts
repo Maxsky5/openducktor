@@ -25,13 +25,19 @@ export const readCatalog = async (
   directory: string,
   awaitPlugins: () => Promise<void>,
 ): Promise<AgentRuntimeCatalogRead> => {
-  // Session preparation needs the model and profile catalog after initial plugin activation.
-  // The other lists can return partial data and refresh on OpenCode's catalog events.
+  // An update during the first read can arrive before the client caches the result.
+  // Wait for initial activation before reading any surface of that result.
+  const ready = awaitPlugins();
+  const surface = async <Value>(read: () => Promise<Value>) => {
+    try {
+      await ready;
+      return { status: "available" as const, catalog: await read() };
+    } catch (cause) {
+      return { status: "failed" as const, cause };
+    }
+  };
   const [models, slashCommands, subagents, skills] = await Promise.all([
-    surface(async () => {
-      await awaitPlugins();
-      return readModelCatalog(client, directory);
-    }),
+    surface(() => readModelCatalog(client, directory)),
     surface(async () => ({
       commands: [
         ...(await client.command.list({ location: { directory } })).data
@@ -130,12 +136,4 @@ const readModelCatalogFromModels = async (
       return profile;
     }),
   };
-};
-
-const surface = async <Value>(read: () => Promise<Value>) => {
-  try {
-    return { status: "available" as const, catalog: await read() };
-  } catch (cause) {
-    return { status: "failed" as const, cause };
-  }
 };
