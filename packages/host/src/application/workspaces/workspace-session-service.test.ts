@@ -19,7 +19,9 @@ import {
   type AgentSessionControlStartInput,
   type AgentSessionControlForkInput,
   type AgentSessionLiveReadResult,
-  type WorkspaceSessionCreateInput,
+  type AgentSessionModelSelection,
+  type GitTargetBranch,
+  type RuntimeKind,
   type WorkspaceSession,
   globalConfigSchema,
 } from "@openducktor/contracts";
@@ -69,9 +71,81 @@ import {
   createWorkspaceSessionService,
   type WorkspaceSessionServiceDependencies,
 } from "./workspace-session-service";
+import {
+  withWorkspaceSessionTarget,
+  type WorkspaceSessionDestination,
+} from "./workspace-session-target";
 import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
-const input = (): Extract<WorkspaceSessionCreateInput, { location: "local_repo_root" }> => ({
+type SeedSessionInput = {
+  workspaceId: string;
+  runtimeKind: RuntimeKind;
+  selectedModel: AgentSessionModelSelection | null;
+  customAgentRoleId: string | null;
+  manualTitle: string | null;
+  targetBranch: GitTargetBranch;
+} & WorkspaceSessionDestination;
+
+const seedSession =
+  (dependencies: WorkspaceSessionServiceDependencies) => (input: SeedSessionInput) =>
+    Effect.gen(function* () {
+      const config = yield* dependencies.settings.getRepoConfig(input.workspaceId);
+      const roles = yield* dependencies.settings.listCustomAgentRoles();
+      const role = input.customAgentRoleId
+        ? (roles.find((entry) => entry.id === input.customAgentRoleId) ?? null)
+        : null;
+      const sessionId = crypto.randomUUID();
+      const now = Date.now();
+      const destination: WorkspaceSessionDestination =
+        input.location === "local_worktree"
+          ? { location: "local_worktree", worktree: input.worktree }
+          : input.location === "existing_worktree"
+            ? { location: "existing_worktree", existingWorktree: input.existingWorktree }
+            : { location: "local_repo_root" };
+      return yield* withWorkspaceSessionTarget(
+        dependencies,
+        {
+          owner: { workspaceId: input.workspaceId, sessionId },
+          destination,
+          repoConfig: config,
+          targetBranch: input.targetBranch,
+        },
+        (executionTarget, retainTarget) =>
+          dependencies.store
+            .create({
+              workspaceId: input.workspaceId,
+              repoPath: config.repoPath,
+              session: {
+                id: sessionId,
+                runtimeKind: input.runtimeKind,
+                selectedModel: input.selectedModel,
+                externalSessionId: null,
+                executionTarget,
+                targetBranch: input.targetBranch,
+                roleSnapshot: role
+                  ? { id: role.id, name: role.name, systemPrompt: role.systemPrompt }
+                  : null,
+                manualTitle: input.manualTitle?.trim().replace(/\s+/g, " ") || null,
+                generatedTitle: null,
+                createdAt: now,
+                lastActivityAt: now,
+                updatedAt: now,
+                archivedAt: null,
+              },
+            })
+            .pipe(
+              Effect.tap(() => Effect.sync(retainTarget)),
+              Effect.map((session) => ({ session })),
+            ),
+      );
+    });
+
+const createService = (dependencies: WorkspaceSessionServiceDependencies) => ({
+  ...createWorkspaceSessionService(dependencies),
+  create: seedSession(dependencies),
+});
+
+const input = (): Extract<SeedSessionInput, { location: "local_repo_root" }> => ({
   workspaceId: "fairnest",
   runtimeKind: "opencode",
   selectedModel: {
@@ -87,15 +161,16 @@ const input = (): Extract<WorkspaceSessionCreateInput, { location: "local_repo_r
   targetBranch: { remote: "origin", branch: "main" },
 });
 
-const worktreeInput = (): Extract<WorkspaceSessionCreateInput, { location: "local_worktree" }> => ({
+const worktreeInput = (): Extract<SeedSessionInput, { location: "local_worktree" }> => ({
   ...input(),
   location: "local_worktree",
   worktree: { mode: "from_name", name: "my-feature", branchName: null },
 });
 
 describe("host-owned Workspace Session lifecycle", () => {
-  test("tracked draft publication failure retains the exact saved session", async () => {
+  test("tracked start publication failure retains the exact saved session", async () => {
     const h = setup();
+    const { session: savedSession } = await Effect.runPromise(h.service.create(input()));
     const router = toPromiseHostCommandRouter(
       createEffectHostCommandRouter({
         handlers: createWorkspaceSessionCommandHandlers(h.service, () =>
@@ -115,7 +190,7 @@ describe("host-owned Workspace Session lifecycle", () => {
             ...h.dependencies.settings,
             getRepoConfigByRepoPath: () => h.dependencies.settings.getRepoConfig("fairnest"),
           },
-          finalize: () => Effect.die(new Error("A draft has no native preparation")),
+          finalize: () => Effect.die(new Error("Should not finalize after publish failure")),
           runtime: {
             probeSessionStatus: () => Effect.succeed({ supported: true, hasLiveSession: false }),
           },
@@ -124,9 +199,10 @@ describe("host-owned Workspace Session lifecycle", () => {
     );
     let failed = false;
     try {
-      await router.invoke("workspace_session_create", {
-        ...input(),
-        startup: { startupAttemptId: "attempt", operationId: "create" },
+      await router.invoke("workspace_session_start", {
+        workspaceId: "fairnest",
+        sessionId: savedSession.id,
+        startup: { startupAttemptId: "attempt", operationId: "start" },
       });
     } catch (error) {
       failed = true;
@@ -138,7 +214,7 @@ describe("host-owned Workspace Session lifecycle", () => {
           phase: "failed",
           ownership: {
             state: "saved",
-            target: { kind: "workspace", record: { id: saved[0]?.id, externalSessionId: null } },
+            target: { kind: "workspace", record: { id: savedSession.id } },
           },
           steps: expect.arrayContaining([
             expect.objectContaining({ id: "publish", state: "failed" }),
@@ -147,7 +223,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       });
     }
     expect(failed).toBe(true);
-    expect(h.starts).toHaveLength(0);
+    expect(h.starts).toHaveLength(1);
   });
   let database: SqliteTaskStoreTestHarness;
   beforeEach(async () => {
@@ -219,23 +295,12 @@ describe("host-owned Workspace Session lifecycle", () => {
       createdTrackingRef: null as string | null,
       // SAFETY: The fake records each deleted reference.
       deletedReferences: [] as string[],
-      // SAFETY: The fake records each chat that the creation registers for naming.
-      registeredChats: [] as {
-        workspaceId: string;
-        sessionId: string;
-        temporaryBranch: string | null;
-      }[],
     };
     const store = createSqliteWorkspaceSessionStore(database);
     const pendingTitles = new Set<string>();
     const failure = (message: string) =>
       Effect.fail(new HostOperationError({ operation: "test", message }));
     const dependencies: WorkspaceSessionServiceDependencies = {
-      chatNaming: {
-        registerCreated: (ref, temporaryBranch) => {
-          state.registeredChats.push({ ...ref, temporaryBranch });
-        },
-      },
       claudeSessionMetadata: createClaudeSessionMetadataTestDouble(),
       runtimeAdmission: { admit: (_kind, work) => work },
       runForkSourceOperation: (_target, work) => work,
@@ -483,7 +548,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       },
     };
     return {
-      service: createWorkspaceSessionService(dependencies),
+      service: createService(dependencies),
       dependencies,
       calls,
       starts,
@@ -555,7 +620,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       h.state.observation = "running";
       h.calls.length = 0;
       const requests: AgentSessionControlForkInput[] = [];
-      const service = createWorkspaceSessionService({
+      const service = createService({
         ...h.dependencies,
         live: {
           ...h.dependencies.live,
@@ -638,7 +703,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       h.state.failSave = true;
       h.state.failCloseTerminals = terminalFailure;
       h.calls.length = 0;
-      const service = createWorkspaceSessionService({
+      const service = createService({
         ...h.dependencies,
         live: {
           ...h.dependencies.live,
@@ -692,7 +757,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       const draft = await Effect.runPromise(h.service.create(input()));
       const ref = { workspaceId: "fairnest", sessionId: draft.session.id };
       await Effect.runPromise(h.service.start(ref));
-      const service = createWorkspaceSessionService({
+      const service = createService({
         ...h.dependencies,
         live: {
           ...h.dependencies.live,
@@ -745,7 +810,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     h.calls.length = 0;
     h.state.failSave = true;
     h.state.failStop = true;
-    const service = createWorkspaceSessionService({
+    const service = createService({
       ...h.dependencies,
       live: {
         ...h.dependencies.live,
@@ -956,7 +1021,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       observer: { statusChanged: () => {}, backgroundFailure: () => {} },
     });
     const registry = createRuntimeRegistryPort(orchestrator);
-    const service = createWorkspaceSessionService({
+    const service = createService({
       ...h.dependencies,
       runtime: { requireReady: registry.requireReady },
     });
@@ -1240,12 +1305,8 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect((await Effect.runPromise(h.service.get(ref))).manualTitle).toBe("Renamed");
   });
 
-  test("No Role supplies no Role prompt and missing Roles fail before resource creation", async () => {
+  test("No Role supplies no Role prompt", async () => {
     const h = setup();
-    await expect(
-      Effect.runPromise(h.service.create({ ...input(), customAgentRoleId: "deleted" })),
-    ).rejects.toThrow("no longer exists");
-    expect(h.calls).toEqual([]);
     const created = await Effect.runPromise(
       h.service.create({ ...input(), customAgentRoleId: null, manualTitle: null }),
     );
@@ -1291,22 +1352,6 @@ describe("host-owned Workspace Session lifecycle", () => {
       "copies:pending",
       "action:setup:pending",
     ]);
-  });
-
-  test("an unnamed worktree plans no upstream step, because the first message sets it", async () => {
-    const h = setup();
-    h.config.namingModel = { runtimeKind: "claude", providerId: "anthropic", modelId: "haiku" };
-    const { snapshots, progress } = recordStartup();
-    await Effect.runPromise(
-      h.service
-        .create({ ...worktreeInput(), worktree: { mode: "from_name", name: "", branchName: null } })
-        .pipe(Effect.provideService(CurrentStartupProgress, progress)),
-    );
-
-    const planned = snapshots.find((snapshot) =>
-      snapshot.steps.some((step) => step.id === "checkout"),
-    );
-    expect(planned?.steps.map((step) => step.id)).toEqual(["checkout", "copies", "action:setup"]);
   });
 
   test("a rejected worktree directory publishes no setup steps", async () => {
@@ -1630,10 +1675,12 @@ describe("host-owned Workspace Session lifecycle", () => {
           ),
         }),
       );
-      const { session } = await router.invoke("workspace_session_create", {
-        ...worktreeInput(),
-        worktree: { mode, name: "my-feature", branchName: "odt/my-feature" },
-      });
+      const { session } = await Effect.runPromise(
+        h.service.create({
+          ...worktreeInput(),
+          worktree: { mode, name: "my-feature", branchName: "odt/my-feature" },
+        }),
+      );
       expect(session.executionTarget.kind).toBe("local_worktree");
       expect(h.calls).toEqual(["worktree", "copy", "actions", "save"]);
       expect(h.starts).toEqual([]);
@@ -1656,7 +1703,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       expect(await router.invoke("workspace_session_restore", ref)).toEqual(started.session);
       expect(h.calls).toEqual(callsBeforeArchive);
       expect(h.starts).toHaveLength(1);
-      expect(events).toEqual([session, started.session, archived, started.session]);
+      expect(events).toEqual([started.session, archived, started.session]);
       h.registered.clear();
       await expect(
         router.invoke("workspace_session_archive", {
@@ -1665,7 +1712,7 @@ describe("host-owned Workspace Session lifecycle", () => {
         }),
       ).rejects.toThrow("not a registered worktree");
       expect(await Effect.runPromise(h.service.get(ref))).toEqual(started.session);
-      expect(events).toHaveLength(4);
+      expect(events).toHaveLength(3);
     },
   );
 
@@ -1737,7 +1784,7 @@ describe("host-owned Workspace Session lifecycle", () => {
   test("retains the saved target when cancellation arrives during persistence", async () => {
     const h = setup();
     const cancellation = new AbortController();
-    const service = createWorkspaceSessionService({
+    const service = createService({
       ...h.dependencies,
       store: {
         ...h.dependencies.store,
@@ -1780,7 +1827,7 @@ describe("host-owned Workspace Session lifecycle", () => {
         Effect.scoped(
           Effect.gen(function* () {
             const entered = yield* Deferred.make<void>();
-            const service = createWorkspaceSessionService({
+            const service = createService({
               ...h.dependencies,
               worktreeFiles: {
                 ...h.dependencies.worktreeFiles,
@@ -1897,85 +1944,6 @@ describe("host-owned Workspace Session lifecycle", () => {
       expect(h.registered.has(directory)).toBe(collision === "registered worktree");
     },
   );
-
-  test("requires a worktree name when the workspace has no naming model", async () => {
-    const h = setup();
-    const error = await Effect.runPromise(
-      Effect.flip(
-        h.service.create({
-          ...worktreeInput(),
-          worktree: { mode: "from_name", name: "  ", branchName: null },
-        }),
-      ),
-    );
-    expect(hostInvokeFailureFromError(error)).toEqual({
-      kind: "workspace_session_validation",
-      field: "worktree.name",
-    });
-    expect(error.message).toBe(
-      "Enter a worktree name. To leave it blank, select a naming model in the workspace settings.",
-    );
-    expect(h.calls).toEqual([]);
-  });
-
-  test.each([
-    ["no branch name", null, true],
-    ["a typed branch name", "feature/typed", false],
-  ] as const)(
-    "names a blank worktree from the session ID, with %s",
-    async (_case, branchName, temporary) => {
-      const h = setup();
-      h.config.namingModel = { runtimeKind: "claude", providerId: "anthropic", modelId: "haiku" };
-      const { session } = await Effect.runPromise(
-        h.service.create({
-          ...worktreeInput(),
-          worktree: { mode: "from_name", name: "", branchName },
-        }),
-      );
-      const digits = session.id.replace(/-/g, "").slice(0, 8);
-      expect(h.state.worktree).toBe(
-        path.join(database.configDir, "worktrees", "workspace-sessions", digits),
-      );
-      expect(h.state.branch).toBe(branchName ?? `odt/${digits}`);
-      expect(h.state.registeredChats).toEqual([
-        {
-          workspaceId: h.config.workspaceId,
-          sessionId: session.id,
-          temporaryBranch: temporary ? `odt/${digits}` : null,
-        },
-      ]);
-      // The first message sets the upstream of a temporary branch, under its final name.
-      expect(h.state.upstreamRemote).toBe(temporary ? null : "origin");
-    },
-  );
-
-  test.each(["../escape", "/absolute", "bad:name", ".hidden"])(
-    "rejects invalid worktree name %s before creating resources",
-    async (name) => {
-      const h = setup();
-      await expect(
-        Effect.runPromise(
-          h.service.create({
-            ...worktreeInput(),
-            worktree: { mode: "from_name", name, branchName: null },
-          }),
-        ),
-      ).rejects.toThrow("Invalid Workspace Session creation input");
-      expect(h.calls).toEqual([]);
-    },
-  );
-
-  test("rejects collisions and invalid titles before Git or runtime creation", async () => {
-    const h = setup();
-    h.state.collision = true;
-    await expect(Effect.runPromise(h.service.create(worktreeInput()))).rejects.toThrow(
-      "already exists",
-    );
-    await expect(
-      Effect.runPromise(h.service.create({ ...input(), manualTitle: "x".repeat(121) })),
-    ).rejects.toThrow("120 characters");
-    expect(h.calls).toEqual([]);
-  });
 
   test.each(["failActions", "failSave"] as const)(
     "rolls back all created Git resources after %s",
@@ -2250,7 +2218,7 @@ describe("host-owned Workspace Session lifecycle", () => {
                   );
             const entered = yield* Deferred.make<void>();
             const release = yield* Deferred.make<void>();
-            const service = createWorkspaceSessionService({
+            const service = createService({
               ...h.dependencies,
               store: createSqliteWorkspaceSessionStore({
                 workspacesProvider: (scopes, operation, use) =>
@@ -2330,7 +2298,7 @@ describe("host-owned Workspace Session lifecycle", () => {
           Effect.gen(function* () {
             const entered = yield* Deferred.make<void>();
             const release = yield* Deferred.make<void>();
-            const service = createWorkspaceSessionService({
+            const service = createService({
               ...h.dependencies,
               runtime: {
                 requireReady: (kind) =>
@@ -2392,7 +2360,7 @@ describe("host-owned Workspace Session lifecycle", () => {
         Effect.gen(function* () {
           const entered = yield* Deferred.make<void>();
           const release = yield* Deferred.make<void>();
-          const service = createWorkspaceSessionService({
+          const service = createService({
             ...h.dependencies,
             store: {
               ...h.dependencies.store,
@@ -2592,7 +2560,7 @@ describe("host-owned Workspace Session lifecycle", () => {
             ),
           );
           yield* Deferred.await(readHeld);
-          const service = createWorkspaceSessionService({
+          const service = createService({
             ...h.dependencies,
             lifecycle: {
               ...h.dependencies.lifecycle,

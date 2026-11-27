@@ -14,6 +14,8 @@ export type SessionRoute = {
   pinSession?: true;
   /** The route asks to scroll to and focus the pending input of the session. */
   focusPendingInput: boolean;
+  /** The startup attempt whose inline creation steps show at the top of the transcript. */
+  startupAttemptId: string | null;
 };
 
 export type SessionRouteResult = { ok: true; route: SessionRoute } | { ok: false; message: string };
@@ -36,6 +38,7 @@ export const readSessionRoute = (raw: RawRouteParams): SessionRouteResult => {
     identity: session.identity,
     readOnly: routeParam(raw["readOnly"]) === "1",
     focusPendingInput: routeParam(raw["focus"]) === "pending-input",
+    startupAttemptId: routeParam(raw["startupAttemptId"]),
   };
   if (routeParam(raw["pinSession"]) === "1") route.pinSession = true;
   const transcriptScope = routeParam(raw["transcriptScope"]);

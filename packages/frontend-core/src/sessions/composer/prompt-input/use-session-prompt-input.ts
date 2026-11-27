@@ -25,7 +25,7 @@ export function useSessionPromptInput({
   reusablePrompts,
 }: {
   repoPath: string;
-  runtimeKind: RuntimeKind;
+  runtimeKind: RuntimeKind | null;
   workingDirectory: string;
   /** The runtime session, or null before the chat has one. */
   identity: AgentSessionIdentity | null;

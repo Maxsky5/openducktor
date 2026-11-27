@@ -847,7 +847,6 @@ describe("Workspace Session persistence through the shared command module", () =
       repoPath: database.repoPath,
     });
     const workspace = createWorkspaceSessionService({
-      chatNaming: { registerCreated: () => undefined },
       taskOwnership: database.taskOwnership,
       claudeSessionMetadata: createClaudeSessionMetadataTestDouble(),
       runtimeAdmission: { admit: (_kind, work) => work },

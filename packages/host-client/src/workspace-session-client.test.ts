@@ -35,39 +35,50 @@ test("reads complete chat IDs through the typed host boundary", async () => {
   await expect(client.workspaceSessionIdsList("workspace")).rejects.toThrow();
 });
 
-test("creates a draft, starts it, and saves draft models through separate host commands", async () => {
+test("launches, starts, and saves draft models through separate host commands", async () => {
   const draft = makeDraft();
   const selectedModel = { runtimeKind: "codex" as const, providerId: "openai", modelId: "model" };
   const calls: Array<{ command: HostCommandName; args: unknown }> = [];
+  const runtimeSession = {
+    runtimeKind: "codex" as const,
+    externalSessionId: "native",
+    workingDirectory: "/repo",
+    startedAt: "1970-01-01T00:00:01.000Z",
+    status: "idle" as const,
+  };
   const client = createHostClient(async (command, args, schema) => {
     calls.push({ command, args });
-    if (command === "workspace_session_create") return schema.parse({ session: draft });
+    if (command === "workspace_session_launch")
+      return schema.parse({
+        workspaceId: "workspace",
+        repoPath: "/repo",
+        status: "completed",
+        sessionId: draft.id,
+        record: { ...draft, externalSessionId: "native" },
+        session: runtimeSession,
+      });
     if (command === "workspace_session_start")
       return schema.parse({
         session: { ...draft, externalSessionId: "native" },
-        runtimeSession: {
-          runtimeKind: "codex",
-          externalSessionId: "native",
-          workingDirectory: "/repo",
-          startedAt: "1970-01-01T00:00:01.000Z",
-          status: "idle",
-        },
+        runtimeSession,
       });
     if (command === "workspace_session_set_draft_model")
       return schema.parse({ ...draft, selectedModel, updatedAt: 1001 });
     throw new Error(`Unexpected command: ${command}`);
   });
-  const createInput = {
+  const launchInput = {
     workspaceId: "workspace",
+    repoPath: "/repo",
+    draftId: "draft-1",
     runtimeKind: "codex" as const,
     selectedModel: null,
     customAgentRoleId: null,
     location: "local_repo_root" as const,
-    manualTitle: null,
     targetBranch: { remote: "origin", branch: "main" },
+    parts: [{ kind: "text" as const, text: "hello" }],
   };
-  const created = await client.workspaceSessionCreate(createInput);
-  expect(created.session.id).toBe("chat");
+  const launched = await client.workspaceSessionLaunch(launchInput);
+  expect(launched.record?.id).toBe("chat");
   const ref = { workspaceId: "workspace", sessionId: "chat" };
   const started = await client.workspaceSessionStart(ref);
   expect(started.session.externalSessionId).toBe("native");
@@ -81,7 +92,7 @@ test("creates a draft, starts it, and saves draft models through separate host c
     updatedAt: 1001,
   });
   expect(calls).toEqual([
-    { command: "workspace_session_create", args: createInput },
+    { command: "workspace_session_launch", args: launchInput },
     { command: "workspace_session_start", args: ref },
     { command: "workspace_session_set_draft_model", args: { ...ref, selectedModel } },
   ]);

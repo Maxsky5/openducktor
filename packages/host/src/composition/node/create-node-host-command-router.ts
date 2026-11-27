@@ -100,10 +100,7 @@ export const assembleNodeEffectHostCommandRouter = (
     runtimeHealth,
     settingsConfig: baseSettingsConfig,
     systemCommands,
-    browserEngine,
-    browserAutomation,
     toolDiscovery,
-    readEnv,
     startupEnv,
     worktreeFiles,
   } = defaultPorts;
@@ -120,7 +117,7 @@ export const assembleNodeEffectHostCommandRouter = (
     workflowWiring.readWorkflowSettings,
   );
   const { workspaceSettingsService, workspaceProviderSetup, workspaceAdmissionService } = setup;
-  const claudeSessionMetadata = createClaudeSessionMetadataAdapter(readEnv);
+  const claudeSessionMetadata = createClaudeSessionMetadataAdapter(defaultPorts.readEnv);
   const assets = createNodeTaskAssetServices({
     configDir,
     contextManager: defaultPorts.taskDatabase,
@@ -222,8 +219,8 @@ export const assembleNodeEffectHostCommandRouter = (
     sessions: assets.workspaceSessionStore,
   });
   const { browserService, ...callers } = createNodeBrowser({
-    engine: browserEngine,
-    automation: browserAutomation,
+    engine: defaultPorts.browserEngine,
+    automation: defaultPorts.browserAutomation,
     configRoot: configDir.root,
     settings: workspaceSettingsService,
     git,
@@ -352,6 +349,7 @@ export const assembleNodeEffectHostCommandRouter = (
     taskReader: taskStore,
   });
   const workspaceChats = createNodeWorkspaceSessionServices({
+    naming,
     terminalService,
     browserTabs: browserService,
     lifecycle: taskSessionLifecycleCoordinator,

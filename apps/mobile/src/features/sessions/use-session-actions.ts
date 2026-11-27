@@ -1,10 +1,12 @@
+import { sessionEntryLocation } from "@openducktor/frontend-core/sessions/navigation/session-entry-presentation";
 import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import { useSetSessionUnread } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
+import type { DraftDiscardPolicy } from "@openducktor/frontend-core/workspace-sessions/create/use-workspace-session-draft-core";
 import { useRouter } from "expo-router";
 import { useCallback } from "react";
+import { useDiscardWorkspaceDraft } from "@/features/new-chat/use-open-workspace-chat";
 import { routes } from "@/navigation/routes";
 import { useClipboardCopy } from "@/platform/use-clipboard-copy";
-import { sessionEntryLocation } from "@openducktor/frontend-core/sessions/navigation/session-entry-presentation";
 import type { SessionMenuAction } from "./session-list-model";
 
 export type RunSessionAction = (
@@ -18,6 +20,7 @@ export const useSessionActions = (): RunSessionAction => {
   const router = useRouter();
   const { copyText } = useClipboardCopy();
   const setUnread = useSetSessionUnread();
+  const discardDraft = useDiscardWorkspaceDraft();
   const copy = useCallback(
     (value: string, copied: string) => {
       void copyText(value, { copied, failed: "The text was not copied." });
@@ -42,6 +45,16 @@ export const useSessionActions = (): RunSessionAction => {
             router.push(routes.archiveChat(workspaceId, entry.context.session.id));
           }
           return;
+        case "discard_draft":
+          if (entry.context.kind === "workspace_draft") {
+            const policy: DraftDiscardPolicy = entry.context.isStarting
+              ? "blocked"
+              : entry.context.lifecycle === "untouched"
+                ? "immediate"
+                : "confirm";
+            discardDraft(entry.context.draftId, policy);
+          }
+          return;
         case "copy_working_directory":
           if (location.workingDirectory) {
             copy(location.workingDirectory, "Working directory copied.");
@@ -54,6 +67,6 @@ export const useSessionActions = (): RunSessionAction => {
           return;
       }
     },
-    [copy, router, setUnread],
+    [copy, discardDraft, router, setUnread],
   );
 };

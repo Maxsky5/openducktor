@@ -1,10 +1,9 @@
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { MessageCirclePlus, MessagesSquare, Plus } from "lucide-react";
 import type { ReactElement } from "react";
-import { useNavigate } from "react-router";
 import { RepositoryBranchSwitcher } from "@/components/features/repository/repository-branch-switcher";
 import { Button } from "@/components/ui/button";
-import { buildNewWorkspaceSessionHref } from "@/features/session-navigation/sessions-route";
+import { useOpenNewWorkspaceSession } from "@/features/session-navigation/use-open-new-workspace-session";
 import { useRequiredTaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 
 /** The Sessions page before a conversation or task context is chosen. */
@@ -13,10 +12,10 @@ export function SessionsEmptyState({
 }: {
   workspace: Pick<WorkspaceRecord, "workspaceId" | "workspaceName">;
 }): ReactElement {
-  const navigate = useNavigate();
+  const openNewWorkspaceSession = useOpenNewWorkspaceSession();
   const { onCreateTask } = useRequiredTaskWorkflowActions();
   const openNewChat = (): void => {
-    void navigate(buildNewWorkspaceSessionHref(workspace.workspaceId));
+    openNewWorkspaceSession(workspace.workspaceId);
   };
 
   return (

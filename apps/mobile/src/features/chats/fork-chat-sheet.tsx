@@ -18,7 +18,7 @@ import {
   sessionForkRequestKey,
   useSessionForkRequests,
 } from "@openducktor/frontend-core/sessions/session-forks";
-import { workspaceSessionValidationError } from "@openducktor/frontend-core/workspace-sessions/create/workspace-session-create-input";
+import { workspaceSessionValidationError } from "@openducktor/frontend-core/workspace-sessions/create/workspace-session-worktree-rules";
 import {
   newWorktreeBranchState,
   WORKTREE_NAME_MAX_LENGTH,

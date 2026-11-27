@@ -103,6 +103,7 @@ export function useAgentChatScrollController({
   const isPointerPressedRef = useRef(false);
   const lastPointerDownTargetRef = useRef<EventTarget | null>(null);
   const lastScrollTopRef = useRef(0);
+  const wasScrollableRef = useRef(false);
   const edgesRef = useRef<EdgeState>({ nearBottom: true, nearTop: true });
   const [edges, dispatchEdges] = useReducer(
     (_current: EdgeState, next: EdgeState) => next,
@@ -157,14 +158,16 @@ export function useAgentChatScrollController({
       return;
     }
 
+    const scrollable = canScroll(container);
     if (canPinRef.current) {
-      if (!pinnedRef.current && !canScroll(container)) {
+      if (!pinnedRef.current && !scrollable && wasScrollableRef.current) {
         setPinned(true);
       }
       if (pinnedRef.current && distanceFromBottom(container) > 1) {
         container.scrollTop = container.scrollHeight;
       }
     }
+    wasScrollableRef.current = scrollable;
     lastScrollTopRef.current = container.scrollTop;
     refreshEdges();
   }, [messagesContainerRef, pinnedRef, refreshEdges, setPinned]);

@@ -12,6 +12,8 @@ import {
 } from "react";
 import { useLocation } from "react-router";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
+import type { NewWorkspaceSessionDraftStore } from "@openducktor/frontend-core/drafts/new-workspace-session-draft-store";
 import { type RepoTaskData, taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
 import { workspaceSessionQueryKeys } from "@openducktor/frontend-core/queries/workspace-sessions";
 import type { WorkspaceSession } from "@openducktor/contracts";
@@ -24,6 +26,7 @@ import {
 import {
   buildSessionNavigationSearch,
   sameSessionSelection,
+  WORKSPACE_SESSION_QUERY_KEYS,
   type SessionsPageKind,
 } from "@/features/session-navigation/sessions-route";
 import {
@@ -54,23 +57,30 @@ export function useSessionViews({
   const location = useLocation();
   const published = useVisibleSessionView();
   const client = useQueryClient();
+  const draftStore = useClientConnection().drafts.newWorkspaceSessions;
   const scope = useSessionViewScope();
   const { workspaces } = useWorkspaceState();
   const [state, setState] = useState<SessionViewsState>({ views: [], activeId: null });
+  // Keep one pending view ID across StrictMode render replays so a new view never commits under two keys.
+  const [pendingId, setPendingId] = useState<string>(() => crypto.randomUUID());
   useLayoutEffect(() => {
     const prune = () =>
       setState((current) => {
         const views = current.views.filter(
-          (view) => view.id === current.activeId || hasOwner(client, view),
+          (view) => view.id === current.activeId || hasOwner(client, draftStore, view),
         );
         return views.length === current.views.length ? current : { ...current, views };
       });
-    const unsubscribe = client.getQueryCache().subscribe((event) => {
+    const unsubscribeQuery = client.getQueryCache().subscribe((event) => {
       if (event.type === "updated" && event.action.type === "success") prune();
     });
+    const unsubscribeDrafts = draftStore.subscribe(prune);
     prune();
-    return unsubscribe;
-  }, [client]);
+    return () => {
+      unsubscribeQuery();
+      unsubscribeDrafts();
+    };
+  }, [client, draftStore]);
   const next = resolveSessionViews(state, {
     workspace,
     kind,
@@ -83,10 +93,15 @@ export function useSessionViews({
         (open) =>
           open.workspaceId === candidate.workspaceId && open.repoPath === candidate.repoPath,
       ),
-    hasOwner: (view) => hasOwner(client, view),
-    createId: () => crypto.randomUUID(),
+    hasOwner: (view) => hasOwner(client, draftStore, view),
+    createId: () => pendingId,
   });
-  if (next !== state) setState(next);
+  if (next !== state) {
+    setState(next);
+    if (next.views.some((view) => view.id === pendingId)) {
+      setPendingId(crypto.randomUUID());
+    }
+  }
   return next;
 }
 
@@ -100,7 +115,7 @@ export function SessionViews({
   const visible = useVisibleSessionView();
   const shown = views.find((view) => view.id === (activeId ?? previewId));
   const shownId = shown?.id ?? null;
-  const readShownSearch = useEffectEvent(() => shown?.search ?? "");
+  const readShownView = useEffectEvent(() => shown ?? null);
   // The target that each kept view last published.
   const lastPublished = useRef(new Map<string, VisibleSession>());
   useLayoutEffect(() => {
@@ -117,10 +132,26 @@ export function SessionViews({
   // content never turned active.
   useLayoutEffect(() => {
     if (shownId === null) return;
+    const currentShown = readShownView();
+    const shownSearch = currentShown?.search ?? "";
     const last = lastPublished.current.get(shownId);
     // Only active content marks its session as read, so the mark carries no read key.
-    if (last && sameSessionSelection(buildSessionNavigationSearch(last.target), readShownSearch()))
+    if (last && sameSessionSelection(buildSessionNavigationSearch(last.target), shownSearch)) {
       publish({ ...last, readKey: null });
+    } else if (currentShown?.kind === "workspace") {
+      const draftId = new URLSearchParams(shownSearch).get(WORKSPACE_SESSION_QUERY_KEYS.draft);
+      if (draftId) {
+        publish({
+          target: {
+            kind: "workspace_session_draft",
+            workspaceId: currentShown.workspace.workspaceId,
+            draftId,
+          },
+          readKey: null,
+          viewId: shownId,
+        });
+      }
+    }
     return () => hideView(shownId);
   }, [hideView, publish, shownId]);
   return (
@@ -195,7 +226,11 @@ const SessionView = memo(function SessionView({
   );
 });
 
-function hasOwner(client: QueryClient, view: View): boolean {
+function hasOwner(
+  client: QueryClient,
+  draftStore: NewWorkspaceSessionDraftStore,
+  view: View,
+): boolean {
   const params = new URLSearchParams(view.search);
   if (view.kind === "task") {
     const tasks = client.getQueryData<RepoTaskData>(taskQueryKeys.repoData(view.workspace));
@@ -203,6 +238,11 @@ function hasOwner(client: QueryClient, view: View): boolean {
       tasks === undefined ||
       tasks.tasks.some((task) => task.id === params.get("task") && taskHasSessionPage(task))
     );
+  }
+  const draftId = params.get(WORKSPACE_SESSION_QUERY_KEYS.draft);
+  if (draftId !== null) {
+    const draft = draftStore.getDraft(draftId);
+    return draft !== null && draft.workspaceId === view.workspace.workspaceId;
   }
   const sessions = client.getQueryData<WorkspaceSession[]>(
     workspaceSessionQueryKeys.list(view.workspace.workspaceId, false),

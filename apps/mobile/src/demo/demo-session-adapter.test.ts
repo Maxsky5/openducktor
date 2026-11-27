@@ -538,4 +538,36 @@ describe("demo backend", () => {
     expect(queue.queue.revision).toBeGreaterThan(1);
     expect(live.type === "live" && live.session.activity).toBe("idle");
   });
+
+  test("launches a deferred workspace session with auto-named worktree and structured steps", async () => {
+    const demo = openDemo();
+    await observeLive(demo);
+    const launchPromise = demo.client.workspaceSessionLaunch({
+      workspaceId: FIELDNOTES.workspaceId,
+      repoPath: FIELDNOTES.repoPath,
+      draftId: "draft-demo-1",
+      runtimeKind: "codex",
+      selectedModel: { runtimeKind: "codex", providerId: "openai", modelId: "gpt-6-astra" },
+      customAgentRoleId: null,
+      targetBranch: { remote: "origin", branch: "main" },
+      location: "local_worktree",
+      worktree: { mode: "from_name", name: "", branchName: null },
+      parts: [{ kind: "text", text: "Audit markdown indexing latency" }],
+      startup: { startupAttemptId: "attempt-demo-1", operationId: "op-demo-1" },
+    });
+    await demo.advance(5_000);
+    const result = await launchPromise;
+    expect(result.status).toBe("completed");
+    expect(result.sessionId).toBeDefined();
+    expect(result.record?.executionTarget.kind).toBe("local_worktree");
+    if (result.record?.executionTarget.kind === "local_worktree") {
+      expect(result.record.executionTarget.branchName).toContain("audit-markdown-indexing-latency");
+    }
+    expect(result.acceptedMessage).toBeDefined();
+    const stepIds = result.startupProgress?.steps.map((step) => step.id) ?? [];
+    expect(stepIds).toContain("naming");
+    expect(stepIds).toContain("checkout");
+    expect(stepIds).toContain("prepare");
+    expect(stepIds).toContain("instruction");
+  });
 });

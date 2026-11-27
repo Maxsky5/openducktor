@@ -243,7 +243,11 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
             result.failure = { message: "Session launch cleanup failed.", cleanupErrors };
         }
         if (attempt.session && attempt.ownershipSaved) result.session = attempt.session.summary;
-        if (result.status === "failed" && result.session && attempt.delivery?.kind === "unsent")
+        if (
+          result.status === "failed" &&
+          attempt.ownershipSaved &&
+          attempt.delivery?.kind === "unsent"
+        )
           result.unsentInstruction = attempt.delivery.instruction;
         // The caller can leave before settlement, so the saved session must show the failure.
         if (attempt.session && result.session && result.status === "failed" && result.failure) {

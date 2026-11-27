@@ -3,119 +3,171 @@ import { terminalCommandSucceeded } from "../../terminals/terminal-command-resul
 import type { StartupAttempt } from "./startup-attempt-store";
 import { startupIsPending } from "./startup-navigation";
 
+const INTERNAL_BOOKKEEPING_STEP_IDS = new Set([
+  "request",
+  "checks",
+  "save",
+  "bind",
+  "publish",
+  "handoff",
+  "workflow",
+  "waiting",
+]);
+
+const USER_FACING_STEP_IDS = new Set([
+  "naming",
+  "checkout",
+  "upstream",
+  "copies",
+  "prepare",
+  "instruction",
+]);
+
+const CLEANUP_STEP_IDS = new Set(["cleanup", "stop-session"]);
+
+export type StartupStepDisplayState = StartupStep["state"] | "warning";
+
+export function startupStepDisplayState(step: StartupStep): StartupStepDisplayState {
+  if (startupStepHasFailure(step)) return "failed";
+  if (startupStepHasWarning(step)) return "warning";
+  return step.state;
+}
+
+export function startupStepHasDetails(step: StartupStep): boolean {
+  return (
+    Boolean(step.warning?.trim()) ||
+    step.details.length > 0 ||
+    Boolean(step.action) ||
+    Boolean(step.resources?.length) ||
+    Boolean(step.failure)
+  );
+}
+
+export function startupIsCleanReady(attempt: StartupAttempt | null | undefined): boolean {
+  return Boolean(
+    attempt &&
+    !startupIsPending(attempt) &&
+    attempt.status.phase === "ready" &&
+    !startupHasWarningOrFailure(attempt),
+  );
+}
+
+export function startupStepHasWarning(step: StartupStep): boolean {
+  return Boolean(step.warning);
+}
+
+export function startupStepHasFailure(step: StartupStep): boolean {
+  return (
+    step.state === "failed" ||
+    Boolean(step.failure) ||
+    Boolean(step.action?.result && !terminalCommandSucceeded(step.action.result))
+  );
+}
+
+function stepHasResourceAttention(step: StartupStep): boolean {
+  return Boolean(
+    step.resources?.some(
+      (resource) =>
+        resource.state === "retained" ||
+        resource.state === "unknown" ||
+        Boolean(resource.nextAction),
+    ),
+  );
+}
+
+function isPrimaryTraceStep(attempt: StartupAttempt, step: StartupStep): boolean {
+  if (CLEANUP_STEP_IDS.has(step.id)) return false;
+  if (startupStepHasFailure(step) || startupStepHasWarning(step)) return true;
+  if (INTERNAL_BOOKKEEPING_STEP_IDS.has(step.id)) return false;
+  if (step.action) return true;
+  if (step.id === "copies") return step.details.length > 0;
+  if (step.id === "instruction") return attempt.instructionRequired || step.state !== "pending";
+  return USER_FACING_STEP_IDS.has(step.id);
+}
+
 export function startupShowsProgress(attempt: StartupAttempt | null): boolean {
   return (
     attempt !== null &&
-    (startupTraceRows(attempt).length > 0 ||
-      startupFailureRows(attempt).length > 0 ||
-      attempt.operations.some(
-        (operation) => operation.phase === "failed" || operation.phase === "canceled",
-      ) ||
-      attempt.status.phase === "failed" ||
-      attempt.status.phase === "canceled" ||
-      attempt.status.confirmation === "unconfirmed" ||
-      attempt.instruction?.state === "unknown" ||
-      Boolean(attempt.error))
+    (startupTraceRows(attempt).length > 0 || startupHasWarningOrFailure(attempt))
   );
 }
 
 export function startupTraceRows(attempt: StartupAttempt): { id: string; step: StartupStep }[] {
-  if (!attempt.operations.some(setsUpWorktree)) return [];
-
   const rows = attempt.operations.flatMap((operation) => {
-    const createsWorktree = setsUpWorktree(operation);
-    return stepsAfterCleanup(operation)
-      .filter((step) => (createsWorktree && isSetupStep(step)) || startupStepHasFailure(step))
+    const steps = stepsAfterCleanup(operation);
+    const hasPrimary = steps.some((step) => isPrimaryTraceStep(attempt, step));
+    if (!hasPrimary) return [];
+    return steps
+      .filter(
+        (step) =>
+          isPrimaryTraceStep(attempt, step) ||
+          (CLEANUP_STEP_IDS.has(step.id) &&
+            (startupStepHasFailure(step) ||
+              startupStepHasWarning(step) ||
+              stepHasResourceAttention(step) ||
+              step.state === "running" ||
+              step.state === "completed")),
+      )
       .map((step) => ({ id: `${operation.context.operationId}:${step.id}`, step }));
   });
-  // The session start follows the setup, so the trace shows it from the first snapshot.
+  if (rows.length > 0) return rows;
+  if (!startupIsPending(attempt) || attempt.presentation !== "inline") return [];
   return [
-    ...rows,
     {
-      id: `${attempt.id}:session`,
+      id: `${attempt.id}:submitting`,
       step: {
-        id: "session",
-        label: "Start session",
-        state: sessionState(attempt, rows),
+        id: "submitting",
+        label: "Submitting request",
+        state: "running",
         details: [],
       },
     },
   ];
 }
 
-function isSetupStep(step: StartupStep): boolean {
-  return (
-    step.id === "naming" ||
-    step.id === "checkout" ||
-    step.id === "upstream" ||
-    (step.id === "copies" && step.details.length > 0) ||
-    Boolean(step.action) ||
-    step.id === "cleanup"
-  );
+export type StartupStepCounts = {
+  completed: number;
+  total: number;
+};
+
+export function startupStepCounts(attempt: StartupAttempt): StartupStepCounts {
+  const rows = startupTraceRows(attempt);
+  const completed = rows.filter(
+    ({ step }) => step.state === "completed" && !startupStepHasFailure(step),
+  ).length;
+  return { completed, total: rows.length };
 }
 
-function sessionState(
-  attempt: StartupAttempt,
-  setup: readonly { step: StartupStep }[],
-): StartupStep["state"] {
-  const phase = attempt.status.phase;
-  if (phase === "ready") return startupIsPending(attempt) ? "running" : "completed";
-  if (phase === "canceled") return "not_run";
-  // An action that continues in its terminal can end with an error after it started. That end
-  // does not stop the session start.
-  const setupFailed = setup.some(
-    ({ step }) =>
-      step.id !== "cleanup" &&
-      isSetupStep(step) &&
-      startupStepHasFailure(step) &&
-      !(step.action?.waitBeforeAgentStart === false && step.action.result),
+export function startupHasWarningOrFailure(attempt: StartupAttempt | null): boolean {
+  if (!attempt) return false;
+  if (
+    attempt.status.phase === "failed" ||
+    attempt.status.phase === "canceled" ||
+    attempt.status.confirmation === "unconfirmed" ||
+    attempt.instruction?.state === "unknown" ||
+    Boolean(attempt.error)
+  ) {
+    return true;
+  }
+  return attempt.operations.some(
+    (operation) =>
+      operation.phase === "failed" ||
+      operation.phase === "canceled" ||
+      operation.steps.some(
+        (step) =>
+          startupStepHasFailure(step) ||
+          startupStepHasWarning(step) ||
+          stepHasResourceAttention(step),
+      ),
   );
-  if (setupFailed && (phase === "failed" || phase === "settling")) return "not_run";
-  if (phase === "failed") return "failed";
-  // The host settles every launch, also a successful one, before the session is ready.
-  if (phase === "settling") return "running";
-  // An action that continues in its terminal does not hold the session start.
-  const blocked = setup.some(
-    ({ step }) =>
-      step.state === "pending" ||
-      step.state === "waiting" ||
-      (step.state === "running" && step.action?.waitBeforeAgentStart !== false),
-  );
-  return blocked ? "pending" : "running";
 }
 
 export function startupFailureRows(attempt: StartupAttempt): { id: string; step: StartupStep }[] {
   return attempt.operations.flatMap((operation) =>
     stepsAfterCleanup(operation)
-      .filter(
-        (step) =>
-          startupStepHasFailure(step) ||
-          step.resources?.some(
-            (resource) =>
-              resource.state === "retained" ||
-              resource.state === "unknown" ||
-              Boolean(resource.nextAction),
-          ),
-      )
+      .filter((step) => startupStepHasFailure(step) || stepHasResourceAttention(step))
       .map((step) => ({ id: `${operation.context.operationId}:${step.id}`, step })),
   );
-}
-
-function setsUpWorktree(operation: StartupOperationSnapshot): boolean {
-  const checkout = operation.steps.find((step) => step.id === "checkout");
-  if (!checkout) return false;
-  const created =
-    checkout.resources?.some(
-      (resource) => resource.kind === "worktree" && resource.state === "created",
-    ) === true;
-  // Only worktree creation plans a copy step, before Git starts. A checkout that stopped before
-  // Git created the worktree shows only its failure. The host reports the created worktree in
-  // the snapshot after the completed checkout, so a completed checkout keeps the trace.
-  const planned =
-    checkout.state !== "failed" &&
-    checkout.state !== "not_run" &&
-    operation.steps.some((step) => step.id === "copies");
-  return created || planned;
 }
 
 function stepsAfterCleanup(operation: StartupOperationSnapshot): StartupStep[] {
@@ -135,23 +187,19 @@ function stepsAfterCleanup(operation: StartupOperationSnapshot): StartupStep[] {
   });
 }
 
-export function startupStepHasFailure(step: StartupStep): boolean {
-  return (
-    step.state === "failed" ||
-    Boolean(step.failure) ||
-    Boolean(step.action?.result && !terminalCommandSucceeded(step.action.result))
-  );
-}
-
 /**
- * The step that a collapsed trace shows: the last step that runs, waits, or failed. Between two
- * steps, no step runs, so the next pending step shows and the line stays in place.
+ * The step that a collapsed trace shows: the last step that runs, waits, failed, or warned.
+ * Between two steps, no step runs, so the next pending step shows and the line stays in place.
  */
 export function startupActiveStep(rows: readonly { step: StartupStep }[]): StartupStep | undefined {
   const steps = rows.map(({ step }) => step);
   return (
     steps.findLast(
-      (step) => step.state === "running" || step.state === "waiting" || startupStepHasFailure(step),
+      (step) =>
+        step.state === "running" ||
+        step.state === "waiting" ||
+        startupStepHasFailure(step) ||
+        startupStepHasWarning(step),
     ) ?? steps.find((step) => step.state === "pending")
   );
 }

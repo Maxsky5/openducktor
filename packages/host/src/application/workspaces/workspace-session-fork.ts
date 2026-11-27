@@ -213,7 +213,7 @@ const forkAndSave = (
     Effect.gen(function* () {
       const manualTitle = forkTitle(input.source);
       const child = yield* startupStep(
-        { id: "prepare", label: "Fork native session" },
+        { id: "prepare", label: "Fork session" },
         deps.live.forkSession({
           repoPath: input.repoPath,
           runtimeKind: input.source.runtimeKind,

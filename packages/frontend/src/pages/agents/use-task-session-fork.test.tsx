@@ -144,7 +144,7 @@ function createForkHarness({
           Fork reply
         </button>
         <output aria-label="Fork error">{error}</output>
-        <InlineStartup repoPath="/repo" taskId="task" role="build" />
+        <InlineStartup scope={{ kind: "task", repoPath: "/repo", taskId: "task", role: "build" }} />
       </>
     );
   }

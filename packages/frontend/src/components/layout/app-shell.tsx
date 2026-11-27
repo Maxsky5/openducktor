@@ -42,6 +42,7 @@ import {
   useWorkspacePresence,
   useWorkspaceState,
 } from "@/state/app-state-provider";
+import { usePruneRemovedWorkspaceDrafts } from "@openducktor/frontend-core/drafts/use-new-workspace-session-drafts";
 import { repoConfigQueryOptionsOrSkip } from "@openducktor/frontend-core/queries/workspace";
 import { useRefetchFailedRuntimeQueries } from "@openducktor/frontend-core/queries/use-refetch-failed-runtime-queries";
 import { windowReturnVisibility } from "@/lib/window-return-visibility";
@@ -97,6 +98,25 @@ function ActiveRepoConfigQuery(): null {
   return null;
 }
 
+function PruneRemovedWorkspaceDrafts(): null {
+  const { workspaces, closedWorkspaces } = useWorkspaceState();
+  const { workspaceRecordsAreCurrent } = useWorkspacePresence();
+  const openWorkspaceIds = useMemo(
+    () => workspaces.map((workspace) => workspace.workspaceId),
+    [workspaces],
+  );
+  const closedWorkspaceIds = useMemo(
+    () => closedWorkspaces.map((workspace) => workspace.workspaceId),
+    [closedWorkspaces],
+  );
+  usePruneRemovedWorkspaceDrafts({
+    workspaceRecordsAreCurrent,
+    openWorkspaceIds,
+    closedWorkspaceIds,
+  });
+  return null;
+}
+
 function OpenRepositoryModalWhenEmpty({ onEmpty }: { onEmpty: () => void }): null {
   const isEmpty = useWorkspaceState().workspaces.length === 0;
   const open = useEffectEvent(onEmpty);
@@ -144,6 +164,7 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
   return (
     <VisibleSessionTargetProvider>
       <ActiveRepoConfigQuery />
+      <PruneRemovedWorkspaceDrafts />
       <OpenRepositoryModalWhenEmpty onEmpty={openDefaultRepositoryModal} />
       <SessionReadStateProvider visibility={documentVisibility}>
         <WorkspaceDialogsProvider>

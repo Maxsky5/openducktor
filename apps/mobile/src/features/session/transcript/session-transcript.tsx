@@ -5,15 +5,16 @@ import type {
 import type { AgentChatTranscriptSession } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript.types";
 import { useAgentChatTranscriptModel } from "@openducktor/frontend-core/sessions/transcript/use-agent-chat-transcript-model";
 import type { AgentSessionTranscriptTarget } from "@openducktor/frontend-core/sessions/transcript/agent-session-transcript-target";
-import { memo, type ReactElement, useMemo, useState } from "react";
-import { View } from "react-native";
+import { memo, type ReactElement, type ReactNode, useMemo, useState } from "react";
+import { ScrollView } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useDevicePreferences } from "@/app-shell/app-services";
 import { useSessionTarget } from "@/features/session/session-target";
+import { KEYBOARD_DISMISS_ON_DRAG } from "@/ui/keyboard-dismiss";
 import type { JumpToLatestSignal } from "./jump-to-latest-signal";
 import { createDisclosureStore, DisclosureStoreProvider } from "./rows/disclosure";
 import { TranscriptList } from "./transcript-list";
-import { EmptyTranscript, TranscriptNotice } from "./transcript-notice";
+import { EmptyTranscript, TranscriptNotice, TranscriptStartupTrace } from "./transcript-notice";
 import { mobileTranscriptRows } from "./transcript-row-type";
 import { TranscriptSkeleton } from "./transcript-skeleton";
 
@@ -22,6 +23,8 @@ export type SessionTranscriptProps = {
   transcriptSession: AgentChatTranscriptSession | null;
   /** A loading, failure, or warning notice, with an action such as Retry. */
   notice: AgentChatTranscriptNotice | null;
+  /** An active inline startup attempt rendered at the top of the transcript. */
+  startupAttemptId?: string | null | undefined;
   isLoading: boolean;
   runtimePresentation: AgentChatRuntimePresentation;
   /** Pending approvals and questions of each Subagent session, by session key. */
@@ -39,6 +42,7 @@ export type SessionTranscriptProps = {
 export const SessionTranscript = memo(function SessionTranscript({
   transcriptSession,
   notice,
+  startupAttemptId = null,
   isLoading,
   runtimePresentation,
   subagentPendingCountBySessionKey,
@@ -57,15 +61,15 @@ export const SessionTranscript = memo(function SessionTranscript({
   return (
     <DisclosureStoreProvider value={disclosures}>
       {transcriptSession === null ? (
-        <TranscriptStatus notice={notice} isLoading={isLoading} />
+        <EmptyOrLoadingWithStartup startupAttemptId={startupAttemptId}>
+          <TranscriptStatus notice={notice} isLoading={isLoading} />
+        </EmptyOrLoadingWithStartup>
       ) : !hasRowsForActiveSession ? (
-        <TranscriptSkeleton label="Loading session" />
+        <EmptyOrLoadingWithStartup startupAttemptId={startupAttemptId}>
+          <TranscriptSkeleton label="Loading session" />
+        </EmptyOrLoadingWithStartup>
       ) : rows.length === 0 ? (
-        <View style={styles.fill}>
-          {notice ? <TranscriptNotice notice={notice} /> : null}
-          {/* Work that the notice shows, such as branch naming, brings the first message. */}
-          {notice?.severity === "loading" ? null : <EmptyTranscript />}
-        </View>
+        <EmptyTranscriptScroll notice={notice} startupAttemptId={startupAttemptId} />
       ) : (
         <TranscriptList
           // A new session mounts a new list, so it opens at its latest message.
@@ -74,6 +78,7 @@ export const SessionTranscript = memo(function SessionTranscript({
           activeStreamingMessageId={transcriptState.activeStreamingAssistantMessageId}
           messagesVersion={transcriptSession.messages.version}
           notice={notice}
+          startupAttemptId={startupAttemptId}
           presentToolCall={runtimePresentation.presentToolCall}
           subagentPendingCountBySessionKey={subagentPendingCountBySessionKey}
           onOpenSubagent={onOpenSubagent}
@@ -83,6 +88,55 @@ export const SessionTranscript = memo(function SessionTranscript({
     </DisclosureStoreProvider>
   );
 });
+
+function TranscriptEmptyScroll({
+  startupAttemptId,
+  children,
+}: {
+  startupAttemptId: string | null;
+  children: ReactNode;
+}): ReactElement {
+  return (
+    <ScrollView
+      style={styles.fill}
+      contentContainerStyle={styles.emptyContent}
+      keyboardDismissMode={KEYBOARD_DISMISS_ON_DRAG}
+      keyboardShouldPersistTaps="handled"
+    >
+      {startupAttemptId ? <TranscriptStartupTrace attemptId={startupAttemptId} /> : null}
+      {children}
+    </ScrollView>
+  );
+}
+
+function EmptyTranscriptScroll({
+  notice,
+  startupAttemptId,
+}: {
+  notice: SessionTranscriptProps["notice"];
+  startupAttemptId: string | null;
+}): ReactElement {
+  return (
+    <TranscriptEmptyScroll startupAttemptId={startupAttemptId}>
+      {notice ? <TranscriptNotice notice={notice} /> : null}
+      {/* Work that the notice shows, such as branch naming, brings the first message. */}
+      {notice?.severity === "loading" || startupAttemptId ? null : <EmptyTranscript />}
+    </TranscriptEmptyScroll>
+  );
+}
+
+function EmptyOrLoadingWithStartup({
+  startupAttemptId,
+  children,
+}: {
+  startupAttemptId: string | null;
+  children: ReactElement;
+}): ReactElement {
+  if (!startupAttemptId) return children;
+  return (
+    <TranscriptEmptyScroll startupAttemptId={startupAttemptId}>{children}</TranscriptEmptyScroll>
+  );
+}
 
 /** The notices that load the transcript itself. They show its skeleton. */
 const TRANSCRIPT_LOAD_NOTICES: ReadonlySet<AgentChatTranscriptNotice["kind"]> = new Set([
@@ -107,4 +161,5 @@ function TranscriptStatus({
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  emptyContent: { flexGrow: 1 },
 });

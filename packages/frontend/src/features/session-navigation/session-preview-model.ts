@@ -51,6 +51,14 @@ export const buildSessionPreviewModel = (
   projection: WorkspaceActivityProjection | null,
 ): SessionPreviewModel => {
   const { target, context } = entry;
+  if (context.kind === "workspace_draft") {
+    return {
+      model: null,
+      pending: [],
+      steps: [],
+      roleTargets: new Map(),
+    };
+  }
   let identity: AgentSessionIdentity | null = null;
   if (target.kind === "task_session") identity = target.identity;
   else if (context.kind === "workspace") identity = workspaceSessionIdentity(context.session);

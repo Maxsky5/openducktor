@@ -4,8 +4,12 @@ import {
   WorkspaceScopeContext,
 } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
+import { usePruneRemovedWorkspaceDrafts } from "@openducktor/frontend-core/drafts/use-new-workspace-session-drafts";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { workspaceListQueryOptions } from "@openducktor/frontend-core/queries/workspace";
+import {
+  workspaceCatalogQueryOptions,
+  workspaceListQueryOptions,
+} from "@openducktor/frontend-core/queries/workspace";
 import { useQuery } from "@tanstack/react-query";
 import {
   createContext,
@@ -51,7 +55,22 @@ export function WorkspaceSelectionProvider({ children }: PropsWithChildren): Rea
   const { storage, feedback } = useClientConnection();
   const { setActiveWorkspace } = useActiveWorkspaceContext();
   const query = useQuery(workspaceListQueryOptions());
+  const catalogQuery = useQuery(workspaceCatalogQueryOptions());
   const workspaces = query.data ?? EMPTY_WORKSPACES;
+  const openWorkspaceIds = useMemo(
+    () => (catalogQuery.data?.openWorkspaces ?? EMPTY_WORKSPACES).map((entry) => entry.workspaceId),
+    [catalogQuery.data?.openWorkspaces],
+  );
+  const closedWorkspaceIds = useMemo(
+    () =>
+      (catalogQuery.data?.closedWorkspaces ?? EMPTY_WORKSPACES).map((entry) => entry.workspaceId),
+    [catalogQuery.data?.closedWorkspaces],
+  );
+  usePruneRemovedWorkspaceDrafts({
+    workspaceRecordsAreCurrent: catalogQuery.isSuccess && !catalogQuery.isFetching,
+    openWorkspaceIds,
+    closedWorkspaceIds,
+  });
   const [storedId, setStoredId] = useState(() => storage.getItem(SELECTED_WORKSPACE_KEY));
   const knownNames = useRef(new Map<string, string>());
 

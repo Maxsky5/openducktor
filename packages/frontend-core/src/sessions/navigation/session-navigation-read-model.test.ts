@@ -1010,4 +1010,80 @@ describe("buildSessionNavigationModel", () => {
     ]);
     expect(model.isLoading).toBe(false);
   });
+
+  test("keeps starting drafts and saved starting workspace sessions in Running without idle or untitled flicker", () => {
+    const draftKey = "workspace_session_draft:draft-1";
+    const startingDraft = {
+      id: "draft-1",
+      workspaceId: "alpha",
+      createdAt: 100,
+      updatedAt: 200,
+      lifecycle: "retained" as const,
+      composer: {
+        segments: [{ id: "seg-1", kind: "text" as const, text: "Hello sidebar" }],
+        attachments: [],
+      },
+      options: {
+        location: "local_repo_root" as const,
+        targetBranch: null,
+        worktree: { mode: "from_name" as const, name: "", branchName: null },
+        existingWorktreeDirectory: null,
+        customAgentRoleId: null,
+        selectedModel: null,
+      },
+    };
+    const draftModel = buildSessionNavigationModel(
+      [
+        {
+          ...sources({}),
+          workspaceDrafts: [startingDraft],
+          workspaceDraftStartups: new Map([
+            [
+              "draft-1",
+              {
+                startupAttemptId: "attempt-1",
+                isStarting: true,
+                failed: false,
+                submittedComposer: null,
+              },
+            ],
+          ]),
+        },
+      ],
+      "none",
+    );
+    expect(groupsOf(draftModel)).toEqual({
+      needs_you: [],
+      running: [draftKey],
+      recent: [],
+    });
+
+    const unboundSaved = chat("saved-1", {
+      externalSessionId: null,
+      generatedTitle: null,
+      manualTitle: null,
+    });
+    const handedOffModel = buildSessionNavigationModel(
+      [
+        {
+          ...sources({ chats: [unboundSaved] }),
+          workspaceStartupSessions: new Map([
+            ["saved-1", { title: "Hello sidebar", isStarting: true, originDraftKey: draftKey }],
+          ]),
+        },
+      ],
+      "none",
+    );
+    expect(groupsOf(handedOffModel)).toEqual({
+      needs_you: [],
+      running: ["workspace_session:alpha:saved-1"],
+      recent: [],
+    });
+    expect(handedOffModel.groups[1]?.entries[0]).toMatchObject({
+      title: "Hello sidebar",
+      listKey: draftKey,
+      status: { kind: "running" },
+      context: { kind: "workspace", isStarting: true },
+    });
+  });
 });

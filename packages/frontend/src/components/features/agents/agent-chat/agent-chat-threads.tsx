@@ -17,10 +17,9 @@ export function AgentChatThreads({
   visitKey: number;
 }) {
   const session = model.transcript.session;
-  const key = JSON.stringify([
-    model.transcript.repoPath,
-    session ? agentSessionIdentityKey(session) : null,
-  ]);
+  const key =
+    model.threadKey ??
+    JSON.stringify([model.transcript.repoPath, session ? agentSessionIdentityKey(session) : null]);
   // Keep only inactive sessions in state. Storing the active session's latest committed model in a
   // ref avoids a render-time state update on every streaming token of the active thread.
   const [state, setState] = useState<ThreadState>(() => ({ activeKey: key, retained: [] }));
@@ -37,7 +36,8 @@ export function AgentChatThreads({
     );
     if (
       previousActive.key === state.activeKey &&
-      previousActive.model.transcript.session !== null
+      (previousActive.model.transcript.session !== null ||
+        previousActive.model.threadKey !== undefined)
     ) {
       nextRetained.push(previousActive);
     }

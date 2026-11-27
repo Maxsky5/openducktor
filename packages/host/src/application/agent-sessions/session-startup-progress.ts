@@ -10,7 +10,7 @@ import type {
 import { Context, Effect } from "effect";
 import { errorMessage, type HostError } from "../../effect/host-errors";
 
-type StartupStepUpdate = Pick<StartupStep, "id" | "label" | "state"> & Partial<StartupStep>;
+export type StartupStepUpdate = Pick<StartupStep, "id" | "label" | "state"> & Partial<StartupStep>;
 
 export type StartupProgressRecorder = {
   snapshot(): StartupOperationSnapshot;
@@ -31,6 +31,10 @@ export const CurrentStartupProgress = Context.Reference<StartupProgressRecorder 
   { defaultValue: () => undefined },
 );
 
+const PRE_SESSION_STEP_IDS = new Set(["checks", "naming", "checkout", "upstream", "copies"]);
+const PRE_INSTRUCTION_STEP_IDS = new Set(["save", "bind", "workflow", "publish", "handoff"]);
+const isPreSessionStep = (id: string) => PRE_SESSION_STEP_IDS.has(id) || id.startsWith("action:");
+
 const mergeStep = (steps: StartupStep[], step: StartupStepUpdate): StartupStep[] => {
   const previous = steps.find((item) => item.id === step.id);
   const next: StartupStep = {
@@ -47,13 +51,37 @@ const mergeStep = (steps: StartupStep[], step: StartupStepUpdate): StartupStep[]
     next.state = previous.state;
     next.details = previous.details;
   }
-  return (
-    previous ? steps.map((item) => (item.id === step.id ? next : item)) : [...steps, next]
-  ).map((item) =>
+  let updated: StartupStep[];
+  if (previous) {
+    updated = steps.map((item) => (item.id === step.id ? next : item));
+  } else if (isPreSessionStep(step.id)) {
+    const insertAt = steps.findIndex((item) => item.id === "prepare" || item.id === "instruction");
+    updated =
+      insertAt === -1
+        ? [...steps, next]
+        : [...steps.slice(0, insertAt), next, ...steps.slice(insertAt)];
+  } else if (PRE_INSTRUCTION_STEP_IDS.has(step.id)) {
+    const insertAt = steps.findIndex((item) => item.id === "instruction");
+    updated =
+      insertAt === -1
+        ? [...steps, next]
+        : [...steps.slice(0, insertAt), next, ...steps.slice(insertAt)];
+  } else {
+    updated = [...steps, next];
+  }
+  return updated.map((item) =>
     item.id === "request" && step.id !== "request" && item.state === "running"
       ? { ...item, state: "completed" as const }
       : item,
   );
+};
+
+const mergePlanStep = (steps: StartupStep[], step: StartupStepUpdate): StartupStep[] => {
+  const previous = steps.find((item) => item.id === step.id);
+  if (previous && step.state === "pending" && previous.state !== "pending") {
+    return steps;
+  }
+  return mergeStep(steps, step);
 };
 
 export const createStartupProgressRecorder = (
@@ -80,7 +108,11 @@ export const createStartupProgressRecorder = (
   return {
     snapshot: () => structuredClone(snapshot),
     step: (step) => commit({ steps: mergeStep(snapshot.steps, step) }),
-    plan: (steps) => commit({ steps: steps.reduce(mergeStep, snapshot.steps) }),
+    plan: (steps) => {
+      const nextSteps = steps.reduce(mergePlanStep, snapshot.steps);
+      if (JSON.stringify(nextSteps) === JSON.stringify(snapshot.steps)) return;
+      commit({ steps: nextSteps });
+    },
     ownership: (ownership) => {
       if (snapshot.ownership.state === "saved" && ownership.state !== "saved") return;
       commit({ ownership });
@@ -169,14 +201,22 @@ export const completeStartupSession = <Failure>(
 export const startupStep = <A, E, R>(
   step: Pick<StartupStep, "id" | "label"> & Partial<Omit<StartupStep, "state">>,
   work: Effect.Effect<A, E, R>,
+  onSuccess?: (value: A) => Partial<Omit<StartupStep, "id" | "label" | "state">>,
 ): Effect.Effect<A, E, R> =>
   Effect.gen(function* () {
     const progress = yield* CurrentStartupProgress;
     if (!progress) return yield* work;
     progress.step({ ...step, state: "running" });
     return yield* work.pipe(
-      Effect.tap(() =>
-        Effect.sync(() => progress.step({ id: step.id, label: step.label, state: "completed" })),
+      Effect.tap((value) =>
+        Effect.sync(() =>
+          progress.step({
+            id: step.id,
+            label: step.label,
+            state: "completed",
+            ...onSuccess?.(value),
+          }),
+        ),
       ),
       Effect.tapError((failure) =>
         Effect.sync(() =>

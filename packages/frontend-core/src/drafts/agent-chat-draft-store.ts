@@ -53,6 +53,7 @@ export type AgentChatDraftStore = {
     draft: AgentChatComposerDraft,
   ): number;
   readVersion(identity: AgentChatDraftIdentity): number | null;
+  subscribeChanged(identity: AgentChatDraftIdentity, onChange: () => void): () => void;
   subscribeCleared(identity: AgentChatDraftIdentity, onClear: () => void): () => void;
   /**
    * Removes the draft from memory and storage. With `onlyIfVersion`, it keeps a draft that the
@@ -185,6 +186,7 @@ export const createAgentChatDraftStore = ({
   scheduleTask: scheduleDraftTask = scheduleTask,
 }: AgentChatDraftStoreOptions): AgentChatDraftStore => {
   const draftEntries = new Map<string, DraftMemoryEntry>();
+  const changeListeners = new Map<string, Set<() => void>>();
   const clearListeners = new Map<string, Set<() => void>>();
   let userVersion = 0;
   let didRunExpiredCleanup = false;
@@ -468,9 +470,20 @@ export const createAgentChatDraftStore = ({
       entry.version += 1;
       entry.userVersion = ++userVersion;
       scheduleEntryFlush(entry);
+      changeListeners.get(toAgentChatDraftStorageKey(identity))?.forEach((listener) => listener());
       return entry.userVersion;
     },
     readVersion: (identity) => readEntry(identity)?.userVersion ?? null,
+    subscribeChanged: (identity, onChange) => {
+      const key = toAgentChatDraftStorageKey(identity);
+      const listeners = changeListeners.get(key) ?? new Set();
+      listeners.add(onChange);
+      changeListeners.set(key, listeners);
+      return () => {
+        listeners.delete(onChange);
+        if (listeners.size === 0) changeListeners.delete(key);
+      };
+    },
     subscribeCleared: (identity, onClear) => {
       const key = toAgentChatDraftStorageKey(identity);
       const listeners = clearListeners.get(key) ?? new Set();

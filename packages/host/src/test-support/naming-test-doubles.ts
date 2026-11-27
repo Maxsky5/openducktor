@@ -11,7 +11,7 @@ import type { WorkspaceSessionNamingDependencies } from "../application/workspac
 import { createNamingService, type NamingService } from "../application/naming/naming-service";
 import { createDefaultGlobalConfig } from "../config/global-config";
 import { HostOperationError, type HostError } from "../effect/host-errors";
-import { createGitPortTestDouble, unexpectedEffectCall } from "./service-test-doubles";
+import { unexpectedEffectCall } from "./service-test-doubles";
 
 /** A naming service for a workspace without a naming model: it never calls a model. */
 export const disabledNamingService: NamingService = {
@@ -57,6 +57,5 @@ export const createNamingTestDependencies = (
 ): WorkspaceSessionNamingDependencies => ({
   service: disabledNamingService,
   settings: { getRepoConfig: unexpectedEffectCall("workspace settings", "getRepoConfig") },
-  git: createGitPortTestDouble({}),
   ...overrides,
 });

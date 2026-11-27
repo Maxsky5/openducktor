@@ -193,6 +193,83 @@ describe("resolveSessionViews", () => {
     expect(shown(created)).toEqual([["chat", chat("next"), true]]);
   });
 
+  test("switching between workspace drafts allocates distinct kept views instead of reusing draft A", () => {
+    const draftA = "?workspace=alpha&kind=workspace&draft=draft-a";
+    const draftB = "?workspace=alpha&kind=workspace&draft=draft-b";
+    let nextId = 0;
+    const visit = (search: string) =>
+      input({
+        kind: "workspace",
+        createId: () => `view-${++nextId}`,
+        ...at(search),
+      });
+
+    const openedA = settle({ views: [], activeId: null }, visit(draftA));
+    expect(shown(openedA)).toEqual([["view-1", draftA, true]]);
+
+    const openedB = settle(openedA, visit(draftB));
+    expect(shown(openedB)).toEqual([
+      ["view-1", draftA, false],
+      ["view-2", draftB, true],
+    ]);
+  });
+
+  test("replaces a missing workspace draft in place instead of mounting a new kept view", () => {
+    const staleDraft = "?workspace=alpha&kind=workspace&draft=stale-draft";
+    const freshDraft = "?workspace=alpha&kind=workspace&draft=fresh-draft";
+    let nextId = 0;
+    const opened = settle(
+      { views: [], activeId: null },
+      input({
+        kind: "workspace",
+        createId: () => `view-${++nextId}`,
+        hasOwner: () => false,
+        ...at(staleDraft),
+      }),
+    );
+    expect(shown(opened)).toEqual([["view-1", staleDraft, true]]);
+
+    const recovered = settle(
+      opened,
+      input({
+        kind: "workspace",
+        createId: () => `view-${++nextId}`,
+        hasOwner: (view) => view.search.includes("fresh-draft"),
+        ...at(freshDraft),
+      }),
+    );
+    expect(shown(recovered)).toEqual([["view-1", freshDraft, true]]);
+  });
+
+  test("reuses the active view in place when moving a workspace draft to another workspace", () => {
+    const draftAlpha = "?workspace=alpha&kind=workspace&draft=draft-1";
+    const draftBeta = "?workspace=beta&kind=workspace&draft=draft-1";
+    let nextId = 0;
+    const opened = settle(
+      { views: [], activeId: null },
+      input({
+        workspace: alpha,
+        kind: "workspace",
+        createId: () => `view-${++nextId}`,
+        ...at(draftAlpha),
+      }),
+    );
+    expect(shown(opened)).toEqual([["view-1", draftAlpha, true]]);
+
+    const moved = settle(
+      opened,
+      input({
+        workspace: beta,
+        kind: "workspace",
+        createId: () => `view-${++nextId}`,
+        hasOwner: (view) => view.workspace.workspaceId === "beta",
+        ...at(draftBeta),
+      }),
+    );
+    expect(shown(moved)).toEqual([["view-1", draftBeta, true]]);
+    expect(moved.views[0]?.workspace).toBe(beta);
+  });
+
   test("a workspace keeps the address and history state of its last view", () => {
     const sessionless = {
       sessionlessTask: { workspaceId: "alpha", taskId: "next", role: "build" },
@@ -284,6 +361,7 @@ describe("resolveSessionViews", () => {
             view.kind,
             params.get("task"),
             params.get("session"),
+            params.get("draft"),
             params.get("agent"),
           ].join();
         });
@@ -307,7 +385,7 @@ const addresses = (workspace: ActiveWorkspace, kind: "task" | "workspace"): stri
       ]
     : [
         base,
-        `${base}&create=session`,
+        `${base}&draft=draft-1`,
         `${base}&session=chat`,
         `${base}&session=gone`,
         `${base}&task=current`,

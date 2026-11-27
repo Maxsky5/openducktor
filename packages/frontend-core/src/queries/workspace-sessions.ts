@@ -154,6 +154,22 @@ export const updateWorkspaceSessionQueries = (
   }
 };
 
+/** Reads the first active workspace session ID from the cache, optionally excluding one ID. */
+export const readFallbackWorkspaceSessionId = (
+  queryClient: QueryClient,
+  workspaceId: string,
+  excludeSessionId?: string,
+): string | null => {
+  const sessions =
+    queryClient.getQueryData<WorkspaceSession[]>(
+      workspaceSessionQueryKeys.list(workspaceId, false),
+    ) ?? [];
+  const fallback = sessions.find(
+    (session) => session.archivedAt === null && session.id !== excludeSessionId,
+  );
+  return fallback?.id ?? null;
+};
+
 export const customAgentRolesQueryOptions = () =>
   queryOptions({
     queryKey: ["custom-agent-roles"] as const,

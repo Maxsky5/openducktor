@@ -5,6 +5,8 @@ import {
   type ReactElement,
   useContext,
   useEffect,
+  useLayoutEffect,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -82,6 +84,7 @@ export function VisibleSessionTargetProvider({ children }: PropsWithChildren): R
 const sameVisibleSession = (left: VisibleSession, right: VisibleSession): boolean =>
   left.viewId === right.viewId &&
   left.readKey === right.readKey &&
+  left.target.workspaceId === right.target.workspaceId &&
   sessionNavigationTargetKey(left.target) === sessionNavigationTargetKey(right.target);
 
 const useVisibleSessionStore = (): VisibleSessionStore => {
@@ -104,6 +107,8 @@ const selectView = (visible: VisibleSession | null): VisibleSession | null => vi
 const selectTarget = (visible: VisibleSession | null): SessionNavigationTarget | null =>
   visible?.target ?? null;
 const selectReadKey = (visible: VisibleSession | null): string | null => visible?.readKey ?? null;
+const selectVisibleWorkspaceDraftId = (visible: VisibleSession | null): string | null =>
+  visible?.target.kind === "workspace_session_draft" ? visible.target.draftId : null;
 
 export const useVisibleSessionView = (): VisibleSession | null =>
   useVisibleSessionSelection(selectView);
@@ -113,6 +118,9 @@ export const useVisibleSessionTarget = (): SessionNavigationTarget | null =>
 
 export const useVisibleSessionReadKey = (): string | null =>
   useVisibleSessionSelection(selectReadKey);
+
+export const useVisibleWorkspaceDraftId = (): string | null =>
+  useVisibleSessionSelection(selectVisibleWorkspaceDraftId);
 
 const visibleReadKey = (
   target: SessionNavigationTarget | null,
@@ -139,9 +147,26 @@ export const usePublishVisibleSessionTarget = (
   const { publish, clear } = useVisibleSessionControls();
   const viewId = useContext(SessionViewContext)?.id ?? null;
   const readKey = visibleReadKey(target, workspaceSessionIdentity);
+  const latestTargetRef = useRef<SessionNavigationTarget | null>(target);
+  useLayoutEffect(() => {
+    latestTargetRef.current = target;
+  }, [target]);
   useEffect(() => {
     if (!target) return;
+    const key = sessionNavigationTargetKey(target);
     publish({ target, readKey, viewId });
-    return () => clear(viewId, sessionNavigationTargetKey(target));
+    return () => {
+      const next = latestTargetRef.current;
+      // Keep the current entry visible when this hook updates the same target key in place.
+      if (next === null || sessionNavigationTargetKey(next) !== key) {
+        clear(viewId, key);
+      }
+    };
   }, [clear, publish, readKey, target, viewId]);
+  useEffect(() => {
+    return () => {
+      const last = latestTargetRef.current;
+      if (last) clear(viewId, sessionNavigationTargetKey(last));
+    };
+  }, [clear, viewId]);
 };

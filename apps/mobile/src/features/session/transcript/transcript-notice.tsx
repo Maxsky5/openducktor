@@ -2,6 +2,7 @@ import type { AgentChatTranscriptNotice } from "@openducktor/frontend-core/sessi
 import { memo, type ReactElement } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
+import { StartupTrace } from "@/features/session-startup/startup-trace";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { LoaderSpinner } from "@/ui/loader-spinner";
 import { monoWeight, sansWeight, touchSlop } from "@/theme/tokens";
@@ -124,6 +125,15 @@ export function EmptyTranscript(): ReactElement {
           No messages yet. Messages and agent activity show here.
         </Text>
       </View>
+    </View>
+  );
+}
+
+/** Inline startup progress framed at the top of the transcript, matching notice width and padding. */
+export function TranscriptStartupTrace({ attemptId }: { attemptId: string }): ReactElement {
+  return (
+    <View style={styles.holder}>
+      <StartupTrace attemptId={attemptId} presentation="inline" />
     </View>
   );
 }

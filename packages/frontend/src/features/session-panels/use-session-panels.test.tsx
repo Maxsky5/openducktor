@@ -703,4 +703,28 @@ describe("useSessionPanels browser tabs", () => {
     expect(view.result.current.right.launcher.map((entry) => entry.kind)).toEqual(["terminal"]);
     expect(findPanelTab(layoutStore().read(owner), `browser:${TAB_1}`)).not.toBeNull();
   });
+
+  test("defers right panel visibility during draft handoff and slides it open once revealed", () => {
+    const owner = newTaskOwner();
+    const terminals = createTerminalSessionsFixture({ scopeKey: sessionPanelOwnerKey(owner) });
+    const view = renderHook(
+      ({ deferRightReveal }: { deferRightReveal: boolean }) =>
+        useSessionPanels({
+          owner,
+          selectionKey: "build",
+          unavailableKinds: WITHOUT_CI_CHECKS,
+          terminals,
+          deferRightReveal,
+        }),
+      { initialProps: { deferRightReveal: true }, wrapper },
+    );
+
+    expect(view.result.current.right.presence).toBe("closed");
+    expect(view.result.current.right.isVisible).toBe(false);
+
+    view.rerender({ deferRightReveal: false });
+
+    expect(view.result.current.right.presence).toBe("opening");
+    expect(view.result.current.right.isVisible).toBe(true);
+  });
 });

@@ -149,6 +149,11 @@ type SessionPanelsInput = {
    * `revealRevision` selects the tab and opens the right panel. Closing the tab calls `onClose`.
    */
   toolCallTab?: { revealRevision: number; onClose: () => void } | null;
+  /**
+   * Keeps the right panel closed while a newly handed-off session finishes startup, then slides
+   * it in smoothly once ready instead of snapping the layout mid-startup.
+   */
+  deferRightReveal?: boolean;
 };
 
 type LatestControllerState = LatestPanelState &
@@ -370,6 +375,7 @@ export function useSessionPanels({
   terminals,
   browser = null,
   toolCallTab = null,
+  deferRightReveal = false,
 }: SessionPanelsInput): SessionPanelsModel {
   const isActive = useSessionViewActive();
   const layoutStore = useSessionPanelLayoutStore();
@@ -442,6 +448,7 @@ export function useSessionPanels({
       context.hostTabs.terminal.synced,
     ),
     isActive,
+    deferRightReveal,
   });
   const { isRightOpen, isBottomOpen, setBottomOpen, toggleRight, showRight, requestFocus } =
     visibility;

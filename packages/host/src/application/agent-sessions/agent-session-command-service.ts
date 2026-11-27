@@ -356,7 +356,7 @@ export const createAgentSessionCommandService = ({
               return yield* resumeAndSaveSession({
                 ref,
                 resume: startupStep(
-                  { id: "prepare", label: "Resume native session" },
+                  { id: "prepare", label: "Resume session" },
                   runtime.resumeSession({
                     ...runtimeInput,
                     workStartGuard: resumeOptions.assertCurrent

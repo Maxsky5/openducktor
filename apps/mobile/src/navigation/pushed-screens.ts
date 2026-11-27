@@ -4,6 +4,7 @@
  */
 export const isPushedScreen = (name: string): boolean =>
   name === "session" ||
+  name === "new-chat" ||
   name === "tool-call" ||
   name.startsWith("task/") ||
   name.startsWith("work/");

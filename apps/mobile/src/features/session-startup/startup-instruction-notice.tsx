@@ -20,7 +20,11 @@ export function StartupInstructionNotice({
   instruction: StartupInstruction | undefined;
   style?: StyleProp<TextStyle>;
 }): ReactElement | null {
-  const message = instruction ? INSTRUCTION_TEXT[instruction.state] : null;
+  const baseMessage = instruction ? INSTRUCTION_TEXT[instruction.state] : null;
+  const message =
+    baseMessage && instruction?.state === "unknown" && instruction.submissionId
+      ? `${baseMessage} Submission ID: ${instruction.submissionId}.`
+      : baseMessage;
   useAnnounce(message);
   return message ? (
     <Text variant="footnote" tone="secondary" accessibilityLiveRegion="polite" style={style}>

@@ -12,6 +12,11 @@ import {
   type QueuedMessageEditDrafts,
 } from "../drafts/agent-chat-queued-message-drafts";
 import {
+  createNewWorkspaceSessionDraftStore,
+  type NewWorkspaceSessionDraftStore,
+} from "../drafts/new-workspace-session-draft-store";
+import { updateWorkspaceSessionQueries } from "../queries/workspace-sessions";
+import {
   createInlineCommentDraftStore,
   type InlineCommentDraftStoreApi,
 } from "../drafts/inline-comment-draft-store";
@@ -64,6 +69,7 @@ type ClientDrafts = {
   readonly taskEditors: ReturnType<typeof createTaskEditorDraftState>;
   readonly settings: { retained: { baseline: SettingsSnapshot; draft: SettingsSnapshot } | null };
   readonly chat: AgentChatDraftStore;
+  readonly newWorkspaceSessions: NewWorkspaceSessionDraftStore;
   readonly inlineComments: InlineCommentDraftStoreApi;
   readonly queuedMessageEdits: QueuedMessageEditDrafts;
 };
@@ -136,16 +142,30 @@ export const createClientConnection = ({
   if (connectionsByQueryClient.has(queryClient)) {
     throw new Error("This query client already belongs to another host connection.");
   }
+  const startupAttempts = createStartupAttemptStore(host, {
+    adopt: (snapshot) => adoptStartupPreparedHandoff(queryClient, snapshot),
+    isCurrent: (id, handoff) => isStartupPreparedHandoffCurrent(queryClient, id, handoff),
+    release: (id) => releaseStartupPreparationAttempt(queryClient, id),
+    onWorkspaceOwnershipSaved: ({ workspaceId, record }) => {
+      updateWorkspaceSessionQueries(queryClient, workspaceId, record);
+    },
+  });
+  const chatDrafts = createAgentChatDraftStore({
+    storage,
+    stageAttachment,
+    reportPersistenceError: chatDraftPersistenceReporter(feedback),
+    ...(scheduleTask && { scheduleTask }),
+  });
   const drafts: ClientDrafts = {
     taskEditors: createTaskEditorDraftState((workspaceId, assetIds) =>
       host.client.taskAssetDiscardStaged({ workspaceId, assetIds }),
     ),
     settings: { retained: null },
-    chat: createAgentChatDraftStore({
+    chat: chatDrafts,
+    newWorkspaceSessions: createNewWorkspaceSessionDraftStore({
       storage,
-      stageAttachment,
-      reportPersistenceError: chatDraftPersistenceReporter(feedback),
-      ...(scheduleTask && { scheduleTask }),
+      chatDrafts,
+      startupAttempts,
     }),
     inlineComments: createInlineCommentDraftStore({
       storage,
@@ -154,7 +174,7 @@ export const createClientConnection = ({
     queuedMessageEdits: createQueuedMessageEditDrafts(),
   };
   const saveDrafts = async (): Promise<void> => {
-    // Both saves start before the first await, so page hide keeps the drafts.
+    // All saves start before the first await, so page hide keeps the drafts.
     const results = await Promise.allSettled([
       drafts.chat.saveAll(),
       (async () => drafts.inlineComments.saveAll())(),
@@ -171,11 +191,6 @@ export const createClientConnection = ({
     }
   };
   let disposal: Promise<void> | null = null;
-  const startupAttempts = createStartupAttemptStore(host, {
-    adopt: (snapshot) => adoptStartupPreparedHandoff(queryClient, snapshot),
-    isCurrent: (id, handoff) => isStartupPreparedHandoffCurrent(queryClient, id, handoff),
-    release: (id) => releaseStartupPreparationAttempt(queryClient, id),
-  });
   const connection: ClientConnection = {
     host,
     queryClient,
@@ -207,6 +222,7 @@ export const createClientConnection = ({
         await attempt(() => queryClient.cancelQueries());
         await draftsSaved;
         drafts.chat.dispose();
+        drafts.newWorkspaceSessions.dispose();
         drafts.inlineComments.dispose();
         queryClient.clear();
         connectionsByQueryClient.delete(queryClient);

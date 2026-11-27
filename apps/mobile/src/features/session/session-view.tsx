@@ -1,9 +1,15 @@
+import { matchesStartupScope } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
+import {
+  type StartupAttempt,
+  useStartupAttemptsSelector,
+} from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 import type { AgentSessionTranscriptTarget } from "@openducktor/frontend-core/sessions/transcript/agent-session-transcript-target";
 import { useRouter } from "expo-router";
 import { type ComponentRef, memo, type ReactElement, useCallback, useRef, useState } from "react";
 import { ScrollView, TextInput, useWindowDimensions, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { SessionComposer } from "@/features/composer/session-composer";
+import { InlineStartupLease } from "@/features/session-startup/inline-startup-lease";
 import { routes, sessionParams } from "@/navigation/routes";
 import { KeyboardInsetView } from "@/ui/keyboard-inset-view";
 import { Screen } from "@/ui/screen";
@@ -16,15 +22,37 @@ import { SessionPendingInput } from "./pending-input/session-pending-input";
 import { SessionRuntimeStatus } from "./session-runtime-status";
 import { SessionGitConflict } from "./session-git-conflict";
 import { SessionLoaders } from "./session-loaders";
-import { useFocusPendingInput, useSessionTarget } from "./session-target";
+import {
+  type SessionTarget,
+  useFocusPendingInput,
+  useRouteStartupAttemptId,
+  useSessionTarget,
+} from "./session-target";
 import { LiveSessionTranscript, ReadOnlySessionTranscript } from "./session-transcript-source";
 import { createJumpToLatestSignal } from "./transcript/jump-to-latest-signal";
 import { PublishVisibleSession } from "./publish-visible-session";
 import { useSessionFork } from "./fork/session-fork";
-import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
-import { StartupTrace } from "@/features/session-startup/startup-trace";
 
 const MAX_INPUT_AREA_HEIGHT_SHARE = 0.62;
+
+const matchesSessionAttempt = (attempt: StartupAttempt, target: SessionTarget): boolean => {
+  if (target.owner.kind === "chat") {
+    return matchesStartupScope(attempt, {
+      kind: "workspace",
+      workspaceId: target.workspace.workspaceId,
+      sessionId: target.owner.record.id,
+    });
+  }
+  if (target.owner.kind === "task") {
+    return matchesStartupScope(attempt, {
+      kind: "task",
+      workspaceId: target.workspace.workspaceId,
+      taskId: target.owner.taskId,
+      role: target.owner.role,
+    });
+  }
+  return false;
+};
 
 /**
  * The session view. The navigation bar carries the session identity, status, and the work views,
@@ -40,7 +68,27 @@ const MAX_INPUT_AREA_HEIGHT_SHARE = 0.62;
 export const SessionView = memo(function SessionView(): ReactElement {
   const target = useSessionTarget();
   const fork = useSessionFork();
-  const startup = useStartupAttempt(fork?.startupAttemptId);
+  const routeStartupAttemptId = useRouteStartupAttemptId();
+  const preferredId = fork?.startupAttemptId ?? routeStartupAttemptId;
+  const matchedStartupKey = useStartupAttemptsSelector(
+    useCallback(
+      (attempts) => {
+        const matched =
+          (preferredId ? attempts.find((attempt) => attempt.id === preferredId) : undefined) ??
+          attempts.findLast((attempt) => matchesSessionAttempt(attempt, target)) ??
+          null;
+        return matched ? `${matched.id}\0${matched.presentation}` : null;
+      },
+      [preferredId, target],
+    ),
+  );
+  const separator = matchedStartupKey?.indexOf("\0") ?? -1;
+  const startupId =
+    matchedStartupKey && separator !== -1 ? matchedStartupKey.slice(0, separator) : null;
+  const inlineStartupId =
+    matchedStartupKey && separator !== -1 && matchedStartupKey.slice(separator + 1) === "inline"
+      ? startupId
+      : null;
   const focusPendingInput = useFocusPendingInput();
   const { readOnly, workspace } = target;
   const router = useRouter();
@@ -66,14 +114,10 @@ export const SessionView = memo(function SessionView(): ReactElement {
   return (
     <Screen>
       <PublishVisibleSession target={target} />
+      <InlineStartupLease attemptId={startupId} />
       <View style={styles.row}>
         <View style={styles.main}>
           <SessionHeader showsRail={!side} />
-          {startup?.presentation === "inline" ? (
-            <View style={styles.startup}>
-              <StartupTrace attemptId={startup.id} presentation="inline" />
-            </View>
-          ) : null}
           {readOnly ? null : <SessionGitConflict />}
           {/* A read-only session has no composer, so its column keeps the bottom safe area. */}
           <KeyboardInsetView
@@ -86,7 +130,11 @@ export const SessionView = memo(function SessionView(): ReactElement {
               onLayout={(event) => setAvailableHeight(event.nativeEvent.layout.height)}
             >
               <View style={styles.transcript}>
-                <Transcript latestSignal={latestSignal} onOpenSubagent={openSubagent} />
+                <Transcript
+                  latestSignal={latestSignal}
+                  onOpenSubagent={openSubagent}
+                  startupAttemptId={inlineStartupId}
+                />
               </View>
               {readOnly ? (
                 <>
@@ -182,5 +230,4 @@ const styles = StyleSheet.create({
   column: { flex: 1 },
   transcript: { flex: 1 },
   inputArea: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
-  startup: { maxHeight: 280 },
 });

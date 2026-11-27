@@ -15,7 +15,11 @@ export {
 
 export const startupScopeSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("task"), taskId: z.string().min(1), role: agentRoleSchema }),
-  z.strictObject({ kind: z.literal("workspace"), sessionId: z.string().min(1).optional() }),
+  z.strictObject({
+    kind: z.literal("workspace"),
+    sessionId: z.string().min(1).optional(),
+    draftId: z.string().min(1).optional(),
+  }),
 ]);
 export type StartupScope = z.infer<typeof startupScopeSchema>;
 
@@ -79,6 +83,7 @@ export const startupStepSchema = z.strictObject({
       }),
     )
     .optional(),
+  warning: z.string().min(1).optional(),
   failure: workflowFailureSchema.optional(),
 });
 export type StartupStep = z.infer<typeof startupStepSchema>;

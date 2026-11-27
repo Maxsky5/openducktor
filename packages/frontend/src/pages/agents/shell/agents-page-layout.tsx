@@ -360,31 +360,42 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     ),
     [workflowSteps, selectedRole, agentStudioReady, onWorkflowStepSelect],
   );
+  const startupTopContent = useMemo(
+    () => (
+      <InlineStartup
+        scope={{
+          kind: "task",
+          repoPath: chatFileLinkOwner.repoPath,
+          taskId: chatFileLinkOwner.taskId,
+          role: chatHeaderModel.selectedRole,
+        }}
+      />
+    ),
+    [chatFileLinkOwner.repoPath, chatFileLinkOwner.taskId, chatHeaderModel.selectedRole],
+  );
+  const chatModelWithStartup = useMemo(
+    () => ({
+      ...chatModel,
+      thread: {
+        ...chatModel.thread,
+        topContent: startupTopContent,
+      },
+    }),
+    [chatModel, startupTopContent],
+  );
   const chatContent = useMemo(
     () => (
       <ChatFileLinkProvider owner={fileLinkOwner}>
         <ChatArtifactLinkProvider owner={chatArtifactLinkOwner}>
           <div className="flex h-full min-h-0 flex-col">
-            <InlineStartup
-              repoPath={chatFileLinkOwner.repoPath}
-              taskId={chatFileLinkOwner.taskId}
-              role={chatHeaderModel.selectedRole}
-            />
             <div className="min-h-0 flex-1">
-              <MemoizedAgentChatPane chatModel={chatModel} />
+              <MemoizedAgentChatPane chatModel={chatModelWithStartup} />
             </div>
           </div>
         </ChatArtifactLinkProvider>
       </ChatFileLinkProvider>
     ),
-    [
-      chatModel,
-      chatArtifactLinkOwner,
-      fileLinkOwner,
-      chatFileLinkOwner.repoPath,
-      chatFileLinkOwner.taskId,
-      chatHeaderModel.selectedRole,
-    ],
+    [chatModelWithStartup, chatArtifactLinkOwner, fileLinkOwner],
   );
   const rightPanelContent = useMemo(
     () => (

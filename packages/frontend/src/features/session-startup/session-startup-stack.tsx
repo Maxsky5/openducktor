@@ -1,15 +1,17 @@
-import { Check, ChevronDown, ChevronUp, LoaderCircle, OctagonAlert } from "lucide-react";
+import { Check, LoaderCircle, OctagonAlert } from "lucide-react";
 import { type ReactElement, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useStartupAttempts } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
-import { startupFailureRows } from "@openducktor/frontend-core/sessions/startup/startup-trace";
+import {
+  startupFailureRows,
+  startupStepCounts,
+} from "@openducktor/frontend-core/sessions/startup/startup-trace";
 import type { StartupAttempt } from "@openducktor/frontend-core/sessions/startup/startup-attempt-store";
 import {
   canOpenStartupSession,
   startupIsPending,
 } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
-import { Button } from "@/components/ui/button";
 import { NotificationOpenLabel } from "@/components/ui/sonner";
 import { ToastResizeContent } from "@/components/ui/toast-resize";
 import { notificationClassNames } from "@/lib/sonner-feedback";
@@ -18,12 +20,14 @@ import { STARTUP_TEXT_INSET } from "./constants";
 import { StartupRecoveryActions, StartupTrace } from "./session-startup-trace";
 import { TraceIcon } from "@/components/ui/trace";
 import { useOpenStartupSession } from "./use-open-startup-session";
+import { StartupExpandChevron, StartupStepCounter } from "./startup-card-parts";
 import { retainStartupPresentations, startupPresentation } from "./startup-presentation";
 import {
+  STARTUP_UNCONFIRMED_MESSAGE,
   startupActivity,
   startupIssue,
   startupOrigin,
-  startupProgress,
+  startupProgressToggleLabel,
   startupTitle,
 } from "./startup-summary";
 
@@ -67,20 +71,18 @@ function StartupNotice({ attempt }: { attempt: StartupAttempt }): null {
     () => () => {
       toast.dismiss(toastId);
     },
-    [connection, toastId],
+    [toastId],
   );
   useEffect(() => {
     const pending = startupIsPending(attempt);
     const activity = startupActivity(attempt);
     const issue = startupIssue(attempt);
-    const progress = startupProgress(attempt);
+    const progress = startupStepCounts(attempt);
     const hasTrace = progress.total > 0;
     const expanded = detailsOpen ?? hasTrace;
     const canInspect =
       hasTrace || attempt.ownership.state === "saved" || startupFailureRows(attempt).length > 0;
-    let progressLabel = "View progress";
-    if (!hasTrace || attempt.status.phase === "ready") progressLabel = "Details";
-    if (expanded) progressLabel = hasTrace ? "Hide progress" : "Hide details";
+    const progressLabel = startupProgressToggleLabel(expanded, hasTrace, attempt.status.phase);
     let icon = <OctagonAlert aria-hidden="true" className="size-4 text-destructive" />;
     if (pending)
       icon = (
@@ -96,33 +98,33 @@ function StartupNotice({ attempt }: { attempt: StartupAttempt }): null {
       startupPresentation(connection, attempt.id).detailsOpen = next;
       setDetailsOpen(next);
     };
-    toast(
-      <div className="flex min-w-0 items-center gap-2">
+    const headerContent = (
+      <>
         <TraceIcon className="size-5">{icon}</TraceIcon>
-        <span className="min-w-0 flex-1">{startupTitle(attempt)}</span>
+        <span className="min-w-0 flex-1 truncate">{startupTitle(attempt)}</span>
         <div className="flex shrink-0 items-center gap-1">
           {hasTrace && (pending || !expanded) ? (
-            <span className="text-xs font-normal text-muted-foreground tabular-nums">
-              {progress.completed}/{progress.total}
-              <span className="sr-only"> steps complete</span>
-            </span>
+            <StartupStepCounter completed={progress.completed} total={progress.total} />
           ) : null}
-          {canInspect ? (
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="size-6"
-              aria-label={progressLabel}
-              title={progressLabel}
-              aria-expanded={expanded}
-              onClick={toggleDetails}
-            >
-              {expanded ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
-            </Button>
-          ) : null}
+          {canInspect ? <StartupExpandChevron expanded={expanded} /> : null}
         </div>
-      </div>,
+      </>
+    );
+    toast(
+      canInspect ? (
+        <button
+          type="button"
+          className="group/startup-toggle -mx-1.5 -my-1 flex w-[calc(100%+0.75rem)] min-w-0 cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={progressLabel}
+          title={progressLabel}
+          aria-expanded={expanded}
+          onClick={toggleDetails}
+        >
+          {headerContent}
+        </button>
+      ) : (
+        <div className="flex min-w-0 items-center gap-2">{headerContent}</div>
+      ),
       {
         id: toastId,
         duration: Infinity,
@@ -147,9 +149,7 @@ function StartupNotice({ attempt }: { attempt: StartupAttempt }): null {
               <p className="break-words">{startupOrigin(attempt)}</p>
               {activity && (!expanded || !hasTrace) ? <p>{activity}</p> : null}
               {!expanded && attempt.status.confirmation === "unconfirmed" ? (
-                <p className="text-warning-surface-foreground">
-                  Startup is not confirmed. Inspect the session before you try again.
-                </p>
+                <p className="text-warning-surface-foreground">{STARTUP_UNCONFIRMED_MESSAGE}</p>
               ) : null}
               {!expanded && issue ? (
                 <p role="alert" className="break-words text-destructive">

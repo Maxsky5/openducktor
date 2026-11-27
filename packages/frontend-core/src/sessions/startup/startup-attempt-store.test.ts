@@ -113,9 +113,11 @@ test("registers feedback before dispatch and keeps command order across a backgr
   expect(dispatched).toBe(false);
   admit();
   await first;
-  // Workspace sessions keep their foreground presentation.
+  // Pending workspace sessions can continue in the background and return inline.
   store.continueInBackground(id);
-  expect(store.getAttempt(id)?.presentation).toBe("dialog");
+  expect(store.getAttempt(id)?.presentation).toBe("notification");
+  store.returnToInline(id);
+  expect(store.getAttempt(id)?.presentation).toBe("inline");
   await store.operation(id, async (context) => ({ startupProgress: progress(context, 1) }));
   expect(store.getAttempt(id)?.operations.map((operation) => operation.phase)).toEqual([
     "completed",
@@ -398,6 +400,32 @@ test("late action results stay in their old operation without changing a running
       type: "exited",
       exitCode: 1,
     });
+  } finally {
+    store.dispose();
+  }
+});
+
+test("attachInlineView shares inline ownership across handoffs, backgrounds pending leaves, and releases clean ready leaves", async () => {
+  const { store, id } = harness(undefined, "inline");
+  try {
+    const releaseFirst = store.attachInlineView(id);
+    releaseFirst();
+    const releaseSecond = store.attachInlineView(id);
+    await Promise.resolve();
+    expect(store.getAttempt(id)?.presentation).toBe("inline");
+
+    releaseSecond({ suppressBackground: true });
+    await Promise.resolve();
+    expect(store.getAttempt(id)?.presentation).toBe("inline");
+
+    const releaseThird = store.attachInlineView(id);
+    releaseThird();
+    await Promise.resolve();
+    expect(store.getAttempt(id)?.presentation).toBe("notification");
+
+    const releaseReturned = store.attachInlineView(id, { returnFromNotification: true });
+    expect(store.getAttempt(id)?.presentation).toBe("inline");
+    releaseReturned({ suppressBackground: true });
   } finally {
     store.dispose();
   }

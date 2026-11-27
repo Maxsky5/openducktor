@@ -65,10 +65,10 @@ export type SessionPanelVisibility = {
   settleBottom: () => void;
 };
 
-const initialOwnerViewState = (ownerKey: string | null): OwnerViewState => ({
+const initialOwnerViewState = (ownerKey: string | null, slideRightIn: boolean): OwnerViewState => ({
   ownerKey,
   focusRequest: { right: 0, bottom: 0 },
-  motion: { right: "instant", bottom: "instant" },
+  motion: { right: slideRightIn ? "slide" : "instant", bottom: "instant" },
   presence: { right: "closed", bottom: "closed" },
 });
 
@@ -127,6 +127,7 @@ type SessionPanelVisibilityInput = {
   bottomClosingTabs: readonly ResolvedPanelTab[];
   terminalList: BottomPanelFacts["terminalList"];
   isActive: boolean;
+  deferRightReveal?: boolean;
 };
 
 /**
@@ -141,6 +142,7 @@ export function useSessionPanelVisibility({
   bottomClosingTabs,
   terminalList,
   isActive,
+  deferRightReveal = false,
 }: SessionPanelVisibilityInput): SessionPanelVisibility {
   const store = useSessionPanelLayoutStore();
   const ownerKey = owner ? sessionPanelOwnerKey(owner) : null;
@@ -149,7 +151,7 @@ export function useSessionPanelVisibility({
     [owner, store],
   );
   const panels = useSyncExternalStore(store.subscribe, readOwnerPanels);
-  const isRightOpen = owner !== null && isSavedRightOpen(panels);
+  const isRightOpen = owner !== null && !deferRightReveal && isSavedRightOpen(panels);
 
   const facts: BottomPanelFacts = {
     tabs: bottomTabs,
@@ -165,9 +167,11 @@ export function useSessionPanelVisibility({
   const nextBottomState = decision?.state ?? panels.bottom;
   const nextBottomCheck = decision?.check ?? bottomCheck;
 
-  const [viewState, setViewState] = useState(() => initialOwnerViewState(ownerKey));
+  const [viewState, setViewState] = useState(() =>
+    initialOwnerViewState(ownerKey, deferRightReveal),
+  );
   const view = syncOwnerViewState(
-    viewState.ownerKey === ownerKey ? viewState : initialOwnerViewState(ownerKey),
+    viewState.ownerKey === ownerKey ? viewState : initialOwnerViewState(ownerKey, deferRightReveal),
     { isRightOpen, isBottomOpen, bottomHides, isActive },
   );
   if (view !== viewState) setViewState(view);

@@ -19,7 +19,7 @@ import { terminalFontSize, terminalPageColors } from "../terminals/terminal-colo
 import { createTerminalOutputSession } from "../terminals/terminal-output-session";
 import { TERMINAL_PAGE } from "../terminals/terminal-page";
 import { useTerminalBridge } from "../terminals/use-terminal-bridge";
-import { useStartupPresentation } from "./startup-presentation-context";
+import { useStartupPresentationActions } from "./startup-presentation-context";
 import { createStartupOutputReader } from "./startup-output-reading";
 
 export function StartupTerminalOutput({
@@ -36,7 +36,7 @@ export function StartupTerminalOutput({
   const [notice, setNotice] = useState<string | null>(null);
   const [pageReady, setPageReady] = useState(false);
   const [generation, setGeneration] = useState(0);
-  const reading = useStartupPresentation().outputReading(attemptId, terminalId);
+  const reading = useStartupPresentationActions().outputReading(attemptId, terminalId);
   const [outputText, setOutputText] = useState(reading.text);
   const [initialTextOffset] = useState(() => ({ x: 0, y: reading.textOffset }));
   const { copyText } = useClipboardCopy();

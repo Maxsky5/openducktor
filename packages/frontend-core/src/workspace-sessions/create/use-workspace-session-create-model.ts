@@ -65,6 +65,10 @@ const isCatalogLoadingForCreate = (
 export function useWorkspaceSessionCreateModel(
   repoPath: string,
   defaultSelection: AgentModelSelection | null,
+  controlled?: {
+    selection: AgentModelSelection | null;
+    onSelectionChange: (selection: AgentModelSelection | null) => void;
+  },
 ) {
   const { feedback } = useClientConnection();
   const { availableRuntimeDefinitions, loadRepoRuntimeCatalog } = useRuntimeAvailabilityContext();
@@ -78,7 +82,9 @@ export function useWorkspaceSessionCreateModel(
     enabledRuntimeKinds: runtimeKinds,
     loadRuntimeCatalog: loadRepoRuntimeCatalog,
   });
-  const [draftSelection, setDraftSelection] = useState<AgentModelSelection | null>(null);
+  const [localSelection, setLocalSelection] = useState<AgentModelSelection | null>(null);
+  const draftSelection = controlled ? controlled.selection : localSelection;
+  const setDraftSelection = controlled ? controlled.onSelectionChange : setLocalSelection;
   const defaultCatalog = defaultSelection
     ? (resources.find((entry) => entry.runtimeKind === defaultSelection.runtimeKind)?.catalog ??
       null)

@@ -40,7 +40,10 @@ import type {
 import type { AgentChatTranscriptPresentation } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript.types";
 
 export type AgentChatThreadModel = {
+  /** Optional stable pane key that preserves mounted thread DOM before a runtime identity binds. */
+  threadKey?: string;
   workflowTask?: import("@openducktor/workflows").ResolvedTaskCard | null;
+  topContent?: ReactNode;
   forkActions?: AgentChatForkActions | null;
   forkDialog?: ReactNode;
   modelCatalog: AgentModelCatalog | null;
@@ -79,6 +82,7 @@ export type AgentChatComposerModel = {
   isReadOnly: boolean;
   canSend?: boolean;
   readOnlyReason: string | null;
+  externalSendBlockedReason?: string | null;
   pendingSendItems?: readonly AgentChatPendingSendGroup[];
   draftScope: AgentChatDraftScope;
   onSend: (

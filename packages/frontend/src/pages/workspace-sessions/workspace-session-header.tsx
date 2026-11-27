@@ -27,6 +27,8 @@ import {
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { WorkspaceSessionRenameDialog } from "./workspace-session-rename-dialog";
 
+export type HeaderChromeReveal = "default" | "deferred" | "smooth";
+
 type Props = {
   workspace: ActiveWorkspace;
   record: WorkspaceSession;
@@ -34,6 +36,38 @@ type Props = {
   viewControls: ReactNode;
   onArchive: (onCloseAutoFocus: (event: Event) => void) => void;
   isArchiving: boolean;
+  chromeReveal?: HeaderChromeReveal;
+  startupTitleFallback?: string | null;
+};
+
+function HeaderTitle({ title }: { title: string }): ReactElement {
+  const [truncated, setTruncated] = useState(false);
+  const [open, setOpen] = useState(false);
+  const updateTruncation = (element: HTMLHeadingElement) => {
+    setTruncated(element.scrollWidth > element.clientWidth);
+  };
+  return (
+    <Tooltip open={truncated && open} onOpenChange={setOpen}>
+      <TooltipTrigger asChild>
+        <h2
+          className="min-w-0 truncate text-sm font-semibold leading-5"
+          onPointerEnter={(event) => updateTruncation(event.currentTarget)}
+          onFocus={(event) => updateTruncation(event.currentTarget)}
+        >
+          {title}
+        </h2>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" align="start" className="max-w-96">
+        {title}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+const chromeRevealClass = (chromeReveal: HeaderChromeReveal): string => {
+  if (chromeReveal === "deferred") return "session-header-deferred flex items-center gap-1.5";
+  if (chromeReveal === "smooth") return "session-header-reveal flex items-center gap-1.5";
+  return "contents";
 };
 
 export function WorkspaceSessionHeader({
@@ -43,13 +77,20 @@ export function WorkspaceSessionHeader({
   viewControls,
   onArchive,
   isArchiving,
+  chromeReveal = "default",
+  startupTitleFallback = null,
 }: Props): ReactElement {
   const shortcutRegistry = use(CommandPaletteRegistryContext);
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const renameMounted = useDialogPresence(renaming);
   const actionsButton = useRef<HTMLButtonElement>(null);
-  const title = workspaceSessionTitle(record);
+  const hasRecordTitle =
+    Boolean(record.manualTitle?.trim()) || Boolean(record.generatedTitle?.trim());
+  const title =
+    !hasRecordTitle && startupTitleFallback?.trim()
+      ? startupTitleFallback.trim()
+      : workspaceSessionTitle(record);
   const workingDirectory = workspaceSessionWorkingDirectory(workspace, record);
   const contextMode = record.executionTarget.kind === "local_repo_root" ? "repository" : "worktree";
   const archive = (trigger: HTMLButtonElement | null): void => {
@@ -75,18 +116,9 @@ export function WorkspaceSessionHeader({
         />
       ) : null}
       <SessionPageHeader
-        title={
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <h2 className="min-w-0 truncate text-sm font-semibold leading-5">{title}</h2>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" align="start" className="max-w-96">
-              {title}
-            </TooltipContent>
-          </Tooltip>
-        }
+        title={<HeaderTitle title={title} />}
         actions={
-          <>
+          <div className={chromeRevealClass(chromeReveal)}>
             {repoActions}
             {record.roleSnapshot ? (
               <Tooltip>
@@ -169,19 +201,21 @@ export function WorkspaceSessionHeader({
                 </PopoverContent>
               </Popover>
             </div>
-          </>
+          </div>
         }
         openIn={
-          <SessionOpenInAction
-            contextMode={contextMode}
-            targetPath={workingDirectory}
-            targetLabel={contextMode === "repository" ? "repository root" : "workspace worktree"}
-            disabledReason={
-              workingDirectory ? null : "The selected working directory is unavailable."
-            }
-          />
+          <div className={chromeRevealClass(chromeReveal)}>
+            <SessionOpenInAction
+              contextMode={contextMode}
+              targetPath={workingDirectory}
+              targetLabel={contextMode === "repository" ? "repository root" : "workspace worktree"}
+              disabledReason={
+                workingDirectory ? null : "The selected working directory is unavailable."
+              }
+            />
+          </div>
         }
-        viewControls={viewControls}
+        viewControls={<div className={chromeRevealClass(chromeReveal)}>{viewControls}</div>}
       />
       {renameMounted && (
         <WorkspaceSessionRenameDialog

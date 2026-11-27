@@ -28,7 +28,10 @@ import {
 import { buildSessionNavigationHref } from "@/features/session-navigation/sessions-route";
 import { useSessionGrouping } from "@openducktor/frontend-core/sessions/navigation/use-session-grouping";
 import { useSessionNavigationModel } from "@openducktor/frontend-core/sessions/navigation/use-session-navigation-model";
-import { useVisibleSessionControls } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
+import {
+  useVisibleSessionControls,
+  useVisibleWorkspaceDraftId,
+} from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
 import { useWatchSessionBlockers } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
@@ -162,7 +165,10 @@ export function WorkspaceSidebar({
     return activeWorkspace ? [activeWorkspace] : [];
   }, [activeWorkspace, scope, workspaces]);
   const { grouping, disabled: groupingDisabled, changeGrouping } = useSessionGrouping();
-  const { model, retrySource } = useSessionNavigationModel(scopedWorkspaces, grouping);
+  const includeUntouchedDraftId = useVisibleWorkspaceDraftId();
+  const { model, retrySource } = useSessionNavigationModel(scopedWorkspaces, grouping, {
+    includeUntouchedDraftId,
+  });
   useWatchSessionBlockers(model);
   const { readVisible } = useVisibleSessionControls();
   const listScopeKey =
@@ -217,7 +223,7 @@ export function WorkspaceSidebar({
         return;
       const href = buildSessionNavigationHref(target);
       guardTransition(() => {
-        if (target.kind !== "workspace_session") {
+        if (target.kind === "task" || target.kind === "task_session") {
           void prefetchTaskArtifacts(queryClient, entry.workspace, target.taskId, target.role);
         }
         // The Sessions page opens the workspace that the address names.

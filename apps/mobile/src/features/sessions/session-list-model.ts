@@ -83,7 +83,8 @@ export type SessionListItem =
 const searchText = (entry: SessionNavigationEntry): string => {
   const parts = [entry.title, entry.workspace.workspaceName, sessionEntryRoleLabel(entry) ?? ""];
   if (entry.context.kind === "task") parts.push(entry.context.task.id);
-  else parts.push(entry.context.session.executionTarget.workingDirectory);
+  else if (entry.context.kind === "workspace")
+    parts.push(entry.context.session.executionTarget.workingDirectory);
   return parts.join(" ").toLowerCase();
 };
 
@@ -139,6 +140,7 @@ export const sessionsNeedsYouCount = (model: SessionNavigationModel): number =>
 export type SessionDestination =
   | { kind: "session"; params: SessionRouteParams }
   | { kind: "task"; workspaceId: string; taskId: string }
+  | { kind: "draft"; workspaceId: string; draftId: string }
   /** A chat whose runtime session has not started has no conversation to open. */
   | { kind: "not_started" };
 
@@ -163,6 +165,9 @@ export const sessionEntryDestination = (entry: SessionNavigationEntry): SessionD
   const { target } = entry;
   if (target.kind === "task") {
     return { kind: "task", workspaceId: target.workspaceId, taskId: target.taskId };
+  }
+  if (target.kind === "workspace_session_draft") {
+    return { kind: "draft", workspaceId: target.workspaceId, draftId: target.draftId };
   }
   if (target.kind === "task_session") {
     return sessionDestination(entry, {
@@ -260,16 +265,28 @@ export type SessionMenuAction =
   | "rename"
   | "copy_working_directory"
   | "copy_external_session_id"
-  | "archive";
+  | "archive"
+  | "discard_draft";
 
 /**
  * The same actions and words as the desktop session menu, in the title case of the mobile menus,
- * as the session header menu. Chats can also be renamed or archived.
+ * as the session header menu. Chats can also be renamed or archived; drafts can only be discarded.
  */
 export const sessionMenuItems = (
   entry: SessionNavigationEntry,
   unread: boolean,
 ): (ActionMenuItem & { id: SessionMenuAction })[] => {
+  if (entry.context.kind === "workspace_draft") {
+    return [
+      {
+        id: "discard_draft",
+        title: "Discard Draft",
+        icon: "trash-2",
+        destructive: true,
+        disabled: entry.context.isStarting,
+      },
+    ];
+  }
   const chat = entry.context.kind === "workspace";
   const location = sessionEntryLocation(entry);
   const items: (ActionMenuItem & { id: SessionMenuAction })[] = [
@@ -312,6 +329,7 @@ const SESSION_MENU_ACTIONS: readonly SessionMenuAction[] = [
   "copy_working_directory",
   "copy_external_session_id",
   "archive",
+  "discard_draft",
 ];
 
 /** The menu reports the item ID as a string. */

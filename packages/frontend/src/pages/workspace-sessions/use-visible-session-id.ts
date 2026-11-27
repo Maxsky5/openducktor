@@ -10,12 +10,14 @@ export function useVisibleSessionId(
   workspaceId: string,
 ) {
   const [visible, setVisible] = useState({ workspaceId, sessionId: requestedSelectedId });
-  const visibleSelectedId =
-    visible.workspaceId === workspaceId ? visible.sessionId : requestedSelectedId;
+  const shouldAdoptImmediately =
+    visible.workspaceId !== workspaceId ||
+    (visible.sessionId === null && requestedSelectedId !== null);
+  const visibleSelectedId = shouldAdoptImmediately ? requestedSelectedId : visible.sessionId;
   const [retryCount, setRetryCount] = useState(0);
   const pendingRef = useRef<{ target: string | null } | null>(null);
   const canceledTargetRef = useRef<string | null | undefined>(undefined);
-  if (visible.workspaceId !== workspaceId) {
+  if (shouldAdoptImmediately) {
     setVisible({ workspaceId, sessionId: requestedSelectedId });
   }
   useLayoutEffect(() => {

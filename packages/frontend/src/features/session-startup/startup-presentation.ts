@@ -2,6 +2,8 @@ import type { ClientConnection } from "@openducktor/frontend-core/connection/cli
 
 export type StartupPresentation = {
   detailsOpen: boolean | undefined;
+  settledAutoCollapsed: boolean;
+  hasEnteredInline: boolean;
   expandedSteps: Set<string>;
   scrollTop: number;
   inspection: ReturnType<typeof createStartupInspection>;
@@ -26,6 +28,8 @@ export const startupPresentation = (
   if (!presentation) {
     presentation = {
       detailsOpen: undefined,
+      settledAutoCollapsed: false,
+      hasEnteredInline: false,
       expandedSteps: new Set(),
       scrollTop: 0,
       inspection: createStartupInspection(),

@@ -2,7 +2,11 @@ import { useClientConnection } from "@openducktor/frontend-core/connection/clien
 import {
   startupActiveStep,
   startupFailureRows,
-  startupStepHasFailure,
+  startupHasWarningOrFailure,
+  startupIsCleanReady,
+  startupStepCounts,
+  type StartupStepDisplayState,
+  startupStepDisplayState,
   startupTraceRows,
 } from "@openducktor/frontend-core/sessions/startup/startup-trace";
 import {
@@ -11,7 +15,6 @@ import {
   type StartupAttempt,
 } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
-import { terminalCommandSucceeded } from "@openducktor/frontend-core/terminals/terminal-command-result";
 import { type ReactElement, useState } from "react";
 import { ScrollView, useWindowDimensions, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -66,43 +69,49 @@ export function StartupTrace({
   attemptId,
   onContinueInBackground,
   onEditChoices,
-  onRepairSavedSession,
   presentation: expectedPresentation = "dialog",
   detailsMaxHeight,
 }: {
   attemptId: string;
   onContinueInBackground?: (() => void) | undefined;
   onEditChoices?: (() => void) | undefined;
-  onRepairSavedSession?: (() => void) | undefined;
   presentation?: StartupPresentation;
   detailsMaxHeight?: number;
 }): ReactElement | null {
   const attempt = useStartupAttempt(attemptId);
-  const { startupAttempts } = useClientConnection();
   const traceState = useStartupPresentation();
   const compact = expectedPresentation !== "dialog";
+  const inline = expectedPresentation === "inline";
   const rows = attempt ? startupTraceRows(attempt) : [];
   const traceAvailable = rows.length > 0;
+  const isCleanReady = startupIsCleanReady(attempt);
+  const inlineOverride = traceState.inlineProgressOverride[attemptId];
   const progressOpen =
-    traceAvailable && (!compact || traceState.expanded[attemptId]?.has("progress") === true);
+    traceAvailable &&
+    (!compact
+      ? true
+      : inline
+        ? (inlineOverride ?? !isCleanReady)
+        : traceState.expanded[attemptId]?.has("progress") === true);
   const [progressViewed, setProgressViewed] = useState(progressOpen);
   useAnnounce(startupAnnouncement(attempt, expectedPresentation));
   if (!attempt || attempt.presentation !== expectedPresentation) return null;
-  if (
-    expectedPresentation === "inline" &&
-    startupAttempts.isReadyForHandoff(attemptId) &&
-    hasConfirmedReadyState(attempt)
-  )
-    return null;
   const toggleProgress =
     compact && traceAvailable
       ? () => {
           setProgressViewed(true);
-          traceState.toggle(attemptId, "progress");
+          if (inline) traceState.setInlineProgressOpen(attemptId, !progressOpen);
+          else traceState.toggle(attemptId, "progress");
         }
       : undefined;
   return (
-    <View style={[styles.root, compact ? styles.compact : styles.full]}>
+    <View
+      style={[
+        styles.root,
+        compact ? styles.compact : styles.full,
+        inline ? styles.inlineCard : null,
+      ]}
+    >
       <StartupTraceHeader
         attempt={attempt}
         compact={compact}
@@ -138,26 +147,8 @@ export function StartupTrace({
         attempt={attempt}
         onContinueInBackground={onContinueInBackground}
         onEditChoices={onEditChoices}
-        onRepairSavedSession={onRepairSavedSession}
-        progressExpanded={progressOpen}
-        onToggleProgress={toggleProgress}
       />
     </View>
-  );
-}
-
-function hasConfirmedReadyState(attempt: StartupAttempt): boolean {
-  return (
-    attempt.status.phase === "ready" &&
-    attempt.status.confirmation === "current" &&
-    !attempt.error &&
-    attempt.instruction?.state !== "not_sent" &&
-    attempt.instruction?.state !== "unknown" &&
-    !attempt.operations.some((operation) =>
-      operation.steps.some(
-        (step) => step.action?.result && !terminalCommandSucceeded(step.action.result),
-      ),
-    )
   );
 }
 
@@ -174,45 +165,49 @@ function StartupTraceHeader({
 }): ReactElement {
   const theme = useAppTheme();
   const phase = attempt.status.phase;
+  const hasWarningOrFailure = startupHasWarningOrFailure(attempt);
+  const readyWithWarnings = phase === "ready" && hasWarningOrFailure;
+  const phaseIcon: IconName = readyWithWarnings ? "triangle-alert" : PHASE_ICONS[phase];
+  const phaseColor: ThemeColorName = readyWithWarnings ? "amber" : PHASE_COLORS[phase];
+  const phaseLabel = readyWithWarnings ? "Session ready with warnings" : PHASE_LABELS[phase];
+  const counts = startupStepCounts(attempt);
   const current = attempt.status.confirmation === "current";
   const workspace = attempt.origin.workspaceId.split(/[\\/]/).filter(Boolean).at(-1);
   const scope =
     attempt.origin.scope.kind === "task"
       ? ` · ${attempt.origin.scope.taskId} · ${attempt.origin.scope.role}`
       : "";
-  const origin = `${workspace}${scope}`;
+  const countSuffix = counts.total > 0 ? ` · ${counts.completed} of ${counts.total} steps` : "";
+  const origin = `${workspace}${scope}${countSuffix}`;
   return (
     <View style={styles.header}>
-      <SwapTransition swapKey={PHASE_ICONS[phase]}>
+      <SwapTransition swapKey={phaseIcon}>
         <View
-          style={[
-            styles.phaseIcon,
-            { backgroundColor: withAlpha(theme.colors[PHASE_COLORS[phase]], 0.12) },
-          ]}
+          style={[styles.phaseIcon, { backgroundColor: withAlpha(theme.colors[phaseColor], 0.12) }]}
         >
-          {PHASE_ICONS[phase] === "loader-circle" ? (
+          {phaseIcon === "loader-circle" ? (
             <LoaderSpinner size={16} colorStyle={styles.activeIcon} />
           ) : (
-            <Icon name={PHASE_ICONS[phase]} size={16} color={PHASE_COLORS[phase]} />
+            <Icon name={phaseIcon} size={16} color={phaseColor} />
           )}
         </View>
       </SwapTransition>
       <View style={styles.heading}>
-        <SwapTransition swapKey={PHASE_LABELS[phase]}>
+        <SwapTransition swapKey={phaseLabel}>
           <Text
             variant="headline"
             accessibilityRole={compact ? "header" : "text"}
             numberOfLines={2}
             style={styles.title}
           >
-            {PHASE_LABELS[phase]}
+            {phaseLabel}
           </Text>
         </SwapTransition>
         <Text
           variant="caption1"
           tone="secondary"
           numberOfLines={1}
-          accessibilityLabel={`${attempt.origin.workspaceId}${scope}`}
+          accessibilityLabel={`${attempt.origin.workspaceId}${scope}${countSuffix}`}
           selectable
         >
           {origin}
@@ -223,7 +218,7 @@ function StartupTraceHeader({
           </Text>
         ) : null}
       </View>
-      <StartupNotificationControls
+      <StartupHeaderControls
         attempt={attempt}
         progressExpanded={progressExpanded}
         onToggleProgress={onToggleProgress}
@@ -232,7 +227,7 @@ function StartupTraceHeader({
   );
 }
 
-function StartupNotificationControls({
+function StartupHeaderControls({
   attempt,
   progressExpanded,
   onToggleProgress,
@@ -242,7 +237,7 @@ function StartupNotificationControls({
   onToggleProgress: (() => void) | undefined;
 }): ReactElement | null {
   const { startupAttempts } = useClientConnection();
-  if (attempt.presentation !== "notification") return null;
+  if (attempt.presentation === "dialog") return null;
   const settled = !startupIsPending(attempt);
   if (!onToggleProgress && !settled) return null;
   return (
@@ -268,7 +263,7 @@ function StartupNotificationControls({
           feedback="opacity"
           onPress={() => startupAttempts.dismiss(attempt.id)}
           accessibilityRole="button"
-          accessibilityLabel="Dismiss startup notification"
+          accessibilityLabel="Dismiss startup progress"
           style={styles.headerAction}
         >
           <Icon name="x" size={16} color="secondaryLabel" />
@@ -276,6 +271,12 @@ function StartupNotificationControls({
       ) : null}
     </View>
   );
+}
+
+function compactStepTone(displayState: StartupStepDisplayState): "red" | "amber" | "secondary" {
+  if (displayState === "failed") return "red";
+  if (displayState === "warning") return "amber";
+  return "secondary";
 }
 
 function StartupTraceSummary({
@@ -291,12 +292,12 @@ function StartupTraceSummary({
 }): ReactElement | null {
   if (!compact || rows.length === 0 || progressOpen) return null;
   const activeStep = startupActiveStep(rows);
-  const failed = activeStep ? startupStepHasFailure(activeStep) : false;
+  const displayState = activeStep ? startupStepDisplayState(activeStep) : null;
   return (
     <>
-      {activeStep ? (
-        <SwapTransition swapKey={`${activeStep.id}:${failed}`} style={styles.textColumn}>
-          <Text variant="footnote" tone={failed ? "red" : "secondary"} numberOfLines={1}>
+      {activeStep && displayState ? (
+        <SwapTransition swapKey={`${activeStep.id}:${displayState}`} style={styles.textColumn}>
+          <Text variant="footnote" tone={compactStepTone(displayState)} numberOfLines={1}>
             {activeStep.label}
           </Text>
         </SwapTransition>
@@ -442,10 +443,7 @@ function startupAnnouncement(
   if (!attempt || attempt.presentation !== expectedPresentation) return null;
   const current = attempt.status.confirmation === "current";
   const activeStep = startupActiveStep(startupTraceRows(attempt));
-  const state =
-    activeStep?.action?.result && !terminalCommandSucceeded(activeStep.action.result)
-      ? "failed"
-      : activeStep?.state.replace("_", " ");
+  const state = activeStep ? startupStepDisplayState(activeStep).replace("_", " ") : undefined;
   const stepAnnouncement = activeStep ? ` ${activeStep.label}. ${state}.` : "";
   const failure = attempt.error ? ` ${attempt.error}` : "";
   return `${attempt.label}. ${PHASE_LABELS[attempt.status.phase]}.${current ? stepAnnouncement : " Waiting for the host to confirm the outcome."}${failure}`;
@@ -456,6 +454,13 @@ const styles = StyleSheet.create((theme) => ({
   root: { gap: theme.space.sm, flexShrink: 1, minHeight: 0 },
   full: { maxHeight: "100%", padding: theme.layout.screenPadding },
   compact: { padding: theme.space.md },
+  inlineCard: {
+    borderRadius: theme.radius.xl,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    borderColor: theme.desktop.border,
+    backgroundColor: theme.desktop.card,
+  },
   header: { flexDirection: "row", alignItems: "flex-start", gap: theme.space.md, flexShrink: 0 },
   phaseIcon: {
     width: STATUS_COLUMN,

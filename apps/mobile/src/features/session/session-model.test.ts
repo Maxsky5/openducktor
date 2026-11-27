@@ -75,6 +75,7 @@ describe("readSessionRoute", () => {
         readOnly: true,
         transcriptScope,
         focusPendingInput: true,
+        startupAttemptId: null,
       },
     });
   });

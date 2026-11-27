@@ -68,8 +68,12 @@ import {
   transcriptListItems,
 } from "./transcript-list-items";
 import { type ListPlace, placeOf } from "./transcript-list-slots";
-import { TranscriptNotice } from "./transcript-notice";
-import { TranscriptNoticeContext } from "./transcript-notice-context";
+import { TranscriptNotice, TranscriptStartupTrace } from "./transcript-notice";
+import {
+  TranscriptNoticeContext,
+  TranscriptShownContext,
+  TranscriptStartupContext,
+} from "./transcript-notice-context";
 import { TranscriptRow } from "./transcript-row";
 import type { RowStateStore } from "./transcript-row-state";
 import { messageRowKind, type PresentToolCall } from "./transcript-row-type";
@@ -240,8 +244,17 @@ const GLIDE_HOME = { layout: glideHome };
 const NO_GLIDE = {};
 
 function TopEdge(): ReactElement {
+  const shown = use(TranscriptShownContext);
+  const startupAttemptId = use(TranscriptStartupContext);
   const notice = use(TranscriptNoticeContext);
-  return notice ? <TranscriptNotice notice={notice} /> : TOP_SPACE;
+  const showStartup = shown && startupAttemptId !== null;
+  if (!showStartup && !notice) return TOP_SPACE;
+  return (
+    <View>
+      {showStartup ? <TranscriptStartupTrace attemptId={startupAttemptId} /> : null}
+      {notice ? <TranscriptNotice notice={notice} /> : null}
+    </View>
+  );
 }
 
 /**
@@ -405,37 +418,39 @@ export const TranscriptChatList = memo(function TranscriptChatList({
       accessibilityElementsHidden={!shown}
       importantForAccessibility={shown ? "auto" : "no-hide-descendants"}
     >
-      <TranscriptRowsProvider value={context}>
-        <FoldMotionListProvider value={foldList}>
-          <FoldMotionProvider value={foldMotion}>
-            <FlashList
-              ref={listRef}
-              data={items}
-              inverted={kind === "latest"}
-              drawDistance={DRAW_DISTANCE}
-              renderItem={renderItem}
-              CellRendererComponent={TranscriptCell}
-              keyExtractor={keyExtractor}
-              getItemType={getItemType}
-              onLayout={onLayout}
-              onScroll={onScroll}
-              onContentSizeChange={onContentSizeChange}
-              onViewableItemsChanged={onViewableItemsChanged}
-              onScrollEndDrag={onRestShown}
-              onMomentumScrollEnd={onRestShown}
-              // As on desktop, no scroll bar: the list measures rows as they come near.
-              showsVerticalScrollIndicator={false}
-              // A drag closes the keyboard; a tap keeps it. The composer suggestions float over the
-              // transcript, and Android gives their taps to the list below them too.
-              keyboardDismissMode={KEYBOARD_DISMISS_ON_DRAG}
-              keyboardShouldPersistTaps="always"
-              accessibilityLabel="Transcript"
-              accessibilityActions={accessibilityActions}
-              onAccessibilityAction={onAccessibilityAction}
-            />
-          </FoldMotionProvider>
-        </FoldMotionListProvider>
-      </TranscriptRowsProvider>
+      <TranscriptShownContext value={shown}>
+        <TranscriptRowsProvider value={context}>
+          <FoldMotionListProvider value={foldList}>
+            <FoldMotionProvider value={foldMotion}>
+              <FlashList
+                ref={listRef}
+                data={items}
+                inverted={kind === "latest"}
+                drawDistance={DRAW_DISTANCE}
+                renderItem={renderItem}
+                CellRendererComponent={TranscriptCell}
+                keyExtractor={keyExtractor}
+                getItemType={getItemType}
+                onLayout={onLayout}
+                onScroll={onScroll}
+                onContentSizeChange={onContentSizeChange}
+                onViewableItemsChanged={onViewableItemsChanged}
+                onScrollEndDrag={onRestShown}
+                onMomentumScrollEnd={onRestShown}
+                // As on desktop, no scroll bar: the list measures rows as they come near.
+                showsVerticalScrollIndicator={false}
+                // A drag closes the keyboard; a tap keeps it. The composer suggestions float over the
+                // transcript, and Android gives their taps to the list below them too.
+                keyboardDismissMode={KEYBOARD_DISMISS_ON_DRAG}
+                keyboardShouldPersistTaps="always"
+                accessibilityLabel="Transcript"
+                accessibilityActions={accessibilityActions}
+                onAccessibilityAction={onAccessibilityAction}
+              />
+            </FoldMotionProvider>
+          </FoldMotionListProvider>
+        </TranscriptRowsProvider>
+      </TranscriptShownContext>
     </View>
   );
 });

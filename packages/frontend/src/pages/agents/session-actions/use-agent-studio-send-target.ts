@@ -1,13 +1,6 @@
-import {
-  type AgentModelSelection,
-  type AgentUserMessagePart,
-  classifySystemSlashCommandInvocation,
-} from "@openducktor/core";
+import type { AgentModelSelection } from "@openducktor/core";
 import { RemoteConnectionError } from "@openducktor/host-client/remote";
-import {
-  GOAL_SLASH_COMMAND,
-  MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
-} from "@openducktor/contracts";
+import { requireSystemCommandSessionTarget } from "@openducktor/frontend-core/sessions/composer/system-slash-command-guard";
 import { useEffect, useMemo, useRef } from "react";
 import type { AgentChatSendTarget } from "@openducktor/frontend-core/sessions/send/use-agent-chat-send";
 import {
@@ -109,7 +102,7 @@ export function useAgentStudioSendTarget({
         if (!isCurrentContext()) return null;
         if (!options?.steersRunningTurn && speedBlockedReason !== null)
           throw new Error(speedBlockedReason);
-        requireSystemCommandTarget(parts, selectedSessionIdentity);
+        requireSystemCommandSessionTarget(parts, selectedSessionIdentity !== null);
         if (selectedSessionIdentity) {
           assertCanPrepareSession(selectedSessionIdentity);
           if (!isCurrentContext()) return null;
@@ -218,17 +211,3 @@ export function useAgentStudioSendTarget({
     ],
   );
 }
-
-/** A system command, such as `/compact` or `/goal`, needs an existing session. */
-const requireSystemCommandTarget = (
-  parts: AgentUserMessagePart[],
-  selectedSessionIdentity: AgentSessionIdentity | null,
-): void => {
-  const invocation = classifySystemSlashCommandInvocation(parts);
-  if (invocation.kind === "not_system" || selectedSessionIdentity) return;
-  const trigger =
-    invocation.kind === "goal"
-      ? GOAL_SLASH_COMMAND.trigger
-      : MANUAL_SESSION_COMPACTION_SLASH_COMMAND.trigger;
-  throw new Error(`/${trigger} requires an existing selected session.`);
-};

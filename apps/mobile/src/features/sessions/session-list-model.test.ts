@@ -456,7 +456,63 @@ describe("sessionMenuItems", () => {
       ["copy_external_session_id", true],
     ]);
     expect(parseSessionMenuAction("archive")).toBe("archive");
+    expect(parseSessionMenuAction("discard_draft")).toBe("discard_draft");
     expect(parseSessionMenuAction("delete")).toBeNull();
+  });
+
+  test("handles workspace session draft destinations, search, and discard-only menu actions", () => {
+    const draftEntry = {
+      key: "workspace_session_draft:alpha:draft-1",
+      target: {
+        kind: "workspace_session_draft" as const,
+        workspaceId: "alpha",
+        draftId: "draft-1",
+      },
+      workspace: workspace("alpha"),
+      title: "Fix login redirect",
+      roleLabel: null,
+      workflowTone: null,
+      runtimeKind: "codex" as const,
+      group: "recent" as const,
+      status: { kind: "settled" as const, failed: false },
+      attention: [],
+      startedAt: minutesAgo(1),
+      time: { kind: "activity" as const, at: minutesAgo(1) },
+      fault: null,
+      context: {
+        kind: "workspace_draft" as const,
+        draftId: "draft-1",
+        lifecycle: "retained" as const,
+        isStarting: false,
+        startupAttemptId: null,
+      },
+    };
+    const startingDraft = {
+      ...draftEntry,
+      context: {
+        ...draftEntry.context,
+        isStarting: true,
+        startupAttemptId: "attempt-1",
+      },
+    };
+
+    expect(sessionEntryDestination(draftEntry)).toEqual({
+      kind: "draft",
+      workspaceId: "alpha",
+      draftId: "draft-1",
+    });
+    expect(sessionMatchesQuery(draftEntry, "login alpha")).toBe(true);
+    expect(sessionMatchesQuery(draftEntry, "beta")).toBe(false);
+    expect(sessionMenuItems(draftEntry, false)).toEqual([
+      {
+        id: "discard_draft",
+        title: "Discard Draft",
+        icon: "trash-2",
+        destructive: true,
+        disabled: false,
+      },
+    ]);
+    expect(sessionMenuItems(startingDraft, false)[0]?.disabled).toBe(true);
   });
 });
 

@@ -38,7 +38,10 @@ import { SessionEntryRuntimeIcon } from "./session-navigation-parts";
 import { SessionPreviewPendingRequests } from "./session-preview-pending-input";
 import { useSessionMenu } from "./session-menu-provider";
 import { SessionPreviewCommands } from "./session-command-activity";
-import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
+import {
+  useClientConnection,
+  useHostClient,
+} from "@openducktor/frontend-core/connection/client-connection-react";
 import { SESSION_MENU_LABELS } from "@openducktor/frontend-core/workspace-sessions/workspace-session-menu";
 
 export function SessionPreviewContent({
@@ -108,7 +111,7 @@ export function SessionPreviewContent({
           className="h-6 shrink-0 gap-1 px-1.5 text-[11px]"
           onClick={() => onOpen()}
         >
-          Open session
+          {entry.context.kind === "workspace_draft" ? "Open draft" : "Open session"}
           <ArrowUpRight className="size-3.5" />
         </Button>
       </footer>
@@ -139,6 +142,7 @@ function SessionPreviewHeader({
 }): ReactElement {
   const task = entry.context.kind === "task" ? entry.context.task : null;
   const workspaceSession = entry.context.kind === "workspace" ? entry.context.session : null;
+  const workspaceDraft = entry.context.kind === "workspace_draft" ? entry.context : null;
   const customRole = workspaceSession?.roleSnapshot;
   const workingDirectory = workspaceSession
     ? workspaceSessionWorkingDirectory(entry.workspace, workspaceSession)
@@ -150,6 +154,11 @@ function SessionPreviewHeader({
           <h3 id={titleId} className="text-base font-semibold leading-snug text-foreground">
             {entry.title}
           </h3>
+          {workspaceDraft ? (
+            <Badge variant="outline" className="text-[11px]">
+              {workspaceDraft.isStarting ? "Starting draft" : "Draft session"}
+            </Badge>
+          ) : null}
           {task ? <TaskIdBadge taskId={task.id} className="max-w-full" /> : null}
           {customRole ? (
             <div
@@ -237,11 +246,18 @@ function SessionPreviewModelDetails({
   entry: SessionNavigationEntry;
   model: SessionPreviewModel["model"];
 }): ReactElement {
+  const connection = useClientConnection();
   const hostClient = useHostClient();
   const { loadRuntimeCatalog } = useMemo(
     () => createHostRuntimeCatalogOperations(hostClient),
     [hostClient],
   );
+  const draftModel =
+    entry.context.kind === "workspace_draft"
+      ? (connection.drafts.newWorkspaceSessions.getDraft(entry.context.draftId)?.options
+          .selectedModel ?? null)
+      : null;
+  const effectiveModel = model ?? draftModel;
   let runtimeRef: RuntimeWorkingDirectoryRef | null = null;
   if (entry.target.kind === "task_session") {
     const { runtimeKind, workingDirectory } = entry.target.identity;
@@ -253,16 +269,22 @@ function SessionPreviewModelDetails({
       runtimeKind,
       workingDirectory: executionTarget.workingDirectory,
     };
+  } else if (entry.context.kind === "workspace_draft" && draftModel) {
+    runtimeRef = {
+      repoPath: entry.workspace.repoPath,
+      runtimeKind: draftModel.runtimeKind,
+      workingDirectory: entry.workspace.repoPath,
+    };
   }
   const modelCatalog = useRuntimeModelCatalogQuery({
     runtimeRef,
     loadRuntimeCatalog,
-    enabled: model !== null,
+    enabled: effectiveModel !== null,
   });
   let infoParts: string[];
-  if (!model) infoParts = ["Model not recorded"];
+  if (!effectiveModel) infoParts = ["Model not recorded"];
   else if (modelCatalog.isLoading) infoParts = ["Loading model details…"];
-  else infoParts = agentModelInfoParts(model, modelCatalog.catalog);
+  else infoParts = agentModelInfoParts(effectiveModel, modelCatalog.catalog);
   const label = infoParts.join(" · ");
   return (
     <div aria-label="Session configuration" className="min-w-0 flex-1 space-y-1.5">

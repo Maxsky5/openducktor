@@ -316,17 +316,12 @@ export const createWorkspaceSessionRuntimePersistence = ({
       const known = yield* find(runtimeRef);
       if (!known || occurredAt <= (known.session.lastActivityAt ?? known.session.createdAt)) return;
       const saved = yield* storeEffect(
-        store.recordActivity({
-          ...known.ref,
-          activity: { type: "session_activity", occurredAt },
-        }),
+        store.recordActivity({ ...known.ref, activity: { type: "session_activity", occurredAt } }),
       );
       yield* publishUpdated(known.ref.workspaceId, saved);
     });
   const validateRef = (runtimeRef: ScopedAgentSessionRef) =>
-    Effect.gen(function* () {
-      yield* findActive(runtimeRef);
-    });
+    findActive(runtimeRef).pipe(Effect.asVoid);
   const runOperation = <A, E, R>(
     runtimeRef: ScopedAgentSessionRef,
     effect: Effect.Effect<A, E, R>,

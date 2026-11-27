@@ -1,5 +1,5 @@
 import type { SidebarSessionGrouping } from "@openducktor/contracts";
-import { createContext, useContext, useSyncExternalStore } from "react";
+import { createContext, use, useSyncExternalStore } from "react";
 import {
   type SessionNavigationTarget,
   sessionNavigationTargetKey,
@@ -46,7 +46,7 @@ export const createSessionSelectionStore = (initial: SessionSelection): SessionS
 export const SessionSelectionContext = createContext<SessionSelectionStore | null>(null);
 
 export const useSessionEntrySelection = (entryKey: string) => {
-  const store = useContext(SessionSelectionContext);
+  const store = use(SessionSelectionContext);
   if (!store) throw new Error("SessionSelectionContext is missing.");
   const isSelected = useSyncExternalStore(
     store.subscribe,
@@ -68,7 +68,12 @@ export const selectSessionEntry = (
   grouping: SidebarSessionGrouping,
 ): SessionSelection => {
   const visibleKey = target ? sessionNavigationTargetKey(target) : null;
-  if (!target || grouping === "none" || target.kind === "workspace_session") {
+  if (
+    !target ||
+    grouping === "none" ||
+    target.kind === "workspace_session" ||
+    target.kind === "workspace_session_draft"
+  ) {
     return { visibleKey, entryKey: visibleKey };
   }
   const entries = model.groups.flatMap((group) => group.entries);
@@ -76,7 +81,7 @@ export const selectSessionEntry = (
     return { visibleKey, entryKey: visibleKey };
   }
   const matchesTask = (entry: SessionNavigationEntry): boolean =>
-    entry.target.kind !== "workspace_session" &&
+    (entry.target.kind === "task" || entry.target.kind === "task_session") &&
     entry.target.workspaceId === target.workspaceId &&
     entry.target.taskId === target.taskId;
   const entry =

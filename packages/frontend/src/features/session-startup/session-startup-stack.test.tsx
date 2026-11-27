@@ -178,7 +178,7 @@ test("keeps worktree progress and failed cleanup inspectable through updates and
     expect(cleanup.queryByRole("list", { name: "Session startup steps" })).toBeNull();
     expect(connection.startupAttempts.getSnapshot()).toHaveLength(2);
 
-    fireEvent.click(first.getByRole("button", { name: "Hide progress" }));
+    fireEvent.click(first.getByText("Starting Task session"));
     await first.findByRole("button", { name: "View progress" });
     expect(first.queryByRole("list", { name: "Session startup steps" })).toBeNull();
     act(() => {

@@ -1,17 +1,27 @@
 import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { createAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
-import { VisibleSessionTargetProvider } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
+import {
+  useVisibleWorkspaceDraftId,
+  VisibleSessionTargetProvider,
+} from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
 import { CommandPaletteTestContext } from "@/test-utils/command-palette-test-context";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type {
   TerminalSummary,
   WorkspaceSession,
   WorkspaceSessionArchiveInput,
-  WorkspaceSessionCreateInput,
 } from "@openducktor/contracts";
 import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import { type QueryClient, notifyManager, useQueryClient } from "@tanstack/react-query";
-import { act, type ReactNode, startTransition, useEffect, useState } from "react";
+import {
+  act,
+  type ReactNode,
+  StrictMode,
+  startTransition,
+  useEffect,
+  useLayoutEffect,
+  useState,
+} from "react";
 import { Link, MemoryRouter, useLocation, useNavigate } from "react-router";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { installPanelLayout } from "@/test-utils/panel-layout";
@@ -24,6 +34,7 @@ import {
   type ClientStorage,
   createMemoryClientStorage,
 } from "@openducktor/frontend-core/platform/client-storage";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
@@ -64,7 +75,7 @@ import {
 import * as workspaceChat from "./workspace-session-chat";
 import * as sessionContent from "./workspace-session-content";
 import * as workspaceNavigation from "./use-workspace-session-navigation";
-import * as createDialog from "./workspace-session-create-dialog";
+import * as draftView from "./workspace-session-draft-view";
 import { useActiveWorkspace } from "@/state/app-state-provider";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { SessionsPage } from "@/pages/sessions/sessions-page";
@@ -307,7 +318,6 @@ function SessionLinks() {
     const params = new URLSearchParams(location.search);
     if (sessionId) params.set("session", sessionId);
     else params.delete("session");
-    params.delete("creating");
     return location.pathname + (params.size ? "?" + params.toString() : "");
   };
   return (
@@ -446,7 +456,7 @@ function renderSessions(
   workspaceId: string = crypto.randomUUID(),
   queryControls: ReactNode = null,
   previewControls: ReactNode = null,
-  options: { workspaces?: ActiveWorkspace[]; viaSessionsPage?: boolean } = {},
+  options: { workspaces?: ActiveWorkspace[]; viaSessionsPage?: boolean; strictMode?: boolean } = {},
 ) {
   const workspace = options.workspaces?.find((entry) => entry.workspaceId === workspaceId) ?? {
     workspaceId,
@@ -469,7 +479,10 @@ function renderSessions(
   }
   const connection = createTestClientConnection({ client: hostClient, storage: hostStorage });
   const view = render(
-    <MemoryRouter initialEntries={Array.isArray(initialEntry) ? initialEntry : [initialEntry]}>
+    <MemoryRouter
+      initialEntries={Array.isArray(initialEntry) ? initialEntry : [initialEntry]}
+      useTransitions={false}
+    >
       <RouteControls />
       <SessionLinks />
       <QueryProvider connection={connection}>
@@ -519,6 +532,7 @@ function renderSessions(
         </ThemeProvider>
       </QueryProvider>
     </MemoryRouter>,
+    options.strictMode ? { wrapper: StrictMode } : undefined,
   );
   return { ...view, workspaceId, queryClient: connection.queryClient };
 }
@@ -554,14 +568,16 @@ function TestWorkspaceScope({
   const state = createWorkspaceStateFixture({
     activeWorkspace: records.find((entry) => entry.workspaceId === workspace?.workspaceId) ?? null,
     workspaces: records,
-    selectWorkspace: async (workspaceId, onSelected) => {
+    selectWorkspace: async (workspaceId, onSelected, options) => {
       const next = openWorkspaces.find((entry) => entry.workspaceId === workspaceId);
       if (!next) throw new Error("Workspace is not open.");
       await Promise.resolve();
-      startTransition(() => {
+      const apply = () => {
         setWorkspace(next);
         onSelected?.();
-      });
+      };
+      if (options?.immediate) apply();
+      else startTransition(apply);
     },
   });
   return (
@@ -621,7 +637,7 @@ function createChatTerminalClient(
   };
 }
 
-test.each(["Archive session", "New session", "Rename session", "Session actions"] as const)(
+test.each(["Archive session", "Rename session", "Session actions"] as const)(
   "%s closes while a workspace route is pending and stays closed on return",
   async (dialogName) => {
     chatStub.mockImplementation(() => <input aria-label="Chat draft" />);
@@ -632,20 +648,15 @@ test.each(["Archive session", "New session", "Rename session", "Session actions"
     }));
     const first = workspaces[0]!;
     const other = workspaces[1]!;
-    const records = dialogName === "New session" ? [] : [sessionRecord("First")];
+    const records = [sessionRecord("First")];
     const chatList = Promise.withResolvers<WorkspaceSession[]>();
     const archives: WorkspaceSessionArchiveInput[] = [];
-    const creates: WorkspaceSessionCreateInput[] = [];
     const hostClient = createChatTerminalClient(
       async (workspaceId) => (workspaceId === other.workspaceId ? chatList.promise : records),
       {
         workspaceSessionArchive: async (input) => {
           archives.push(input);
           return { ...sessionRecord("First"), archivedAt: 2000 };
-        },
-        workspaceSessionCreate: async (input) => {
-          creates.push(input);
-          throw new Error("Unexpected chat creation.");
         },
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
       },
@@ -675,8 +686,6 @@ test.each(["Archive session", "New session", "Rename session", "Session actions"
       const openDialog = async () => {
         if (dialogName === "Archive session") {
           await openArchive(view, "First", "primary");
-        } else if (dialogName === "New session") {
-          fireEvent.click(view.getByRole("button", { name: "New session" }));
         } else {
           fireEvent.click(view.getByRole("button", { name: "Session actions" }));
           if (dialogName === "Rename session") {
@@ -694,7 +703,6 @@ test.each(["Archive session", "New session", "Rename session", "Session actions"
       expect(view.queryAllByRole("dialog").length).toBe(0);
       if (draft) expect(draft.isConnected).toBe(true);
       expect(archives).toHaveLength(0);
-      expect(creates).toHaveLength(0);
 
       await frames.flushFrames();
       await act(async () => fireEvent.click(forward));
@@ -915,89 +923,81 @@ test.each([
   5_000,
 );
 
-test("creating and switching chats keeps the original draft and terminal layouts", async () => {
-  const media = spyOn(window, "matchMedia").mockImplementation((query) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: () => undefined,
-    removeListener: () => undefined,
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
-    dispatchEvent: () => true,
-  }));
-  const workspaceId = crypto.randomUUID();
-  chatStub.mockImplementation(({ record }) => <input data-testid={`${record.id} draft`} />);
-  const dialog = spyOn(createDialog, "WorkspaceSessionCreateDialog").mockImplementation(
-    ({ onCreated }) => (
-      <button onClick={() => onCreated(sessionRecord("Second"))}>Complete create</button>
-    ),
-  );
-  const client = createChatTerminalClient(async () => [
-    sessionRecord("First"),
-    sessionRecord("Second"),
-    sessionRecord("Third"),
-  ]);
-  const listTerminals = client.terminalList!;
-  client.terminalList = async (input) =>
-    input.filter.kind === "workspace_session" && input.filter.sessionId === "Third"
-      ? { hostInstanceId: "host", revision: 1, terminals: [] }
-      : listTerminals(input);
-  // The resizable group takes a size change only when its panels have a size, as in a browser.
-  const removePanelLayout = installPanelLayout();
-  const view = renderSessions(
-    client,
-    undefined,
-    `/sessions?workspace=${workspaceId}&kind=workspace&session=First&create=session`,
-    workspaceId,
-    null,
-    null,
-    { viaSessionsPage: true },
-  );
-  try {
-    const draft = await view.findByTestId("First draft");
-    await waitFor(() =>
-      expect(view.container.querySelectorAll("[data-terminal-viewport]")).toHaveLength(1),
+test.each([true, false])(
+  "a chat switch keeps the layout when the next chat has terminals=%s",
+  async (hasTerminals) => {
+    const media = spyOn(window, "matchMedia").mockImplementation((query) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => true,
+    }));
+    const workspaceId = crypto.randomUUID();
+    chatStub.mockImplementation(({ record }) => <input data-testid={`${record.id} draft`} />);
+    const client = createChatTerminalClient(async () => [
+      sessionRecord("First"),
+      sessionRecord("Second"),
+    ]);
+    const listTerminals = client.terminalList!;
+    client.terminalList = async (input) =>
+      !hasTerminals &&
+      input.filter.kind === "workspace_session" &&
+      input.filter.sessionId === "Second"
+        ? { hostInstanceId: "host", revision: 1, terminals: [] }
+        : listTerminals(input);
+    // The resizable group takes a size change only when its panels have a size, as in a browser.
+    const removePanelLayout = installPanelLayout();
+    const view = renderSessions(
+      client,
+      undefined,
+      `/sessions?workspace=${workspaceId}&kind=workspace&session=First`,
+      workspaceId,
+      null,
+      null,
+      { viaSessionsPage: true },
     );
-    const viewport = view.container.querySelector("[data-terminal-viewport]");
-    for (const { id, openWith, splitSizes } of [
-      {
-        id: "Second",
-        openWith: view.getByRole("button", { name: "Complete create" }),
-        splitSizes: ["72", "28"],
-      },
-      {
-        id: "Third",
-        openWith: view.getByRole("link", { name: "Open third chat" }),
-        splitSizes: ["100", "0"],
-      },
-    ]) {
-      await act(async () => fireEvent.click(openWith));
+    try {
+      const draft = await view.findByTestId("First draft");
+      await waitFor(() =>
+        expect(view.container.querySelectorAll("[data-terminal-viewport]")).toHaveLength(1),
+      );
+      const viewport = view.container.querySelector("[data-terminal-viewport]");
+      await act(async () => {
+        fireEvent.click(view.getByRole("link", { name: "Open second chat" }));
+      });
+      await view.findByRole("heading", { name: "Second" });
       await waitFor(() => {
         const split = view
-          .getByTestId(`${id} draft`)
+          .getByTestId("Second draft")
           .closest('[data-group][id^="workspace-session-terminal-layout"]');
         const panels = split!.querySelectorAll<HTMLElement>(":scope > [data-panel]");
-        expect(Array.from(panels, (panel) => panel.style.flexGrow)).toEqual(splitSizes);
+        expect(panels).toHaveLength(2);
+        expect(panels[0]!.style.flexGrow).toBe(hasTerminals ? "72" : "100");
+        expect(panels[1]!.style.flexGrow).toBe(hasTerminals ? "28" : "0");
       });
       expect(viewport?.isConnected).toBe(true);
       expect(draft.isConnected).toBe(true);
-      expect(view.getByTestId("session-url").textContent).not.toContain("create=session");
+      await act(async () => {
+        fireEvent.click(view.getByRole("link", { name: "Open first chat" }));
+      });
+      await view.findByRole("heading", { name: "First" });
+      expect(view.getByTestId("First draft")).toBe(draft);
+      expect(viewport?.isConnected).toBe(true);
+      expect(view.container.querySelectorAll("[data-terminal-viewport]")).toHaveLength(
+        hasTerminals ? 2 : 1,
+      );
+    } finally {
+      view.unmount();
+      removePanelLayout();
+      media.mockRestore();
     }
-    await act(async () => {
-      fireEvent.click(view.getByRole("link", { name: "Open first chat" }));
-    });
-    expect(view.getByRole("heading", { name: "First" })).toBeTruthy();
-    expect(view.getByTestId("First draft") === draft).toBe(true);
-    expect(viewport?.isConnected).toBe(true);
-    expect(view.container.querySelectorAll("[data-terminal-viewport]")).toHaveLength(2);
-  } finally {
-    view.unmount();
-    removePanelLayout();
-    media.mockRestore();
-    dialog.mockRestore();
-  }
-}, 5_000);
+  },
+  5_000,
+);
 
 test("a removed chat loses its terminal viewport and pane", async () => {
   const workspaceId = crypto.randomUUID();
@@ -1681,3 +1681,289 @@ describe("Archive commands", () => {
     5_000,
   );
 });
+
+test("late save callback from an earlier draft does not redirect away from the currently open draft", async () => {
+  const workspaceId = crypto.randomUUID();
+  const capturedCallbacks = new Map<
+    string,
+    (record: WorkspaceSession, attemptId: string, savedDraftId: string) => boolean | void
+  >();
+  const draftStub = spyOn(draftView, "WorkspaceSessionDraftView").mockImplementation(
+    ({ draft, onSavedRecord }) => {
+      capturedCallbacks.set(draft.id, onSavedRecord);
+      return <div data-testid="active-draft">{draft.id}</div>;
+    },
+  );
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: async () => [],
+    workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+  };
+  let draftAId = "";
+  let draftBId = "";
+  function DraftSwitcher() {
+    const navigate = useNavigate();
+    const { drafts } = useClientConnection();
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          const first = drafts.newWorkspaceSessions.createDraft(workspaceId);
+          drafts.newWorkspaceSessions.updateComposer(first.id, {
+            segments: [{ id: "t1", kind: "text", text: "Draft A" }],
+            attachments: [],
+          });
+          const second = drafts.newWorkspaceSessions.createDraft(workspaceId);
+          drafts.newWorkspaceSessions.updateComposer(second.id, {
+            segments: [{ id: "t2", kind: "text", text: "Draft B" }],
+            attachments: [],
+          });
+          draftAId = first.id;
+          draftBId = second.id;
+          navigate(`/chats?draft=${first.id}`);
+        }}
+      >
+        Open draft A
+      </button>
+    );
+  }
+  function OpenDraftBButton() {
+    const navigate = useNavigate();
+    return (
+      <button type="button" onClick={() => navigate(`/chats?draft=${draftBId}`)}>
+        Open draft B
+      </button>
+    );
+  }
+  const view = renderSessions(
+    hostClient,
+    undefined,
+    "/chats",
+    workspaceId,
+    <>
+      <DraftSwitcher />
+      <OpenDraftBButton />
+    </>,
+  );
+  try {
+    fireEvent.click(view.getByRole("button", { name: "Open draft A" }));
+    await waitFor(() => expect(view.getByTestId("active-draft").textContent).toBe(draftAId));
+    const draftACallback = capturedCallbacks.get(draftAId);
+    expect(draftACallback).toBeDefined();
+
+    fireEvent.click(view.getByRole("button", { name: "Open draft B" }));
+    await waitFor(() => expect(view.getByTestId("active-draft").textContent).toBe(draftBId));
+
+    let handedOff: boolean | undefined;
+    await act(async () => {
+      handedOff = draftACallback?.(sessionRecord("SavedFromA"), "attempt-a", draftAId) ?? undefined;
+    });
+    expect(handedOff).toBe(false);
+    expect(view.getByTestId("active-draft").textContent).toBe(draftBId);
+    expect(view.getByTestId("session-url").textContent).toBe(`/chats?draft=${draftBId}`);
+  } finally {
+    view.unmount();
+    draftStub.mockRestore();
+  }
+}, 5_000);
+
+test("unbound workspace session with a tracked startup attempt does not auto-fire workspaceSessionStart", async () => {
+  const workspaceId = crypto.randomUUID();
+  const unbound: WorkspaceSession = {
+    ...sessionRecord("UnboundSession"),
+    externalSessionId: null,
+  };
+  let startCalls = 0;
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: async () => [unbound],
+    workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+    workspaceSessionStart: async () => {
+      startCalls += 1;
+      throw new Error("Should not auto-start while tracked startup attempt owns launch");
+    },
+  };
+  function SeedTrackedAttempt() {
+    const { startupAttempts } = useClientConnection();
+    useLayoutEffect(() => {
+      const attemptId = startupAttempts.begin({
+        origin: {
+          workspaceId,
+          repoPath: "/repo",
+          scope: { kind: "workspace", draftId: "draft-active" },
+        },
+        label: "Start workspace session",
+        presentation: "inline",
+      });
+      startupAttempts.setSaved(attemptId, {
+        state: "saved",
+        target: { kind: "workspace", record: unbound },
+      });
+      return () => {
+        startupAttempts.release(attemptId);
+      };
+    }, [startupAttempts]);
+    return null;
+  }
+  const view = renderSessions(
+    hostClient,
+    undefined,
+    `/chats?session=${unbound.id}`,
+    workspaceId,
+    <SeedTrackedAttempt />,
+  );
+  try {
+    await view.findByRole("heading", { name: "UnboundSession" });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(startCalls).toBe(0);
+  } finally {
+    view.unmount();
+  }
+}, 5_000);
+
+test("StrictMode initial mount keeps an untouched draft alive without creating replacement drafts", async () => {
+  const workspaceId = crypto.randomUUID();
+  const draftStub = spyOn(draftView, "WorkspaceSessionDraftView").mockImplementation(
+    ({ draft }) => <div data-testid="strict-draft">{draft.id}</div>,
+  );
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: async () => [],
+    workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+  };
+  let initialDraftId = "";
+  const draftStores: ReturnType<typeof useClientConnection>["drafts"]["newWorkspaceSessions"][] =
+    [];
+  function OpenUntouchedDraft() {
+    const navigate = useNavigate();
+    const { drafts } = useClientConnection();
+    useEffect(() => {
+      draftStores.push(drafts.newWorkspaceSessions);
+    }, [drafts.newWorkspaceSessions]);
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          const created = drafts.newWorkspaceSessions.createDraft(workspaceId);
+          initialDraftId = created.id;
+          navigate(`/sessions?workspace=${workspaceId}&kind=workspace&draft=${created.id}`);
+        }}
+      >
+        Open untouched draft
+      </button>
+    );
+  }
+  const view = renderSessions(
+    hostClient,
+    undefined,
+    `/sessions?workspace=${workspaceId}&kind=workspace`,
+    workspaceId,
+    <OpenUntouchedDraft />,
+    null,
+    { viaSessionsPage: true, strictMode: true },
+  );
+  try {
+    fireEvent.click(view.getByRole("button", { name: "Open untouched draft" }));
+    await waitFor(() => expect(view.getByTestId("strict-draft").textContent).toBe(initialDraftId));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+    expect(view.getByTestId("session-url").textContent).toBe(
+      `/sessions?workspace=${workspaceId}&kind=workspace&draft=${initialDraftId}`,
+    );
+    const activeDraftStore = draftStores.at(-1);
+    expect(activeDraftStore?.getDraft(initialDraftId)?.lifecycle).toBe("untouched");
+    expect(activeDraftStore?.getSnapshot().map((entry) => entry.id)).toEqual([initialDraftId]);
+  } finally {
+    view.unmount();
+    draftStub.mockRestore();
+  }
+}, 5_000);
+
+test("switching workspace from a draft keeps the draft view mounted and visible draft continuous", async () => {
+  const alpha = { workspaceId: crypto.randomUUID(), workspaceName: "Alpha", repoPath: "/alpha" };
+  const beta = { workspaceId: crypto.randomUUID(), workspaceName: "Beta", repoPath: "/beta" };
+  let mountCount = 0;
+  let unmountCount = 0;
+  const draftStub = spyOn(draftView, "WorkspaceSessionDraftView").mockImplementation(
+    ({ workspace, draft, onSwitchWorkspace }) => {
+      useEffect(() => {
+        mountCount += 1;
+        return () => {
+          unmountCount += 1;
+        };
+      }, []);
+      return (
+        <div>
+          <div data-testid="draft-workspace">{`${workspace.workspaceId}:${draft.workspaceId}:${draft.id}`}</div>
+          <button type="button" onClick={() => onSwitchWorkspace?.(beta.workspaceId)}>
+            Switch draft to Beta
+          </button>
+        </div>
+      );
+    },
+  );
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: async () => [],
+    workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+  };
+  let draftId = "";
+  const seenVisibleDraftIds: (string | null)[] = [];
+  function DraftSwitchHarness() {
+    const navigate = useNavigate();
+    const { drafts } = useClientConnection();
+    const visibleDraftId = useVisibleWorkspaceDraftId();
+    useEffect(() => {
+      if (draftId) seenVisibleDraftIds.push(visibleDraftId);
+    }, [visibleDraftId]);
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          const created = drafts.newWorkspaceSessions.createDraft(alpha.workspaceId);
+          draftId = created.id;
+          navigate(`/sessions?workspace=${alpha.workspaceId}&kind=workspace&draft=${created.id}`);
+        }}
+      >
+        Open alpha draft
+      </button>
+    );
+  }
+  const view = renderSessions(
+    hostClient,
+    undefined,
+    `/sessions?workspace=${alpha.workspaceId}&kind=workspace`,
+    alpha.workspaceId,
+    null,
+    <DraftSwitchHarness />,
+    { viaSessionsPage: true, workspaces: [alpha, beta] },
+  );
+  try {
+    fireEvent.click(view.getByRole("button", { name: "Open alpha draft" }));
+    await waitFor(() =>
+      expect(view.getByTestId("draft-workspace").textContent).toBe(
+        `${alpha.workspaceId}:${alpha.workspaceId}:${draftId}`,
+      ),
+    );
+    await waitFor(() => expect(seenVisibleDraftIds).toContain(draftId));
+    const draftNodeBefore = view.getByTestId("draft-workspace");
+    seenVisibleDraftIds.length = 0;
+
+    fireEvent.click(view.getByRole("button", { name: "Switch draft to Beta" }));
+    await waitFor(() =>
+      expect(view.getByTestId("draft-workspace").textContent).toBe(
+        `${beta.workspaceId}:${beta.workspaceId}:${draftId}`,
+      ),
+    );
+
+    expect(view.getByTestId("draft-workspace")).toBe(draftNodeBefore);
+    expect(mountCount).toBe(1);
+    expect(unmountCount).toBe(0);
+    expect(seenVisibleDraftIds.every((id) => id === draftId)).toBe(true);
+    expect(view.getByTestId("session-url").textContent).toBe(
+      `/sessions?workspace=${beta.workspaceId}&kind=workspace&draft=${draftId}`,
+    );
+  } finally {
+    view.unmount();
+    draftStub.mockRestore();
+  }
+}, 5_000);

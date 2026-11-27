@@ -74,16 +74,3 @@ export function segmentedControlItemClassName({
     className,
   );
 }
-
-export function segmentedControlTriggerClassName({
-  size,
-  className,
-  inactiveClassName,
-}: Omit<SegmentedControlItemClassNameOptions, "active" | "grow"> = {}): string {
-  return cn(
-    segmentedControlItemVariants({ size, active: false }),
-    inactiveClassName,
-    "data-[state=active]:bg-selected-control data-[state=active]:text-selected-control-foreground data-[state=active]:shadow-sm data-[state=active]:hover:bg-selected-control/90",
-    className,
-  );
-}

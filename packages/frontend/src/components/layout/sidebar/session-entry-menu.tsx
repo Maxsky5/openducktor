@@ -1,4 +1,4 @@
-import { Archive, Copy, Folder, Mail, MailOpen, Pencil } from "lucide-react";
+import { Archive, Copy, Folder, Mail, MailOpen, Pencil, Trash2 } from "lucide-react";
 import { useRef, type ReactElement } from "react";
 import { useCommandPaletteCommands } from "@/features/command-palette/command-palette-registry-context";
 import { paletteChatKey } from "@/features/command-palette/command-palette-row-keys";
@@ -56,9 +56,36 @@ function SessionMenuItems({
 }): ReactElement {
   const unread = useSessionUnread(entry);
   const setUnread = useSetSessionUnread();
-  const { requestDialog, copyToClipboard } = useSessionMenu();
-  const workspaceSession = entry.context.kind === "workspace" ? entry.context.session : null;
+  const { requestDialog, requestDiscardDraft, copyToClipboard } = useSessionMenu();
   const pageCommands = useCommandPaletteCommands();
+  const workspaceDraft = entry.context.kind === "workspace_draft" ? entry.context : null;
+  if (workspaceDraft) {
+    const { isStarting } = workspaceDraft;
+    return (
+      <ContextMenuGroup>
+        <ShortcutMenuItem
+          shortcutId={undefined}
+          className="cursor-pointer text-destructive focus:text-destructive"
+          disabled={isStarting}
+          onSelect={() => {
+            if (isStarting) return;
+            if (workspaceDraft.lifecycle !== "untouched") onOpenDialog();
+            requestDiscardDraft({
+              workspace: entry.workspace,
+              draftId: workspaceDraft.draftId,
+              lifecycle: workspaceDraft.lifecycle,
+              isStarting,
+              onCloseAutoFocus,
+            });
+          }}
+        >
+          <Trash2 aria-hidden="true" />
+          Discard draft
+        </ShortcutMenuItem>
+      </ContextMenuGroup>
+    );
+  }
+  const workspaceSession = entry.context.kind === "workspace" ? entry.context.session : null;
   const shortcutAvailable = Boolean(
     workspaceSession &&
     pageCommands.some(

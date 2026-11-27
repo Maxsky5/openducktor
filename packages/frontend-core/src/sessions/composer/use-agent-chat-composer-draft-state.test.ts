@@ -16,6 +16,7 @@ import { createAgentChatDraftStore } from "../../drafts/agent-chat-draft-store";
 import { createMemoryClientStorage } from "../../platform/client-storage";
 import { toAgentChatDraftStorageKey } from "../../drafts/agent-chat-draft-storage";
 import { useAgentChatComposerDraftState } from "./use-agent-chat-composer-draft-state";
+import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-chat-draft";
 
 type HookArgs = Omit<Parameters<typeof useAgentChatComposerDraftState>[0], "visibility">;
 type HookResult = ReturnType<typeof useAgentChatComposerDraftState>;
@@ -675,3 +676,37 @@ test.each([false, true])(
     }
   },
 );
+
+test("restores external workspace session draft writes into a mounted composer without echoing local commits", async () => {
+  const drafts = createAgentChatDraftStore({
+    storage: createMemoryClientStorage(),
+    stageAttachment: async (file) => {
+      throw new Error(`The test draft store cannot stage '${file.name}'.`);
+    },
+  });
+  const persistence = createWorkspaceSessionChatDraftPersistence(drafts, "ws-1", "saved-1");
+  const externalEvents = mock(() => {});
+  const stopExternal = persistence.subscribeExternalChange?.(externalEvents);
+  const harness = await mountHarness({ key: persistence.targetKey, persistence });
+  try {
+    expect(draftHasMeaningfulContent(harness.getLatest().draft)).toBe(false);
+
+    const recovered = buildDraft("Recovered first message");
+    await harness.run(() => {
+      drafts.set({ workspaceId: "ws-1", workspaceSessionId: "saved-1" }, null, recovered);
+    });
+    expect(harness.getLatest().draft).toEqual(recovered);
+    expect(externalEvents).toHaveBeenCalledTimes(1);
+
+    const edited = buildDraft("User edited message");
+    await harness.run((state) => {
+      state.commitDraft(edited);
+    });
+    expect(harness.getLatest().draft).toEqual(edited);
+    expect(externalEvents).toHaveBeenCalledTimes(1);
+  } finally {
+    stopExternal?.();
+    await harness.unmount();
+    drafts.dispose();
+  }
+});

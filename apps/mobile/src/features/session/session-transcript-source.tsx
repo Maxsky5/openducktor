@@ -28,6 +28,8 @@ import { mergePendingCounts, deriveLiveTranscriptState } from "./session-transcr
 import { useSessionScreen } from "./session-target";
 import type { JumpToLatestSignal } from "./transcript/jump-to-latest-signal";
 import { SessionTranscript } from "./transcript/session-transcript";
+import { useTaskRuntimeHandoff } from "@openducktor/frontend-core/sessions/send/use-task-runtime-handoff";
+import { useRuntimeHandoffTranscript } from "@openducktor/frontend-core/sessions/transcript/use-runtime-handoff-transcript";
 import { useSessionSkills } from "./use-session-skills";
 
 const NO_APPROVALS: readonly AgentApprovalRequest[] = Object.freeze([]);
@@ -37,6 +39,7 @@ const NO_COUNTS: Readonly<Record<string, number>> = Object.freeze({});
 type SourceProps = {
   latestSignal: JumpToLatestSignal;
   onOpenSubagent: (target: AgentSessionTranscriptTarget) => void;
+  startupAttemptId?: string | null | undefined;
 };
 
 /** A notice action that waits for the host connection. */
@@ -62,7 +65,11 @@ const useRuntimePresentation = (runtimeKind: AgentSessionIdentity["runtimeKind"]
  * The transcript of a live session. Only the open session builds transcript rows; this
  * component is the one view that renders again on each streamed change.
  */
-export function LiveSessionTranscript({ latestSignal, onOpenSubagent }: SourceProps): ReactElement {
+export function LiveSessionTranscript({
+  latestSignal,
+  onOpenSubagent,
+  startupAttemptId = null,
+}: SourceProps): ReactElement {
   const { target, interaction } = useSessionScreen();
   const { open: gateOpen } = useCommandGate();
   const { identity, repoPath, sessionKey, owner, sessionScope } = target;
@@ -160,6 +167,7 @@ export function LiveSessionTranscript({ latestSignal, onOpenSubagent }: SourcePr
     <SessionTranscript
       transcriptSession={transcript.session}
       notice={notice}
+      startupAttemptId={startupAttemptId}
       isLoading={isAgentSessionTranscriptLoading(transcriptState)}
       runtimePresentation={runtimePresentation}
       subagentPendingCountBySessionKey={pendingCountsShown}
@@ -252,5 +260,3 @@ export function ReadOnlySessionTranscript({
     />
   );
 }
-import { useRuntimeHandoffTranscript } from "@openducktor/frontend-core/sessions/transcript/use-runtime-handoff-transcript";
-import { useTaskRuntimeHandoff } from "@openducktor/frontend-core/sessions/send/use-task-runtime-handoff";

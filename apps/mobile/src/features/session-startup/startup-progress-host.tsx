@@ -27,7 +27,7 @@ import { useStore } from "zustand";
 import { useFeedbackStore } from "@/app-shell/app-services";
 import { appStateVisibility } from "@/composition/app-visibility";
 import { startupCoveredBy, toastWindowOf } from "@/feedback/feedback-store";
-import { useStartupPresentation } from "./startup-presentation-context";
+import { useStartupPresentationActions } from "./startup-presentation-context";
 import { StartupTrace } from "./startup-trace";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { motion } from "@/theme/tokens";
@@ -147,7 +147,7 @@ function StartupCard({
   attemptId: string;
   detailsMaxHeight: number;
 }): ReactElement {
-  const { notificationPresented } = useStartupPresentation();
+  const { notificationPresented } = useStartupPresentationActions();
   const reducedMotion = useReducedMotion();
   const [firstPresentation] = useState(() => !notificationPresented.has(attemptId));
   useEffect(() => {

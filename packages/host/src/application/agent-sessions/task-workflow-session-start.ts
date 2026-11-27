@@ -109,7 +109,7 @@ export const createStartTaskWorkflowSession =
           const launched = yield* Effect.gen(function* () {
             yield* progress.checkCanceled();
             summary = yield* startupStep(
-              { id: "prepare", label: "Prepare native session" },
+              { id: "prepare", label: "Start session" },
               runtime.startSession(runtimeInput),
             );
             return summary;

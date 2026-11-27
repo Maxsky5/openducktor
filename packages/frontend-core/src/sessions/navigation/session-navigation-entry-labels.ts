@@ -53,6 +53,7 @@ export const ATTENTION_REASON_LABELS = {
 export const sessionEntryTypeLabel = (entry: SessionNavigationEntry): string => {
   if (entry.target.kind === "task_session") return "Task session";
   if (entry.target.kind === "workspace_session") return "Workspace session";
+  if (entry.target.kind === "workspace_session_draft") return "Draft session";
   return "Blocked task";
 };
 

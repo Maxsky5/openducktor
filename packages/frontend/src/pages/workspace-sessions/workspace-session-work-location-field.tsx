@@ -38,10 +38,7 @@ export function WorkspaceSessionWorkLocationField<Value extends string>({
           if (option) onValueChange(option.value);
         }}
         disabled={disabled}
-        className={cn(
-          "grid-cols-1 gap-3",
-          options.length > 2 ? "sm:grid-cols-3" : "sm:grid-cols-2",
-        )}
+        className="grid-cols-1 gap-3 sm:grid-cols-2"
       >
         {options.map((option) => {
           const labelId = `${id}-${option.value}-label`;

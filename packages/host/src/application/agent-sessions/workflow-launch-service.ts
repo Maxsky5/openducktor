@@ -4,10 +4,14 @@ import type {
   AgentSessionControlSendInput,
   AgentSessionControlSummary,
   AgentWorkflowSessionStartInput,
+  StartupStep,
   WorkflowLaunchResult,
 } from "@openducktor/contracts";
+import type { AgentWorkStartOptions } from "@openducktor/core";
 import { Effect } from "effect";
+import { normalizePathForComparison } from "../../domain/path-comparison";
 import { finalizeStartup, startupStep, updateStartup } from "./session-startup-progress";
+import { existingCheckoutStepMeta } from "./worktree-setup-plan";
 import type { TaskServiceError } from "../tasks/task-service";
 import { createSessionLaunchService } from "./session-launch-service";
 import type { SessionLaunchContext } from "./session-launch-types";
@@ -78,7 +82,17 @@ export const createWorkflowLaunchService = (
       };
       let session: AgentSessionControlSummary;
       let publish: Effect.Effect<void, TaskServiceError> | null = null;
+      const instructionPlan =
+        parts !== undefined
+          ? [{ id: "instruction", label: "Submit initial instruction", state: "pending" as const }]
+          : [];
       if (decision.startMode === "fresh") {
+        yield* updateStartup((startup) =>
+          startup.plan([
+            { id: "prepare", label: "Start session", state: "pending" },
+            ...instructionPlan,
+          ]),
+        );
         const startInput: AgentWorkflowSessionStartInput = {
           repoPath,
           runtimeKind: decision.selectedModel.runtimeKind,
@@ -90,6 +104,25 @@ export const createWorkflowLaunchService = (
           startInput.targetWorkingDirectory = decision.targetWorkingDirectory;
         ({ session, publish } = yield* deps.sessions.start(startInput, progress));
       } else if (decision.startMode === "fork") {
+        yield* updateStartup((startup) =>
+          startup.plan([
+            {
+              id: "checkout",
+              label: "Reuse task worktree",
+              state: "completed",
+              details: [decision.sourceSession.workingDirectory],
+              resources: [
+                {
+                  kind: "worktree",
+                  value: decision.sourceSession.workingDirectory,
+                  state: "reused",
+                },
+              ],
+            },
+            { id: "prepare", label: "Fork session", state: "pending" },
+            ...instructionPlan,
+          ]),
+        );
         ({ session, publish } = yield* deps.sessions.fork(
           {
             repoPath,
@@ -103,6 +136,26 @@ export const createWorkflowLaunchService = (
         ));
       } else {
         const { source, live } = decision;
+        const isMainCheckout =
+          normalizePathForComparison(source.workingDirectory) ===
+          normalizePathForComparison(repoPath);
+        const checkoutStep: StartupStep = {
+          ...existingCheckoutStepMeta(
+            source.workingDirectory,
+            isMainCheckout,
+            "Reuse task worktree",
+          ),
+          state: "completed",
+        };
+        yield* updateStartup((startup) =>
+          startup.plan([
+            checkoutStep,
+            ...(live.type !== "live"
+              ? [{ id: "prepare", label: "Resume session", state: "pending" as const }]
+              : []),
+            ...instructionPlan,
+          ]),
+        );
         session = { ...decision.sourceSession, startedAt: source.startedAt, status: "idle" };
         attempt.reusedSession(repoPath, session);
         yield* updateStartup((progress) =>
@@ -112,8 +165,7 @@ export const createWorkflowLaunchService = (
           }),
         );
         if (live.type !== "live") {
-          const resumeInput: AgentSessionControlResumeInput &
-            import("@openducktor/core").AgentWorkStartOptions = {
+          const resumeInput: AgentSessionControlResumeInput & AgentWorkStartOptions = {
             repoPath,
             ...decision.sourceSession,
             sessionScope,
@@ -123,7 +175,7 @@ export const createWorkflowLaunchService = (
           };
           if (model) resumeInput.model = model;
           ({ session, publish } = yield* startupStep(
-            { id: "prepare", label: "Resume native session" },
+            { id: "prepare", label: "Resume session" },
             deps.sessions.resume(resumeInput),
           ));
           attempt.reusedSession(repoPath, session);

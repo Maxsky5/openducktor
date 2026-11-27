@@ -1,4 +1,9 @@
 import type { StartupStep } from "@openducktor/contracts";
+import {
+  type StartupStepDisplayState,
+  startupStepDisplayState,
+  startupStepHasDetails,
+} from "@openducktor/frontend-core/sessions/startup/startup-trace";
 import { terminalCommandSucceeded } from "@openducktor/frontend-core/terminals/terminal-command-result";
 import type { ReactElement } from "react";
 import { View } from "react-native";
@@ -17,27 +22,49 @@ const STEP_LABELS = {
   waiting: "Waiting",
   running: "Running",
   completed: "Completed",
+  warning: "Warning",
   failed: "Failed",
   not_run: "Did not run",
-} satisfies Record<StartupStep["state"], string>;
+} satisfies Record<StartupStepDisplayState, string>;
 const STEP_ICONS = {
   pending: "circle",
   waiting: "clock",
   running: "loader-circle",
   completed: "check",
+  warning: "triangle-alert",
   failed: "circle-alert",
   not_run: "x",
-} satisfies Record<StartupStep["state"], IconName>;
+} satisfies Record<StartupStepDisplayState, IconName>;
 const STEP_COLORS = {
   pending: "tertiaryLabel",
   waiting: "tint",
   running: "tint",
   completed: "green",
+  warning: "amber",
   failed: "red",
   not_run: "tertiaryLabel",
-} satisfies Record<StartupStep["state"], ThemeColorName>;
+} satisfies Record<StartupStepDisplayState, ThemeColorName>;
 /** The width of the status icon column. Step icons center in it under the header icon. */
 export const STATUS_COLUMN = 32;
+
+function StepOutcomeNote({ step }: { step: StartupStep }): ReactElement | null {
+  if (step.failure) {
+    return (
+      <Text variant="footnote" tone="red" selectable>
+        {step.failure.message}
+        {step.failure.nextAction ? ` ${step.failure.nextAction}` : ""}
+      </Text>
+    );
+  }
+  if (step.warning) {
+    return (
+      <Text variant="footnote" tone="amber" selectable>
+        {step.warning}
+      </Text>
+    );
+  }
+  return null;
+}
 
 export function StartupStepRow({
   attemptId,
@@ -52,10 +79,8 @@ export function StartupStepRow({
   expanded: boolean;
   toggle: () => void;
 }): ReactElement {
-  const hasDetails =
-    step.details.length > 0 || step.action || step.failure || step.resources?.length;
-  const result = step.action?.result;
-  const displayState = result && !terminalCommandSucceeded(result) ? "failed" : step.state;
+  const hasDetails = startupStepHasDetails(step);
+  const displayState = startupStepDisplayState(step);
   return (
     <View style={styles.step}>
       {last ? null : <View pointerEvents="none" style={styles.line} />}
@@ -84,12 +109,7 @@ export function StartupStepRow({
         ) : null}
       </Touchable>
       <View style={styles.stepBody}>
-        {step.failure ? (
-          <Text variant="footnote" tone="red" selectable>
-            {step.failure.message}
-            {step.failure.nextAction ? ` ${step.failure.nextAction}` : ""}
-          </Text>
-        ) : null}
+        <StepOutcomeNote step={step} />
         {expanded ? <StartupStepDetails attemptId={attemptId} step={step} /> : null}
       </View>
     </View>

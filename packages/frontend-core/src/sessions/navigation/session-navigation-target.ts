@@ -18,7 +18,8 @@ export type SessionNavigationTarget =
       identity: AgentSessionIdentity;
     }
   | { kind: "task"; workspaceId: string; taskId: string; role: AgentRole | null }
-  | { kind: "workspace_session"; workspaceId: string; sessionId: string };
+  | { kind: "workspace_session"; workspaceId: string; sessionId: string }
+  | { kind: "workspace_session_draft"; workspaceId: string; draftId: string };
 
 /**
  * One key for a sidebar entry and for the content on screen, so that selection compares one
@@ -29,5 +30,8 @@ export const sessionNavigationTargetKey = (target: SessionNavigationTarget): str
     return `task_session:${target.workspaceId}:${agentSessionIdentityKey(target.identity)}`;
   }
   if (target.kind === "task") return `task:${target.workspaceId}:${target.taskId}`;
+  if (target.kind === "workspace_session_draft") {
+    return `workspace_session_draft:${target.draftId}`;
+  }
   return `workspace_session:${target.workspaceId}:${target.sessionId}`;
 };

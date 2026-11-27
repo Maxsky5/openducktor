@@ -14,11 +14,13 @@ export function useWorkspaceSessionSelection({
   sessions,
   requestedSessionId,
   isActive,
+  draftActive = false,
 }: {
   workspaceId: string;
   sessions: WorkspaceSession[] | undefined;
   requestedSessionId: string | null | undefined;
   isActive: boolean;
+  draftActive?: boolean;
 }): WorkspaceSessionSelection {
   const { storage } = useClientConnection();
   const storageKey = workspaceSessionSelectionStorageKey(workspaceId);
@@ -38,12 +40,14 @@ export function useWorkspaceSessionSelection({
     currentSelection = { workspaceId, ...readSelection(storage, storageKey) };
     setLastSelection(currentSelection);
   }
-  const selected = currentSelection.error
-    ? null
-    : selectSession(sessions, requestedSessionId, currentSelection.sessionId);
+  const selected =
+    draftActive || currentSelection.error
+      ? null
+      : selectSession(sessions, requestedSessionId, currentSelection.sessionId);
   const selectedId = selected?.id ?? null;
   const hasLoadedSessions = sessions !== undefined;
   const missingSessionId =
+    !draftActive &&
     currentSelection.error === null &&
     hasLoadedSessions &&
     requestedSessionId != null &&
@@ -94,6 +98,7 @@ export function useWorkspaceSessionSelection({
     wasActive.current = isActive;
     if (
       !isActive ||
+      draftActive ||
       currentSelection.error !== null ||
       !hasLoadedSessions ||
       missingSessionId !== null ||
@@ -130,6 +135,7 @@ export function useWorkspaceSessionSelection({
     };
   }, [
     currentSelection.error,
+    draftActive,
     hasLoadedSessions,
     isActive,
     missingSessionId,

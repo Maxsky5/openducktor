@@ -123,7 +123,19 @@ describe("session navigation entry labels", () => {
   });
 
   test("names the entry type, workflow role, and runtime", () => {
+    const draftEntry = chatEntry({
+      key: "workspace_session_draft:alpha:draft-1",
+      target: { kind: "workspace_session_draft", workspaceId: "alpha", draftId: "draft-1" },
+      context: {
+        kind: "workspace_draft",
+        draftId: "draft-1",
+        lifecycle: "retained",
+        isStarting: false,
+        startupAttemptId: null,
+      },
+    });
     expect(sessionEntryTypeLabel(chatEntry())).toBe("Workspace session");
+    expect(sessionEntryTypeLabel(draftEntry)).toBe("Draft session");
     expect(sessionEntryTypeLabel(taskSessionEntry())).toBe("Task session");
     expect(sessionEntryTypeLabel(blockedTaskEntry)).toBe("Blocked task");
     expect(sessionEntryRoleLabel(taskSessionEntry())).toBe("Builder");

@@ -1,9 +1,20 @@
+import type { WorkspaceSession } from "@openducktor/contracts";
 import type { HumanReviewFeedbackRequest } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-types";
 import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import {
+  workspaceSessionIdentity,
+  workspaceSessionTitle,
+} from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import type { WorkflowLaunchActionId as SessionLaunchActionId } from "@openducktor/workflows";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { ChangedFileGroup } from "@/features/review/changes-model";
 import type { ChangesFocus } from "@/features/review/changes-view-state";
+
+type NewChatParams = {
+  workspaceId: string;
+  draftId?: string;
+  startupAttemptId?: string;
+};
 
 type RequestChangesParams = {
   workspaceId: string;
@@ -32,6 +43,8 @@ export type SessionRouteParams = AgentSessionIdentity & {
   title?: string;
   /** The session belongs to a task, so its title opens the task. */
   task?: "1";
+  /** The startup attempt whose inline creation steps show at the top of the transcript. */
+  startupAttemptId?: string;
 };
 
 /** The owner of work views: a task, or a chat (Workspace Session). */
@@ -47,6 +60,22 @@ export const sessionParams = (
   ...toAgentSessionIdentity(identity),
 });
 
+/** Route to a bound workspace session record, or null while the session has no runtime identity. */
+export const workspaceSessionRoute = (
+  workspaceId: string,
+  record: WorkspaceSession,
+  startupAttemptId?: string,
+) => {
+  const identity = workspaceSessionIdentity(record);
+  if (!identity) return null;
+  const params: SessionRouteParams = {
+    ...sessionParams(workspaceId, identity),
+    title: workspaceSessionTitle(record),
+  };
+  if (startupAttemptId) params.startupAttemptId = startupAttemptId;
+  return routes.session(params);
+};
+
 /**
  * The params that open another session of the same task in the open session screen. A switch
  * between the sessions of one task is a switch between peers, so it plays no screen transition.
@@ -60,6 +89,7 @@ export const switchedSessionParams = (workspaceId: string, identity: AgentSessio
   focus: undefined,
   title: undefined,
   task: undefined,
+  startupAttemptId: undefined,
 });
 
 /**
@@ -124,7 +154,12 @@ export const routes = {
     ({ pathname: "/edit-task", params: { workspaceId, taskId } }) as const,
   importIssues: (workspaceId: string) =>
     ({ pathname: "/import-issues", params: { workspaceId } }) as const,
-  newChat: (workspaceId: string) => ({ pathname: "/new-chat", params: { workspaceId } }) as const,
+  newChat: (workspaceId: string, draftId?: string, startupAttemptId?: string) => {
+    const params: NewChatParams = { workspaceId };
+    if (draftId) params.draftId = draftId;
+    if (startupAttemptId) params.startupAttemptId = startupAttemptId;
+    return { pathname: "/new-chat", params } as const;
+  },
   addHost: () => ({ pathname: "/add-host" }) as const,
   scanHost: () => ({ pathname: "/scan-host" }) as const,
   /** The QR scan of the first screen, while no host is active. */
