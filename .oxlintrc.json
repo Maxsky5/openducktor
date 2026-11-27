@@ -407,6 +407,7 @@
       ],
       "rules": {
         "anti-slop/no-hex-alpha-suffix": "error",
+        "anti-slop/no-transparent-text-color": "error",
         "unistyles/no-stylesheet-dependency-aliases": "error",
         "react-compiler/refs": "error",
         "react-compiler/immutability": "error",

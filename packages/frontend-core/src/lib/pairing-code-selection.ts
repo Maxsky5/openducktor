@@ -30,23 +30,27 @@ export const slotIsActive = (selection: CodeSelection, position: number): boolea
 
 /** The selection after an edit. A replaced digit selects the next one, so a correction reads on. */
 export const selectionAfterEdit = (previous: string, next: string): CodeSelection => {
-  if (next.length !== previous.length) return { start: next.length, end: next.length };
+  if (next.length !== previous.length) return selectionForSlot(next.length, next);
   let changed = 0;
   while (changed < next.length && next[changed] === previous[changed]) changed += 1;
-  const position = Math.min(changed + 1, CODE_LENGTH);
-  return { start: position, end: position < next.length ? position + 1 : position };
+  return selectionForSlot(changed + 1, next);
 };
 
 /**
- * The selection for a tap at `x`. `slotEnds` holds the right edge of each slot. A tap on a digit
- * selects it; a tap after the last digit puts the caret at the end of the code.
+ * The selection for a tap on the slot at `slot`. A tap on a digit selects it; a tap on an empty
+ * slot puts the caret at the end of the code.
  */
+export const selectionForSlot = (slot: number, value: string): CodeSelection => {
+  const position = Math.min(slot, value.length);
+  return { start: position, end: position < value.length ? position + 1 : position };
+};
+
+/** The selection for a tap at `x`. `slotEnds` holds the right edge of each slot. */
 export const selectionForTap = (
   slotEnds: readonly number[],
   x: number,
   value: string,
 ): CodeSelection => {
   const tapped = slotEnds.findIndex((end) => x < end);
-  const position = Math.min(tapped === -1 ? CODE_LENGTH - 1 : tapped, value.length);
-  return { start: position, end: position < value.length ? position + 1 : position };
+  return selectionForSlot(tapped === -1 ? CODE_LENGTH - 1 : tapped, value);
 };
