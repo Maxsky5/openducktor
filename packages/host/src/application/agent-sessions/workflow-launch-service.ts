@@ -17,6 +17,7 @@ import { normalizePathForComparison } from "../../domain/path-comparison";
 import { finalizeStartup, startupStep, updateStartup } from "./session-startup-progress";
 import { existingCheckoutStepMeta } from "./worktree-setup-plan";
 import type { TaskServiceError } from "../tasks/task-service";
+import type { QueuedSubmissionCommit } from "./agent-message-queue-admission";
 import { createSessionLaunchService } from "./session-launch-service";
 import type { SessionLaunchContext } from "./session-launch-types";
 import type { TaskSessionProgress } from "./task-session-operations";
@@ -64,13 +65,10 @@ export const createWorkflowLaunchService = (
       }
       yield* attempt.checkCanceled();
       const { decision, action, model, systemPrompt, parts, queuedFeedbackEvent } = prepared;
-      // Rejected feedback must retry the launch with its event, not send a bare message.
-      const retryInstruction =
-        queuedFeedbackEvent === undefined
-          ? request.instruction.kind === "message"
-            ? request.instruction.parts
-            : parts
-          : undefined;
+      const originalInstruction =
+        request.instruction.kind === "message" ? request.instruction.parts : parts;
+      // A feedback retry must also carry the workflow event.
+      const retryInstruction = queuedFeedbackEvent === undefined ? originalInstruction : undefined;
       if (retryInstruction !== undefined) attempt.keepInstruction(retryInstruction);
       attempt.setResultFields({ role: action.role, startMode: decision.startMode });
       if (model) attempt.setResultFields({ model });
@@ -241,6 +239,26 @@ export const createWorkflowLaunchService = (
         }
         if (request.policy.kind === "manual" && decision.startMode !== "reuse")
           return deps.runtime.sendUserMessage(input, options);
+
+        const commitFeedback: QueuedSubmissionCommit | undefined =
+          queuedFeedbackEvent === undefined
+            ? undefined
+            : (onCommitted) =>
+                deps.tasks
+                  .applyTaskEvent(
+                    {
+                      workspaceId: request.workspaceId,
+                      repoPath,
+                      taskId: request.taskId,
+                      eventId: queuedFeedbackEvent,
+                    },
+                    onCommitted,
+                  )
+                  .pipe(
+                    Effect.mapError((cause) =>
+                      toHostOperationError(cause, "workflow-launch.commit-feedback"),
+                    ),
+                  );
         return deps.messageDelivery
           .submit(
             {
@@ -254,24 +272,7 @@ export const createWorkflowLaunchService = (
               mode: "default",
             },
             options,
-            queuedFeedbackEvent === undefined
-              ? undefined
-              : (onCommitted) =>
-                  deps.tasks
-                    .applyTaskEvent(
-                      {
-                        workspaceId: request.workspaceId,
-                        repoPath,
-                        taskId: request.taskId,
-                        eventId: queuedFeedbackEvent,
-                      },
-                      onCommitted,
-                    )
-                    .pipe(
-                      Effect.mapError((cause) =>
-                        toHostOperationError(cause, "workflow-launch.commit-feedback"),
-                      ),
-                    ),
+            commitFeedback,
           )
           .pipe(
             Effect.map((result) =>
