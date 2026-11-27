@@ -95,6 +95,39 @@ const sentRequest = (launch: ReturnType<typeof createLaunch>): WorkflowLaunchReq
   return request;
 };
 
+test("returns a queued receipt when the reused session holds the conflict request", async () => {
+  const launch = createLaunch({
+    session: { ...session, ...sourceSession },
+    startMode: "reuse",
+    startupProgress: {
+      context: { startupAttemptId: "attempt", operationId: "operation" },
+      hostInstanceId: "host",
+      revision: 1,
+      workspaceId: "workspace",
+      repoPath: "/repo",
+      scope: { kind: "task", taskId: "task", role: "build" },
+      phase: "completed",
+      steps: [],
+      ownership: { state: "not_saved" },
+      instruction: { state: "queued" },
+    },
+  });
+  const sendAgentMessage = mock(async () => null);
+  const started = await start(launch, {
+    request: {
+      ...baseRequest,
+      launchActionId: "build_rebase_conflict_resolution",
+      postStartAction: "send_message",
+      message: "Resolve the conflict.",
+    },
+    decision: { startMode: "reuse", sourceSession },
+    sendAgentMessage,
+  });
+  expect(started.postStartMessageReceipt).toEqual({ outcome: "queued", recipient: sourceSession });
+  expect(started.retryPostStartMessage).toBeUndefined();
+  expect(sendAgentMessage).not.toHaveBeenCalled();
+});
+
 test("submits the captured identity, model, edited text, and target branch in one host command", async () => {
   const launch = createLaunch();
   const started = await start(launch, {
@@ -364,7 +397,10 @@ test("an accepted first message gives a receipt and no retry", async () => {
 test("a completed accepted first message gives a receipt without a failure", async () => {
   const started = await start(createLaunch({ acceptedMessage }));
   expect(started.postStartActionError).toBeNull();
-  expect(started.postStartMessageReceipt?.postAcceptanceFailure).toBeNull();
+  expect(started.postStartMessageReceipt).toMatchObject({
+    outcome: "accepted",
+    postAcceptanceFailure: null,
+  });
 });
 
 test("retry sends the unsent kickoff once through the frontend send path", async () => {

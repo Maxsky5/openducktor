@@ -61,19 +61,22 @@ export const createMutationPublisher = ({
       options: {
         changes?: (result: A) => TaskChangeSet;
         artifactChanges?: (result: A) => TaskArtifactChange[];
+        onCommitted?: (() => void) | undefined;
       } = {},
     ): Effect.Effect<{ value: A; cursor: TaskEventCursor }, TaskServiceError> {
       return runMutation(operation, workspace, mutation, (value, statusChanges) =>
-        taskSyncService
-          .publishTasksUpdated(
+        Effect.gen(function* () {
+          options.onCommitted?.();
+          const cursor = yield* taskSyncService.publishTasksUpdated(
             workspace,
             options.changes?.(value) ?? changes,
             operation,
             statusChanges,
             undefined,
             options.artifactChanges?.(value),
-          )
-          .pipe(Effect.map((cursor) => ({ value, cursor }))),
+          );
+          return { value, cursor };
+        }),
       );
     },
     publishWhen<A>(

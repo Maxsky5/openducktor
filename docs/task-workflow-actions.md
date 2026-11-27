@@ -42,7 +42,7 @@ An event action sends one workflow event. The client calls `task_apply_event` wi
 The client operation follows the event:
 
 - An event with the `worktree.reset` effect opens the Reset Implementation confirmation first. `reset_implementation` uses it.
-- An event action whose following launch has `context: "human_feedback"` opens the feedback form first. `human_request_changes` uses it. The session start sends `beforeStartAction: { eventId, note }`, and the host commits the event before the session starts. Without a launch to start, the form sends `task_apply_event`.
+- An event action whose following launch has `context: "human_feedback"` opens the feedback form first. `human_request_changes` uses it. The launch sends `beforeStartAction: { eventId }`. For Reuse with a regular instruction and an event without host effects, the host reserves the feedback in the message queue before the event commits. The feedback can reach the runtime after the commit. Other launches commit the event before session startup. Without a launch to start, the form sends `task_apply_event`.
 - Another event action sends `task_apply_event` directly, then starts its following launch when it has one.
 
 `human_approve` is an `approval` action, not an event action. It opens the approval modal and sends no event. The host allows the approval reads and writes while the `availableWhen` condition of this action matches the task.
@@ -53,7 +53,7 @@ Spec, Planner, Builder, and QA sessions use the canonical task worktree director
 
 Session startup accepts any branch or detached HEAD in that worktree. It keeps the current branch and files. If the worktree does not exist, startup creates it with the configured task branch name and runs the configured copy paths and hooks.
 
-Autopilot submits its first instruction through the host message queue. If the selected session is working, the instruction waits for the current turn to complete. It keeps its place behind earlier queued messages. Stop, failed turns, and interrupted turns pause the queue under the normal message delivery rules.
+Autopilot and manual Reuse launches submit regular instructions through the host message queue. If the selected session is working, the instruction waits for the current turn to complete. It keeps its place behind earlier queued messages. Stop, failed turns, and interrupted turns pause the queue under the normal message delivery rules.
 
 Stop also cancels Autopilot submissions that are still being prepared. A canceled submission cannot send its instruction or add it to the queue.
 

@@ -1,5 +1,5 @@
 import type {
-  AgentSessionControlSendInput,
+  AcceptedAgentInput,
   AgentSessionControlSummary,
   AgentSessionLiveRef,
   AgentSessionUserMessagePart,
@@ -7,6 +7,11 @@ import type {
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type { HostError } from "../../effect/host-errors";
+import type { SubmitOptions } from "./agent-message-queue-admission";
+
+export type SessionLaunchInstructionDelivery = (
+  options: Required<SubmitOptions>,
+) => Effect.Effect<AcceptedAgentInput | undefined, HostError>;
 
 /** The result fields that `run` sets. The launch service owns the other shared fields. */
 type SessionLaunchResultFields<Result extends SessionLaunchResult> = Partial<
@@ -41,11 +46,12 @@ export type SessionLaunchContext<Request, Result extends SessionLaunchResult> = 
   stopSession: (ref: AgentSessionLiveRef) => Effect.Effect<void, HostError>;
   /**
    * Uses `instruction` for a safe retry when delivery fails before dispatch or the runtime rejects
-   * it. A queued launch completes without `acceptedMessage`.
+   * it. Omit it for instructions that need to retry the launch. A queued launch completes without
+   * `acceptedMessage`.
    */
   send: (
-    input: AgentSessionControlSendInput,
-    instruction: AgentSessionUserMessagePart[],
+    instruction: AgentSessionUserMessagePart[] | undefined,
+    deliver: SessionLaunchInstructionDelivery,
   ) => Effect.Effect<void, HostError>;
 };
 

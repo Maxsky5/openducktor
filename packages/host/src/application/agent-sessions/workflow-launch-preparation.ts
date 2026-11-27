@@ -258,13 +258,21 @@ export const prepareWorkflowLaunch = (
       const goals = resolveRuntimeGoalAvailability(descriptor, version);
       if (!goals.available) return yield* launchValidationError(goals.reason);
     }
-    // The event commits through the workflow event path, so its host effects run first.
-    if (request.beforeStartAction) {
+    const queuedFeedbackEvent =
+      beforeStartEventId !== undefined &&
+      decision.startMode === "reuse" &&
+      !request.goal &&
+      request.instruction.kind !== "none" &&
+      workflow.eventEffects(beforeStartEventId).length === 0
+        ? beforeStartEventId
+        : undefined;
+    // An event with host effects must complete before preparing its destination.
+    if (beforeStartEventId !== undefined && queuedFeedbackEvent === undefined) {
       yield* deps.tasks.applyTaskEvent({
         workspaceId: request.workspaceId,
         repoPath,
         taskId: request.taskId,
-        eventId: request.beforeStartAction.eventId,
+        eventId: beforeStartEventId,
       });
     }
     if (request.targetBranch) {
@@ -280,6 +288,11 @@ export const prepareWorkflowLaunch = (
       repoPath,
       taskId: request.taskId,
     });
+    if (queuedFeedbackEvent !== undefined)
+      task = yield* Effect.try({
+        try: () => workflow.taskAfterEvent(queuedFeedbackEvent, task),
+        catch: (cause) => launchValidationError(errorMessage(cause)),
+      });
     yield* validateLaunchAvailable(workflow, task, action, repoPath);
     const systemPrompt = workflow.prompts.systemPrompt({
       role: action.role,
@@ -298,6 +311,7 @@ export const prepareWorkflowLaunch = (
       model,
       systemPrompt,
       parts,
+      queuedFeedbackEvent,
     };
   });
 

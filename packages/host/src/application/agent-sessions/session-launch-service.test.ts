@@ -104,7 +104,6 @@ const fixture = (accepted?: AcceptedAgentInput) => {
   };
   const service = createSessionLaunchService<Request, SessionLaunchResult>({
     runtime,
-    send: (_request, input, options) => runtime.sendUserMessage(input, options),
     initial: () =>
       Effect.succeed({ workspaceId: "workspace", repoPath: "/repo", status: "completed" as const }),
     key: (request) => request.key,
@@ -125,14 +124,16 @@ const fixture = (accepted?: AcceptedAgentInput) => {
         attempt.ownershipSaved();
         if (entered) yield* Deferred.succeed(entered, undefined);
         if (gate) yield* Deferred.await(gate);
-        yield* attempt.send(
-          {
-            ...refFor(sessionId),
-            sessionScope: { kind: "repository", workspaceId: "workspace" },
-            parts,
-            delivery: "new_turn",
-          },
-          parts,
+        yield* attempt.send(parts, (options) =>
+          runtime.sendUserMessage(
+            {
+              ...refFor(sessionId),
+              sessionScope: { kind: "repository", workspaceId: "workspace" },
+              parts,
+              delivery: "new_turn",
+            },
+            options,
+          ),
         );
       }),
   });

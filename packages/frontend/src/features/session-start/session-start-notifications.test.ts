@@ -230,9 +230,10 @@ describe("session-start notifications", () => {
       request: { ...baseInput.request, postStartAction: "send_message", message: "Continue" },
     });
     expect(result.retryPostStartMessage).toBeUndefined();
-    expect(result.postStartMessageReceipt?.postAcceptanceFailure).toBe(
-      "Stream closed after acceptance",
-    );
+    expect(result.postStartMessageReceipt).toMatchObject({
+      outcome: "accepted",
+      postAcceptanceFailure: "Stream closed after acceptance",
+    });
     expect(notifications.publishSessionError).not.toHaveBeenCalled();
     expect(isSessionStartFailureFeedbackHandled(result.postStartActionError)).toBe(true);
     expect(notifications.publishSessionStarted).not.toHaveBeenCalled();

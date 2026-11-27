@@ -1,3 +1,8 @@
+import {
+  createMessageQueueAdmission,
+  type QueuedSubmissionCommit,
+  type SubmitOptions,
+} from "./agent-message-queue-admission";
 import { messageSteeringBlock } from "./agent-message-steering";
 import { omittedQueueSessions } from "./omitted-queue-sessions";
 import { createSubmissionReservations } from "./submission-reservations";
@@ -22,11 +27,7 @@ import {
   agentSessionScopesEqual,
 } from "@openducktor/core";
 import { Effect } from "effect";
-import {
-  type HostError,
-  HostValidationError,
-  toHostOperationError,
-} from "../../effect/host-errors";
+import { type HostError, HostValidationError } from "../../effect/host-errors";
 import type { AgentSessionSendOptions } from "../../ports/agent-session-live-adapter-port";
 import {
   ACCEPTANCE_UNKNOWN_REASON,
@@ -96,7 +97,8 @@ export type AgentMessageDeliveryService = {
   /** Options guard the first send and enqueue. Queued entries use the normal pause rules. */
   readonly submit: (
     input: AgentMessageSubmitInput,
-    options?: AgentSessionSendOptions,
+    options?: SubmitOptions,
+    queuedCommit?: QueuedSubmissionCommit,
   ) => Effect.Effect<AgentMessageSubmitResult, HostError>;
   readonly manage: (
     input: AgentMessageQueueManageInput,
@@ -227,37 +229,10 @@ export const createAgentMessageDeliveryService = (
       );
     });
 
-  /** Retains an uncertain message at the front of its queue and blocks repeat delivery. */
-  const queueUnknownMessage = (
-    queue: MessageQueue,
-    content: SubmittedContent,
-    messageId?: string,
-  ): AgentMessageSubmitResult => {
-    markAcceptanceUnknown(registry.enqueue(queue, content, "first"), messageId);
-    queue.pause ??= { cause: "acceptance_unknown" };
-    return { kind: "queued", queue: publish(queue) };
-  };
-
-  /** Stop can run while preparation waits. Check and enqueue without yielding. */
-  const enqueue = (
-    queue: MessageQueue,
-    content: SubmittedContent,
-    position: "first" | "last",
-    options?: AgentSessionSendOptions,
-  ) =>
-    Effect.suspend(() => {
-      try {
-        options?.assertCurrent?.();
-      } catch (cause) {
-        forgetIfUnused(queue);
-        return Effect.fail(toHostOperationError(cause, "agent-message-delivery.enqueue"));
-      }
-      registry.enqueue(queue, content, position);
-      return Effect.succeed<AgentMessageSubmitResult>({ kind: "queued", queue: publish(queue) });
-    });
+  const { enqueue, queueUnknownMessage } = createMessageQueueAdmission(registry, release);
 
   /** The send keeps the queue, so the queue stays the queue of its session until the send ends. */
-  const submitDefault = (content: SubmittedContent, options?: AgentSessionSendOptions) =>
+  const submitDefault = (content: SubmittedContent, options?: SubmitOptions) =>
     Effect.gen(function* () {
       const queue = queueFor(content);
       if (conditions.holdsInQueue(queue, content.parts)) {
@@ -278,7 +253,7 @@ export const createAgentMessageDeliveryService = (
           return queued;
         }
         case "unknown":
-          return queueUnknownMessage(queue, content, outcome.messageId);
+          return queueUnknownMessage(queue, content, outcome.messageId, options);
         case "accepted_then_failed":
           // The host state is unsure, so later messages wait for Resume.
           pauses.pause(queue, { cause: "accepted_then_failed", detail: outcome.error.message });
@@ -295,7 +270,7 @@ export const createAgentMessageDeliveryService = (
     });
 
   /** A failed steer pauses the session's current queue, which can change during the send. */
-  const submitSteer = (content: SubmittedContent, options?: AgentSessionSendOptions) =>
+  const submitSteer = (content: SubmittedContent, options?: SubmitOptions) =>
     Effect.gen(function* () {
       const sent = yield* steer(content, options);
       const outcome = sent.kind === "blocked" ? sent : reconcileAcceptedOutcome(sent);
@@ -303,7 +278,7 @@ export const createAgentMessageDeliveryService = (
         case "accepted":
           return { kind: "accepted", acceptedMessage: outcome.acceptedMessage } as const;
         case "unknown":
-          return queueUnknownMessage(queueFor(content), content, outcome.messageId);
+          return queueUnknownMessage(queueFor(content), content, outcome.messageId, options);
         case "accepted_then_failed":
           pause(content, { cause: "accepted_then_failed", detail: outcome.error.message });
           break;
@@ -418,7 +393,7 @@ export const createAgentMessageDeliveryService = (
   };
 
   return {
-    submit: (input, options) =>
+    submit: (input, options, queuedCommit) =>
       reserveSubmission(
         input,
         dependencies.runOperation(
@@ -436,6 +411,10 @@ export const createAgentMessageDeliveryService = (
             if (conditions.isBlockedOnInput(agentSessionRefKey(content))) {
               return yield* blockedOnInputError();
             }
+            if (queuedCommit)
+              return yield* enqueue(queueFor(content), content, "last", options, queuedCommit).pipe(
+                Effect.uninterruptible,
+              );
             return yield* input.mode === "default"
               ? submitDefault(content, options)
               : submitSteer(content, options);

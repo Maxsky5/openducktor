@@ -1,4 +1,8 @@
-import { HostValidationError } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  HostValidationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import type {
   AgentSessionControlResumeInput,
   AgentSessionControlSendInput,
@@ -59,11 +63,15 @@ export const createWorkflowLaunchService = (
         return;
       }
       yield* attempt.checkCanceled();
-      const { decision, action, model, systemPrompt, parts } = prepared;
-      if (parts !== undefined)
-        attempt.keepInstruction(
-          request.instruction.kind === "message" ? request.instruction.parts : parts,
-        );
+      const { decision, action, model, systemPrompt, parts, queuedFeedbackEvent } = prepared;
+      // Rejected feedback must retry the launch with its event, not send a bare message.
+      const retryInstruction =
+        queuedFeedbackEvent === undefined
+          ? request.instruction.kind === "message"
+            ? request.instruction.parts
+            : parts
+          : undefined;
+      if (retryInstruction !== undefined) attempt.keepInstruction(retryInstruction);
       attempt.setResultFields({ role: action.role, startMode: decision.startMode });
       if (model) attempt.setResultFields({ model });
       const sessionScope = {
@@ -214,49 +222,82 @@ export const createWorkflowLaunchService = (
         parts,
         delivery: "new_turn",
       };
-      yield* attempt.send(
-        input,
-        request.instruction.kind === "message" ? request.instruction.parts : parts,
-      );
+      yield* attempt.send(retryInstruction, (options) => {
+        if (request.goal) {
+          // The launch holds its new session as running, so it sets the goal without the `/goal`
+          // busy check of a composer message.
+          return deps.runtime.controlGoal(
+            {
+              repoPath: input.repoPath,
+              runtimeKind: input.runtimeKind,
+              workingDirectory: input.workingDirectory,
+              externalSessionId: input.externalSessionId,
+              sessionScope: input.sessionScope,
+              systemPrompt: input.systemPrompt,
+              command: { kind: "set", objective: request.goal.objective },
+            },
+            options,
+          );
+        }
+        if (request.policy.kind === "manual" && decision.startMode !== "reuse")
+          return deps.runtime.sendUserMessage(input, options);
+        const submissionId = crypto.randomUUID();
+        return deps.messageDelivery
+          .submit(
+            {
+              repoPath: input.repoPath,
+              runtimeKind: input.runtimeKind,
+              workingDirectory: input.workingDirectory,
+              externalSessionId: input.externalSessionId,
+              sessionScope: input.sessionScope,
+              parts: input.parts,
+              submissionId,
+              mode: "default",
+            },
+            options,
+            queuedFeedbackEvent === undefined
+              ? undefined
+              : (onCommitted) =>
+                  deps.tasks
+                    .applyTaskEvent(
+                      {
+                        workspaceId: request.workspaceId,
+                        repoPath,
+                        taskId: request.taskId,
+                        eventId: queuedFeedbackEvent,
+                      },
+                      onCommitted,
+                    )
+                    .pipe(
+                      Effect.mapError((cause) =>
+                        toHostOperationError(cause, "workflow-launch.commit-feedback"),
+                      ),
+                    ),
+          )
+          .pipe(
+            Effect.flatMap((result) => {
+              if (result.kind === "accepted") return Effect.succeed(result.acceptedMessage);
+              if (
+                result.kind === "queued" &&
+                request.policy.kind === "manual" &&
+                result.queue.entries.some(
+                  (entry) =>
+                    entry.submissionId === submissionId && entry.state === "acceptance_unknown",
+                )
+              )
+                return Effect.fail(
+                  new HostOperationError({
+                    operation: "workflow-launch.instruction",
+                    message: "The runtime did not confirm the instruction.",
+                  }),
+                );
+              return Effect.succeed(undefined);
+            }),
+          );
+      });
     });
   return createSessionLaunchService<WorkflowLaunchAttemptRequest, WorkflowLaunchResult>({
     runtime: deps.runtime,
-    send: (request, input, options) => {
-      if (request.policy.kind !== "automatic") {
-        // The launch holds its new session as running, so it sets the goal without the `/goal`
-        // busy check of a composer message.
-        if (!request.goal) return deps.runtime.sendUserMessage(input, options);
-        return deps.runtime.controlGoal(
-          {
-            repoPath: input.repoPath,
-            runtimeKind: input.runtimeKind,
-            workingDirectory: input.workingDirectory,
-            externalSessionId: input.externalSessionId,
-            sessionScope: input.sessionScope,
-            systemPrompt: input.systemPrompt,
-            command: { kind: "set", objective: request.goal.objective },
-          },
-          options,
-        );
-      }
-      return deps.messageDelivery
-        .submit(
-          {
-            repoPath: input.repoPath,
-            runtimeKind: input.runtimeKind,
-            workingDirectory: input.workingDirectory,
-            externalSessionId: input.externalSessionId,
-            sessionScope: input.sessionScope,
-            parts: input.parts,
-            submissionId: crypto.randomUUID(),
-            mode: "default",
-          },
-          options,
-        )
-        .pipe(
-          Effect.map((result) => (result.kind === "accepted" ? result.acceptedMessage : undefined)),
-        );
-    },
     // The launch result names the role, so a missing task fails the launch before it starts.
     initial: (request) =>
       deps.taskReader
