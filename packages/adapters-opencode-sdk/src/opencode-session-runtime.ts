@@ -35,6 +35,7 @@ import {
 } from "./opencode-client";
 import { createOpenCodeGenerationModels } from "./opencode-generation-model";
 import { createOpenCodeCatalogReadiness } from "./opencode-catalog-readiness";
+import { readCatalog } from "./opencode-catalog";
 import { createOpenCodeMcpBridge } from "./opencode-mcp-bridge";
 import {
   OpencodeSdkAdapter,
@@ -275,7 +276,6 @@ export const createPrepareOpencodeSessionRuntime =
       globalConfigDirectory: options.globalConfigDirectory,
       isClosed,
     });
-    const catalogReadiness = createOpenCodeCatalogReadiness(abort.signal);
     abort.signal.addEventListener("abort", () => {
       mcpBridge.close();
       generationModels.close();
@@ -285,7 +285,6 @@ export const createPrepareOpencodeSessionRuntime =
       ensureMcp: mcpBridge.ensure,
       restoreMcp: mcpBridge.restore,
       awaitGenerationModel: generationModels.awaitModel,
-      awaitCatalogPlugins: (target) => catalogReadiness.awaitPlugins(controller.client, target),
       projectHistory: (sessionID, messages, inbox) =>
         (projectors.get(sessionID) ?? new OpenCodeLiveMessageProjector()).projectHistory(
           messages,
@@ -330,6 +329,7 @@ export const createPrepareOpencodeSessionRuntime =
     abort.signal.addEventListener("abort", () => controller.close(), { once: true });
     if (abort.signal.aborted) controller.close();
     const client = controller.client;
+    const catalogReadiness = createOpenCodeCatalogReadiness(client, abort.signal);
     const info = await nativeRequest(runtimeIdentity, "verify the V2 server", () =>
       client.server.info(),
     );
@@ -1367,7 +1367,8 @@ export const createPrepareOpencodeSessionRuntime =
     return {
       connection,
       queries: {
-        loadRuntimeCatalog: controller.loadRuntimeCatalog.bind(controller),
+        loadRuntimeCatalog: (target) =>
+          readCatalog(client, target.workingDirectory, catalogReadiness.awaitPlugins(target)),
         searchFiles: controller.searchFiles.bind(controller),
         loadSessionHistory: controller.loadSessionHistory.bind(controller),
         loadSessionTodos: controller.loadSessionTodos.bind(controller),

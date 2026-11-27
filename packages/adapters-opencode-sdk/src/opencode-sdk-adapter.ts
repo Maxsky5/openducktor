@@ -112,7 +112,6 @@ export type OpenCodeControlHooks = {
     model: ModelRef,
     signal: AbortSignal,
   ) => Promise<void>;
-  awaitCatalogPlugins: (input: LoadAgentRuntimeCatalogInput) => Promise<void>;
   admitted: (binding: OpenCodeSessionBinding) => void;
   /** Projects the history with the result notices that still wait in the inbox. */
   projectHistory: (
@@ -976,9 +975,7 @@ export class OpencodeSdkAdapter {
     return (await this.readNativeSession(input, "read the parent conversation")).parentID ?? null;
   }
   async loadRuntimeCatalog(input: LoadAgentRuntimeCatalogInput) {
-    return readCatalog(this.client, input.workingDirectory, () =>
-      this.hooks.awaitCatalogPlugins(input),
-    );
+    return readCatalog(this.client, input.workingDirectory);
   }
   async searchFiles(input: SearchAgentFilesInput) {
     return nativeRequest(input, "search files", async () =>

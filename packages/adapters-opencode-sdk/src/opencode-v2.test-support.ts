@@ -116,7 +116,6 @@ export const createController = (
       ensureMcp: async () => {},
       restoreMcp: async () => {},
       awaitGenerationModel: async () => {},
-      awaitCatalogPlugins: async () => {},
       admitted: () => {},
       projectHistory: (_sessionID, messages) => projectMessages(messages),
     },

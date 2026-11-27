@@ -58,7 +58,7 @@ const nativeCatalog = (variants: ModelInfo["variants"] = []) =>
   );
 
 describe("OpenCode catalog", () => {
-  test("reads each catalog surface in parallel after plugin readiness", async () => {
+  test("reads catalog surfaces in parallel", async () => {
     const data = nativeCatalog();
     const lists = ["/api/model", "/api/command", "/api/agent", "/api/skill"];
     const listed = new Set<string>();
@@ -126,7 +126,7 @@ describe("OpenCode catalog", () => {
     const data = nativeCatalog();
     const initialRead = Promise.withResolvers<void>();
     const coldInventory = Promise.withResolvers<Response>();
-    const updateReceived = Promise.withResolvers<void>();
+    const invalidated = Promise.withResolvers<void>();
     let pluginsLoaded = false;
     const fixture = prepareFixture(({ url }) => {
       const path = url.pathname;
@@ -135,7 +135,6 @@ describe("OpenCode catalog", () => {
           initialRead.resolve();
           return coldInventory.promise;
         }
-        updateReceived.resolve();
         return Response.json({
           location: { directory: canonicalDirectory },
           data: [{ id: "opencode.agent", state: { status: "active" } }],
@@ -147,6 +146,10 @@ describe("OpenCode catalog", () => {
 
     const runtime = await fixture.prepare();
     try {
+      await runtime.startForwarding((signal) => {
+        if (signal.type === "catalog_invalidated" && signal.workingDirectory === canonicalDirectory)
+          invalidated.resolve();
+      });
       const catalog = runtime.queries.loadRuntimeCatalog({ ...ref, workingDirectory });
       await initialRead.promise;
       pluginsLoaded = true;
@@ -158,7 +161,7 @@ describe("OpenCode catalog", () => {
         data: {},
       });
 
-      await updateReceived.promise;
+      await invalidated.promise;
       coldInventory.resolve(
         Response.json({ location: { directory: canonicalDirectory }, data: [] }),
       );

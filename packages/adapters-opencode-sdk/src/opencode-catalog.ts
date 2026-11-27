@@ -23,11 +23,10 @@ export const readModelCatalog = async (
 export const readCatalog = async (
   client: OpenCodeClient,
   directory: string,
-  awaitPlugins: () => Promise<void>,
+  ready?: Promise<void>,
 ): Promise<AgentRuntimeCatalogRead> => {
   // An update during the first read can arrive before the client caches the result.
   // Wait for initial activation before reading any surface of that result.
-  const ready = awaitPlugins();
   const surface = async <Value>(read: () => Promise<Value>) => {
     try {
       await ready;
