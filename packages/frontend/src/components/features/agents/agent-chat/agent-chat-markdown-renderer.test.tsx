@@ -72,17 +72,26 @@ describe("AgentChatMarkdownRenderer", () => {
   test("keeps one root element while the reply streams", () => {
     const view = render(chat("Plain line", true));
     const root = view.container.firstElementChild;
+    const text = view.getByText("Plain line").firstChild;
 
-    view.rerender(chat("Plain line with **emphasis**", true));
+    view.rerender(chat("Plain line continues", true));
+    expect(view.getByText("Plain line continues").firstChild).toBe(text);
+
+    view.rerender(chat("Plain line continues with **emphasis**", true));
 
     expect(view.container.firstElementChild).toBe(root);
     expect(view.container.querySelector("strong")?.textContent).toBe("emphasis");
   });
 
   test("shows an open code fence as code while the reply streams", () => {
-    const view = render(chat("```ts\nconst value = 1;", true));
+    const prefix = "Read `src/a.ts`.\n\n```text\nfirst line";
+    const view = render(chat(prefix, true));
+    const code = view.container.querySelector("pre code");
+    expect(code?.textContent).toContain("first line");
 
-    expect(view.container.querySelector("pre code")?.textContent).toContain("const value = 1;");
+    view.rerender(chat(`${prefix}\nsecond line`, true));
+    expect(view.container.querySelector("pre code")).toBe(code);
+    expect(code?.textContent).toContain("second line");
   });
 
   test("keeps raw HTML out of the reply", () => {
@@ -185,6 +194,7 @@ describe("chat file links", () => {
         [
           "`pnpm test` · `GET /api/auth` · `https://example.org/a.ts` · `/api/v1.json`",
           "`../outside.ts` · `src/../outside.ts` · `users.read`",
+          "`www.example.org/a.ts` · `./www.example.org/a.ts`",
           "[`src/auth.ts`](https://example.org/a.ts)",
           "```text\n`src/method.ts`\n```",
           "Open `` ./src/auth.ts ``.",
@@ -193,6 +203,7 @@ describe("chat file links", () => {
     );
 
     expect(view.getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "./www.example.org/a.ts",
       "src/auth.ts",
       "./src/auth.ts",
     ]);
@@ -201,6 +212,39 @@ describe("chat file links", () => {
     );
     expect(view.container.querySelector("a a")).toBeNull();
   });
+
+  test("links only the closed occurrences after a late footnote reference", () => {
+    const first = "Read `src/a.ts`.";
+    const view = render(chat(first, true));
+    const definition = `${first}\n\n[^1]: Also see \`src/a.ts\` and \`src/b.ts\`.`;
+    view.rerender(chat(definition, true));
+
+    const current = `${definition}\n\nSee [^1]. Then read \`src/a.ts`;
+    view.rerender(chat(current, true));
+
+    const links = () =>
+      Array.from(view.container.querySelectorAll("a[data-local-link]"), (link) =>
+        link.getAttribute("data-local-link"),
+      );
+    expect(links()).toEqual(["src/a.ts", "src/a.ts", "src/b.ts"]);
+    expect(view.container.querySelector("p:nth-of-type(2) code")?.closest("a")).toBeNull();
+
+    view.rerender(chat(`${current}\``, true));
+    expect(links()).toEqual(["src/a.ts", "src/a.ts", "src/a.ts", "src/b.ts"]);
+    expect(view.container.querySelector("p:nth-of-type(2) code")?.closest("a")).not.toBeNull();
+  });
+
+  test.each(["- `\n  src/a.ts\n  ", "> `\n> src/a.ts\n> "])(
+    "links an indented path only after the closing backtick in %j",
+    (unfinished) => {
+      const view = render(chat(unfinished, true));
+      expect(view.queryByRole("link", { name: "src/a.ts" })).toBeNull();
+      view.rerender(chat(`${unfinished}\``, true));
+      expect(view.getByRole("link", { name: "src/a.ts" }).getAttribute("data-local-link")).toBe(
+        "src/a.ts",
+      );
+    },
+  );
 
   test.each([
     {
