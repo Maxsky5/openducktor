@@ -29,6 +29,15 @@
   border-radius: 2px;
 }
 
+.markdown-body a[data-inline-file-link] {
+  color: var(--transcript-file-link-foreground);
+  text-decoration: none;
+}
+
+.markdown-body a[data-inline-file-link] > code {
+  color: inherit;
+}
+
 .markdown-body a[data-file-link-chip] {
   display: inline-flex;
   max-width: 100%;

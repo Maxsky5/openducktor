@@ -11,6 +11,8 @@ import { CHECKBOX_CLASS_NAME } from "./checkbox";
 export type MarkdownLocalLinks = {
   handles(href: string): boolean;
   open(href: string, anchor: HTMLAnchorElement): void;
+  /** Detect unambiguous file paths in inline code. */
+  inlineFilePaths?: boolean;
   /** Trusted markup for a local link chip. */
   chip?(href: string, labelHtml: string): { iconHtml: string; labelHtml: string } | null;
 };

@@ -54,6 +54,7 @@ export const AgentChatMarkdownRenderer = memo(function AgentChatMarkdownRenderer
     () => ({
       local: {
         handles: isChatLocalDestination,
+        inlineFilePaths: true,
         chip: (href, labelHtml) => {
           const destination = parseChatFileLink(href);
           if (destination.kind !== "path") return null;

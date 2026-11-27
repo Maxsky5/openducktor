@@ -40,9 +40,9 @@ describe("AgentChatMarkdownRenderer", () => {
     const reply = [
       "## Result",
       "",
-      "- one\n- two\n\n  Continuation.\n- three",
+      "- one\n- `src/tasks/two.ts`\n\n  Continuation.\n- three",
       "",
-      "| File | Change |\n| --- | --- |\n| `a.ts` | **added** |",
+      "| File | Change |\n| --- | --- |\n| `src/a.ts` | **added** |",
       "",
       "```ts\nconst value = 1;\n```",
       "",
@@ -61,6 +61,9 @@ describe("AgentChatMarkdownRenderer", () => {
       elements: Array.from(view.container.querySelectorAll("*"))
         .filter((element) => !element.closest("code"))
         .map((element) => element.tagName),
+      fileLinks: Array.from(view.container.querySelectorAll("a[data-local-link]"), (link) =>
+        link.getAttribute("data-local-link"),
+      ),
       text: view.container.textContent,
     });
     expect(renderedReply(streamed)).toEqual(renderedReply(fresh));
@@ -135,6 +138,61 @@ describe("AgentChatMarkdownRenderer", () => {
 });
 
 describe("chat file links", () => {
+  test("links each inline path at its closing backtick and opens the full destination", () => {
+    const open = mock<OpenFile>(() => {});
+    const path = "apps/api/src/lib/auth.ts:42:3";
+    const prefix = `Intro.\n\n- Open \`${path}`;
+    const reply = (markdown: string, streaming = true) =>
+      withFiles(open, chat(markdown, streaming));
+    const view = render(reply(prefix));
+    const intro = view.getByText("Intro.");
+
+    expect(view.getByText(path).tagName).toBe("CODE");
+    expect(view.queryByRole("link", { name: path })).toBeNull();
+
+    const partialSecond = `${prefix}\`\n- Then see \`${path}`;
+    view.rerender(reply(`${prefix}\``));
+    const firstLink = view.getByRole("link", { name: path });
+    expect(firstLink.querySelector("code")?.textContent).toBe(path);
+    fireEvent.click(firstLink);
+    expect(open).toHaveBeenCalledWith(path, firstLink);
+
+    view.rerender(reply(partialSecond));
+    expect(view.getAllByRole("link", { name: path })).toHaveLength(1);
+    view.rerender(reply(`${partialSecond}\``));
+    const [, secondLink] = view.getAllByRole("link", { name: path });
+    expect(secondLink).toBeDefined();
+    if (secondLink) fireEvent.keyDown(secondLink, { key: "Enter" });
+    expect(open).toHaveBeenLastCalledWith(path, secondLink);
+
+    view.rerender(reply(`${partialSecond}\``, false));
+    expect(view.getAllByRole("link", { name: path })).toHaveLength(2);
+    expect(view.getByText("Intro.")).toBe(intro);
+  });
+
+  test("keeps ambiguous code and explicit Markdown links as written", () => {
+    const view = render(
+      chat(
+        [
+          "`pnpm test` · `GET /api/auth` · `https://example.org/a.ts` · `/api/v1.json`",
+          "`../outside.ts` · `src/../outside.ts` · `users.read`",
+          "[`src/auth.ts`](https://example.org/a.ts)",
+          "```text\n`src/method.ts`\n```",
+          "Open `` ./src/auth.ts ``.",
+        ].join("\n\n"),
+      ),
+    );
+
+    expect(view.getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "src/auth.ts",
+      "./src/auth.ts",
+    ]);
+    expect(view.getByRole("link", { name: "src/auth.ts" }).getAttribute("href")).toBe(
+      "https://example.org/a.ts",
+    );
+    expect(view.container.querySelector("a a")).toBeNull();
+  });
+
   test.each([
     {
       label: "apps/web/src/LandingPage.tsx",

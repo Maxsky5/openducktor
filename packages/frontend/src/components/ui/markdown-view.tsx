@@ -4,8 +4,8 @@
  * Words leaves to the app: link and diagram clicks, task checkboxes, and images that the host loads.
  */
 import type { TaskAssetRenderContext } from "@openducktor/contracts";
-import type { PluginConfig } from "@pierre/words/html";
-import { Markdown, type ReactiveIslands } from "@pierre/words/react";
+import type { HtmlOptions, PluginConfig } from "@pierre/words/html";
+import { Markdown, type MarkdownProps, type ReactiveIslands } from "@pierre/words/react";
 import type { MouseEvent, ReactElement } from "react";
 import { memo, useId, useLayoutEffect, useMemo, useState } from "react";
 import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
@@ -36,6 +36,7 @@ import {
   parseHostImageData,
 } from "./markdown-html";
 import { IslandLink } from "./markdown-island-link";
+import { MarkdownWithInlineFileLinks } from "./markdown-inline-file-view";
 import { closestLink, useMarkdownLinkEvents } from "./markdown-link-events";
 import { MarkdownMermaidDialog } from "./markdown-mermaid-dialog";
 import { MARKDOWN_CLASSES, type MarkdownRendererVariant } from "./markdown-variants";
@@ -220,27 +221,41 @@ export const MarkdownView = memo(function MarkdownView({
     linkEvents.onClick(event);
   };
 
+  const options = useMemo(() => {
+    const next: Omit<HtmlOptions, "islands"> = {
+      math: !lightweight,
+      controls: false,
+      lineNumbers: false,
+      components: hooks,
+      urlTransform,
+    };
+    if (plugins) next.plugins = plugins;
+    return next;
+  }, [hooks, lightweight, plugins, urlTransform]);
+  const contentProps: Pick<MarkdownProps, "id" | "islands" | "className"> & typeof linkEvents = {
+    id: fileLinkRootId,
+    className: cn(MARKDOWN_CLASSES[variant], className),
+    ...linkEvents,
+    onClick: handleClick,
+  };
+  if (islands) contentProps.islands = islands;
+
   return (
     <>
-      <Markdown
-        id={fileLinkRootId}
-        mode={streaming ? "streaming" : "static"}
-        isAnimating={streaming}
-        math={!lightweight}
-        controls={false}
-        lineNumbers={false}
-        components={hooks}
-        {...(islands ? { islands } : {})}
-        {...(plugins ? { plugins } : {})}
-        urlTransform={urlTransform}
-        className={cn(MARKDOWN_CLASSES[variant], className)}
-        onClick={handleClick}
-        onKeyDown={linkEvents.onKeyDown}
-        onAuxClick={linkEvents.onAuxClick}
-        onContextMenu={linkEvents.onContextMenu}
-      >
-        {markdown}
-      </Markdown>
+      {localLinks?.inlineFilePaths ? (
+        <MarkdownWithInlineFileLinks {...contentProps} options={options} streaming={streaming}>
+          {markdown}
+        </MarkdownWithInlineFileLinks>
+      ) : (
+        <Markdown
+          {...contentProps}
+          {...options}
+          mode={streaming ? "streaming" : "static"}
+          isAnimating={streaming}
+        >
+          {markdown}
+        </Markdown>
+      )}
       {showsDiagrams ? <ClosesOnViewHide onHide={closePreview} /> : null}
       {previewMounted && preview ? (
         <DiagramPreviewDialog preview={preview} onClose={closePreview} />
