@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { selectionAfterEdit, selectionForTap } from "./pairing-code-selection";
+import { selectionAfterEdit, selectionForSlot, selectionForTap } from "./pairing-code-selection";
 
 const slotEnds = [40, 86, 132, 184, 230, 276];
 
@@ -9,6 +9,12 @@ test("a tap selects the tapped digit, or puts the caret after the typed digits",
   expect(selectionForTap(slotEnds, 200, "12")).toEqual({ start: 2, end: 2 });
   // A tap past the last slot counts as the last slot.
   expect(selectionForTap(slotEnds, 400, "123456")).toEqual({ start: 5, end: 6 });
+});
+
+test("a tapped slot selects its digit, and an empty slot puts the caret after the typed digits", () => {
+  expect(selectionForSlot(0, "123456")).toEqual({ start: 0, end: 1 });
+  expect(selectionForSlot(4, "12")).toEqual({ start: 2, end: 2 });
+  expect(selectionForSlot(2, "")).toEqual({ start: 0, end: 0 });
 });
 
 test("a replaced digit selects the next digit, and typing or deleting moves the caret to the end", () => {
