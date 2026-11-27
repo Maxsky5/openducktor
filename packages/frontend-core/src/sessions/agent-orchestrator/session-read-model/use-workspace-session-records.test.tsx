@@ -163,7 +163,8 @@ describe("Workspace Session metadata subscription", () => {
           message: "Connection lost",
         }),
       );
-      expect(harness.getLatest().subscriptionError).toBe("Connection lost");
+      // The host connection state shows a lost connection. It is not a subscription error.
+      expect(harness.getLatest().subscriptionError).toBeNull();
       expect(harness.getLatest().records.data?.[0]?.manualTitle).toBe("read-1");
       // A complete replay already delivered every update.
       await harness.run(() =>
@@ -175,7 +176,6 @@ describe("Workspace Session metadata subscription", () => {
           missedEvents: false,
         }),
       );
-      expect(harness.getLatest().subscriptionError).toBeNull();
       expect(reads).toBe(1);
       await harness.run(() =>
         emit({

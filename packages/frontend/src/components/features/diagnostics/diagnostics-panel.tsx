@@ -9,15 +9,14 @@ import {
   useEffect,
   useMemo,
   useState,
-  useSyncExternalStore,
 } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { useShellPlatform } from "@/lib/shell-platform";
 import { cn } from "@/lib/utils";
 import { useChecksState, useWorkspaceState } from "@/state";
 import { useRuntimeAvailabilityContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { useHostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import { useHostConnectionState } from "@openducktor/frontend-core/connection/use-host-connection-state";
 import { useDiagnosticsAutoOpenOwner } from "@/state/providers/diagnostics-auto-open-provider";
 import {
   buildDiagnosticsPanelModel,
@@ -39,18 +38,6 @@ export function useDiagnosticsPanel(): DiagnosticsPanelContextValue {
   return value;
 }
 
-const noSubscription = (): (() => void) => () => {};
-
-/** A remote host connection is live only while it is connected. A local host is always live. */
-function useHostConnectionLive(): boolean {
-  const connection = useShellPlatform().remoteConnection;
-  return useSyncExternalStore(
-    connection?.subscribeState ?? noSubscription,
-    () => connection === undefined || connection.readState().status === "connected",
-    () => true,
-  );
-}
-
 /** Owns the one diagnostics sheet and its automatic opening. Triggers and commands open it. */
 export function DiagnosticsPanelProvider({ children }: PropsWithChildren): ReactElement {
   const { activeWorkspace } = useWorkspaceState();
@@ -61,7 +48,7 @@ export function DiagnosticsPanelProvider({ children }: PropsWithChildren): React
   } = useRuntimeAvailabilityContext();
   const runtimeStatus = useHostRuntimeStatusContext();
   const checks = useChecksState();
-  const connectionLive = useHostConnectionLive();
+  const connectionLive = useHostConnectionState() === "connected";
   const autoOpenOwner = useDiagnosticsAutoOpenOwner();
   const [isOpen, setOpen] = useState(false);
 

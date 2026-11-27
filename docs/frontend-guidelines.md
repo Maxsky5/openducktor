@@ -17,6 +17,21 @@ Read [the TanStack Query cache strategy](tanstack-query-cache-strategy.md) befor
 - Use operation-specific flags such as `isLoadingTasks` and `isLoadingChecks`.
 - Do not use a generic busy flag or a magic string.
 
+## Host connection
+
+Each `HostConnection` carries one connection state in `connectionState`: `connected`, `reconnecting`, or `reload-required`. The local host channel sets it when it loses or opens its socket. A remote bridge derives it from its remote connection and never asks for a reload.
+
+- Read the state with `useHostConnectionState` from `packages/frontend-core/src/connection/use-host-connection-state.ts`. Do not add another connection state or probe.
+- Each local channel connection asks the web host for the page session again. A restarted web host has a new app token and refuses the session. The shell then fails `prepare` with `HostSessionRefusedError`, and the channel stops its reconnects and reports `reload-required`.
+- `HostConnectionIndicator` is the only message for a lost local host connection. It always offers Reload, because a host on a new address never answers the old page. A remote client shows the reconnect dialog of `RemoteConnectionBoundary` instead.
+- The local host channel keeps its subscriptions during a lost connection. They receive the stream warning, and the reconnect event after recovery. A live attachment that lost the connection attaches again after the reconnect.
+- A request that the channel could not carry fails with `HostUnreachableError`. Classify a failure with `isConnectionFailure` from `packages/frontend-core/src/lib/command-outcome.ts`. Do not read the error message to find the cause.
+- A lost connection is a connection state, not an error. The indicator is its only message. A source that learns about a lost connection, such as a stream warning, does not make an error from it. A review that needs current data before a confirmation, such as the runtime impact review, stays blocked until the reconnect.
+- TanStack Query follows a local host connection as its online state, through `followHostConnection` in `packages/frontend-core/src/connection/query-online-state.ts`. A read that loses the connection pauses, keeps its last data, and continues after the reconnect. A remote client waits for its own reconnect before it sends a read, so the online state does not follow a remote host. Do not classify a query error as a lost connection in a view.
+- Background work that does not use a query, such as an automatic Git refresh or a save, waits for `connected` or drops a connection failure.
+- A command fails at once and reports its failure in its usual place. It never waits in a queue. A user action that reads the host before its command waits for that read, so it stays pending during the outage and continues after the reconnect. A remote `outcome_unknown` failure keeps its own message, because the action can have run.
+- A local host reads its active queries again each time its connection returns to `connected`, through `refetchHostQueriesOnRecovery` in `packages/frontend-core/src/recovery/state-recovery.ts`. A remote host does this in its own synchronization. Do not add a recovery for a query read.
+
 ## Forms and control flow
 
 - Disable the full form during an async submission.

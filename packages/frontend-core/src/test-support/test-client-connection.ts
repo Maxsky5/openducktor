@@ -7,6 +7,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { type ClientConnection, createClientConnection } from "../connection/client-connection";
 import { createClientQueryClient } from "../connection/client-query-client";
 import type { HostConnection } from "../connection/host-connection";
+import { connectedHostConnectionState } from "../connection/host-connection-state";
 import type { ScheduleTask } from "../lib/scheduling";
 import type { ClientFeedback } from "../platform/client-feedback";
 import { type ClientStorage, createMemoryClientStorage } from "../platform/client-storage";
@@ -38,6 +39,7 @@ export const createTestHostConnection = (
       client,
     ),
     subscribeStartupProgress: noSubscription,
+    connectionState: connectedHostConnectionState,
     subscribeWorkspaceProviderSetupUpdates: noSubscription,
     subscribeWorkspaceSessionUpdates: noSubscription,
     subscribeRuntimeChanges: noSubscription,

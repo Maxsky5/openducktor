@@ -19,6 +19,9 @@ import { ProcessesFloatingWindow } from "@/components/features/processes/process
 import { FloatingWindowLayer } from "@/components/ui/floating-window";
 import { useNotificationContext } from "@/state/notifications/notification-context";
 import { StartupNotifications } from "@/features/session-startup/session-startup-stack";
+import { HostConnectionIndicator } from "./host-connection-indicator";
+
+const reloadApplication = (): void => window.location.reload();
 
 function NotificationFailurePromptHost(): ReactElement {
   const { deliveryFailure } = useNotificationContext();
@@ -27,7 +30,6 @@ function NotificationFailurePromptHost(): ReactElement {
     () => openSettings({ deepLink: { kind: "global", section: "notifications" } }),
     [openSettings],
   );
-  const reloadApplication = useCallback(() => window.location.reload(), []);
   return (
     <NotificationFailurePrompt
       failure={deliveryFailure}
@@ -45,6 +47,7 @@ export function ApplicationOverlays({ children }: PropsWithChildren): ReactEleme
         <CommandPaletteRegistryProvider>
           <FeatureTourProvider>
             <SettingsModalProvider>
+              <HostConnectionIndicator onReload={reloadApplication} />
               <DiagnosticsPanelProvider>
                 <NotificationFailurePromptHost />
                 {/* The task sheet lives here, and it shows the ports of its task. */}

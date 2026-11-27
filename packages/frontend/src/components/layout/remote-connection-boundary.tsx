@@ -92,10 +92,18 @@ function ConnectedWork({
   const [hasConnected, setHasConnected] = useState(
     () => connection.readState().status === "connected",
   );
+  // Automatic attempts alternate between disconnected and connecting. The last failure stays
+  // until the connection returns, so the dialog does not change on each attempt.
+  const [lastFailure, setLastFailure] = useState<RemoteConnectionState["failure"]>(undefined);
   const subscribe = useCallback(
     (notify: () => void) =>
       connection.subscribeState((next) => {
-        if (next.status === "connected") setHasConnected(true);
+        if (next.status === "connected") {
+          setHasConnected(true);
+          setLastFailure(undefined);
+        } else if (next.failure) {
+          setLastFailure(next.failure);
+        }
         notify();
       }),
     [connection],
@@ -105,7 +113,11 @@ function ConnectedWork({
   if (!hasConnected && !connected && initialView) return initialView(state, connection);
   const pairing =
     isRemotePairingFailure(state.failure?.code) && endpoint !== undefined && pair !== undefined;
-  const { title, message, canRetry } = connectionDialogCopy(state, hasConnected);
+  const { title, message, nextAction, canRetry, waiting } = connectionDialogCopy(
+    state,
+    hasConnected,
+    state.failure ?? lastFailure,
+  );
   let body: ReactNode = null;
   if (pairing) {
     body = (
@@ -119,10 +131,10 @@ function ConnectedWork({
         />
       </DialogBody>
     );
-  } else if (state.failure) {
+  } else if (nextAction) {
     body = (
       <DialogBody className="px-6 pb-5">
-        <p className="text-sm text-muted-foreground">{state.failure.nextAction}</p>
+        <p className="text-sm text-muted-foreground">{nextAction}</p>
       </DialogBody>
     );
   }
@@ -145,7 +157,7 @@ function ConnectedWork({
           <DialogHeader className="px-6 py-6">
             <DialogTitle>
               <span className="flex items-center gap-2">
-                {!canRetry ? (
+                {waiting ? (
                   <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
                 ) : null}
                 {pairing ? PAIR_WITH_HOST.title : title}
@@ -173,23 +185,39 @@ function ConnectedWork({
 type ConnectionDialogCopy = {
   title: string;
   message: string;
+  /** What the user can do about the failure, or null while the work is restored. */
+  nextAction: string | null;
   canRetry: boolean;
+  /** An automatic attempt runs. */
+  waiting: boolean;
 };
 
+/**
+ * Automatic attempts alternate between disconnected and connecting. The copy follows the last
+ * failure, so the dialog does not change on each attempt.
+ */
 function connectionDialogCopy(
   state: RemoteConnectionState,
   hasConnected: boolean,
+  failure: RemoteConnectionState["failure"],
 ): ConnectionDialogCopy {
   const stopped = state.status === "idle";
-  const canRetry = stopped || state.status === "failed" || state.status === "disconnected";
+  const failed = state.status === "failed";
+  const synchronizing = state.status === "synchronizing";
   let title = "Connecting to host";
   if (stopped) title = "Host connection stopped";
-  else if (state.status === "failed") title = "Host connection failed";
-  else if (state.status === "disconnected") title = "Host connection lost";
-  else if (hasConnected) title = "Reconnecting to host";
+  else if (failed) title = "Host connection failed";
+  else if (hasConnected || failure) title = "Host connection lost";
   let message = "Waiting for the host to respond.";
-  if (state.failure) message = state.failure.message;
+  if (synchronizing) message = "Restoring your work from the host.";
+  else if (failure) message = failure.message;
   else if (stopped) message = "Retry the connection or choose another host.";
-  else if (state.status === "synchronizing") message = "Restoring your work from the host.";
-  return { title, message, canRetry };
+  // A Retry starts a new attempt at once, also during an automatic attempt.
+  return {
+    title,
+    message,
+    nextAction: synchronizing ? null : (failure?.nextAction ?? null),
+    canRetry: !synchronizing,
+    waiting: !stopped && !failed,
+  };
 }

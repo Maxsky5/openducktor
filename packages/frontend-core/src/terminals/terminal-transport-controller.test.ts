@@ -13,6 +13,7 @@ import type {
   TerminalTransportState,
 } from "./terminal-bridge";
 import { createTerminalTransportController } from "./terminal-transport-controller";
+import { HostUnreachableError } from "@openducktor/host-client";
 
 interface BridgeCallbacksContract {
   reportFailure: ((failure: TerminalFailure) => void) | undefined;
@@ -483,6 +484,34 @@ describe("createTerminalTransportController", () => {
 
     expect(connectionCount).toBe(2);
     expect(failures).toEqual(["terminal authentication failed"]);
+    await controller.dispose();
+  });
+
+  test("reconnects quietly when the host connection is lost", async () => {
+    const failures: string[] = [];
+    let connectionCount = 0;
+    const bridge: TerminalBridge = {
+      connect: async () => {
+        connectionCount += 1;
+        if (connectionCount === 1) throw new HostUnreachableError(new Error("Socket refused."));
+        return {
+          send: async () => undefined,
+          close: () => undefined,
+        };
+      },
+    };
+    const controller = createTerminalTransportController(
+      bridge,
+      () => undefined,
+      (failure) => failures.push(failure.message),
+    );
+
+    await expect(controller.connect()).rejects.toBeInstanceOf(HostUnreachableError);
+    await Bun.sleep(10);
+
+    // The connection indicator reports the lost host, so the terminal shows no failure.
+    expect(connectionCount).toBe(2);
+    expect(failures).toEqual([]);
     await controller.dispose();
   });
 

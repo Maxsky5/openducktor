@@ -14,6 +14,7 @@ import {
   type HostClient,
 } from "@openducktor/host-client";
 import { hostChannelInvokeError } from "@openducktor/host-client/channel";
+import { isConnectionFailure } from "../lib/command-outcome";
 import { errorMessage } from "../lib/errors";
 import {
   CONNECTION_RECONNECTED_EVENT_KIND,
@@ -21,6 +22,7 @@ import {
   isConnectionControlEvent,
 } from "../recovery/connection-control-events";
 import type { HostConnection } from "./host-connection";
+import { createHostConnectionStore } from "./host-connection-state";
 import {
   createLocalHostChannel,
   type LocalHostChannel,
@@ -42,6 +44,7 @@ const INITIAL_CHANNEL_READY_TIMEOUT_MS = 10_000;
 export type LocalHostConnection = Pick<
   HostConnection,
   | "client"
+  | "connectionState"
   | "subscribeRunEvents"
   | "subscribeAzureDevOpsConnectionUpdates"
   | "subscribeWorkspaceProviderSetupUpdates"
@@ -73,6 +76,7 @@ export const createLocalHostConnection = ({
   prepare,
   openSocket,
 }: LocalHostConnectionOptions): LocalHostConnection => {
+  const connectionState = createHostConnectionStore();
   let channel: LocalHostChannel | null = null;
   const current = (notificationCursor: NotificationCursor | null = null): LocalHostChannel => {
     if (channel) return channel;
@@ -83,6 +87,7 @@ export const createLocalHostConnection = ({
       onDispose: () => {
         if (channel === created) channel = null;
       },
+      onConnectionChange: connectionState.setState,
     });
     channel = created;
     return created;
@@ -90,18 +95,21 @@ export const createLocalHostConnection = ({
 
   const client: HostClient = createHostClient(async (command, args, resultSchema, options) => {
     const signal = options?.signal;
+    let result: unknown;
     try {
-      return resultSchema.parse(
-        await current().request({ method: "invoke", command, args: args ?? {} }, options),
-      );
+      result = await current().request({ method: "invoke", command, args: args ?? {} }, options);
     } catch (cause) {
       // The caller stopped waiting. The host interrupts a read and keeps other work.
       if (signal?.aborted && cause === signal.reason) throw cause;
       throw hostChannelInvokeError(cause);
     }
+    return resultSchema.parse(result);
   });
 
-  /** Adds a listener and waits until the channel finished its first replay. */
+  /**
+   * Adds a listener and waits until the channel finished its first replay. A channel that cannot
+   * reach the host keeps the listener: it receives the warning now, and the reconnect later.
+   */
   const subscribeReady = async (
     eventChannel: HostEventChannel,
     listener: LocalHostChannelListener,
@@ -122,18 +130,12 @@ export const createLocalHostConnection = ({
     try {
       await Promise.race([
         opened.ready,
-        new Promise<never>((_resolve, reject) => {
-          // The warning names the cause of the failed attempts, such as a refused session.
-          timer = setTimeout(
-            () =>
-              reject(
-                new Error(
-                  opened.readConnectionWarning() ??
-                    "Timed out waiting for the host channel to open.",
-                ),
-              ),
-            INITIAL_CHANNEL_READY_TIMEOUT_MS,
-          );
+        new Promise<void>((resolve, reject) => {
+          timer = setTimeout(() => {
+            // The connection state shows a channel that cannot reach the host.
+            if (opened.readConnectionWarning() !== null) resolve();
+            else reject(new Error("Timed out waiting for the host channel to open."));
+          }, INITIAL_CHANNEL_READY_TIMEOUT_MS);
         }),
       ]);
       // The first open does not prove the channel is connected now. A control subscriber that
@@ -151,6 +153,7 @@ export const createLocalHostConnection = ({
 
   return {
     client,
+    connectionState,
     subscribeRunEvents: (listener) =>
       // Control events report reconnects, so a listener can read the state that it missed.
       subscribeReady(RUN_EVENT_CHANNEL, (event) => {
@@ -229,18 +232,24 @@ export const createLocalHostConnection = ({
       let closed = false;
       // Each attach request takes a new generation. Only the latest one can install its snapshot.
       let attachGeneration = 0;
+      // An attach that lost the connection attaches again after the reconnect.
+      let attached = false;
       const attachment = createAgentSessionLiveAttachment(input.repoPath, listener);
       const attach = async (generation: number): Promise<void> => {
         const hostEpoch = current().readHostEpoch();
         const snapshot = await client.agentSessionLiveAttach(input);
-        if (!closed && generation === attachGeneration) attachment.install(snapshot, hostEpoch);
+        if (closed || generation !== attachGeneration) return;
+        attachment.install(snapshot, hostEpoch);
+        attached = true;
       };
       // A complete replay keeps the current state. Missed events need a new host snapshot.
       const reattach = (): void => {
         const generation = ++attachGeneration;
+        attached = false;
         attachment.restart();
         attach(generation).catch((cause: unknown) => {
-          if (!closed && generation === attachGeneration)
+          // The connection state shows a lost connection.
+          if (!closed && generation === attachGeneration && !isConnectionFailure(cause))
             listener({
               type: "fault",
               repoPath: input.repoPath,
@@ -253,7 +262,11 @@ export const createLocalHostConnection = ({
         AGENT_SESSION_LIVE_EVENT_CHANNEL,
         (event) => {
           if (isConnectionControlEvent(event)) {
-            if (event.kind === CONNECTION_RECONNECTED_EVENT_KIND && event.missedEvents) reattach();
+            if (
+              event.kind === CONNECTION_RECONNECTED_EVENT_KIND &&
+              (event.missedEvents || !attached)
+            )
+              reattach();
             return;
           }
           if (event.channel === AGENT_SESSION_LIVE_EVENT_CHANNEL) attachment.accept(event.payload);
@@ -264,8 +277,10 @@ export const createLocalHostConnection = ({
         // A recovery before the first open can already have started a newer request.
         await attach(++attachGeneration);
       } catch (cause) {
-        unsubscribe();
-        throw hostChannelInvokeError(cause);
+        if (!isConnectionFailure(cause)) {
+          unsubscribe();
+          throw cause;
+        }
       }
       return () => {
         closed = true;

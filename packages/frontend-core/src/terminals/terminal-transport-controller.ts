@@ -19,6 +19,7 @@ import {
 } from "./terminal-transport-channel-registry";
 import { createTerminalActivityStore } from "./terminal-activity-store";
 import { TERMINAL_RECOVERY_TIMEOUT_MS } from "./constants";
+import { isConnectionFailure } from "../lib/command-outcome";
 
 export type { TerminalFrameListener } from "./terminal-transport-channel-registry";
 
@@ -77,6 +78,8 @@ export const createTerminalTransportController = (
   const emptyPayload: Uint8Array = new Uint8Array(0);
 
   const reportConnectionFailure = (cause: unknown): void => {
+    // The connection indicator reports a lost host, and the transport reconnects.
+    if (isConnectionFailure(cause)) return;
     onProtocolFailure({
       code: "protocol_error",
       message: cause instanceof Error ? cause.message : String(cause),

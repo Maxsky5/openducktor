@@ -1,12 +1,14 @@
 import { TERMINAL_PROTOCOL_SUBPROTOCOL, type TerminalFailure } from "@openducktor/contracts";
 import type { TerminalBridge } from "@openducktor/frontend-core/terminals/terminal-bridge";
+import { HostUnreachableError } from "@openducktor/host-client";
 import { Effect } from "effect";
 import { getBrowserBackendUrlEffect } from "../browser-config";
 import { runWebBoundary } from "@openducktor/remote-host/effect/web-errors";
 import { ensureLocalHostSessionDedupedEffect, hostSocketUrl } from "../local-host-transport";
 
+/** A lost connection closes without a close frame (1006). The connection indicator reports it. */
 const readTerminalSocketCloseFailure = (event: CloseEvent): TerminalFailure | null => {
-  if (event.code === 1000) return null;
+  if (event.code === 1000 || event.code === 1006) return null;
   const reason = event.reason.trim();
   return {
     code: "protocol_error",
@@ -31,12 +33,20 @@ export const createBrowserTerminalBridge = (): TerminalBridge => ({
               candidate.addEventListener("open", () => resolve(candidate), { once: true });
               candidate.addEventListener(
                 "error",
-                () => reject(new Error("Terminal WebSocket connection failed.")),
+                () =>
+                  reject(
+                    new HostUnreachableError(new Error("Terminal WebSocket connection failed.")),
+                  ),
                 { once: true },
               );
               candidate.addEventListener(
                 "close",
-                () => reject(new Error("Terminal WebSocket closed before connecting.")),
+                () =>
+                  reject(
+                    new HostUnreachableError(
+                      new Error("Terminal WebSocket closed before connecting."),
+                    ),
+                  ),
                 { once: true },
               );
             }),

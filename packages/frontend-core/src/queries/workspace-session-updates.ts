@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { connectionOf } from "../connection/client-connection";
 import { errorMessage } from "../lib/errors";
-import { CONNECTION_STREAM_WARNING_EVENT_KIND } from "../recovery/connection-control-events";
+import { CONNECTION_RECONNECTED_EVENT_KIND } from "../recovery/connection-control-events";
 import { updateWorkspaceSessionQueries, workspaceSessionQueryKeys } from "./workspace-sessions";
 
 type StatusListener = (error: string | null) => void;
@@ -47,23 +47,19 @@ export const observeWorkspaceSessionRecords = (
       .host.subscribeWorkspaceSessionUpdates((event) => {
         if (current.closed) return;
         if ("__openducktorConnectionControl" in event) {
-          if (event.kind === CONNECTION_STREAM_WARNING_EVENT_KIND) {
-            report(event.message ?? "Workspace Session updates are unavailable.");
-          } else {
-            report(null);
-            if (event.missedEvents) {
-              void queryClient.invalidateQueries({
-                queryKey: workspaceSessionQueryKeys.all,
-                refetchType: "all",
-              });
-              void queryClient.invalidateQueries({
-                queryKey: ["workspace-session-archive-preview"],
-              });
-            }
+          // A stream warning is a lost host connection. The host connection state shows it, and
+          // the reconnect reads again what the stream missed.
+          if (event.kind === CONNECTION_RECONNECTED_EVENT_KIND && event.missedEvents) {
+            void queryClient.invalidateQueries({
+              queryKey: workspaceSessionQueryKeys.all,
+              refetchType: "all",
+            });
+            void queryClient.invalidateQueries({
+              queryKey: ["workspace-session-archive-preview"],
+            });
           }
           return;
         }
-        report(null);
         updateWorkspaceSessionQueries(queryClient, event.workspaceId, event.session);
       })
       .then((stop) => {

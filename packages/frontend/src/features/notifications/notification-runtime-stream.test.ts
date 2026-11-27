@@ -4,6 +4,8 @@ import {
   type NotificationStreamFrame,
   type SelectedNotification,
 } from "@openducktor/contracts";
+import { HostUnreachableError } from "@openducktor/host-client";
+import { RemoteReplyTooLargeError, remoteError } from "@openducktor/host-client/remote";
 import { createNotificationRuntime } from "@openducktor/frontend-core/notifications/notification-runtime";
 import {
   createBridge,
@@ -359,6 +361,29 @@ test.each(["attachment", "live"] as const)(
     }
   },
 );
+
+test.each([
+  ["a local request that did not reach the host", new HostUnreachableError(new TypeError("x"))],
+  [
+    "a lost remote connection",
+    remoteError("transport_failure", "The remote connection was lost.", "Retry."),
+  ],
+])("leaves a live stream failure from %s to the host connection state", async (_label, cause) => {
+  const h = harness();
+  const stop = h.runtime.subscribe();
+  try {
+    h.finishAttachment();
+    await h.attachment;
+    h.fail(cause);
+    // A failure with another cause still reports. It proves that the lost connection did not.
+    const other = new RemoteReplyTooLargeError(32 * 1024 * 1024);
+    h.fail(other);
+    expect(h.onFailure).toHaveBeenCalledTimes(1);
+    expect(h.onFailure).toHaveBeenCalledWith(expect.objectContaining({ message: other.message }));
+  } finally {
+    stop();
+  }
+});
 
 const harness = () => {
   const settings = createSpecPlanBuildNotificationSettings();

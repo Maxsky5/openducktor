@@ -146,7 +146,7 @@ describe("createHostRuntimeStatusOwner", () => {
     harness.owner.stop();
   });
 
-  test("reports a stream warning as not current and reads one baseline after reconnect", async () => {
+  test("marks the status not current on a stream warning and reads one baseline after reconnect", async () => {
     const harness = createHarness();
     harness.owner.start();
     await waitForExpectation(() => expect(harness.runtimeStatus).toHaveBeenCalledTimes(1));
@@ -158,8 +158,9 @@ describe("createHostRuntimeStatusOwner", () => {
       kind: "stream-warning",
       message: "Connection lost.",
     });
+    // The host connection state shows a lost connection. It is not a stream failure.
     expect(harness.owner.getConnection()).toMatchObject({
-      streamError: "Connection lost.",
+      streamError: null,
       hasBaseline: false,
     });
 
@@ -231,30 +232,6 @@ describe("createHostRuntimeStatusOwner", () => {
     );
     expect(harness.readSnapshot()?.runtimes[0]?.state).toBe("error");
     harness.owner.stop();
-  });
-
-  test("keeps a connection failure that the transport reports while it subscribes", async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const owner = createHostRuntimeStatusOwner({
-      queryClient,
-      ports: {
-        subscribeRuntimeChanges: async (listener) => {
-          listener({
-            __openducktorConnectionControl: true,
-            kind: "stream-warning",
-            message: "Lost.",
-          });
-          return () => {};
-        },
-        runtimeStatus: async () => snapshot("host-1", []),
-      },
-      onRuntimeGenerationChange: () => {},
-    });
-    owner.start();
-
-    await waitForExpectation(() => expect(owner.getConnection().hasBaseline).toBe(true));
-    expect(owner.getConnection().streamError).toBe("Lost.");
-    owner.stop();
   });
 
   test("a failure and recovery before the first open end with a current baseline", async () => {
@@ -444,17 +421,15 @@ describe("createHostRuntimeStatusOwner", () => {
       const stopLateSubscription = mock(() => {});
       let staleListener: RuntimeChangeListener | undefined;
       try {
+        harness.subscribeRuntimeChanges.mockImplementationOnce(async () => {
+          throw new Error("Event stream unavailable.");
+        });
         harness.owner.start();
         await waitForExpectation(() => expect(harness.runtimeStatus).toHaveBeenCalledTimes(1));
         harness.lastBaseline().resolve(snapshot("host-1", []));
         await waitForExpectation(() =>
           expect(harness.owner.getConnection().hasBaseline).toBe(true),
         );
-        harness.emit({
-          __openducktorConnectionControl: true,
-          kind: "stream-warning",
-          message: "Lost.",
-        });
         harness.subscribeRuntimeChanges.mockImplementationOnce((listener) => {
           staleListener = listener;
           return registered.promise;

@@ -18,6 +18,7 @@ import {
   type TaskEventStreamSubscribe,
 } from "@openducktor/contracts";
 import type { JSONType } from "zod";
+import { HostUnreachableError } from "./host-unreachable-error";
 import { HostInvokeError } from "./invoke-utils";
 import { RemoteRefusalError, type RemoteSocketConnection } from "./remote/transport";
 
@@ -59,8 +60,8 @@ export class HostChannelProtocolError extends Error {
 }
 
 /**
- * The `HostInvokeError` of a failed request. A host failure keeps its structured failure, and other
- * causes stay as they are.
+ * The error of a failed request. A host failure keeps its structured failure, and a protocol error
+ * stays as it is. Any other cause is a channel that did not carry the request to the host.
  */
 export const hostChannelInvokeError = (cause: unknown): Error => {
   if (cause instanceof HostChannelRequestError)
@@ -69,7 +70,10 @@ export const hostChannelInvokeError = (cause: unknown): Error => {
       cause.error.kind === "host" ? (cause.error.response.failure ?? null) : null,
       cause,
     );
-  return cause instanceof Error ? cause : new Error(String(cause));
+  // A mismatch with the host and a changed host are not a lost connection.
+  return cause instanceof HostChannelProtocolError || cause instanceof HostInvocationEpochError
+    ? cause
+    : new HostUnreachableError(cause);
 };
 
 const hostChannelErrorMessage = (error: HostChannelError): string => {

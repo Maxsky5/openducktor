@@ -13,6 +13,7 @@ import type {
 } from "@openducktor/frontend-core/connection/host-connection";
 import { createAgentSessionLiveAttachment, type HostClient } from "@openducktor/host-client";
 import type { DemoClock } from "./demo-clock";
+import { connectedHostConnectionState } from "@openducktor/frontend-core/connection/host-connection-state";
 
 type Listener<Event> = (event: Event) => void | Promise<void>;
 
@@ -95,6 +96,7 @@ export const createDemoHostConnection = (client: HostClient, clock: DemoClock) =
 
   const connection: HostConnection = {
     client,
+    connectionState: connectedHostConnectionState,
     subscribeWorkspaceProviderSetupUpdates: noEvents,
     // The demo has one built-in workflow, so its workflow library never changes.
     subscribeWorkflowLibraryChanges: noEvents,

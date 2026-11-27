@@ -78,8 +78,10 @@ export const createHostRuntimeStatusOwner = ({
   // Each baseline read replaces the earlier one. Only the latest read can set the baseline.
   let baselineRead = 0;
   let latestBaseline: Promise<void> | null = null;
-  // Each stream failure or recovery starts a new epoch.
+  // Each stream failure, lost connection, or recovery starts a new epoch.
   let streamEpoch = 0;
+  // The message of a lost host connection until the reconnect.
+  let lostConnection: string | null = null;
 
   const updateConnection = (patch: Partial<HostRuntimeStatusConnection>): void => {
     connection = { ...connection, ...patch };
@@ -157,6 +159,7 @@ export const createHostRuntimeStatusOwner = ({
       if (listenerSession !== session || signal.aborted) return;
       if ("__openducktorConnectionControl" in event) {
         if (event.kind === CONNECTION_RECONNECTED_EVENT_KIND) {
+          lostConnection = null;
           changeStream(null, { hasBaseline: false });
           void readBaseline(listenerSession);
           return waitForLatestBaseline(listenerSession).then(() => {
@@ -169,11 +172,17 @@ export const createHostRuntimeStatusOwner = ({
               throw new Error(
                 connection.readError ??
                   connection.streamError ??
+                  lostConnection ??
                   "Runtime recovery did not establish current host state.",
               );
           });
         }
-        changeStream(event.message ?? "Runtime updates are unavailable.", { hasBaseline: false });
+        // A stream warning is a lost host connection, not a stream failure. The host connection
+        // state shows it, so the status views stay quiet. An open impact review stays blocked. A
+        // baseline read in progress can miss later changes, so it does not count.
+        lostConnection = event.message ?? "Runtime updates are unavailable.";
+        baselineRead += 1;
+        changeStream(null, { hasBaseline: false });
         return;
       }
       // A runtime or MCP bridge change updates the cache. Impact changes concern open reviews only.
@@ -247,6 +256,8 @@ export const createHostRuntimeStatusOwner = ({
       if (isActive) return;
       isActive = true;
       session += 1;
+      // The subscription reports a connection that is still lost.
+      lostConnection = null;
       const startSession = session;
       // Subscribe before the baseline so no change between them is lost.
       void subscribe().then(() => readBaseline(startSession));
@@ -274,7 +285,10 @@ export const createHostRuntimeStatusOwner = ({
       await readBaseline(refreshSession);
     },
     getConnection: () => connection,
-    getStreamHealth: () => ({ error: connection.streamError, epoch: streamEpoch }),
+    getStreamHealth: () => ({
+      error: connection.streamError ?? lostConnection,
+      epoch: streamEpoch,
+    }),
     subscribeEvents: (listener) => {
       eventListeners.add(listener);
       return () => {

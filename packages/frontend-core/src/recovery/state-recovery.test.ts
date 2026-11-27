@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import { HostInvokeError } from "@openducktor/host-client";
 import { RemoteReplyTooLargeError, remoteError } from "@openducktor/host-client/remote";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
-import { synchronizeConnectionState } from "./state-recovery";
+import { createHostConnectionStore } from "../connection/host-connection-state";
+import { refetchHostQueriesOnRecovery, synchronizeConnectionState } from "./state-recovery";
 
 test("host recovery refetches active host reads and skips reads marked to skip it", async () => {
   const queryClient = new QueryClient();
@@ -121,6 +122,42 @@ test("a lost connection during a recovery read fails the recovery", async () => 
     ).rejects.toBe(lost);
   } finally {
     stop();
+    queryClient.clear();
+  }
+});
+
+test("a return to connected refetches active host reads until the watch stops", async () => {
+  const queryClient = new QueryClient();
+  const connection = createHostConnectionStore();
+  const reads = { host: 0, device: 0 };
+  const observe = (key: "host" | "device") =>
+    new QueryObserver(queryClient, {
+      queryKey: [key],
+      queryFn: async () => ++reads[key],
+      staleTime: Infinity,
+      ...(key === "device" && { meta: { skipHostRecovery: true as const } }),
+    }).subscribe(() => {});
+  const stops = [observe("host"), observe("device")];
+  const stopRecovery = refetchHostQueriesOnRecovery(connection, queryClient);
+  try {
+    await queryClient.refetchQueries();
+    expect(reads).toEqual({ host: 1, device: 1 });
+
+    connection.setState("reconnecting");
+    expect(reads).toEqual({ host: 1, device: 1 });
+
+    connection.setState("connected");
+    await queryClient.getQueryCache().find({ queryKey: ["host"] })?.promise;
+    expect(reads).toEqual({ host: 2, device: 1 });
+
+    stopRecovery();
+    connection.setState("reconnecting");
+    connection.setState("connected");
+    expect(queryClient.getQueryState(["host"])?.isInvalidated).toBe(false);
+    expect(reads).toEqual({ host: 2, device: 1 });
+  } finally {
+    stopRecovery();
+    for (const stop of stops) stop();
     queryClient.clear();
   }
 });

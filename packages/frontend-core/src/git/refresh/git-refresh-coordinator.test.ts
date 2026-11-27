@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { RemoteConnectionError } from "@openducktor/host-client/remote";
 import { CancelledError } from "@tanstack/react-query";
+import { HOST_UNREACHABLE_MESSAGE, HostUnreachableError } from "@openducktor/host-client";
 import {
   GitRefreshCoordinator,
   type GitRefreshSteps,
@@ -163,6 +164,54 @@ describe("GitRefreshCoordinator", () => {
 
     readLocal.mockImplementation(async () => {});
     await coordinator.refresh("hard");
+    expect(coordinator.manualState(manualRefreshKey(view)).error).toBeNull();
+  });
+
+  test("a reconnect clears only the Refresh failure that the lost connection caused", async () => {
+    const lost = createView([], {
+      steps: {
+        readLocal: mock(async (): Promise<void> => {
+          throw new HostUnreachableError(new TypeError("Failed to fetch"));
+        }),
+      },
+    });
+    const { coordinator } = createCoordinator();
+    coordinator.publish(lost);
+    await coordinator.refresh("hard");
+    expect(coordinator.manualState(manualRefreshKey(lost)).error).toBe(HOST_UNREACHABLE_MESSAGE);
+
+    coordinator.setHostConnected(false);
+    coordinator.setHostConnected(true);
+    expect(coordinator.manualState(manualRefreshKey(lost)).error).toBeNull();
+
+    const denied = createView([], {
+      steps: {
+        readLocal: mock(async (): Promise<void> => {
+          throw new Error("status unavailable");
+        }),
+      },
+    });
+    coordinator.publish(denied);
+    await coordinator.refresh("hard");
+    coordinator.setHostConnected(false);
+    coordinator.setHostConnected(true);
+    expect(coordinator.manualState(manualRefreshKey(denied)).error).toBe("status unavailable");
+  });
+
+  test("a reconnect during a Refresh drops the lost connection failure that settles after it", async () => {
+    const read = Promise.withResolvers<void>();
+    const view = createView([], { steps: { readLocal: () => read.promise } });
+    const { coordinator } = createCoordinator();
+    coordinator.publish(view);
+    const refresh = coordinator.refresh("hard");
+    await flush();
+
+    // The reads of the Refresh wait for the reconnect, so the run is still pending.
+    coordinator.setHostConnected(false);
+    coordinator.setHostConnected(true);
+    read.reject(new HostUnreachableError(new TypeError("Failed to fetch")));
+    await refresh;
+
     expect(coordinator.manualState(manualRefreshKey(view)).error).toBeNull();
   });
 
@@ -586,6 +635,31 @@ describe("GitRefreshCoordinator", () => {
     await coordinator.refresh("scheduled").catch(() => undefined);
 
     expect(coordinator.manualState(manualRefreshKey(view)).error).toBe("offline");
+  });
+
+  test("a lost host is not a failed check, and a manual Refresh reports the shared message", async () => {
+    const log: Log = [];
+    const unreachable = () => new HostUnreachableError(new TypeError("Failed to fetch"));
+    const view = createView(log, {
+      steps: {
+        readBranch: async () => {
+          throw unreachable();
+        },
+      },
+    });
+    const { coordinator, failedChecks } = createCoordinator();
+    coordinator.publish(view);
+
+    const scheduledOutcome = await coordinator.refresh("scheduled").then(
+      () => "resolved",
+      (error: Error) => error.message,
+    );
+    await coordinator.refresh("hard");
+
+    // The connection indicator reports the lost host, so no check failure is reported.
+    expect(failedChecks).toEqual([]);
+    expect(scheduledOutcome).toBe(HOST_UNREACHABLE_MESSAGE);
+    expect(coordinator.manualState(manualRefreshKey(view)).error).toBe(HOST_UNREACHABLE_MESSAGE);
   });
 
   test("soft refreshes read without a fetch and leave History failures to History", async () => {

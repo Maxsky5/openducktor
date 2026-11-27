@@ -24,6 +24,7 @@ import {
   type NotificationDispatchFailure,
   type NotificationDispatchContext,
 } from "./notification-policy";
+import { isConnectionFailure } from "../lib/command-outcome";
 
 type CoordinationFailurePhase = "stream" | "publication" | "external_delivery";
 
@@ -111,6 +112,8 @@ export const createNotificationRuntime = ({
     occurrence: NotificationOccurrence,
     cause: unknown,
   ): void => {
+    // The host connection state shows a lost connection.
+    if (isConnectionFailure(cause)) return;
     activeCoordinationFailures.add(phase);
     const message = cause instanceof Error ? cause.message : String(cause);
     onFailure({

@@ -50,7 +50,7 @@ export function useGitRefresh({
   refreshOnFocus: boolean;
   visibility: AppVisibility;
 }): GitRefreshControl {
-  const { feedback } = useClientConnection();
+  const { feedback, host } = useClientConnection();
   const [coordinator] = useState(
     () =>
       new GitRefreshCoordinator({
@@ -88,6 +88,13 @@ export function useGitRefresh({
     if (!refreshOnFocus) return;
     return visibility.subscribe(() => refreshWhenVisible());
   }, [refreshOnFocus, visibility]);
+  useEffect(() => {
+    const { connectionState } = host;
+    const follow = () =>
+      coordinator.setHostConnected(connectionState.getSnapshot() === "connected");
+    follow();
+    return connectionState.subscribe(follow);
+  }, [coordinator, host]);
   const manualRefresh = useCallback(() => coordinator.refresh("hard"), [coordinator]);
   const manual = useMemo<ManualRefresh>(
     () => ({ refresh: manualRefresh, isRefreshing: state.isRefreshing, refreshError: state.error }),

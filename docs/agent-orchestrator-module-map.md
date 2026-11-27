@@ -429,6 +429,8 @@ Rules:
 
 `pages/workspace-sessions/workspace-session-content.tsx` owns `components/features/agents/use-workspace-session-tools.tsx` outside the panel layout. This hook keeps the shared Git action controller mounted when the tools view closes. Hidden tools disable comparison and diff reads and remove focus refresh listeners. An operation that finishes while hidden invalidates its original directory without reading it again. Reopening the tools reads current Git data.
 
+The Git refresh coordinator does not report a lost host connection as a failed check. A manual Refresh shows the failure in its own state. Its Git reads are queries, so a read that lost the host pauses and keeps its data until the reconnect.
+
 Deferred refreshes check the current view before each read. Branch and settings refreshes wait while tools are hidden. A repository, directory, or branch change discards work for the previous view.
 
 Keep this hook in the session shell. Closing or hiding the Diffs tab only unmounts its view. Conflict assistance uses the same controller and keeps task workflow policy in the task adapter.
@@ -628,6 +630,7 @@ The read model is ready when the task records of the current task list and the f
 | History stays selected-session only | `history/use-selected-session-history-load.test.tsx`, `history/session-history-loader.test.ts` |
 | Context loads apart from history | `history/use-selected-session-context-load.test.tsx`, adapter context tests |
 | Browser reconnect uses one host channel | `local-host-channel.test.ts` |
+| One host connection state drives quiet waiting and recovery | `connection/local-host-channel.test.ts`, `connection/client-query-client.test.ts`, `local-host-transport.test.ts`, `recovery/state-recovery.test.ts` |
 | Selected transcript display state | `transcript/session-transcript-state.test.ts`, `agent-chat-thread-state.test.ts`, selected view tests |
 | Host prepares current turn context | `session-turn-preparation.test.ts`, `session-operation-owner.test.ts` |
 | Runtime status follows events by revision | `packages/frontend-core/src/runtime/host-runtime-status-owner.test.ts` |

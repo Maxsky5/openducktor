@@ -15,11 +15,14 @@ import {
 } from "@openducktor/host-client/remote/test-support/host-channel";
 import {
   createLocalHostChannel,
+  HostSessionRefusedError,
   type LocalHostChannel,
   type LocalHostChannelDependencies,
   type LocalHostChannelEvent,
 } from "./local-host-channel";
 import { openWebSocket } from "@openducktor/host-client/remote/socket";
+import type { HostConnectionState } from "./host-connection-state";
+import { isConnectionFailure } from "../lib/command-outcome";
 
 const SILENCE_DELAY_MS = 45_000;
 const SETUP_DELAY_MS = 10_000;
@@ -119,6 +122,8 @@ type Setup = {
   replaceHost(options: FakeHostChannelOptions): FakeHostChannel;
   disposed: () => number;
   failPrepare(failure: Error | null): void;
+  /** Each connection state that the channel reported. */
+  connectionStates: HostConnectionState[];
 };
 
 const channels: LocalHostChannel[] = [];
@@ -137,6 +142,7 @@ const setup = (
   let host = createFakeHostChannel(options);
   let disposals = 0;
   let prepareFailure: Error | null = null;
+  const connectionStates: HostConnectionState[] = [];
   const channel = createLocalHostChannel({
     prepare: async () => {
       if (prepareFailure) throw prepareFailure;
@@ -147,6 +153,7 @@ const setup = (
     onDispose: () => {
       disposals += 1;
     },
+    onConnectionChange: (state) => connectionStates.push(state),
     schedule: timers.schedule,
   });
   channels.push(channel);
@@ -162,6 +169,7 @@ const setup = (
     failPrepare: (failure) => {
       prepareFailure = failure;
     },
+    connectionStates,
   };
 };
 
@@ -248,6 +256,25 @@ describe("createLocalHostChannel", () => {
       hostChanged: false,
     });
     expect(test.channel.readConnectionWarning()).toBeNull();
+    expect(test.connectionStates).toEqual(["connected", "reconnecting", "connected"]);
+  });
+
+  test("stops reconnecting and requires a reload when the host refuses the session", async () => {
+    const test = setup();
+    const { events } = listen(test.channel);
+    await test.channel.ready;
+    test.failPrepare(new HostSessionRefusedError(new Error("Invalid app token.")));
+    test.host().closeAll();
+    await waitFor(() => test.timers.pendingReconnects() > 0, "the reconnect timer");
+    test.timers.runReconnects();
+    await waitFor(() => test.connectionStates.at(-1) === "reload-required", "the refusal");
+
+    expect(test.connectionStates).toEqual(["connected", "reconnecting", "reload-required"]);
+    expect(test.timers.pendingReconnects()).toBe(0);
+    expect(controlKinds(events)).toEqual(["stream-warning"]);
+    await expect(test.channel.request({ method: "remote_access.observe" })).rejects.toBeInstanceOf(
+      HostSessionRefusedError,
+    );
   });
 
   test("reports missed events after a host change", async () => {
@@ -316,6 +343,8 @@ describe("createLocalHostChannel", () => {
     await waitFor(() => test.timers.pendingReconnects() > 0, "the second reconnect timer");
     expect(controlKinds(events)).toEqual(["stream-warning"]);
     expect(failures).toHaveLength(1);
+    // Notification coordination waits quietly for a lost connection.
+    expect(isConnectionFailure(failures[0])).toBe(true);
     expect(test.channel.readConnectionWarning()).toContain("after opening");
     test.failPrepare(null);
     test.timers.runReconnects();
@@ -531,6 +560,7 @@ describe("createLocalHostChannel", () => {
         return socket;
       }),
       notificationCursor: null,
+      onConnectionChange: () => {},
       onDispose: () => {
         disposals += 1;
       },
@@ -570,6 +600,7 @@ describe("createLocalHostChannel", () => {
       }),
       notificationCursor: null,
       onDispose: () => {},
+      onConnectionChange: () => {},
       schedule: timers.schedule,
     });
     const events: LocalHostChannelEvent[] = [];
@@ -608,6 +639,7 @@ describe("createLocalHostChannel", () => {
       openSocket: socketOf((protocols) => host.createSocket(protocols)),
       notificationCursor: null,
       onDispose: () => {},
+      onConnectionChange: () => {},
       schedule: timers.schedule,
     });
     releases.push(
