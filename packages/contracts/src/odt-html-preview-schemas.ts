@@ -35,7 +35,7 @@ const htmlPreviewPathSchema = z
   .trim()
   .min(1, "path must not be blank.")
   .max(4096, "path must be at most 4096 characters.")
-  .describe("Absolute path to a local .html or .htm file.");
+  .describe("Absolute .html/.htm path in workspace or temp dir. Omit html.");
 
 /**
  * Published HTML for the transcript. The host validates, inlines referenced local images, and
@@ -45,7 +45,7 @@ const htmlPreviewPathSchema = z
 export const OdtPublishHtmlInputSchema = z
   .strictObject({
     workspaceId: odtToolWorkspaceIdSchema.optional(),
-    title: htmlPreviewTitleSchema,
+    title: htmlPreviewTitleSchema.describe("Short label for full-screen view."),
     html: z
       .string()
       .refine((value) => value.trim().length > 0, "html must not be blank.")
@@ -53,7 +53,7 @@ export const OdtPublishHtmlInputSchema = z
         (value) => odtHtmlPreviewByteSize(value) <= ODT_HTML_PREVIEW_MAX_BYTES,
         `html must be at most ${ODT_HTML_PREVIEW_MAX_BYTES} bytes of UTF-8.`,
       )
-      .describe("Inline HTML document source.")
+      .describe("Inline HTML (max 512 KiB). Omit path.")
       .optional(),
     path: htmlPreviewPathSchema.optional(),
   })
