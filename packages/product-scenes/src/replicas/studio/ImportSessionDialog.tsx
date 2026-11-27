@@ -1,9 +1,9 @@
 // The Import session dialog of workspace-session-import-dialog.tsx, with the search of
 // workspace-session-import-search.tsx and the list of workspace-session-import-results.tsx: the
 // runtime field with its option list, the search field, the loading state, one row for each
-// external session, and the session count. It uses the dialog shell of SessionCreateDialog.css, as
-// the app gives the dialogs the same DialogContent. The markup holds the dialog with a runtime and
-// the full list. A scene hides the parts that show later.
+// external session, and the session count. It uses the dialog shell of SessionDialog.css. The
+// markup holds the dialog with a runtime and the full list. A scene hides the parts that show
+// later.
 import { Folder, Import, LoaderCircle, Search, X } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "../ui/Button";
@@ -17,7 +17,7 @@ import {
 } from "./import-session-text";
 import "../ui/Input.css";
 import "./StartDialog.css";
-import "./SessionCreateDialog.css";
+import "./SessionDialog.css";
 import "./ImportSessionDialog.css";
 
 type ImportSessionDialogProps = {

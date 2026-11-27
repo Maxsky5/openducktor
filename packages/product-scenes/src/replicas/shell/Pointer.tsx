@@ -1,12 +1,16 @@
 // The fake pointer of a replica and its click ring. cursor.ts moves them. A framed scene hides
 // them, and they still move, so the scene plays the same steps without a pointer on screen.
 // `data-shape="crosshair"` on the cursor shows the crosshair of the element picker of a browser
-// tab in place of the arrow.
+// tab in place of the arrow, and `data-shape="text"` shows the I-beam over text that a visitor can
+// type.
 import type { ReactElement } from "react";
 import "./Pointer.css";
 
 /** The four arms of the crosshair, open around the tip of the arrow. */
 const CROSS = "M4 -6v7.4M4 4.6V12M-5 3h7.4M6.6 3H13";
+
+/** The I-beam of a text field, centered on the tip of the arrow. */
+const BEAM = "M1 -5h6M4 -5v16M1 11h6";
 
 export function Pointer(): ReactElement {
   return (
@@ -20,6 +24,10 @@ export function Pointer(): ReactElement {
         <g className="cursor-cross">
           <path className="cursor-cross-halo" d={CROSS} />
           <path className="cursor-cross-line" d={CROSS} />
+        </g>
+        <g className="cursor-beam">
+          <path className="cursor-cross-halo" d={BEAM} />
+          <path className="cursor-cross-line" d={BEAM} />
         </g>
       </svg>
       <span className="click-ring" aria-hidden="true" data-click-ring="" />

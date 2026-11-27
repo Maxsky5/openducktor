@@ -1,0 +1,110 @@
+@layer replica {
+  :where(.stage) {
+    /* The summary of the transition before and after a board button sends it. */
+    [data-inspector="event"][data-triggered] .wfe-help-untriggered,
+    [data-inspector="event"]:not([data-triggered]) .wfe-help-triggered {
+      display: none;
+    }
+    /* ToggleChips in size sm: flex flex-wrap gap-1, each chip inline-flex h-6 items-center gap-1.5
+       rounded-full border px-2.5 text-xs font-medium. An unpicked chip has border-border bg-card
+       text-muted-foreground and dims its dot to opacity-40. A picked chip takes the violet
+       ON_CLASSES and a check after its label. */
+    .wfe-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: calc(4 * var(--u));
+    }
+    .wfe-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      height: calc(24 * var(--u));
+      padding: 0 calc(10 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: 999px;
+      background: var(--card);
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+    }
+    .wfe-chip:not([data-on]) > .wfe-dot {
+      opacity: 0.4;
+    }
+    .wfe-chip[data-on] {
+      border-color: var(--violet-300);
+      background: color-mix(in oklab, var(--violet-500) 12%, transparent);
+      color: var(--violet-700);
+    }
+    :where([data-theme="dark"]) & .wfe-chip[data-on] {
+      border-color: var(--violet-700);
+      background: color-mix(in oklab, var(--violet-400) 15%, transparent);
+      color: var(--violet-200);
+    }
+    .wfe-chip > .lucide {
+      width: calc(12 * var(--u));
+      height: calc(12 * var(--u));
+      margin-right: calc(-2 * var(--u));
+    }
+    /* EventSendersField: flex flex-col gap-5, the board buttons in flex flex-col gap-2, and the
+       agents in a plain row. */
+    .wfe-senders {
+      display: flex;
+      flex-direction: column;
+      gap: calc(20 * var(--u));
+    }
+    .wfe-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: calc(8 * var(--u));
+    }
+    /* A board button: flex items-center gap-2.5 -mx-1.5 rounded-lg px-1.5 py-1.5, the name in
+       text-sm font-medium, the kind in text-xs text-muted-foreground, and a size-4 chevron in
+       text-muted-foreground/60. */
+    .wfe-sender {
+      display: flex;
+      align-items: center;
+      gap: calc(10 * var(--u));
+      margin: 0 calc(-6 * var(--u));
+      padding: calc(6 * var(--u));
+      border-radius: calc(12 * var(--u));
+    }
+    .wfe-sender > .lucide {
+      flex: none;
+      color: color-mix(in oklab, var(--muted-foreground) 60%, transparent);
+    }
+    .wfe-sender-text {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .wfe-sender-text > b {
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+    }
+    .wfe-sender-text > span {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    /* The Agents row: -mx-1.5 flex items-start gap-2.5 px-1.5 py-1.5, the hint in text-xs
+       leading-5, and Pick: an outline button h-7 gap-1 px-2 text-xs. */
+    .wfe-agents {
+      display: flex;
+      align-items: flex-start;
+      gap: calc(10 * var(--u));
+      margin: 0 calc(-6 * var(--u));
+      padding: calc(6 * var(--u));
+    }
+    .wfe-agents .wfe-sender-text > span {
+      line-height: calc(20 * var(--u));
+    }
+    .wfe-pick.ui-button {
+      flex: none;
+      gap: calc(4 * var(--u));
+      height: calc(28 * var(--u));
+      padding: 0 calc(8 * var(--u));
+    }
+  }
+}

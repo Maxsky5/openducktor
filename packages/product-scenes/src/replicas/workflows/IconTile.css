@@ -1,0 +1,99 @@
+@layer replica {
+  :where(.stage) {
+    /* IconTile: flex shrink-0 items-center justify-center in the size of TILE_SIZES. */
+    .wfe-tile {
+      display: flex;
+      flex: none;
+      align-items: center;
+      justify-content: center;
+      width: calc(32 * var(--u));
+      height: calc(32 * var(--u));
+      border-radius: calc(12 * var(--u));
+    }
+    .wfe-tile[data-size="sm"] {
+      width: calc(24 * var(--u));
+      height: calc(24 * var(--u));
+      border-radius: calc(10 * var(--u));
+    }
+    .wfe-tile[data-size="lg"] {
+      width: calc(40 * var(--u));
+      height: calc(40 * var(--u));
+      border-radius: calc(16 * var(--u));
+    }
+    .wfe-tile[data-size="sm"] > .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    .wfe-tile[data-size="lg"] > .lucide {
+      width: calc(20 * var(--u));
+      height: calc(20 * var(--u));
+    }
+    /* KIND_TILE_CLASSES: bg-<color>-500/12 and text-<color>-600, or the 700 shade for amber,
+       emerald, and teal. Amber takes /14. */
+    .wfe-tile[data-color="slate"] {
+      background: color-mix(in oklab, var(--slate-500) 12%, transparent);
+      color: var(--slate-600);
+    }
+    .wfe-tile[data-color="violet"] {
+      background: color-mix(in oklab, var(--violet-500) 12%, transparent);
+      color: var(--violet-600);
+    }
+    .wfe-tile[data-color="sky"] {
+      background: color-mix(in oklab, var(--sky-500) 12%, transparent);
+      color: var(--sky-600);
+    }
+    .wfe-tile[data-color="amber"] {
+      background: color-mix(in oklab, var(--amber-500) 14%, transparent);
+      color: var(--amber-700);
+    }
+    .wfe-tile[data-color="emerald"] {
+      background: color-mix(in oklab, var(--emerald-500) 12%, transparent);
+      color: var(--emerald-700);
+    }
+    .wfe-tile[data-color="indigo"] {
+      background: color-mix(in oklab, var(--indigo-500) 12%, transparent);
+      color: var(--indigo-600);
+    }
+    .wfe-tile[data-color="rose"] {
+      background: color-mix(in oklab, var(--rose-500) 12%, transparent);
+      color: var(--rose-600);
+    }
+    .wfe-tile[data-color="teal"] {
+      background: color-mix(in oklab, var(--teal-500) 12%, transparent);
+      color: var(--teal-700);
+    }
+    /* The dark theme: bg-<color>-400/15 and text-<color>-300. */
+    :where([data-theme="dark"]) & .wfe-tile[data-color="slate"] {
+      background: color-mix(in oklab, var(--slate-400) 15%, transparent);
+      color: var(--slate-300);
+    }
+    :where([data-theme="dark"]) & .wfe-tile[data-color="violet"] {
+      background: color-mix(in oklab, var(--violet-400) 15%, transparent);
+      color: var(--violet-300);
+    }
+    :where([data-theme="dark"]) & .wfe-tile[data-color="sky"] {
+      background: color-mix(in oklab, var(--sky-400) 15%, transparent);
+      color: var(--sky-300);
+    }
+    :where([data-theme="dark"]) & .wfe-tile[data-color="amber"] {
+      background: color-mix(in oklab, var(--amber-400) 15%, transparent);
+      color: var(--amber-300);
+    }
+    :where([data-theme="dark"]) & .wfe-tile[data-color="emerald"] {
+      background: color-mix(in oklab, var(--emerald-400) 15%, transparent);
+      color: var(--emerald-300);
+    }
+    :where([data-theme="dark"]) & .wfe-tile[data-color="indigo"] {
+      background: color-mix(in oklab, var(--indigo-400) 15%, transparent);
+      color: var(--indigo-300);
+    }
+    :where([data-theme="dark"]) & .wfe-tile[data-color="rose"] {
+      background: color-mix(in oklab, var(--rose-400) 15%, transparent);
+      color: var(--rose-300);
+    }
+    :where([data-theme="dark"]) & .wfe-tile[data-color="teal"] {
+      background: color-mix(in oklab, var(--teal-400) 15%, transparent);
+      color: var(--teal-300);
+    }
+  }
+}

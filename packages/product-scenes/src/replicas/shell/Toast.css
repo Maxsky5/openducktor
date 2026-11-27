@@ -72,6 +72,22 @@
       gap: calc(6 * var(--u));
       min-width: 0;
     }
+    /* The action button of Sonner: h-6 px-2 rounded text-xs font-medium at the end of the row,
+       in !bg-primary !text-primary-foreground. */
+    .toast-action {
+      display: flex;
+      flex: none;
+      align-items: center;
+      height: calc(24 * var(--u));
+      margin-left: auto;
+      padding: 0 calc(8 * var(--u));
+      border-radius: calc(4 * var(--u));
+      background: var(--primary);
+      color: var(--primary-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      white-space: nowrap;
+    }
     .toast-close {
       position: absolute;
       top: calc(12 * var(--u));

@@ -22,6 +22,8 @@ export const DIAGRAMS = {
   systemPrompt: async () => (await import("./specs/prompts")).systemPrompt,
   taskFlow: async () => (await import("./specs/workflow")).taskFlow,
   workflow: async () => (await import("./specs/workflow")).workflow,
+  workflowParts: async () => (await import("./specs/custom-workflows")).workflowParts,
+  workflowVersions: async () => (await import("./specs/custom-workflows")).workflowVersions,
   worktree: async () => (await import("./specs/git")).worktree,
 } satisfies Record<string, () => Promise<Diagram>>;
 

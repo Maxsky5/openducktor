@@ -140,16 +140,10 @@
       .chat-window[data-compact] {
         height: calc(680 * var(--u));
       }
-      .chat-window .rail,
-      .chat-window .sb-collapsed,
       .chat-window .ra,
       .chat-window .oi,
       .chat-window .sh-icon {
         display: none;
-      }
-      .chat-window .app-body {
-        padding-top: calc(34 * var(--u));
-        background: var(--card);
       }
     }
   }

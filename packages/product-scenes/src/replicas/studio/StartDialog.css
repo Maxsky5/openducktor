@@ -76,11 +76,6 @@
       font-weight: 500;
       line-height: calc(20 * var(--u));
     }
-    .st-field-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: calc(16 * var(--u));
-    }
     /* The existing session: the latest one has a muted text-xs note. */
     .st-latest {
       color: var(--muted-foreground);
@@ -158,20 +153,6 @@
       border-top: calc(1 * var(--u)) solid var(--border);
       background: var(--popover);
     }
-    /* Effort and Speed share a cell: flex items-end gap-2, and Speed is w-36. */
-    .st-field-pair {
-      display: flex;
-      align-items: flex-end;
-      gap: calc(8 * var(--u));
-      min-width: 0;
-    }
-    .st-field-pair > .st-field {
-      flex: 1;
-      min-width: 0;
-    }
-    .st-field-pair > .st-speed-field {
-      flex: 0 0 calc(144 * var(--u));
-    }
     .st-dialog-actions {
       display: flex;
       align-items: center;
@@ -192,21 +173,18 @@
     }
     .st-dialog[data-starting]
       :is(
-        .st-dialog-body :is(.ui-combobox, .ui-switch, .ui-button, .ui-segment),
+        .st-dialog-body :is(.ui-combobox, .mt, .ui-switch, .ui-button, .ui-segment),
         .st-cancel,
         .st-start
       ) {
       opacity: 0.5;
     }
-    /* A narrow stage shows a smaller dialog with one field in each row. */
+    /* A narrow stage shows a smaller dialog. */
     @container stage (width <= 699px) {
       .st-dialog,
       .st-dialog[data-progress] {
         width: calc(408 * var(--u));
         padding: calc(20 * var(--u));
-      }
-      .st-field-row {
-        grid-template-columns: minmax(0, 1fr);
       }
       .st-modes > .ui-segment {
         font-size: calc(13 * var(--u));

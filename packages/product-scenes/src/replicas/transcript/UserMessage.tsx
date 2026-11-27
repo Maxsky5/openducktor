@@ -9,7 +9,7 @@ export function UserMessage({ time, row, children }: UserMessageProps): ReactEle
   return (
     <div className="st-user" data-row={row}>
       <p>{children}</p>
-      <time>{time}</time>
+      <time data-time="">{time}</time>
     </div>
   );
 }

@@ -1,23 +1,23 @@
 ---
 import Scene from "@openducktor/product-scenes/astro";
 import { links } from "../content/site";
+import FeatureGrid from "../ui/FeatureGrid.astro";
 import FeatureTile from "../ui/FeatureTile.astro";
 import SectionHead from "../ui/SectionHead.astro";
-import "./Features.css";
 ---
 
 <section id="features" class="section features" aria-labelledby="features-title">
   <div class="wrap-wide">
     <SectionHead eyebrow="Features" id="features-title">
       <Fragment slot="title"
-        >Plan in a session, control every prompt, and run your commands in the worktree.</Fragment
+        >Plan in a session, set a goal, control every prompt, and run your commands.</Fragment
       >
       <p>
         Sessions and the MCP server use the same local task store as the board. A task that an agent
         creates in a session or through MCP shows on the board at once.
       </p>
     </SectionHead>
-    <div class="features-grid">
+    <FeatureGrid>
       <FeatureTile
         id="feature-chat"
         label="Sessions"
@@ -53,6 +53,18 @@ import "./Features.css";
         <Scene name="prompts" slot="view" />
       </FeatureTile>
       <FeatureTile
+        id="feature-goal"
+        label="Goal mode"
+        title="Give an agent a goal, and it works until the goal is met."
+        size="full"
+      >
+        Start the Builder in Goal mode, or type <code>/goal</code> in a session. The agent gets the goal
+        in place of a first message, and the runtime works turn after turn until it meets the goal. The
+        row above the composer shows the state of the goal. Goal mode works with recent versions of OpenCode,
+        Codex, Claude Code, and Antigravity.
+        <Scene name="goal-mode" slot="view" />
+      </FeatureTile>
+      <FeatureTile
         id="feature-actions"
         label="Actions"
         title="Run your project commands in the task worktree."
@@ -64,6 +76,6 @@ import "./Features.css";
         creates a worktree, and the agent can wait until it finishes.
         <Scene name="actions" slot="view" />
       </FeatureTile>
-    </div>
+    </FeatureGrid>
   </div>
 </section>

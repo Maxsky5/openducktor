@@ -121,6 +121,10 @@
         color-mix(in oklab, var(--primary-foreground) 25%, transparent);
       border-radius: 0 calc(10 * var(--u)) calc(10 * var(--u)) 0;
     }
+    /* The default Button has hover:bg-primary/90, an opaque mix with the sidebar under it. */
+    .sb-create > .sb-create-menu[data-hover] {
+      background: color-mix(in srgb, var(--primary) 90%, var(--sidebar));
+    }
     .sb-controls {
       display: flex;
       flex: 0 0 auto;
@@ -166,11 +170,12 @@
       height: calc(32 * var(--u));
       color: var(--sidebar-muted-foreground);
     }
+    /* The groups of session-navigation-list.tsx: one flex-col without a gap, where each group has
+       gap-1 pb-4. */
     .sb-sessions {
       display: flex;
       flex: 1;
       flex-direction: column;
-      gap: calc(12 * var(--u));
       min-height: 0;
       padding: 0 calc(12 * var(--u)) calc(12 * var(--u));
       overflow: hidden;
@@ -229,6 +234,9 @@
     .sb-group[data-collapsed] .sb-group-chevron {
       rotate: -90deg;
     }
+    /* The footer: flex items-center gap-1 border-t p-2. The Settings trigger and the page links
+       of SidebarFooterLinks are size-9 icon buttons, and DiagnosticsTrigger is a size-8 button at
+       the end. */
     .sb-footer {
       display: flex;
       align-items: center;
@@ -236,18 +244,29 @@
       padding: calc(8 * var(--u));
       border-top: calc(1 * var(--u)) solid var(--sidebar-border);
     }
-    .sb-settings {
+    .sb-foot-links {
       display: flex;
-      flex: 1;
       align-items: center;
-      gap: calc(8 * var(--u));
+      gap: calc(4 * var(--u));
+    }
+    .sb-foot-button {
+      display: grid;
+      flex: 0 0 auto;
+      place-items: center;
+      width: calc(36 * var(--u));
       height: calc(36 * var(--u));
-      padding: 0 calc(12 * var(--u));
+      border-radius: calc(10 * var(--u));
       color: var(--sidebar-foreground);
-      font-size: calc(14 * var(--u));
-      font-weight: 500;
+    }
+    /* The link of the current page: a quiet tile, bg-accent text-accent-foreground ring-1
+       ring-border. */
+    .sb-foot-links .sb-foot-button[data-current] {
+      background: var(--accent);
+      color: var(--accent-foreground);
+      box-shadow: 0 0 0 calc(1 * var(--u)) var(--border);
     }
     .sb-diagnostics {
+      margin-left: auto;
       color: var(--success-accent);
     }
   }

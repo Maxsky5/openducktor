@@ -1,0 +1,144 @@
+@layer replica {
+  :where(.stage) {
+    /* The tokens of step-track-slider.css. The track is 28 pixels high under a 20 pixel space for
+       the label shoulder. --at is the place of the thumb from 0 to 1, --span the count of steps,
+       and --stretch the widening of the thumb while the visitor drags it. */
+    .et {
+      --step-track-shell: color-mix(in oklch, var(--foreground) 8%, var(--popover));
+      --step-track-line: color-mix(in oklch, var(--foreground) 12%, transparent);
+      --step-track-tick: color-mix(in oklch, var(--foreground) 26%, transparent);
+      --step-track-tick-on-thumb: color-mix(in oklch, var(--foreground) 45%, transparent);
+      --step-track-thumb-shadow:
+        0 calc(1 * var(--u)) calc(3 * var(--u))
+          color-mix(in oklch, var(--foreground) 18%, transparent),
+        0 0 0 calc(1 * var(--u)) color-mix(in oklch, var(--foreground) 10%, transparent);
+      /* The center of the thumb: the stops sit 14 pixels in from each end of the track. */
+      --cx: calc(14 * var(--u) + var(--at) * (100% - 28 * var(--u)));
+      --thumb: calc((24 + 6 * var(--stretch)) * var(--u));
+      position: relative;
+      width: 100%;
+      height: calc(48 * var(--u));
+    }
+    :where([data-theme="dark"]) & .et {
+      --step-track-shell: color-mix(in oklch, var(--foreground) 9%, var(--popover));
+      --step-track-line: color-mix(in oklch, var(--foreground) 14%, transparent);
+      --step-track-tick: color-mix(in oklch, var(--foreground) 30%, transparent);
+      --step-track-tick-on-thumb: color-mix(in oklch, var(--background) 55%, transparent);
+      --step-track-thumb-shadow:
+        0 calc(1 * var(--u)) calc(3 * var(--u))
+          color-mix(in oklch, var(--background) 65%, transparent),
+        0 0 0 calc(1 * var(--u)) color-mix(in oklch, var(--foreground) 14%, transparent);
+    }
+    /* The shell path: fill var(--step-track-shell) and a 0.75 pixel stroke on its edge. */
+    .et-pill {
+      position: absolute;
+      top: calc(20 * var(--u));
+      right: 0;
+      left: 0;
+      height: calc(28 * var(--u));
+      border-radius: calc(14 * var(--u));
+      background: var(--step-track-shell);
+      box-shadow:
+        0 0 0 calc(0.375 * var(--u)) var(--step-track-line),
+        inset 0 0 0 calc(0.375 * var(--u)) var(--step-track-line);
+    }
+    /* The raised flat top over the thumb. It is 4 pixels wider than the label text: a hidden copy
+       of the label gives it its width. */
+    .et-bump {
+      position: absolute;
+      top: 0;
+      left: var(--cx);
+      display: flex;
+      height: calc(21 * var(--u));
+      transform: translateX(-50%);
+    }
+    .et-plateau {
+      min-width: calc(14 * var(--u));
+      padding: 0 calc(2 * var(--u));
+      background: var(--step-track-shell);
+      box-shadow:
+        0 calc(-0.375 * var(--u)) 0 0 var(--step-track-line),
+        inset 0 calc(0.375 * var(--u)) 0 0 var(--step-track-line);
+    }
+    .et-sizer {
+      visibility: hidden;
+    }
+    /* The label: top-[3px] text-[11px] font-medium leading-[14px] tracking-[-0.01em], centered on
+       the thumb over the shoulder. */
+    .et-label {
+      position: absolute;
+      top: calc(3 * var(--u));
+      left: var(--cx);
+      transform: translateX(-50%);
+    }
+    .et-sizer,
+    .et-label {
+      color: var(--foreground);
+      font-size: calc(11 * var(--u));
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      line-height: calc(14 * var(--u));
+      white-space: nowrap;
+    }
+    .et-shoulder {
+      position: absolute;
+      top: 0;
+      left: calc(-20 * var(--u));
+      width: calc(20 * var(--u));
+      height: calc(21 * var(--u));
+      overflow: visible;
+    }
+    .et-shoulder[data-end] {
+      right: calc(-20 * var(--u));
+      left: auto;
+      transform: scaleX(-1);
+    }
+    .et-shoulder-fill {
+      fill: var(--step-track-shell);
+    }
+    .et-shoulder-line {
+      fill: none;
+      stroke: var(--step-track-line);
+      stroke-width: 0.75;
+    }
+    /* The fill of EFFORT_FILLS in model-picker-options-pane.tsx runs to 2 pixels past the thumb.
+       It fades out toward the first stop, so the first stop shows no fill. */
+    .et-fill {
+      position: absolute;
+      top: calc(20 * var(--u));
+      left: 0;
+      width: min(100%, calc(var(--cx) + var(--thumb) / 2 + 2 * var(--u)));
+      height: calc(28 * var(--u));
+      border-radius: calc(14 * var(--u));
+      background: linear-gradient(90deg, #006aff, #0059d4);
+      opacity: min(1, calc(var(--at) * var(--span) / 0.35));
+    }
+    .et-thumb {
+      position: absolute;
+      top: calc(22 * var(--u));
+      left: clamp(
+        calc(2 * var(--u)),
+        calc(var(--cx) - var(--thumb) / 2),
+        calc(100% - 2 * var(--u) - var(--thumb))
+      );
+      width: var(--thumb);
+      height: calc(24 * var(--u));
+      border-radius: 999px;
+      background: var(--primary-foreground);
+      box-shadow: var(--step-track-thumb-shadow);
+    }
+    /* A tick of 1.5 pixels. The tick under the thumb takes the color of the thumb tick. */
+    .et-tick {
+      position: absolute;
+      top: calc((20 + (28 - var(--h)) / 2) * var(--u));
+      left: calc(14 * var(--u) + var(--f) * (100% - 28 * var(--u)) - 0.75 * var(--u));
+      width: calc(1.5 * var(--u));
+      height: calc(var(--h) * var(--u));
+      border-radius: 999px;
+      background: var(--step-track-tick);
+    }
+    .et-tick[data-on] {
+      background: var(--step-track-tick-on-thumb);
+    }
+  }
+}

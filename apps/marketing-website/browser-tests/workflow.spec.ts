@@ -105,12 +105,14 @@ test("each workflow step ends on its static frame, and the next step starts ther
         const rail = [...frame.querySelectorAll(".st-step[data-step]")];
         return {
           action: frame.querySelector("[data-action]")?.textContent,
-          model: frame.querySelector("[data-model]")?.textContent,
+          model: frame.querySelector("[data-composer] [data-model-name]")?.textContent,
           tones: rail.map((step) => step.getAttribute("data-tone")),
           selected: rail.findIndex((step) => step.getAttribute("aria-pressed") === "true"),
         };
       }),
     );
+    // A renamed hook would make both models undefined and the comparison empty.
+    expect(last?.model, `the model of ${next}`).toBeTruthy();
     // The last step ends the story, and the first step starts a new task. The Review step opens
     // after QA approves the fix.
     if (next !== "spec" && next !== "review") {

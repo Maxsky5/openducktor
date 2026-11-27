@@ -1,0 +1,300 @@
+@layer replica {
+  :where(.stage) {
+    /* The top bar of the draft: MessageCirclePlus, the h1 text-sm font-semibold, and the
+       workspace chip in gap-2. */
+    .sd-title {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+    }
+    .sd-title-icon {
+      flex: none;
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .sd-title-name {
+      flex: none;
+      color: var(--foreground);
+      font-size: calc(14 * var(--u));
+      font-weight: 600;
+      line-height: calc(20 * var(--u));
+    }
+    /* The chip: rounded-md border border-border bg-muted/60 px-2 py-0.5 text-xs
+       text-muted-foreground with gap-1.5, and the size-4 tile without its shadow. */
+    .sd-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      min-width: 0;
+      padding: calc(2 * var(--u)) calc(8 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(10 * var(--u));
+      background: color-mix(in oklab, var(--muted) 60%, transparent);
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      white-space: nowrap;
+    }
+    /* WorkspaceTile: rounded-md bg-workspace-rail-tile with the initials in text-[0.5625rem]
+       font-semibold. The heading shows it at size-5, and the chip at size-4. */
+    .sd-tile {
+      display: inline-grid;
+      flex: none;
+      place-items: center;
+      width: calc(20 * var(--u));
+      height: calc(20 * var(--u));
+      border-radius: calc(10 * var(--u));
+      background: var(--workspace-rail-tile);
+      color: var(--foreground);
+      font-size: calc(9 * var(--u));
+      font-weight: 600;
+      letter-spacing: 0;
+      line-height: 1;
+    }
+    .sd-chip > .sd-tile {
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+    }
+    /* Discard: a ghost button h-7 gap-1.5 px-2 text-xs text-muted-foreground with a size-3.5
+       Trash2. */
+    .sd-discard {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      height: calc(28 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+    }
+    .sd-discard > svg {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    /* The page of the draft: the composer stage takes the place of the transcript, with
+       pt-[clamp(5rem,30vh,22rem)] px-4 pb-16 and a max-w-3xl column. */
+    .sd-page[data-draft] :is(.st-transcript, .tpage-right, [data-right-handle]) {
+      display: none;
+    }
+    .sd-stage {
+      flex: 0 0 auto;
+    }
+    .sd-page[data-draft] .sd-stage {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      align-items: center;
+      min-height: 0;
+      padding: clamp(
+          calc(80 * var(--u)),
+          calc(var(--window-height) * 0.3 * var(--u)),
+          calc(352 * var(--u))
+        )
+        calc(16 * var(--u)) calc(64 * var(--u));
+      overflow: hidden;
+    }
+    .sd-page[data-draft] .sd-stage > * {
+      width: 100%;
+      max-width: calc(768 * var(--u));
+    }
+    .sd-page[data-draft] .st-composer {
+      padding-top: 0;
+    }
+    .sd-page:not([data-draft]) :is(.sd-heading, .sd-options) {
+      display: none;
+    }
+    /* The heading: mb-6 flex-col items-center gap-1.5 px-4 text-center. Its row is text-xl
+       font-semibold tracking-tight with gap-x-1.5 gap-y-1. */
+    .sd-heading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      margin-bottom: calc(24 * var(--u));
+      padding: 0 calc(16 * var(--u));
+      text-align: center;
+    }
+    .sd-heading-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: calc(4 * var(--u)) calc(6 * var(--u));
+      color: var(--foreground);
+      font-size: calc(20 * var(--u));
+      font-weight: 600;
+      letter-spacing: -0.025em;
+      line-height: calc(28 * var(--u));
+    }
+    .sd-heading-row > h2 {
+      font: inherit;
+    }
+    .sd-in {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      min-width: 0;
+    }
+    .sd-in > span:first-child {
+      color: var(--muted-foreground);
+      font-weight: 400;
+    }
+    /* The inline WorkspacePicker: h-8 rounded-lg px-2 with gap-2, and ChevronsUpDown size-3.5
+       text-muted-foreground. */
+    .sd-picker {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      height: calc(32 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      border-radius: calc(12 * var(--u));
+    }
+    .sd-picker > svg {
+      flex: none;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .sd-heading > p {
+      color: var(--muted-foreground);
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    /* The options bar: -mt-1.5 px-4, with one h-8 row in justify-between gap-2 and text-xs. */
+    .sd-options {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(8 * var(--u));
+      height: calc(32 * var(--u));
+      margin-top: calc(-6 * var(--u));
+      padding: 0 calc(16 * var(--u));
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .sd-left {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      min-width: 0;
+    }
+    .sd-right {
+      display: flex;
+      flex: none;
+      align-items: center;
+      gap: calc(4 * var(--u));
+    }
+    /* A quiet trigger: h-8 rounded-lg border-transparent bg-transparent px-2 text-xs font-medium
+       text-muted-foreground, with the label in min-w-0 flex-1 pr-2 and ChevronsUpDown size-4. A
+       trigger under the pointer or open has bg-muted/70 and text-foreground. */
+    .sd-trigger {
+      position: relative;
+      display: inline-flex;
+      flex: none;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      height: calc(32 * var(--u));
+      min-width: 0;
+      padding: 0 calc(8 * var(--u));
+      border-radius: calc(12 * var(--u));
+      color: var(--muted-foreground);
+      font-weight: 500;
+      white-space: nowrap;
+      transition:
+        background-color 150ms,
+        color 150ms;
+    }
+    .sd-trigger:is([data-hover], [data-open]) {
+      background: color-mix(in oklab, var(--muted) 70%, transparent);
+      color: var(--foreground);
+    }
+    .sd-value {
+      display: flex;
+      min-width: 0;
+      padding-right: calc(8 * var(--u));
+    }
+    .sd-choice {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+    }
+    .sd-choice > svg {
+      flex: none;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .sd-chevrons {
+      flex: none;
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+      color: var(--muted-foreground);
+    }
+    /* The target branch and the role: the icon sits at left-2 in the pl-7 of the trigger. */
+    .sd-inset {
+      padding-left: calc(28 * var(--u));
+    }
+    .sd-lead {
+      position: absolute;
+      top: 50%;
+      left: calc(8 * var(--u));
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      color: var(--muted-foreground);
+      transform: translateY(-50%);
+    }
+    /* The separator before the branch of a new worktree: mx-0.5 h-3.5 w-px bg-border/70. */
+    .sd-sep {
+      flex: none;
+      width: calc(1 * var(--u));
+      height: calc(14 * var(--u));
+      margin: 0 calc(2 * var(--u));
+      background: color-mix(in oklab, var(--border) 70%, transparent);
+    }
+    /* DraftNewWorktreePopover: min-w-0 max-w-[15rem] gap-1.5 with a truncated label, Sparkles at
+       opacity-75 and ChevronDown at opacity-60, both size-3.5. */
+    .sd-branch {
+      flex: 0 1 auto;
+      gap: calc(6 * var(--u));
+      max-width: calc(240 * var(--u));
+    }
+    .sd-branch > span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sd-branch > svg {
+      flex: none;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      opacity: 0.75;
+    }
+    .sd-branch > svg:last-child {
+      opacity: 0.6;
+    }
+    /* A phone stage starts the stage higher, so the popovers of the options bar open under it, as
+       in a desktop window. The bar of the app keeps one row and draws the branch trigger over the
+       target branch in a pane this narrow, so on a phone stage the target branch and the role
+       move to a second row. */
+    @container stage (width <= 500px) {
+      .sd-page[data-draft] .sd-stage {
+        padding-top: calc(96 * var(--u));
+      }
+      .sd-options {
+        flex-wrap: wrap;
+        row-gap: calc(4 * var(--u));
+        height: auto;
+      }
+      .sd-left {
+        flex-basis: 100%;
+      }
+      .sd-branch {
+        flex: none;
+      }
+    }
+  }
+}

@@ -1,13 +1,17 @@
 // The session list of Sidebar.tsx and SidebarCollapsed.tsx, and the badges of the workspace
 // rail. The read model of the product regroups a session when it changes: a session that needs
 // you goes to Needs you, a running one goes to Running, and the others go to Recent. The scenes
-// change the entries, and the list and the rail follow them.
+// change the entries, and the list and the rail follow them. An entry that changes its group
+// enters its new group in 200 ms and leaves its old place in 150 ms on --motion-ease-out, as
+// `.session-presence` of session-navigation.css moves it.
 import { all, must } from "../../motion/dom";
-import { growIn, pop, shrinkOut } from "../../motion/effects";
+import { fadeIn, growIn, pop, shrinkOut } from "../../motion/effects";
+import { EASE } from "../../motion/tokens";
 import type { Scene } from "../../motion/scene";
 import { WORKSPACES } from "../../sample/workspace";
 import { statusPillLabel } from "../vocabulary";
 import {
+  DRAFT_LABELS,
   type NavEntry,
   type NavGroupId,
   type NavPatch,
@@ -18,6 +22,9 @@ import {
   navTone,
   railBadges,
 } from "./nav";
+
+/** Seconds of `.session-presence` in session-navigation.css: an entry enters and leaves. */
+const PRESENCE = { enter: 0.2, exit: 0.15 } as const;
 
 const part = (item: HTMLElement, hook: string): HTMLElement | null => {
   const found = item.querySelector(`[data-${hook}]`);
@@ -31,6 +38,8 @@ function render(item: HTMLElement, entry: NavEntry): void {
   const tone = navTone(entry);
   if (tone) icon.dataset.tone = tone;
   else delete icon.dataset.tone;
+  if (entry.draft) icon.dataset.draft = entry.draft;
+  else delete icon.dataset.draft;
   must(item, "[data-nav-row]").toggleAttribute("data-selected", entry.selected ?? false);
   const status = part(item, "nav-status");
   if (status) {
@@ -40,6 +49,18 @@ function render(item: HTMLElement, entry: NavEntry): void {
       status.textContent = statusPillLabel(entry.status, true);
     }
   }
+  const draft = part(item, "nav-draft");
+  if (draft) {
+    draft.hidden = !entry.draft;
+    if (entry.draft) {
+      draft.dataset.draft = entry.draft;
+      draft.textContent = DRAFT_LABELS[entry.draft];
+    }
+  }
+  const title = part(item, "nav-title");
+  if (title) title.textContent = entry.title;
+  const runtime = part(item, "nav-runtime");
+  if (runtime) runtime.hidden = !entry.runtime;
   const attention = part(item, "nav-attention");
   if (attention) {
     attention.hidden = !entry.attention;
@@ -134,18 +155,23 @@ export function sessionList(scene: Scene, root: HTMLElement, hooks: SessionListH
     showBadges(false);
   };
 
-  /** A copy of a shown entry takes its place and closes, so the entry can leave its group. */
+  /**
+   * A copy of a shown entry takes its place and closes, so the entry can leave its group. Only the
+   * entry keeps the selection, so the copy shows no check.
+   */
   const closeCopy = (item: HTMLElement): void => {
     const copy = item.cloneNode(true);
     if (!(copy instanceof HTMLElement)) throw new Error("The session entry clone failed.");
     copy.removeAttribute("data-nav-entry");
+    must(copy, "[data-nav-row]").removeAttribute("data-selected");
     item.replaceWith(copy);
-    scene.run(shrinkOut(copy, 0.3));
+    scene.run(shrinkOut(copy, PRESENCE.exit, EASE.chat));
   };
 
   /**
    * Changes the entry `id` at `at`, and shows it if it hides. When its group changes, the old place
-   * closes while the entry grows in at the top of its new group.
+   * closes while the entry grows in at the top of its new group, and its selection check fades in
+   * with it.
    */
   const update = (id: string, at: number, patch: NavPatch = {}): void =>
     scene.at(at, () => {
@@ -160,7 +186,11 @@ export function sessionList(scene: Scene, root: HTMLElement, hooks: SessionListH
       show(item, entry);
       if (!stays) {
         group.prepend(item);
-        if (animate) scene.run(growIn(item, 0.4));
+        if (animate) {
+          scene.run(growIn(item, PRESENCE.enter, EASE.chat));
+          const check = part(item, "nav-check");
+          if (check && entry.selected) scene.run(fadeIn(check, PRESENCE.enter));
+        }
       }
       recount(animate);
       showBadges(animate);

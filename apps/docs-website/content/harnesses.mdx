@@ -10,20 +10,14 @@ A harness is the coding agent that runs your sessions: OpenCode, Codex, Claude C
 
 Install the harness and sign in to it with its own tool. Then turn it on in OpenDucktor.
 
-| Harness | Minimum version | Install and sign in |
-|---|---|---|
-| OpenCode | 2 or later | [OpenCode documentation](https://opencode.ai/docs) |
-| Codex | With `codex app-server` | [Codex documentation](https://developers.openai.com/codex) |
-| Claude Code | 2.1.306 or later | [Claude Code documentation](https://code.claude.com/docs/en/overview) |
-| Antigravity CLI | 1.5.14 or later | [Antigravity documentation](https://antigravity.google/docs/cli) |
+| Harness | Minimum version | Install and sign in | Update |
+|---|---|---|---|
+| OpenCode | 2 or later | [OpenCode documentation](https://opencode.ai/docs) | `opencode upgrade` |
+| Codex | With `codex app-server` | [Codex documentation](https://developers.openai.com/codex) | `codex update` |
+| Claude Code | 2.1.306 or later | [Claude Code documentation](https://code.claude.com/docs/en/overview) | `claude update` |
+| Antigravity CLI | 1.5.14 or later | [Antigravity documentation](https://antigravity.google/docs/cli). To sign in, run `agy` in a terminal. | `agy update` |
 
-To [steer a message](/coding-sessions/#queue) into a running reply, OpenCode needs 2.0.24 or later and Codex needs 0.106.0 or later. The Antigravity CLI 1.5.14 can steer.
-
-[Goal mode](/coding-sessions/#goal-mode) needs OpenCode 2.2.1, Codex 0.166.0, Claude Code 2.1.306, or Antigravity 1.5.14 or later. See [Goal mode support](#goals).
-
-To update, run `opencode upgrade`, `claude update`, or `agy update`. Update Codex with the tool that installed it, for example `npm install -g @openai/codex@latest` or `brew upgrade --cask codex`.
-
-Sign in to Antigravity with the Antigravity CLI: run `agy` in a terminal and follow the sign-in steps. OpenDucktor uses that sign-in and your Antigravity settings. It does not ask for your credentials.
+OpenDucktor uses the sign-in and the settings of each harness. It does not ask for your credentials.
 
 <Callout type="info" title="Claude subscriptions">To use Claude Code with a Claude subscription, read [Use the Claude Agent SDK with your Claude plan](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan).</Callout>
 
@@ -33,66 +27,41 @@ The setup wizard turns on the harnesses that you choose. Use these steps to turn
 
 <Steps>
 <Step>Open [**Settings**](/settings-reference/#open-settings), then **Agent runtimes**, then the harness. Settings shows Claude Code as **Claude**.</Step>
-<Step>Turn on **Enabled**. If the harness does not show **Available**, select <Action>Browse</Action> and choose its executable. Antigravity stays off until you turn it on, even when OpenDucktor finds `agy`.</Step>
+<Step>Turn on **Enabled**. If the harness does not show **Available**, select <Action>Browse</Action> and choose its executable.</Step>
 <Step>Select <Action>Save settings</Action>.</Step>
 </Steps>
 
-<Screenshot id="settings-harnesses" alt="The Agent runtimes section of Settings. OpenCode, Claude, and Codex show Enabled. The OpenCode card shows Available, the Enabled switch, the executable path with Browse, and the version with Check again." />
+<Screenshot id="settings-harnesses" alt="The Agent runtimes section of Settings. OpenCode, Antigravity, Claude, and Codex show Enabled. The OpenCode card shows Available, the Enabled switch, the executable path with Browse, and the version with Check again." />
 
 If the harness shows **Needs attention**, see [Troubleshooting](/troubleshooting/#harness-needs-attention).
 
 ## What each harness supports [#capabilities]
 
-All four harnesses run every agent role. Each one supports questions, permission requests, attachments, and slash commands. They differ in these features:
+All four harnesses run every agent role. Each one supports questions, permission requests, attachments, skills with `$`, and slash commands. They differ in these features:
 
 | Feature | OpenCode | Codex | Claude Code | Antigravity |
 |---|---|---|---|---|
 | Session forks | Yes | Yes | Yes | No |
-| Skills with `$` | Yes | Yes | Yes | No. Skills show as slash commands. |
+| [Steer a message](/coding-sessions/#queue) | 2.0.24 or later | 0.106.0 or later | Yes | Yes |
+| [Goal mode](/coding-sessions/#goal-mode) | 2.2.1 or later | 0.166.0 or later | Yes | Yes |
+| <Action>Pause goal</Action> and <Action>Resume goal</Action> | Yes | Yes | No | No |
+| <Action>Stop session</Action> during a goal | Pauses the goal | Pauses the goal | Keeps the goal | Keeps the goal |
 | Image generation | No | Yes | No | No |
-| **Resume** after a turn stops | Yes | Yes | Yes | No. Send a new message. |
+| [Resume a stopped turn](/coding-sessions/#resume-turn) | Yes | Yes | Yes | No. Send a new message. |
 | [Auto-resume after a usage limit](/coding-sessions/#usage-limit) | No | Yes, with a ChatGPT sign-in | Yes | No |
-| [**Speed** choice](/models/) | No | Some models | Some models | No |
-| [**Agent profile** choice](/models/) | Yes | No | No | No |
+| [Stop one background task](/coding-sessions/#stop-background-task) | Yes | 0.140.0 or later | Yes | No. Stop the session. |
+| [**Speed** choice](/models/#session-model) | No | Some models | Some models | No |
+| [**Profile** choice](/models/#session-model) | Yes | No | No | No |
 | Todo list in the session | No | Yes | Yes | No |
 | Subagents in the background | Yes | No | Yes | No. A subagent shows as a tool call. |
 | Mention a subagent with `@` | Yes | No | No | No |
-| [Goal mode](/coding-sessions/#goal-mode) | Yes | Yes | Yes | Yes |
-| Naming model | Yes | Yes | Yes | Yes. Each request saves a conversation in your Antigravity history. |
+| [Switch to another harness](/models/#runtime-handoff) | Yes | 0.136.0 or later | Yes | Yes |
+| Session titles from the [Naming model](/workspace-sessions/#naming-model) | Yes | Yes | Yes | No. Sessions keep the Antigravity title. |
 | [Permission replies](/coding-sessions/#answer-a-permission-request) | <Action>Approve once</Action>, <Action>Allow for project</Action>, <Action>Reject</Action> | <Action>Approve once</Action>, <Action>Approve for session</Action>, <Action>Always allow</Action>, <Action>Reject</Action> | <Action>Approve once</Action>, <Action>Reject</Action> | <Action>Approve once</Action>, <Action>Reject</Action> |
-
-With an API key sign-in, Codex cannot tell when the account works again, so a Codex session needs a manual **Resume** after a usage limit.
-
-### Antigravity limits [#antigravity]
-
-- After OpenDucktor restarts, a reopened Antigravity transcript has no approval decisions. A turn that ran in another Antigravity client has no times, reply model, or stop notice. A tool that you stopped shows as failed, and a slash command shows as text.
-- Antigravity sessions keep the title that Antigravity gives them.
-- A message that you send while Antigravity works shows as **Unread** until Antigravity reads it.
-- A new session shows its slash commands after its first message. OpenDucktor runs `/goal` as goal mode and `/compact` as compaction. `/swarm` is not available: its workers run in conversations that only Antigravity shows.
-- OpenDucktor offers every model of your account. Only Gemini models have a thinking level.
-- In the **Auto** [session mode](/settings-reference/#harnesses-antigravity-session-mode), Antigravity asks before each tool call of a global MCP server. **Bypass permissions** runs these calls without asking.
-- A command that still runs when Antigravity ends its turn shows in the background task list. You cannot stop one command: **Stop** stops all of them. When the command ends, Antigravity can continue on its own, and that work shows while the session shows **Idle**.
-- Attachments reach the agent as file links that it reads with its own tools.
-- Antigravity does not report the results of OpenDucktor tool calls, so their rows show what the agent asked for.
-- Spec, Planner, and QA never change files with the Antigravity file tools: OpenDucktor refuses their file edits in every [session mode](/settings-reference/#harnesses-antigravity-session-mode). Their shell commands follow the mode, so a command can still change a file.
-
-### Goal mode support [#goals]
-
-OpenCode, Codex, Claude Code, and Antigravity run [Goal mode](/coding-sessions/#goal-mode). They differ in these points:
-
-| | OpenCode | Codex | Claude Code | Antigravity |
-|---|---|---|---|---|
-| Minimum version | 2.2.1 | 0.166.0 | 2.1.306 | 1.5.14 |
-| <Action>Pause goal</Action> and <Action>Resume goal</Action> | Yes | Yes | No. Only <Action>Clear goal</Action>. | No. Only <Action>Clear goal</Action>. |
-| <Action>Stop session</Action> during a goal | Stops the turn and pauses the goal | Stops the turn and pauses the goal | Stops the turn and keeps the goal. The row shows **Waiting for your message**. | Stops the turn and keeps the goal. The row shows **Waiting for your message**. |
-
-Antigravity has no clear command. <Action>Clear goal</Action> sends a message that asks the agent to stop the goal, and the goal leaves when the agent cancels it.
-
-With an older harness, the **Goal mode** switch is off and names the version to install. OpenCode runs goals with its goal plugin. If your OpenCode config turns the plugin off, remove `-opencode.goal` from `plugins` in the OpenCode config.
 
 ## Control what agents can do [#permissions]
 
-Each harness has its own permission settings in **Agent runtimes**. Antigravity also applies its native permission rules.
+Each harness has its own permission settings in **Agent runtimes**.
 
 <Steps>
 <Step>In **Agent runtimes**, select the harness.</Step>
@@ -118,11 +87,9 @@ The settings apply in this order:
 
 <Diagram name="permissionOrder" />
 
-In a Claude Code list field, such as **Allow rules**, OpenDucktor adds its entries to the native entries.
+In Codex, a command in the **Workspace-write** sandbox can change files without a request. To stop the Spec, Planner, and QA roles from changing files with Codex, set their **Sandbox mode** to **Read-only** in **Role overrides**.
 
-In Codex, a command in the **Workspace-write** sandbox can change files without a request. To stop the Spec, Planner, and QA roles from changing files with Codex, set their **Sandbox mode** to **Read-only** in **Role overrides**. The Builder cannot use **Read-only**.
-
-OpenCode and Claude Code apply changes to new and forked sessions. Resumed and imported Claude Code sessions use the native Claude settings. Codex applies changes to sessions that start or resume after the save.
+In Antigravity, OpenDucktor refuses the file edits of Spec, Planner, and QA in every **Session mode**. Their shell commands follow the mode, so a command can still change a file.
 
 <Callout type="warn" title="Reduced protections">
 These settings let agents act without your approval or outside the sandbox:

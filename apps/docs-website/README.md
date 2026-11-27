@@ -34,7 +34,7 @@ Write for a developer who learns OpenDucktor:
 - Keep each paragraph to one to three sentences.
 - Put option details in the Settings reference and edge cases in Troubleshooting, and link to them from the guide.
 - Write in ASD-STE100 Simplified Technical English, as the documentation rules in `AGENTS.md` require.
-- Call OpenCode, Codex, and Claude Code "harnesses".
+- Call OpenCode, Codex, Claude Code, and Antigravity "harnesses".
 - Use bold only for an exact UI label that the reader must find, such as **Start Spec**.
 - Link other pages with root-relative URLs and a trailing slash, for example `/settings-reference/#notifications`.
 - Give a heading a stable ID when other pages link to it: `## Notifications [#notifications]`. Keep the ID when you change the heading text.

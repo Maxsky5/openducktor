@@ -53,4 +53,7 @@ export const VIEWS = {
   "approve-merged": async () => (await import("./scenes/approve-merged/view")).ApproveMergedView,
   "keyboard-shortcuts": async () =>
     (await import("./scenes/keyboard-shortcuts/view")).KeyboardShortcutsView,
+  usage: async () => (await import("./scenes/usage/view")).UsageView,
+  processes: async () => (await import("./scenes/processes/view")).ProcessesView,
+  "workflow-editor": TOUR_VIEWS["workflow-editor"],
 } as const satisfies SceneViewLoaders;

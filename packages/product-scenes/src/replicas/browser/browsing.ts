@@ -34,8 +34,6 @@ export type BrowserTabSteps = {
   reset: () => void;
   /** Turns the element picker on or off. */
   annotate: (on: boolean) => void;
-  /** The pointer is a crosshair over the page while the picker is on, and an arrow elsewhere. */
-  crosshair: (on: boolean) => void;
   /** The address bar takes the focus, with the caret in it. */
   focusAddress: () => void;
   /** Types an address in the focused address bar at `at`. Returns the end time. */
@@ -66,7 +64,6 @@ export function browserTab(scene: Scene, root: HTMLElement, cursor: Pointer): Br
   const commentLabel = must(view, "[data-bw-comment-label]");
   const commentText = must(view, "[data-bw-comment-text]");
   const save = must(view, "[data-bw-save]");
-  const arrow = must(root, "[data-cursor]", SVGSVGElement);
   const tool = (name: string): HTMLElement => must(view, `[data-bw-tool="${name}"]`);
   const marker = (n: number): HTMLElement => must(view, `[data-bw-marker="${n}"]`);
   const element =
@@ -83,14 +80,9 @@ export function browserTab(scene: Scene, root: HTMLElement, cursor: Pointer): Br
     gsap.set(overlay, { left: box.x, top: box.y, width: box.width, height: box.height });
   };
 
-  const crosshair = (on: boolean): void => {
-    if (on) arrow.dataset.shape = "crosshair";
-    else delete arrow.dataset.shape;
-  };
-
   const annotate = (on: boolean): void => {
     tool("annotate").setAttribute("aria-pressed", String(on));
-    crosshair(on);
+    cursor.crosshair(on);
   };
 
   /** Shows the count of pending annotations next to the icon, which hides at zero. */
@@ -204,7 +196,6 @@ export function browserTab(scene: Scene, root: HTMLElement, cursor: Pointer): Br
     tool,
     reset,
     annotate,
-    crosshair,
     focusAddress,
     typeAddress,
     load,

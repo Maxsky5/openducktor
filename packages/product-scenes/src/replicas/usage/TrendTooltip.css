@@ -1,0 +1,89 @@
+@layer replica {
+  :where(.stage) {
+    /*
+     * The tooltip body: flex min-w-48 flex-col gap-1.5 rounded-lg border border-border
+     * bg-popover/95 px-3 py-2.5 backdrop-blur-sm text-xs text-popover-foreground shadow-lg. The
+     * chart places it at --tip-x and --tip-y in the design pixels of the chart.
+     */
+    .usage-tip {
+      --tip-x: 0;
+      --tip-y: 8;
+      position: absolute;
+      top: calc(var(--tip-y) * var(--u));
+      left: calc(var(--tip-x) * var(--u));
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      gap: calc(6 * var(--u));
+      min-width: calc(192 * var(--u));
+      padding: calc(10 * var(--u)) calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: color-mix(in oklab, var(--popover) 95%, transparent);
+      backdrop-filter: blur(calc(8 * var(--u)));
+      color: var(--popover-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      white-space: nowrap;
+      box-shadow:
+        0 calc(10 * var(--u)) calc(15 * var(--u)) calc(-3 * var(--u)) rgb(0 0 0 / 0.1),
+        0 calc(4 * var(--u)) calc(6 * var(--u)) calc(-4 * var(--u)) rgb(0 0 0 / 0.1);
+    }
+    .usage-tip-day {
+      font-weight: 500;
+    }
+    .usage-tip-so-far {
+      font-weight: 400;
+      color: var(--muted-foreground);
+    }
+    /* The total: flex justify-between gap-2 border-b pb-1.5, a text-sm font-semibold value. */
+    .usage-tip-total {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(8 * var(--u));
+      padding-bottom: calc(6 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+    }
+    .usage-tip-total-label {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      font-weight: 500;
+    }
+    /* h-0.5 w-2.5 rounded-full bg-foreground. */
+    .usage-total-swatch {
+      width: calc(10 * var(--u));
+      height: calc(2 * var(--u));
+      border-radius: 999px;
+      background: var(--foreground);
+    }
+    .usage-tip-total-value {
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .usage-tip-row {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+    }
+    .usage-tip-name {
+      flex: 1;
+      min-width: 0;
+      color: var(--muted-foreground);
+    }
+    .usage-tip-share {
+      color: var(--muted-foreground);
+      font-variant-numeric: tabular-nums;
+    }
+    /* min-w-14 text-right font-medium tabular-nums. */
+    .usage-tip-value {
+      min-width: calc(56 * var(--u));
+      text-align: right;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+    }
+  }
+}

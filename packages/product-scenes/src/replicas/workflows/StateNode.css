@@ -1,0 +1,155 @@
+@layer replica {
+  :where(.stage) {
+    /* workflow-state-box: relative flex h-[68px] w-[240px] items-center gap-3 rounded-xl border
+       border-border bg-card px-3 shadow-sm, with transition-[opacity,box-shadow,border-color]
+       duration-150 ease-out. React Flow places the box at its flow position. */
+    .wfe-node {
+      position: absolute;
+      top: 0;
+      left: 0;
+      display: flex;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      width: calc(240 * var(--u));
+      height: calc(68 * var(--u));
+      padding: 0 calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(16 * var(--u));
+      background: var(--card);
+      color: var(--card-foreground);
+      box-shadow: var(--shadow-sm);
+      translate: calc(var(--x) * var(--u)) calc(var(--y) * var(--u));
+      transition:
+        opacity 150ms ease-out,
+        box-shadow 150ms ease-out,
+        border-color 150ms ease-out;
+    }
+    /* hover:border-foreground/20 hover:shadow-md. */
+    .wfe-node[data-hover] {
+      border-color: color-mix(in oklab, var(--foreground) 20%, transparent);
+      box-shadow: var(--shadow-md);
+    }
+    /* EMPHASIS_CLASSES: the selected box takes the selection border and ring-4, a related box the
+       soft border and ring-2, and a dimmed box opacity-60. A box under a new transition takes the
+       look of the selected box. */
+    .wfe-node[data-emphasis="selected"],
+    .wfe-node[data-drop] {
+      border-color: var(--workflow-selection);
+      box-shadow:
+        0 0 0 calc(4 * var(--u)) var(--workflow-selection-ring),
+        var(--shadow-sm);
+    }
+    .wfe-node[data-emphasis="related"] {
+      border-color: var(--workflow-selection-soft);
+      box-shadow:
+        0 0 0 calc(2 * var(--u)) var(--workflow-selection-ring),
+        var(--shadow-sm);
+    }
+    .wfe-node[data-emphasis="dimmed"] {
+      opacity: 0.6;
+    }
+    /* The tone tile: size-10 rounded-lg, TONE_TILE_CLASSES with bg-<tone>-500/15 and the 600 shade,
+       or the 300 shade in the dark theme, and a size-5 icon. */
+    .wfe-node-tile {
+      display: flex;
+      flex: none;
+      align-items: center;
+      justify-content: center;
+      width: calc(40 * var(--u));
+      height: calc(40 * var(--u));
+      border-radius: calc(12 * var(--u));
+      background: var(--muted);
+      color: var(--muted-foreground);
+    }
+    .wfe-node-tile > .lucide {
+      width: calc(20 * var(--u));
+      height: calc(20 * var(--u));
+    }
+    .wfe-node-tile[data-tone="pending"] {
+      background: color-mix(in oklab, var(--violet-500) 15%, transparent);
+      color: var(--violet-600);
+    }
+    .wfe-node-tile[data-tone="info"] {
+      background: color-mix(in oklab, var(--sky-500) 15%, transparent);
+      color: var(--sky-600);
+    }
+    .wfe-node-tile[data-tone="review"] {
+      background: color-mix(in oklab, var(--indigo-500) 15%, transparent);
+      color: var(--indigo-600);
+    }
+    .wfe-node-tile[data-tone="success"] {
+      background: color-mix(in oklab, var(--emerald-500) 15%, transparent);
+      color: var(--emerald-600);
+    }
+    :where([data-theme="dark"]) & .wfe-node-tile[data-tone="pending"] {
+      color: var(--violet-300);
+    }
+    :where([data-theme="dark"]) & .wfe-node-tile[data-tone="info"] {
+      color: var(--sky-300);
+    }
+    :where([data-theme="dark"]) & .wfe-node-tile[data-tone="review"] {
+      color: var(--indigo-300);
+    }
+    :where([data-theme="dark"]) & .wfe-node-tile[data-tone="success"] {
+      color: var(--emerald-300);
+    }
+    /* The label: min-w-0 flex-1 truncate text-[15px] leading-5 font-semibold. */
+    .wfe-node-label {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      font-size: calc(15 * var(--u));
+      font-weight: 600;
+      line-height: calc(20 * var(--u));
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    /* workflow-state-source: a React Flow handle on the middle of each side, at least 12 screen
+       pixels at any zoom, with a border of 2 screen pixels. The dots show on the box under the
+       pointer, and the dot under the pointer takes the selection colour, a ring, and scale 1.35. */
+    .wfe-node-dot {
+      position: absolute;
+      width: calc(12 * var(--u) / var(--zoom));
+      height: calc(12 * var(--u) / var(--zoom));
+      border: calc(2 * var(--u) / var(--zoom)) solid var(--muted-foreground);
+      border-radius: 100%;
+      background: var(--card);
+      opacity: 0;
+      transition:
+        opacity 150ms ease,
+        scale 150ms cubic-bezier(0.22, 1, 0.36, 1),
+        background-color 150ms ease,
+        border-color 150ms ease,
+        box-shadow 150ms ease;
+    }
+    .wfe-node[data-hover] .wfe-node-dot {
+      opacity: 1;
+    }
+    .wfe-node-dot[data-active] {
+      border-color: var(--workflow-selection);
+      background: var(--workflow-selection);
+      box-shadow: 0 0 0 calc(3 * var(--u) / var(--zoom)) var(--workflow-selection-ring);
+      scale: 1.35;
+    }
+    .wfe-node-dot[data-side="top"] {
+      top: 0;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .wfe-node-dot[data-side="bottom"] {
+      bottom: 0;
+      left: 50%;
+      transform: translate(-50%, 50%);
+    }
+    .wfe-node-dot[data-side="left"] {
+      top: 50%;
+      left: 0;
+      transform: translate(-50%, -50%);
+    }
+    .wfe-node-dot[data-side="right"] {
+      top: 50%;
+      right: 0;
+      transform: translate(50%, -50%);
+    }
+  }
+}

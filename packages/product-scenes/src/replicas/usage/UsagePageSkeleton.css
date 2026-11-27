@@ -1,0 +1,80 @@
+@layer replica {
+  :where(.stage) {
+    /* The skeleton: flex flex-col gap-12, with the grid of the overview at @4xl. */
+    .usage-skeleton {
+      display: flex;
+      flex-direction: column;
+      gap: calc(48 * var(--u));
+    }
+    .usage-skeleton-overview {
+      display: grid;
+      grid-template-columns: minmax(0, calc(320 * var(--u))) minmax(0, 1fr);
+      gap: calc(32 * var(--u)) calc(48 * var(--u));
+    }
+    .usage-skeleton-side {
+      display: flex;
+      flex-direction: column;
+      gap: calc(28 * var(--u));
+    }
+    .usage-skeleton-total,
+    .usage-skeleton-row,
+    .usage-skeleton-table {
+      display: flex;
+      flex-direction: column;
+      gap: calc(8 * var(--u));
+    }
+    .usage-skeleton-rows {
+      display: flex;
+      flex-direction: column;
+      gap: calc(20 * var(--u));
+    }
+    .usage-skeleton-chart,
+    .usage-skeleton-types {
+      display: flex;
+      flex-direction: column;
+      gap: calc(12 * var(--u));
+    }
+    /* grid-cols-2 gap-x-8 gap-y-3, four columns at @xl. */
+    .usage-skeleton-type-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: calc(12 * var(--u)) calc(32 * var(--u));
+    }
+    .usage-skeleton-type {
+      display: flex;
+      flex-direction: column;
+      gap: calc(6 * var(--u));
+    }
+    .usage-skeleton-table-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    /* Skeleton: animate-pulse rounded-md bg-accent. */
+    .usage-bone {
+      display: block;
+      flex-shrink: 0;
+      border-radius: calc(10 * var(--u));
+      background: var(--accent);
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    .usage-bone-indent {
+      margin-left: calc(16 * var(--u));
+    }
+    .usage-bone-lg {
+      border-radius: calc(12 * var(--u));
+    }
+    .usage-bone-full {
+      border-radius: 999px;
+    }
+    /* A phone stage: one column under @4xl, and two columns of token types under @xl. */
+    @container stage (width <= 500px) {
+      .usage-skeleton-overview {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .usage-skeleton-type-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+  }
+}

@@ -22,7 +22,7 @@ export const links = {
 export const claim = ["Open-source mission control", "for coding agents"] as const;
 export const tagline = claim.join(" ");
 export const title = `OpenDucktor | ${tagline}`;
-export const description = `${tagline}. OpenDucktor orchestrates OpenCode, Codex, and Claude Code, from the spec to the pull request, on your computer.`;
+export const description = `${tagline}. OpenDucktor orchestrates OpenCode, Codex, Claude Code, and Antigravity, from the spec to the pull request, on your computer.`;
 const scripts = `https://raw.githubusercontent.com/${REPOSITORY}/main`;
 export const commands = {
   unix: `curl -fsSL ${scripts}/install.sh | sh`,

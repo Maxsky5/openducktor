@@ -1,14 +1,10 @@
-// The model fields of a dialog that starts a session: Runtime and model, Effort, and Speed for a
-// model that offers more than Standard. The session start dialog of StartDialog.tsx shows them
-// read-only when it reuses a session, and the New session dialog lets the visitor change them.
-// The classes come from StartDialog.css.
-import { ZapOff } from "lucide-react";
+// The Runtime and model field of the session start dialog of session-start-modal.tsx: one model
+// picker trigger that sums up the runtime, the model, the effort, and a speed above Standard. The
+// dialog locks it when it reuses a session: a model with speed levels keeps only its speed open,
+// and another model shows the trigger read-only. The classes come from StartDialog.css.
 import type { ReactElement } from "react";
-import { modelName } from "../../sample/models";
 import type { Session } from "../../sample/sessions";
-import { flag } from "../flag";
-import { Combobox } from "../ui/Combobox";
-import { RuntimeIcon } from "../ui/RuntimeIcon";
+import { ModelTrigger } from "../models/ModelTrigger";
 
 export function ModelFields({
   session,
@@ -18,31 +14,13 @@ export function ModelFields({
   readOnly?: boolean;
 }): ReactElement {
   return (
-    <div className="st-field-row">
-      <div className="st-field">
-        <b>Runtime and model</b>
-        <Combobox data-disabled={flag(readOnly)}>
-          <RuntimeIcon kind={session.runtime} />
-          <span>{modelName(session)}</span>
-        </Combobox>
-      </div>
-      <div className="st-field-pair">
-        <div className="st-field">
-          <b>Effort</b>
-          <Combobox data-disabled={flag(readOnly)}>
-            <span>{session.effort}</span>
-          </Combobox>
-        </div>
-        {session.speed && (
-          <div className="st-field st-speed-field">
-            <b>Speed</b>
-            <Combobox data-disabled={flag(readOnly)}>
-              <ZapOff className="i14" />
-              <span>Standard</span>
-            </Combobox>
-          </div>
-        )}
-      </div>
+    <div className="st-field">
+      <b>Runtime and model</b>
+      <ModelTrigger
+        variant="form"
+        disabled={readOnly && session.speed === undefined}
+        value={session}
+      />
     </div>
   );
 }

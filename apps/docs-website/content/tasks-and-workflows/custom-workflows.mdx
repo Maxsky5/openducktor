@@ -1,0 +1,111 @@
+---
+icon: Waypoints
+title: Custom workflows
+description: Make your own workflow with its board lanes, buttons, agents, and versions, and choose the repositories that use it.
+---
+
+A workflow sets the board lanes of a task and how the task moves between them. [Spec, Plan, Build](/tasks-and-workflows/spec-plan-build/) is built in. You can make your own workflow, such as a bug triage flow, and choose the repositories that use it.
+
+## The parts of a workflow [#parts]
+
+<Diagram name="workflowParts" />
+
+A state is a lane of the board. A transition moves a task from one state to another: when you select a button on the task, when an agent moves the task, or when an agent saves a document. A step names the role that does the work, the artifacts that it reads, and the artifacts that it writes.
+
+## Create a workflow [#create]
+
+<Screenshot id="workflows-library" alt="The Workflows page. Spec, Plan, Build shows Built-in, Default, and Read-only. Bug triage shows Version 1, Published. Docs update shows Draft. Below the list, Workflow roles shows Spec, Planner, Builder, and QA, and the workflows that use each role." />
+
+<Steps>
+<Step>At the bottom of the expanded sidebar, select **Workflows**, the workflow icon after the chart icon of Usage. You can also run **Go to Workflows** in the [command palette](/command-palette/).</Step>
+<Step>Select <Action>New workflow</Action>, then type a **Name**.</Step>
+<Step>Under **Start from**, select **Copy of Spec, Plan, Build**, which has the **Recommended** badge. **Blank workflow** starts with only Backlog and Done.</Step>
+<Step>Select <Action>Create</Action>. The editor opens.</Step>
+</Steps>
+
+## Edit a workflow [#edit]
+
+<AnnotatedScreenshot
+  id="workflow-editor-overview"
+  alt="The workflow editor of Bug triage, version 2, published. The left panel lists the states and the transitions. The canvas shows the states and their transitions. The right panel shows the details of the selected state, Needs repro."
+  parts={[
+    { at: "version", title: "Version", text: "The published version, or the draft. Your edits save in a draft by themselves." },
+    { at: "elements", title: "Workflow elements", text: "Every state, transition, button, role, step, and artifact. Select one to edit it." },
+    { at: "canvas", title: "Canvas", text: "Each state is a lane of the board. Drag from the dot of a state to add a transition." },
+    { at: "problems", title: "Problems", text: "What to fix before you can publish." },
+    { at: "details", title: "Details", text: "The fields of the selected element." },
+  ]}
+/>
+
+<Steps>
+<Step>To add a lane, select <Action>Add a state</Action> on the canvas, type its name, then select <Action>Create</Action>.</Step>
+<Step>To connect two states, drag from the dot of a state onto the other state. This adds a transition.</Step>
+<Step>The new transition opens in the details. Under **Triggers**, select <Action>Add a button</Action> to show a button on the task, or pick an agent under **Agents** to let the agent move the task.</Step>
+<Step>Select <Action>Publish</Action>, then <Action>Publish</Action> in the dialog.</Step>
+</Steps>
+
+<ProductDemo id="workflow-editor" />
+
+The draft becomes the next version, and new tasks use it. The bar at the bottom of the editor lists the problems of the draft. An error keeps <Action>Publish</Action> off until you fix it. A warning, such as a transition with no trigger, does not stop a publish.
+
+Under **Advanced**, a workflow also sets its Autopilot signals and automations. You turn on the rules in [Autopilot](/autopilot/#turn-on-rules).
+
+## Publish and versions [#versions]
+
+<Diagram name="workflowVersions" />
+
+A version never changes. Each task keeps the version that it started with, until you move it.
+
+<Screenshot id="workflow-publish-dialog" alt="The Publish the draft dialog. The draft becomes version 2 and is available in all repositories. Move tasks from older versions lists one selected fieldnotes task on version 1." />
+
+- When you publish, **Move tasks from older versions** lists the open tasks on older versions. The tasks that can move start selected. Clear the check box of a task to keep it on its version.
+- A task cannot move when the new version does not have its state or its issue type, or when a session runs for it with a role that the new version does not have. The list shows the reason.
+- To move tasks later, open **More commands** in the editor, then **Versions**, and select <Action>Move tasks to latest version</Action>.
+- A moved task keeps its state, artifacts, sessions, worktree, and pull request link.
+- <Action>Discard draft</Action> in **More commands** goes back to the last version. If the workflow has no published version, it deletes the workflow.
+
+## Choose where a workflow applies [#availability]
+
+<Screenshot id="workflow-availability-dialog" alt="The Availability of Bug triage dialog. All repositories is selected. The other choices are Only these and All except these." />
+
+<Steps>
+<Step>On the Workflows page, open the menu of the workflow, then select <Action>Change availability</Action>.</Step>
+<Step>Select **All repositories**, **Only these**, or **All except these**. For the last two, check the repositories.</Step>
+<Step>Select <Action>Save</Action>.</Step>
+</Steps>
+
+New tasks use the default workflow, which has the **Default** badge. To change it, select <Action>Make it the default</Action> in the menu of another workflow. That workflow needs a published version and **All repositories**.
+
+## Choose a workflow for a new task [#new-task]
+
+When more than one workflow takes the issue type, **Create task** lists them, the default first. See [Create a task](/tasks-and-workflows/#create-a-task).
+
+<Screenshot id="new-task-workflow" alt="The Workflow step of Create task for a bug. Spec, Plan, Build has the Default badge and shows Backlog, Spec, Planner, Builder, QA, You approve, and Done. Bug triage is selected and has the same steps without Spec." />
+
+## Workflow roles [#roles]
+
+A role is an agent that a workflow can start, such as the Planner. All workflows share the roles, so a change applies to every workflow that uses the role.
+
+<Steps>
+<Step>On the Workflows page, under **Workflow roles**, select <Action>New role</Action>.</Step>
+<Step>Type a **Name** and the **Instructions**.</Step>
+<Step>Under **Files**, select **Read only** or **Can edit files**.</Step>
+<Step>Select <Action>Save role</Action>. To use the role, add it under **Roles** in the editor of a workflow.</Step>
+</Steps>
+
+<Screenshot id="workflow-role-dialog" alt="The New role dialog. The Name is Reviewer, and the Role ID is reviewer. Under Files, Read only is selected, and Can edit files is the other choice." />
+
+Workflow roles are not the [custom agent roles](/settings-reference/#custom-agent-roles) of workspace sessions. To change the prompts of a workflow or a role, see [Agent prompts](/agent-prompts/).
+
+## Import and export YAML [#yaml]
+
+- To export, open the menu of a workflow and select <Action>Export as YAML</Action>. The file holds the latest version, its prompts, and the custom roles that it uses. It holds no settings, tasks, or version history. The workflow needs a published version.
+- To import, select <Action>Import</Action> on the Workflows page. Choose a file or paste the YAML text, select <Action>Check</Action>, then <Action>Import draft</Action>. The import never publishes. Read the prompts of the draft before you publish it.
+
+## Next [#next]
+
+<Cards>
+  <Card title="Spec, Plan, Build workflow" href="/tasks-and-workflows/spec-plan-build/">See the built-in workflow that you can copy.</Card>
+  <Card title="Autopilot" href="/autopilot/">Turn on the automations of a workflow.</Card>
+  <Card title="Agent prompts" href="/agent-prompts/">Change the prompts of a workflow and its roles.</Card>
+</Cards>

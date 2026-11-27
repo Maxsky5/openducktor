@@ -28,7 +28,7 @@ export const SCENES = {
   },
   palette: TOUR_SCENES.palette,
   runtimes: {
-    size: { width: 760, height: 620 },
+    size: { width: 640, height: 536 },
     timeline: async () => (await import("./scenes/runtimes/timeline")).build,
   },
   autopilot: {
@@ -52,7 +52,7 @@ export const SCENES = {
     timeline: async () => (await import("./scenes/actions/timeline")).build,
   },
   local: {
-    size: { width: 576, height: 720 },
+    size: { width: 576, height: 694 },
     timeline: async () => (await import("./scenes/local/timeline")).build,
   },
   composer: {
@@ -84,7 +84,7 @@ export const SCENES = {
     timeline: async () => (await import("./scenes/agent-browser/timeline")).build,
   },
   "new-session": {
-    size: { width: 960, height: 936 },
+    size: { width: 1100, height: 680 },
     timeline: async () => (await import("./scenes/new-session/timeline")).build,
   },
   fork: {
@@ -163,6 +163,15 @@ export const SCENES = {
     size: { width: 1040, height: 704 },
     timeline: async () => (await import("./scenes/keyboard-shortcuts/timeline")).build,
   },
+  usage: {
+    size: { width: 1440, height: 760 },
+    timeline: async () => (await import("./scenes/usage/timeline")).build,
+  },
+  processes: {
+    size: { width: 1100, height: 640 },
+    timeline: async () => (await import("./scenes/processes/timeline")).build,
+  },
+  "workflow-editor": TOUR_SCENES["workflow-editor"],
 } as const satisfies Record<string, SceneEntry | ChapterEntry>;
 
 export type SceneName = keyof typeof SCENES;
@@ -182,7 +191,11 @@ export const isChapterScene = (name: SceneName): name is ChapterSceneName =>
 export type LoopSceneName = Exclude<SceneName, ChapterSceneName>;
 
 /** The options of the scenes that take more from their host than the theme and the keys. */
-type OptionsOf = { hero: HeroOptions; palette: PaletteOptions; chat: ChatOptions };
+type OptionsOf = {
+  hero: HeroOptions;
+  palette: PaletteOptions;
+  chat: ChatOptions;
+};
 
 /** The options that a host gives to the scene `Name`. A scene without options takes none. */
 export type SceneOptions<Name extends SceneName> = Name extends keyof OptionsOf

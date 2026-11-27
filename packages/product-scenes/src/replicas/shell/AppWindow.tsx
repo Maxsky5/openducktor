@@ -9,22 +9,27 @@ import { flag } from "../flag";
 import { type KeyLabels, MAC_KEYS } from "../keys";
 import { Replica } from "../Replica";
 import type { NavData } from "./nav";
-import { Rail } from "./Rail";
-import { Sidebar } from "./Sidebar";
+import { Rail, type RailProcesses } from "./Rail";
+import { Sidebar, type SidebarPage } from "./Sidebar";
 import { SidebarCollapsed } from "./SidebarCollapsed";
 import "./AppWindow.css";
 
-/** The sidebar of the window and its session list, which also gives the badges of the rail. */
+/**
+ * The sidebar of the window and its session list, which also gives the badges of the rail, and
+ * the current page when the sidebar has a link to it.
+ */
 type Chrome =
   | {
       sidebar: "full";
       nav: NavData;
-      kanban?: boolean;
       version: string | null;
       /** The sidebar stays on a tablet stage, as a scene that starts in the sidebar needs. */
       pinned?: boolean;
+      /** The Processes button of the rail. Without it, no command runs. */
+      processes?: RailProcesses;
+      page?: SidebarPage | undefined;
     }
-  | { sidebar: "collapsed"; nav: NavData; kanban?: boolean }
+  | { sidebar: "collapsed"; nav: NavData; page?: SidebarPage | undefined }
   | { sidebar: "none" };
 
 type AppWindowProps = ComponentProps<"div"> & {
@@ -44,20 +49,19 @@ function Sidebars({ chrome, keys }: { chrome: Chrome; keys: KeyLabels }): ReactN
     case "full":
       return (
         <>
-          <Rail entries={chrome.nav.entries} hintKeys={chrome.nav.hints ? keys : undefined} />
-          <Sidebar
-            nav={chrome.nav}
-            kanban={chrome.kanban ?? false}
-            keys={keys}
-            version={chrome.version}
+          <Rail
+            entries={chrome.nav.entries}
+            hintKeys={chrome.nav.hints ? keys : undefined}
+            processes={chrome.processes}
           />
+          <Sidebar nav={chrome.nav} keys={keys} version={chrome.version} page={chrome.page} />
         </>
       );
     case "collapsed":
       return (
         <>
           <Rail entries={chrome.nav.entries} />
-          <SidebarCollapsed nav={chrome.nav} kanban={chrome.kanban ?? false} />
+          <SidebarCollapsed nav={chrome.nav} page={chrome.page} />
         </>
       );
     case "none":

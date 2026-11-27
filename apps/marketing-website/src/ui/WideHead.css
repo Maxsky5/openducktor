@@ -1,0 +1,22 @@
+@layer site {
+  /* The heading and the copy side by side, above a full-width product view. */
+  .wide-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: end;
+    gap: 32px clamp(40px, 6vw, 96px);
+    margin-bottom: clamp(40px, 5vw, 64px);
+  }
+  .wide-copy {
+    max-width: 40rem;
+    color: var(--body-ink);
+    font-size: 1.0625rem;
+    line-height: 1.6;
+    text-wrap: pretty;
+  }
+  @media (width <= 1023px) {
+    .wide-head {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}

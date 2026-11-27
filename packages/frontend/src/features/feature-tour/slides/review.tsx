@@ -16,7 +16,7 @@ import { noop, SESSIONS } from "../feature-tour-samples";
 import { type FeatureTourSlide, type TourPart, TourPiece } from "../feature-tour-stage";
 import { REVIEW_ROWS } from "../feature-tour-transcripts";
 
-// Slide 8: Human Review in the session of the Builder.
+// Slide 9: Human Review in the session of the Builder.
 
 const noopAsync = async (): Promise<void> => {};
 

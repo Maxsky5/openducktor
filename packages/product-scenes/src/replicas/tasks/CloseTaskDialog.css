@@ -145,7 +145,7 @@
       height: calc(8 * var(--u));
       border-radius: calc(10 * var(--u));
       background: var(--accent);
-      animation: ctd-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     }
     .ctd-skeleton i + i {
       width: 60%;
@@ -289,11 +289,6 @@
       .ctd-foot .ui-button {
         height: calc(44 * var(--u));
       }
-    }
-  }
-  @keyframes ctd-pulse {
-    50% {
-      opacity: 0.5;
     }
   }
 }

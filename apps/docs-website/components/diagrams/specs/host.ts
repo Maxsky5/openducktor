@@ -30,7 +30,12 @@ export const host = defineDiagram({
     host: { type: "zone", data: { title: "OpenDucktor host", Icon: Server, tone: "host" } },
     harnesses: {
       type: "item",
-      data: { title: "Harnesses", text: "OpenCode, Codex, Claude Code", Icon: Cpu, tone: "host" },
+      data: {
+        title: "Harnesses",
+        text: "OpenCode, Codex, Claude Code, Antigravity",
+        Icon: Cpu,
+        tone: "host",
+      },
     },
     terminals: { type: "item", data: { title: "Terminals", Icon: SquareTerminal, tone: "host" } },
     bridge: { type: "item", data: { title: "MCP bridge", Icon: Plug, tone: "host" } },

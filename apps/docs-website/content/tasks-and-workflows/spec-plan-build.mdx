@@ -4,7 +4,7 @@ title: Spec, Plan, Build workflow
 description: Follow a task through the built-in workflow, from the spec to your approval, with its lanes, actions, and Autopilot rules.
 ---
 
-**Spec, Plan, Build** is the built-in workflow of OpenDucktor. A task gets a spec, a plan, a build, a QA review, and then your review. For the board, the task details, and the actions that every workflow shares, see [Tasks and workflows](/tasks-and-workflows/).
+**Spec, Plan, Build** is the built-in workflow of OpenDucktor. A task gets a spec, a plan, a build, a QA review, and then your review. For the board, the task details, and the actions that every workflow shares, see [Tasks and workflows](/tasks-and-workflows/). You cannot edit this workflow. To change its steps, copy it in [Custom workflows](/tasks-and-workflows/custom-workflows/#create).
 
 ## Steps and roles [#steps]
 
@@ -157,8 +157,6 @@ Spec, Plan, Build has five [Autopilot](/autopilot/) rules. With all of them on, 
 - **When a task progresses to AI Review**: **Start QA** continues the last QA session of the task, or starts a fresh one.
 - **When a task is rejected by QA**: **Fix QA Rejection** continues the last Builder session, or starts a fresh one, to fix the findings.
 - **When a task progresses to Human Review**: **Generate Pull Request** forks the last Builder session to create or update the pull request. It needs a [Git provider](/git-and-pull-requests/#git-provider).
-
-Autopilot never starts a session in [Goal mode](/coding-sessions/#goal-mode).
 
 Only an agent sends these events: a spec save in <Status of="open" />, a plan save in <Status of="open" /> or <Status of="spec_ready" />, a finished build, and a QA verdict. <Action>Reset Implementation</Action>, a direct merge, and <Action>Request Changes</Action> start nothing. After <Action>Request Changes</Action>, the next finished build sends the AI Review or the Human Review event.
 

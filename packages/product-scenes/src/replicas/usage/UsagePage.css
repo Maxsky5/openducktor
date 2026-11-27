@@ -1,0 +1,26 @@
+@layer replica {
+  :where(.stage) {
+    /* UsagePageFrame: mx-auto flex max-w-[1200px] flex-col gap-8 px-8 py-8 on a wide page. */
+    .usage-page {
+      display: flex;
+      flex-direction: column;
+      gap: calc(32 * var(--u));
+      width: 100%;
+      max-width: calc(1200 * var(--u));
+      margin: 0 auto;
+      padding: calc(32 * var(--u));
+    }
+    /* The report sections: flex flex-col gap-12. */
+    .usage-result {
+      display: flex;
+      flex-direction: column;
+      gap: calc(48 * var(--u));
+    }
+    /* A phone stage: the px-4 py-6 of a page under @2xl. */
+    @container stage (width <= 500px) {
+      .usage-page {
+        padding: calc(24 * var(--u)) calc(16 * var(--u));
+      }
+    }
+  }
+}

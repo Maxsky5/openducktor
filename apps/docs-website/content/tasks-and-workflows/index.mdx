@@ -6,16 +6,16 @@ description: Create a task, follow it on the board, start its agents, and approv
 
 A task is one piece of work, such as a feature or a bug fix. Its workflow moves it across the lanes of the board. At each step, you or [Autopilot](/autopilot/) start an agent, and at the end you review the work.
 
-OpenDucktor has one built-in workflow, [Spec, Plan, Build](/tasks-and-workflows/spec-plan-build/), and every workspace uses it. This page shows what is the same in every workflow. The workflow page shows each lane, role, and action of Spec, Plan, Build.
+OpenDucktor has one built-in workflow, [Spec, Plan, Build](/tasks-and-workflows/spec-plan-build/). You can also make [your own workflows](/tasks-and-workflows/custom-workflows/). This page shows what is the same in every workflow.
 
 ## Create a task [#create-a-task]
 
 <Screenshot id="new-task-type" alt="The first step of the Create task dialog. The title reads Create task in fieldnotes, and the workspace name opens a menu of the open workspaces. Below are three issue types: Feature, Bug, and Task, each with a short description." />
 
 <Steps>
-  <Step>In the sidebar, select <Action>New task</Action>.</Step>
-  <Step>The title shows the current workspace. To use another open workspace, select its name.</Step>
+  <Step>In the sidebar, select <Action>New task</Action>. The title shows the current workspace. To use another open workspace, select its name.</Step>
   <Step>Select the issue type: **Feature**, **Bug**, or **Task**.</Step>
+  <Step>If the **Workflow** step shows, select the workflow of the task. It shows only when more than one workflow takes the issue type.</Step>
   <Step>Type a **Title** and a **Description**. Change the other fields if necessary.</Step>
   <Step>Select <Action>Create task</Action>. The task shows in the first lane of the board, for example <Status of="open" />.</Step>
 </Steps>
@@ -71,10 +71,7 @@ You move a task with an action, such as <Action>Approve Task</Action> or <Action
 
 Each agent has a role, such as the Builder. The role sets its tools, its access to the files, and its [system prompt](/agent-prompts/).
 
-<Steps>
-  <Step>On the card, select the main action, for example <Action>Start Builder</Action>. For another step, open the menu next to it.</Step>
-  <Step>In the dialog, check the model, then select <Action>Start session</Action>. The [session page](/coding-sessions/) opens, and the agent starts.</Step>
-</Steps>
+On the card, select the main action, for example <Action>Start Builder</Action>. For another step, open the menu next to it. See [Start a session](/coding-sessions/#start-a-session).
 
 For the Builder, the dialog also offers [Goal mode](/coding-sessions/#goal-mode): the agent works until a goal is met.
 
@@ -107,6 +104,8 @@ An agent saves a file with the `odt_set_task_artifact` tool. The transcript show
 <ProductDemo id="artifacts" />
 
 Your own edits never move the task. To edit a workflow document, open it in the **Artifacts** tab and select the pencil button. When a task closes, its other artifacts become read-only. You can still edit its workflow documents.
+
+A Mermaid diagram in a Markdown document uses the colors of the app theme. To zoom in on a diagram, select its expand button, **Open diagram preview**.
 
 ## Approve a task [#approval]
 

@@ -79,7 +79,7 @@ function AntigravityBrandIcon({ className }: RuntimeBrandIconProps): ReactElemen
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
-        <linearGradient id={gradientId} x1="0" y1="1" x2="0.4" y2="0">
+        <linearGradient id={gradientId} {...antigravity.gradientVector}>
           {antigravity.gradientStops.map((stop) => (
             <stop key={stop.offset} offset={stop.offset} stopColor={stop.color} />
           ))}

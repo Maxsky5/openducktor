@@ -68,7 +68,7 @@ function IssueTypesStage(): ReactElement {
 export const issueTypesSlide: FeatureTourSlide = {
   id: "issue-types",
   title: "Features, bugs, and tasks",
-  text: "Choose a type when you create a task. A feature runs every step of the workflow. A bug or a task can skip Spec and Planner and start at the Builder. All three types end with QA and your review.",
+  text: "Choose a type when you create a task. In the built-in workflow, a feature runs every step. A bug or a task can skip Spec and Planner and start at the Builder. All three types end with QA and your review.",
   explainer: {
     width: WIDTH,
     height: HEIGHT,

@@ -1,12 +1,9 @@
 // The agent sessions of the stories: a model of a runtime, an effort, and a context window.
 import type { ContextUse } from "../replicas/format";
-import { modelPath, type ModelRef } from "./models";
-
-/** The speed of a session, for a model that offers more than Standard. */
-type Speed = "standard" | "fast";
+import { type ModelChoice, modelPath } from "./models";
 
 /** A session and the part of its context window in use, in percent. */
-export type Session = ModelRef & { effort: string; window: number; used: number; speed?: Speed };
+export type Session = ModelChoice & { window: number; used: number };
 
 /** The signature under the last assistant message of a turn: provider/model · effort. */
 export function signature(session: Session): string {

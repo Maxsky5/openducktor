@@ -40,7 +40,7 @@ export function SessionRow({ entry }: { entry: NavEntry }): ReactElement {
             {entry.role ? <RoleIcon role={entry.role} /> : <MessagesSquare />}
           </span>
           <span className="mob-row-title">{entry.title}</span>
-          <RuntimeIcon kind={entry.runtime} />
+          {entry.runtime && <RuntimeIcon kind={entry.runtime} />}
         </span>
       </span>
     </li>

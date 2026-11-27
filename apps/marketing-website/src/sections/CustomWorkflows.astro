@@ -1,0 +1,23 @@
+---
+import Scene from "@openducktor/product-scenes/astro";
+import ProductFigure from "../ui/ProductFigure.astro";
+import WideHead from "../ui/WideHead.astro";
+---
+
+<section
+  id="custom-workflows"
+  class="section custom-workflows"
+  aria-labelledby="custom-workflows-title"
+>
+  <div class="wrap-wide">
+    <WideHead eyebrow="Custom workflows" id="custom-workflows-title">
+      <Fragment slot="title">Make the workflow fit your work.</Fragment>
+      Copy the built-in workflow, or start with Backlog and Done. On a canvas, add the columns of the
+      board, and the buttons and the agents that move a task. Publish a version, and choose the repositories
+      that use it. Each task keeps its version until you move it to a newer one.
+    </WideHead>
+    <ProductFigure caption={["Workflows", "Quick fix"]}>
+      <Scene name="workflow-editor" />
+    </ProductFigure>
+  </div>
+</section>

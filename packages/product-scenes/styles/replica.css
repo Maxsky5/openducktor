@@ -106,6 +106,10 @@
       vertical-align: text-bottom;
       animation: caret 1s steps(1) infinite;
     }
+    /* The caret stays solid while keys arrive. */
+    .replica .typed[data-keying]::after {
+      animation: none;
+    }
   }
   /*
    * Product replicas. Values copy the OpenDucktor desktop classes at 1:1 in design pixels.
@@ -131,6 +135,12 @@
   @keyframes caret {
     50% {
       opacity: 0;
+    }
+  }
+  /* animate-pulse, which the Skeleton of components/ui/skeleton.tsx uses. */
+  @keyframes pulse {
+    50% {
+      opacity: 0.5;
     }
   }
 }

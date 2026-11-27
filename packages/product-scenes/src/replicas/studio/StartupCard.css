@@ -1,0 +1,130 @@
+@layer replica {
+  :where(.stage) {
+    /* InlineStartupOwner: mb-4 flex w-full flex-col gap-2 at the top of the transcript. */
+    .isu-owner {
+      display: flex;
+      flex-direction: column;
+      gap: calc(8 * var(--u));
+      margin-bottom: calc(16 * var(--u));
+    }
+    /* InlineTraceCard: overflow-hidden rounded-xl border border-border text-foreground, with
+       bg-card/90 while it is open and bg-card/70 once a clean start folds it. */
+    .isu {
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(16 * var(--u));
+      background: color-mix(in oklab, var(--card) 90%, transparent);
+      color: var(--foreground);
+      transition:
+        background-color 200ms ease-out,
+        border-color 200ms ease-out;
+    }
+    .isu:not([data-open]) {
+      background: color-mix(in oklab, var(--card) 70%, transparent);
+    }
+    .isu-head {
+      position: relative;
+      display: flex;
+      align-items: center;
+      min-width: 0;
+    }
+    /* The toggle: flex w-full items-center gap-2 py-2.5 pl-3.5, with pr-3.5 while the session
+       starts and pr-10 next to the close button when it is ready. */
+    .isu-toggle {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+      padding: calc(10 * var(--u)) calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    .isu[data-phase="ready"] .isu-toggle {
+      padding-right: calc(40 * var(--u));
+    }
+    /* TraceIcon size-5 with a size-4 icon: a spinner in text-info-surface-foreground, or a check in
+       text-success-icon. */
+    .isu-icon {
+      display: grid;
+      flex: none;
+      place-items: center;
+      width: calc(20 * var(--u));
+      height: calc(20 * var(--u));
+    }
+    .isu-icon > svg {
+      grid-area: 1 / 1;
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+    }
+    .isu-icon > .isu-running {
+      color: var(--info-surface-foreground);
+    }
+    .isu-icon > .isu-ready {
+      color: var(--success-icon);
+    }
+    /* The title: min-w-0 flex-1 truncate text-[13px] font-medium. */
+    .isu-title {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* StartupStepCounter: text-xs text-muted-foreground tabular-nums. */
+    .isu-count {
+      flex: none;
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      font-variant-numeric: tabular-nums;
+    }
+    /* StartupExpandChevron: a size-5 box with a size-3.5 ChevronDown, which turns over while the
+       card is open. */
+    .isu-chevron {
+      display: grid;
+      flex: none;
+      place-items: center;
+      width: calc(20 * var(--u));
+      height: calc(20 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .isu-chevron > svg {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      transition: transform 150ms;
+    }
+    .isu[data-open] .isu-chevron > svg {
+      transform: rotate(180deg);
+    }
+    /* The close button: a ghost icon button, absolute right-2.5 size-6, with a size-3.5 X. */
+    .isu-dismiss {
+      position: absolute;
+      top: 50%;
+      right: calc(10 * var(--u));
+      display: grid;
+      place-items: center;
+      width: calc(24 * var(--u));
+      height: calc(24 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: var(--muted-foreground);
+      transform: translateY(-50%);
+    }
+    .isu-dismiss > svg {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    .isu:not([data-phase="ready"]) .isu-ready,
+    .isu[data-phase="ready"] .isu-running {
+      display: none;
+    }
+    /* The steps: border-t border-border/60 px-3 py-2.5, only while the card is open. */
+    .isu-body {
+      padding: calc(10 * var(--u)) calc(12 * var(--u));
+      border-top: calc(1 * var(--u)) solid color-mix(in oklab, var(--border) 60%, transparent);
+    }
+    .isu:not([data-open]) .isu-body {
+      display: none;
+    }
+  }
+}

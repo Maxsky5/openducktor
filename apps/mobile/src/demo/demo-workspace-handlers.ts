@@ -12,6 +12,7 @@ import {
 } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { CATALOGS } from "@openducktor/product-scenes/sample/models";
+import { DEMO_RUNTIME_KINDS, isDemoRuntimeKind } from "./demo-models";
 import { runtimeIdOf } from "./demo-sessions";
 import { DEMO_DONE_VISIBLE_DAYS } from "./demo-tasks";
 import {
@@ -21,12 +22,6 @@ import {
   findWorkspaceByRepo,
 } from "./demo-world";
 
-/** The demo runtimes. Runtimes outside the demo story stay off in its settings. */
-const RUNTIME_KINDS = ["opencode", "codex", "claude"] as const;
-type DemoRuntimeKind = (typeof RUNTIME_KINDS)[number];
-
-const isDemoRuntimeKind = (runtimeKind: RuntimeKind): runtimeKind is DemoRuntimeKind =>
-  RUNTIME_KINDS.some((kind) => kind === runtimeKind);
 const RUNTIME_DESCRIPTORS = {
   opencode: OPENCODE_RUNTIME_DESCRIPTOR,
   codex: CODEX_RUNTIME_DESCRIPTOR,
@@ -125,7 +120,7 @@ export const createDemoWorkspaceHandlers = (world: DemoWorld) => {
     settingsSnapshotSchema.parse({
       theme: "system",
       agentRuntimes: Object.fromEntries(
-        RUNTIME_KINDS.map((kind) => [
+        DEMO_RUNTIME_KINDS.map((kind) => [
           kind,
           { enabled: true, executablePath: `/usr/local/bin/${kind}` },
         ]),
@@ -162,7 +157,7 @@ export const createDemoWorkspaceHandlers = (world: DemoWorld) => {
     runtimeDefinitionsList: async () => Object.values(RUNTIME_DESCRIPTORS_BY_KIND),
     runtimeStatus: async () => ({
       hostInstanceId: DEMO_HOST_INSTANCE_ID,
-      runtimes: RUNTIME_KINDS.map(runtimeStatus),
+      runtimes: DEMO_RUNTIME_KINDS.map(runtimeStatus),
       mcpBridge: {
         state: "ready",
         hostUrl: "http://127.0.0.1:14328",

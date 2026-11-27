@@ -9,6 +9,11 @@ import { CustomEase } from "gsap/CustomEase";
 const APP_CURVES = {
   /** --motion-ease-out of motion.css in packages/frontend/src/components/ui. */
   "desktop-ease-out": "0.22,1,0.36,1",
+  /**
+   * The glide of the composer of a new session to its dock in workspace-session-draft-view.tsx,
+   * and the entries of inline-session-startup.css in packages/frontend/src/features/session-startup.
+   */
+  "desktop-glide": "0.23,1,0.32,1",
   /** `motion.easeOut` of apps/mobile/src/theme/tokens.ts. */
   "mobile-ease-out": "0.23,1,0.32,1",
   /** GLIDE of transcript-chat-list.tsx in apps/mobile/src/features/session/transcript. */

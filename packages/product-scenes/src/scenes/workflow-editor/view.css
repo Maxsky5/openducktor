@@ -1,0 +1,66 @@
+@layer views {
+  :where(.stage) {
+    /*
+     * The workflow editor in a window of 1440 by 780 with the collapsed sidebar. The editor is then
+     * 1318 wide, over the 1100 of WIDE_EDITOR_MIN_WIDTH, so it shows its three panels. The canvas
+     * opens on the fit of the first frame, and the markup shows the fit of the last frame, for the
+     * layout of the stage.
+     */
+    .wfes-window {
+      --start-x: var(--wide-start-x);
+      --start-y: var(--wide-start-y);
+      --start-zoom: var(--wide-start-zoom);
+      --fit-x: var(--wide-fit-x);
+      --fit-y: var(--wide-fit-y);
+      --fit-zoom: var(--wide-fit-zoom);
+      height: calc(780 * var(--u));
+    }
+    /*
+     * The tour of the app frames the scene in 2954 by 1396 (TOUR_FRAME_ASPECT of
+     * feature-tour-geometry.ts) and draws the window, so the window has no sidebar and no window
+     * controls. The editor takes the whole frame, 1300 design pixels wide, so its text stays large
+     * and the toast clears the workflow. The canvas fits at the readable zoom of the editor, so a
+     * tall workflow shows from its top, with the "More below" control.
+     */
+    :where([data-framed]) & .wfes-window {
+      --design-width: 1300;
+      --start-x: var(--framed-start-x);
+      --start-y: var(--framed-start-y);
+      --start-zoom: var(--framed-start-zoom);
+      --fit-x: var(--framed-fit-x);
+      --fit-y: var(--framed-fit-y);
+      --fit-zoom: var(--framed-fit-zoom);
+    }
+    :where([data-framed]) & .wfes-window .traffic {
+      display: none;
+    }
+    /*
+     * A phone stage shows the narrow editor in a window 470 design pixels wide, where the workflow
+     * fits at the readable zoom. A tall workflow shows from its top, with the "More below"
+     * control, and the last fit keeps clear of the toast over the bottom of the canvas.
+     */
+    @container stage (width <= 500px) {
+      .wfes-window {
+        --design-width: 470;
+        --start-x: var(--phone-start-x);
+        --start-y: var(--phone-start-y);
+        --start-zoom: var(--phone-start-zoom);
+        --fit-x: var(--phone-fit-x);
+        --fit-y: var(--phone-fit-y);
+        --fit-zoom: var(--phone-fit-zoom);
+        height: calc(900 * var(--u));
+      }
+      /* The editor page is on the sidebar colour, so the title bar of the window takes it. */
+      .wfes-window > .app-body {
+        background: var(--sidebar);
+      }
+      /* The toasts of a phone: over the canvas, clear of the readiness line and at the right of
+         the zoom controls, which are 28 wide 15 from the left. */
+      .wfes-window .toast-stack {
+        right: calc(16 * var(--u));
+        bottom: calc((37 + 16) * var(--u));
+        width: calc(100% - (15 + 28 + 12 + 16) * var(--u));
+      }
+    }
+  }
+}

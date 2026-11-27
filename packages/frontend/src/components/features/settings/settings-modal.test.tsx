@@ -242,7 +242,7 @@ test("Show tour hands the focus from Settings to the tour and back to the opener
       },
       { timeout: 500 },
     );
-    expect(within(tour).getByText("1 of 8")).toBeDefined();
+    expect(within(tour).getByText("1 of 9")).toBeDefined();
     expect(tour.contains(document.activeElement)).toBe(true);
     expect(triggerFocus).not.toHaveBeenCalled();
 

@@ -1,0 +1,39 @@
+@layer product {
+  :where(.stage) {
+    /* ToggleTabs: inline-flex h-9 w-fit items-center rounded-lg bg-muted p-1 text-muted-foreground. */
+    .ui-toggle-tabs {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      height: calc(36 * var(--u));
+      padding: calc(4 * var(--u));
+      border-radius: calc(12 * var(--u));
+      background: var(--muted);
+      color: var(--muted-foreground);
+    }
+    /*
+     * ToggleTabsItem: inline-flex h-full items-center justify-center whitespace-nowrap rounded-md
+     * border border-transparent px-3 text-[13px] font-medium. The checked item takes
+     * border-border bg-card text-foreground shadow-sm.
+     */
+    .ui-toggle-tabs-item {
+      display: inline-flex;
+      flex-shrink: 0;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      padding: 0 calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid transparent;
+      border-radius: calc(10 * var(--u));
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .ui-toggle-tabs-item[data-checked] {
+      border-color: var(--border);
+      background: var(--card);
+      color: var(--foreground);
+      box-shadow: var(--shadow-sm);
+    }
+  }
+}

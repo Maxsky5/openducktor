@@ -1,0 +1,9 @@
+@layer replica {
+  :where(.stage) {
+    /* The page shows the words of its metric, and changes them at once, as the app renders. */
+    [data-metric="tokens"] [data-metric-text="cost"],
+    [data-metric="cost"] [data-metric-text="tokens"] {
+      display: none;
+    }
+  }
+}

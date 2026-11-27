@@ -106,7 +106,7 @@ const openStep = async (tour: TourQueries, name: string): Promise<void> => {
 
 const openLastSlide = async (): Promise<TourQueries> => {
   const tour = await openTour();
-  await openStep(tour, "Slide 8: You stay in control");
+  await openStep(tour, "Slide 9: You stay in control");
   return tour;
 };
 
@@ -140,19 +140,19 @@ describe("FeatureTourDialog", () => {
     const view = renderTour();
     try {
       const tour = await openTour();
-      expect(tour.getByText("1 of 8")).toBeDefined();
+      expect(tour.getByText("1 of 9")).toBeDefined();
       expect(tour.getByRole("heading", { name: "Welcome to OpenDucktor" })).toBeDefined();
       expect(tour.getByRole("button", { name: "Back" }).hasAttribute("disabled")).toBe(true);
 
       await clickNext(tour, 1);
-      expect(tour.getByText("2 of 8")).toBeDefined();
+      expect(tour.getByText("2 of 9")).toBeDefined();
       expect(tour.getByRole("heading", { name: "Workspaces hold your work" })).toBeDefined();
       const back = tour.getByRole("button", { name: "Back" });
       back.focus();
       await act(async () => {
         fireEvent.click(back);
       });
-      expect(tour.getByText("1 of 8")).toBeDefined();
+      expect(tour.getByText("1 of 9")).toBeDefined();
       // Back is disabled on slide 1, so its focus moves to Next.
       expect(document.activeElement).toBe(tour.getByRole("button", { name: "Next" }));
     } finally {
@@ -164,9 +164,9 @@ describe("FeatureTourDialog", () => {
     const view = renderTour();
     try {
       const tour = await openTour();
-      await openStep(tour, "Slide 7: Control it from your phone");
+      await openStep(tour, "Slide 8: Control it from your phone");
       await clickNext(tour, 1);
-      expect(tour.getByText("8 of 8")).toBeDefined();
+      expect(tour.getByText("9 of 9")).toBeDefined();
       expect(tour.getByRole("heading", { name: "You stay in control" })).toBeDefined();
       expect(tour.queryByRole("button", { name: "Next" })).toBeNull();
       const done = tour.getByRole("button", { name: "Done" });
@@ -193,17 +193,17 @@ describe("FeatureTourDialog", () => {
         });
       };
       await press("ArrowLeft");
-      expect(tour.getByText("1 of 8")).toBeDefined();
+      expect(tour.getByText("1 of 9")).toBeDefined();
       await press("ArrowRight");
       await press("ArrowRight");
-      expect(tour.getByText("3 of 8")).toBeDefined();
+      expect(tour.getByText("3 of 9")).toBeDefined();
       await press("ArrowLeft");
-      expect(tour.getByText("2 of 8")).toBeDefined();
-      await openStep(tour, "Slide 7: Control it from your phone");
+      expect(tour.getByText("2 of 9")).toBeDefined();
+      await openStep(tour, "Slide 8: Control it from your phone");
       await press("ArrowRight");
-      expect(tour.getByText("8 of 8")).toBeDefined();
+      expect(tour.getByText("9 of 9")).toBeDefined();
       await press("ArrowRight");
-      expect(tour.getByText("8 of 8")).toBeDefined();
+      expect(tour.getByText("9 of 9")).toBeDefined();
     } finally {
       view.unmount();
     }
@@ -216,14 +216,14 @@ describe("FeatureTourDialog", () => {
       const step = (name: string) => tour.getByRole("button", { name });
       expect(step("Slide 1: Welcome to OpenDucktor").getAttribute("aria-current")).toBe("step");
       await act(async () => {
-        fireEvent.click(step("Slide 5: Two kinds of agent sessions"));
+        fireEvent.click(step("Slide 6: Two kinds of agent sessions"));
       });
-      expect(tour.getByText("5 of 8")).toBeDefined();
-      expect(step("Slide 5: Two kinds of agent sessions").getAttribute("aria-current")).toBe(
+      expect(tour.getByText("6 of 9")).toBeDefined();
+      expect(step("Slide 6: Two kinds of agent sessions").getAttribute("aria-current")).toBe(
         "step",
       );
       await act(async () => {
-        fireEvent.click(step("Slide 8: You stay in control"));
+        fireEvent.click(step("Slide 9: You stay in control"));
       });
       expect(tour.getByRole("button", { name: "Create task" })).toBeDefined();
     } finally {
@@ -235,8 +235,8 @@ describe("FeatureTourDialog", () => {
     "Slide 2: Workspaces hold your work",
     "Slide 3: Features, bugs, and tasks",
     "Slide 4: You decide when the next role starts",
-    "Slide 7: Control it from your phone",
-    "Slide 8: You stay in control",
+    "Slide 8: Control it from your phone",
+    "Slide 9: You stay in control",
   ])(
     "each pin of the picture on %s has the number of its line in the list of parts",
     async (name) => {
@@ -289,7 +289,7 @@ describe("FeatureTourDialog", () => {
         if (!element) throw new Error("The hero scene has not loaded yet.");
         return element;
       });
-      await openStep(tour, "Slide 5: Two kinds of agent sessions");
+      await openStep(tour, "Slide 6: Two kinds of agent sessions");
       expect(document.querySelector('.t-tour-picture [data-scene="hero"]')).toBe(scene);
       await openStep(tour, "Slide 1: Welcome to OpenDucktor");
       expect(visiblePicture().querySelector('[data-scene="hero"]')).toBe(scene);
@@ -303,14 +303,14 @@ describe("FeatureTourDialog", () => {
     try {
       const tour = await openTour();
       await openStep(tour, "Slide 2: Workspaces hold your work");
-      expect(tour.getByText("2 of 8")).toBeDefined();
+      expect(tour.getByText("2 of 9")).toBeDefined();
       await act(async () => {
         fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
       });
       await waitForClosedTour();
 
       const reopened = await openTour();
-      expect(reopened.getByText("1 of 8")).toBeDefined();
+      expect(reopened.getByText("1 of 9")).toBeDefined();
     } finally {
       view.unmount();
     }

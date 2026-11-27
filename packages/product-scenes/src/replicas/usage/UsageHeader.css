@@ -1,0 +1,110 @@
+@layer replica {
+  :where(.stage) {
+    /* The header: flex flex-wrap items-start justify-between gap-x-6. */
+    .usage-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: calc(12 * var(--u)) calc(24 * var(--u));
+    }
+    .usage-heading {
+      display: flex;
+      flex-direction: column;
+      gap: calc(4 * var(--u));
+      min-width: 0;
+    }
+    .usage-title-row {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+    }
+    /* text-xl font-semibold tracking-tight. */
+    .usage-title {
+      font-size: calc(20 * var(--u));
+      line-height: calc(28 * var(--u));
+      font-weight: 600;
+      letter-spacing: -0.025em;
+    }
+    .usage-title-separator {
+      font-size: calc(16 * var(--u));
+      line-height: calc(24 * var(--u));
+      color: color-mix(in oklab, var(--muted-foreground) 60%, transparent);
+    }
+    /* The runtime menu: a ghost sm button with -ml-2 gap-1.5 px-2 text-base font-semibold. */
+    .usage-runtime-filter.ui-button {
+      gap: calc(6 * var(--u));
+      margin-left: calc(-8 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      font-size: calc(16 * var(--u));
+      line-height: calc(24 * var(--u));
+      font-weight: 600;
+      color: var(--foreground);
+    }
+    .usage-muted-icon {
+      flex-shrink: 0;
+      color: var(--muted-foreground);
+    }
+    /* text-xs text-muted-foreground, each part on one line. */
+    .usage-result-line {
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .usage-result-line > span {
+      white-space: nowrap;
+    }
+    .usage-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      max-width: 100%;
+    }
+    /* RefreshButton: size-9 rounded-lg bg-muted text-muted-foreground. */
+    .usage-refresh.ui-button {
+      border-radius: calc(12 * var(--u));
+      background: var(--muted);
+      color: var(--muted-foreground);
+    }
+    /* While a read runs, the button is disabled, and its icon spins. The page has no result. */
+    [data-fetching] .usage-refresh.ui-button {
+      opacity: 0.5;
+    }
+    [data-fetching] .usage-refresh .lucide {
+      animation: spin 1s linear infinite;
+    }
+    [data-fetching] .usage-result-line {
+      display: none;
+    }
+    .usage-range-short {
+      display: none;
+    }
+    /*
+     * A phone stage: the narrow page under its @lg and @2xl widths. The controls go under the title,
+     * and the range tabs take a full row of equal cells with the short labels: grid w-full
+     * grid-cols-[repeat(4,minmax(2.5rem,1fr))_auto] gap-0.5, px-1 except Custom.
+     */
+    @container stage (width <= 500px) {
+      .usage-range-tabs.ui-toggle-tabs {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(calc(40 * var(--u)), 1fr)) auto;
+        gap: calc(2 * var(--u));
+        width: 100%;
+      }
+      .usage-range-tabs .ui-toggle-tabs-item {
+        padding: 0 calc(4 * var(--u));
+      }
+      .usage-range-tabs .ui-toggle-tabs-item[data-range="custom"] {
+        padding: 0 calc(12 * var(--u));
+      }
+      .usage-range-short {
+        display: inline;
+      }
+      .usage-range-label {
+        display: none;
+      }
+    }
+  }
+}

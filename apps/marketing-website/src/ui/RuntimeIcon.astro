@@ -2,12 +2,28 @@
 import { RUNTIME_ICON_GEOMETRY } from "@openducktor/theme/runtime-icons";
 import "./RuntimeIcon.css";
 interface Props {
-  kind: "codex" | "opencode" | "claude";
+  kind: "antigravity" | "codex" | "opencode" | "claude";
 }
 const { kind } = Astro.props;
-const { codex, claude, opencode } = RUNTIME_ICON_GEOMETRY;
+const { antigravity, codex, claude, opencode } = RUNTIME_ICON_GEOMETRY;
+// The page shows the Antigravity mark once, so its gradient can have a fixed id.
+const gradientId = "antigravity-gradient";
 ---
 
+{
+  kind === "antigravity" && (
+    <svg class="runtime-logo antigravity-logo" viewBox={antigravity.viewBox} aria-hidden="true">
+      <defs>
+        <linearGradient id={gradientId} {...antigravity.gradientVector}>
+          {antigravity.gradientStops.map((stop) => (
+            <stop offset={stop.offset} stop-color={stop.color} />
+          ))}
+        </linearGradient>
+      </defs>
+      <path d={antigravity.path} fill={`url(#${gradientId})`} />
+    </svg>
+  )
+}
 {
   kind === "codex" && (
     <svg class="runtime-logo codex-logo" viewBox={codex.viewBox} aria-hidden="true">

@@ -3,6 +3,11 @@ export const RUNTIME_ICON_GEOMETRY = {
   antigravity: {
     viewBox: "0 0 100 100",
     path: "M85.284 88.03c4.849 3.636 12.122 1.212 5.455-5.455C70.739 63.182 74.981 9.848 50.133 9.848S29.527 63.182 9.527 82.575c-7.273 7.273.606 9.091 5.454 5.455C33.77 75.303 32.557 52.879 50.133 52.879S66.497 75.303 85.284 88.03Z",
+    /**
+     * The direction of the brand gradient, in the bounding box of the path: from the bottom left
+     * corner up and to the right.
+     */
+    gradientVector: { x1: "0", y1: "1", x2: "0.4", y2: "0" },
     /** The brand gradient runs from the blue base to the green, yellow, and red top. */
     gradientStops: [
       { offset: "0", color: "#3186FF" },

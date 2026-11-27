@@ -8,6 +8,7 @@ import type { Session } from "../../sample/sessions";
 import { classes } from "../classes";
 import type { KeyLabels } from "../keys";
 import { AppWindow } from "../shell/AppWindow";
+import type { SidebarPage } from "../shell/Sidebar";
 import type { NavData } from "../shell/nav";
 import { Pointer } from "../shell/Pointer";
 import { Keystrokes } from "../ui/Keystrokes";
@@ -16,8 +17,8 @@ import "./SessionWindow.css";
 
 type SessionWindowProps = {
   nav: NavData;
-  /** The sidebar shows the Kanban entry. */
-  kanban?: boolean;
+  /** The current page of the sidebar, such as the Kanban board. */
+  page?: SidebarPage;
   keys: KeyLabels;
   session: Session;
   /** The pane that a phone stage shows in the static frame. */
@@ -33,7 +34,7 @@ type SessionWindowProps = {
 
 export function SessionWindow({
   nav,
-  kanban = false,
+  page,
   keys,
   session,
   pane,
@@ -44,7 +45,13 @@ export function SessionWindow({
 }: SessionWindowProps): ReactElement {
   return (
     <AppWindow
-      chrome={{ sidebar: "full", nav, kanban, version: null, pinned: true }}
+      chrome={{
+        sidebar: "full",
+        nav,
+        page,
+        version: null,
+        pinned: true,
+      }}
       keys={keys}
       className={classes("session-window", className)}
       data-runtime={session.runtime}

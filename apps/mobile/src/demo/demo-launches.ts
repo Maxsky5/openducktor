@@ -16,6 +16,7 @@ import { toAgentUserMessageParts } from "@openducktor/frontend-core/sessions/sta
 import type { HostClient } from "@openducktor/host-client";
 import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import type { DemoCheckout } from "./demo-repository";
+import { DEMO_MODELS, isDemoRuntimeKind } from "./demo-models";
 import { type DemoRoleOutcomes, kickoffText, promptRun, roleRun } from "./demo-runs";
 import type { DemoSession, DemoSessionEngine } from "./demo-sessions";
 import { runtimeIdOf } from "./demo-sessions";
@@ -361,11 +362,10 @@ export const createDemoLaunches = ({
   ): AgentSessionModelSelection => {
     const fallback = workspace.repoConfig.defaultModel;
     if (fallback && fallback.runtimeKind === runtimeKind) return fallback;
-    return runtimeKind === "claude"
-      ? { runtimeKind, providerId: "claude", modelId: "claude-lyra-3" }
-      : runtimeKind === "codex"
-        ? { runtimeKind, providerId: "openai", modelId: "gpt-6-astra" }
-        : { runtimeKind, providerId: "vega", modelId: "vega-2-pro" };
+    if (!isDemoRuntimeKind(runtimeKind)) throw new Error(`The demo has no ${runtimeKind} runtime.`);
+    // A new session starts at the default effort of its model, so it takes no variant.
+    const { variant: _variant, ...model } = DEMO_MODELS[runtimeKind];
+    return model;
   };
 
   const preparedChat = (

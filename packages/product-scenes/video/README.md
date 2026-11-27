@@ -20,6 +20,7 @@ bun run render:video -- --scene hero --format 16:9 --theme dark --fps 60
 | `--scene` | A loop scene of `src/registry.ts`, such as `hero` or `goal-mode` | `--scene` or `--film` |
 | `--film` | A film of `src/films/registry.ts`, such as `release-1-2-2`. A film has its own frame size, so the command does not accept `--format` | `--scene` or `--film` |
 | `--format` | `16:9` (1920 × 1080), `1:1` (1080 × 1080), `9:16` (1080 × 1920) | `16:9` |
+| `--stage` | For a scene: the stage width in CSS pixels, such as `390` for the phone layout | The design width of the scene |
 | `--theme` | `light`, `dark` | `light` |
 | `--keys` | `mac` (⌘ and ⌥), `pc` (Ctrl and Alt) | `mac` |
 | `--fps` | A whole number from 1 to 120 | `60` |

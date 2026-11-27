@@ -261,7 +261,7 @@ describe("ApplicationOverlays", () => {
         },
         { timeout: 2_000 },
       );
-      expect(tour.getByText("1 of 8")).toBeDefined();
+      expect(tour.getByText("1 of 9")).toBeDefined();
       expect(document.activeElement).toBe(tour.getByRole("button", { name: "Next" }));
     } finally {
       overlays.unmount();

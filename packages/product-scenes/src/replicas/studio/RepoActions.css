@@ -9,7 +9,8 @@
       color: var(--foreground);
     }
     .ra-run,
-    .ra-more {
+    .ra-more,
+    .ra-add {
       display: grid;
       place-items: center;
       height: calc(28 * var(--u));
@@ -20,7 +21,19 @@
       width: calc(28 * var(--u));
       border-radius: calc(10 * var(--u)) 0 0 calc(10 * var(--u));
     }
-    .ra-run .lucide {
+    .ra-add {
+      display: flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: var(--foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .ra-run .lucide,
+    .ra-add .lucide {
       width: calc(14 * var(--u));
       height: calc(14 * var(--u));
     }

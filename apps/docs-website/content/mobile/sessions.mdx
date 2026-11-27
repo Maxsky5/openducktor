@@ -105,19 +105,32 @@ A running session that waits on [background tasks](/coding-sessions/#background-
 
 ## Start a session [#new-session]
 
-Tap <Action>+</Action> in the tab bar, then <Action>New Session</Action>. A new session is a [workspace session](/workspace-sessions/): it belongs to no task.
+Tap <Action>+</Action> in the tab bar, then <Action>New Session</Action>. A new session is a [workspace session](/workspace-sessions/): it belongs to no task. The host creates it when you send the first message.
 
-<Screenshot id="phone-new-session" alt="The New session sheet with Workspace, Name, Runtime and model, Effort, Custom role, and Work location with Current checkout selected, and the Cancel and Create session buttons.">
+<Screenshot id="phone-new-session" alt="The New Session screen with Start a new session and Send your first message in fieldnotes. Above the composer, chips show New worktree, the target branch main, and No role. The composer holds the message “Find why search is slow in large notebooks.” and the model Haiku 5.5 with low effort.">
 
 <Steps>
-<Step>Choose the **Workspace**. Type a **Name**, or leave it empty for a generated title.</Step>
-<Step>Choose the **Runtime and model** and the **Effort**. A **Custom role** gives the agent the instructions of that role. You add custom roles on the desktop.</Step>
-<Step>Choose the **Work location**: **Current checkout**, **New worktree**, or **Existing worktree**. For **Existing worktree**, choose the **Worktree**. For **New worktree**, choose **Existing branch** or **New branch**, then type the **Worktree name**. **New branch** also takes an optional **Branch name**.</Step>
-<Step>Choose the **Target branch**. **Changes** compares the session with it.</Step>
-<Step>Tap <Action>Create session</Action>.</Step>
+<Step>To change a choice, tap its chip above the composer: the work location, the target branch, or the custom role. With more than one workspace, a chip also shows the workspace. You add custom roles on the desktop.</Step>
+<Step>In the **Work location** sheet, choose **Current checkout**, **New worktree**, or **Existing worktree**. For **Existing worktree**, choose the **Worktree**.</Step>
+<Step>To change the model, tap it under the message box. The **Message Options** sheet sets the model and the **Effort**. When the model and the harness offer them, it also sets the **Speed** and the **Runtime profile**.</Step>
+<Step>Type your first message and send it. The startup steps show above it, then the session opens.</Step>
 </Steps>
 
 </Screenshot>
+
+For **New worktree**, choose a mode in the sheet:
+
+- **New branch**: the **Worktree name** and the **Branch name** are optional. Without a branch name, the branch name comes from your first message. Without a worktree name, OpenDucktor gives the folder a unique name.
+- **Existing branch**: choose the branch. When you choose it, an empty **Worktree name** takes the branch name, with a hyphen in place of each slash or other special character. The name cannot be empty.
+
+After you send the message:
+
+- To leave while the session starts, tap <Action>Continue in background</Action>. Sessions shows the session under **Running**.
+- If the start fails, the card shows the reason and the actions that you can take. See [Session start failed](/troubleshooting/#session-failed-to-start).
+
+A draft that you changed but did not send stays in Sessions on this phone with the **Draft** badge. A draft that you did not change closes when you leave it. See [Drafts](/workspace-sessions/#drafts).
+
+To remove a draft, swipe its row to the left and tap <Action>Discard</Action>. You can also open it and tap the trash icon. If you changed the draft, confirm.
 
 ## Fork, rename, and archive [#manage]
 

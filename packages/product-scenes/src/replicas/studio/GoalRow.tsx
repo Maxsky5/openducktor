@@ -103,9 +103,8 @@ export function GoalRow({
   hidden = false,
 }: GoalRowProps): ReactElement {
   return (
-    <section
+    <div
       className="gr"
-      aria-label="Goal"
       data-goal-row=""
       data-status={status}
       data-tone={GOAL_STATUS_TONES[status]}
@@ -135,6 +134,6 @@ export function GoalRow({
           ))}
         </span>
       </div>
-    </section>
+    </div>
   );
 }

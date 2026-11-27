@@ -13,6 +13,7 @@ import { CHAT_TITLES } from "@openducktor/product-scenes/sample/chats";
 import { TASKS, type TaskKey } from "@openducktor/product-scenes/sample/tasks";
 import { taskId as storyTaskId, WORKSPACES } from "@openducktor/product-scenes/sample/workspace";
 import { specPlanBuildWorkflow } from "@openducktor/workflows";
+import { DEMO_MODELS } from "../demo-models";
 import { createDemoRepository, type DemoFile } from "../demo-repository";
 import {
   planMarkdown,
@@ -98,11 +99,7 @@ const actionsConfig = () => {
   return { actions: { items, defaultActionId: "web" }, output };
 };
 
-const MODELS = {
-  vega: { runtimeKind: "opencode", providerId: "vega", modelId: "vega-2-pro", variant: "high" },
-  lyra: { runtimeKind: "claude", providerId: "claude", modelId: "claude-lyra-3", variant: "high" },
-  astra: { runtimeKind: "codex", providerId: "openai", modelId: "gpt-6-astra", variant: "medium" },
-} satisfies Record<"vega" | "lyra" | "astra", AgentSessionModelSelection>;
+const MODELS = { vega: DEMO_MODELS.opencode, lyra: DEMO_MODELS.claude, astra: DEMO_MODELS.codex };
 
 const runtimeOf = (model: AgentSessionModelSelection): RuntimeKind =>
   model.runtimeKind ?? "opencode";

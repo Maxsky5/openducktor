@@ -1,0 +1,154 @@
+@layer replica {
+  :where(.stage) {
+    .usage-highlights {
+      display: flex;
+      flex-direction: column;
+      gap: calc(12 * var(--u));
+    }
+    /* grid gap-px overflow-hidden rounded-xl border bg-border, four columns at @4xl. */
+    .usage-tiles {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: calc(1 * var(--u));
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(16 * var(--u));
+      background: var(--border);
+    }
+    /* HighlightTile: flex min-w-0 flex-col gap-3 bg-card p-5. */
+    .usage-tile {
+      display: flex;
+      flex-direction: column;
+      gap: calc(12 * var(--u));
+      min-width: 0;
+      padding: calc(20 * var(--u));
+      background: var(--card);
+    }
+    .usage-tile-label {
+      display: flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      min-width: 0;
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      font-weight: 500;
+      color: var(--muted-foreground);
+    }
+    /* text-3xl leading-none font-semibold tracking-tight tabular-nums. */
+    .usage-tile-value {
+      font-size: calc(30 * var(--u));
+      line-height: 1;
+      font-weight: 600;
+      letter-spacing: -0.025em;
+      font-variant-numeric: tabular-nums;
+    }
+    .usage-tile-chart {
+      display: flex;
+      align-items: flex-end;
+      height: calc(28 * var(--u));
+    }
+    .usage-tile-detail {
+      overflow: hidden;
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      color: var(--muted-foreground);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    /* Meter: h-1.5 w-full rounded-full bg-muted, filled with bg-foreground/80 from the left. */
+    .usage-meter {
+      width: 100%;
+      height: calc(6 * var(--u));
+      overflow: hidden;
+      border-radius: 999px;
+      background: var(--muted);
+    }
+    .usage-meter-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: color-mix(in oklab, var(--foreground) 80%, transparent);
+      transform-origin: left;
+    }
+    /* PeriodColumns: one column for each day with rounded-t-[2px], the busiest in full ink. A day
+       with a value keeps 3 pixels, and an empty day 2. The page shows the heights of its metric. */
+    .usage-columns {
+      display: flex;
+      align-items: flex-end;
+      gap: calc(1 * var(--u));
+      width: 100%;
+      height: 100%;
+    }
+    .usage-columns > span {
+      flex: 1;
+      min-width: calc(1 * var(--u));
+      height: max(calc(3 * var(--u)), var(--bar-tokens));
+      border-radius: calc(2 * var(--u)) calc(2 * var(--u)) 0 0;
+      background: color-mix(in oklab, var(--muted-foreground) 25%, transparent);
+    }
+    [data-metric="cost"] .usage-columns > span {
+      height: max(calc(3 * var(--u)), var(--bar-cost));
+    }
+    [data-metric="tokens"] .usage-columns > span[data-empty-tokens],
+    [data-metric="cost"] .usage-columns > span[data-empty-cost] {
+      height: calc(2 * var(--u));
+    }
+    [data-metric="tokens"] .usage-columns > span[data-busiest-tokens],
+    [data-metric="cost"] .usage-columns > span[data-busiest-cost] {
+      background: var(--foreground);
+    }
+    /* ActivityStrip: one cell for each day, dark when it had activity. */
+    .usage-strip {
+      display: flex;
+      align-self: center;
+      gap: calc(1 * var(--u));
+      width: 100%;
+      height: calc(8 * var(--u));
+    }
+    .usage-strip > span {
+      flex: 1;
+      min-width: calc(1 * var(--u));
+      background: var(--muted);
+    }
+    .usage-strip > span[data-on] {
+      background: color-mix(in oklab, var(--foreground) 80%, transparent);
+    }
+    .usage-strip > span:first-child {
+      border-radius: 999px 0 0 999px;
+    }
+    .usage-strip > span:last-child {
+      border-radius: 0 999px 999px 0;
+    }
+    /* SessionMix: the sessions of each runtime in their series colors. */
+    .usage-mix {
+      display: flex;
+      align-self: center;
+      gap: calc(2 * var(--u));
+      width: 100%;
+      height: calc(6 * var(--u));
+      overflow: hidden;
+      border-radius: 999px;
+      background: var(--muted);
+    }
+    .usage-mix > span {
+      min-width: calc(4 * var(--u));
+      height: 100%;
+      background: var(--series);
+    }
+    .usage-mix > span:first-child {
+      border-radius: 999px 0 0 999px;
+    }
+    .usage-mix > span:last-child {
+      border-radius: 0 999px 999px 0;
+    }
+    /* A phone stage: two columns of tiles under @4xl, and the p-4 of a tile under @2xl. */
+    @container stage (width <= 500px) {
+      .usage-tiles {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .usage-tile {
+        padding: calc(16 * var(--u));
+      }
+    }
+  }
+}

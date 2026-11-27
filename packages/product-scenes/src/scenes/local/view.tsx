@@ -1,5 +1,5 @@
 // The Diagnostics sheet with the fieldnotes workspace selected. The markup holds the last frame:
-// the host runs its three runtimes, and every check passed.
+// the host runs its four runtimes, and every check passed.
 import { FolderGit2 } from "lucide-react";
 import type { ReactElement } from "react";
 import { SceneFrame, type SceneViewProps } from "../../frame/SceneFrame";
@@ -16,7 +16,7 @@ export function LocalView(props: SceneViewProps): ReactElement {
     <SceneFrame
       {...props}
       name="local"
-      alt="The Diagnostics panel. The OpenDucktor host starts OpenCode, Codex, and Claude Code, one shared runtime of each kind for all workspaces. The checks find PATH and Git, and the OpenDucktor MCP bridge is ready. The fieldnotes workspace has its worktree folder, and its SQLite task store is ready. Everything is working."
+      alt="The Diagnostics panel. The OpenDucktor host starts OpenCode, Codex, Claude Code, and Antigravity, one shared runtime of each kind for all workspaces. The checks find PATH and Git, and the OpenDucktor MCP bridge is ready. The fieldnotes workspace has its worktree folder, and its task store in the host database is ready. The overview says that everything is working: 4 runtimes are ready, and the workspace checks passed."
     >
       <DiagnosticsSheet overview={HEALTHY}>
         <DiagGroup title="Host" description="Shared by all workspaces">

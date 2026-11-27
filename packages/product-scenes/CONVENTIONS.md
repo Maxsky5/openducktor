@@ -51,6 +51,7 @@ Build these parts from their replicas. Do not copy their markup, their styles, o
 | The keys that the visitor holds or presses | `keystrokes` of `SessionWindow`, which shows `Keystrokes` of `replicas/ui`, or `KeyHud` of `replicas/shell` over the stage of a website scene. In the timeline, `heldKeys` or `keyPresses` of `replicas/ui/held-keys.ts`. The displays are not app UI, and a `captioned` scene hides them |
 | The position hints of the session rows and the workspace tiles | `hints` of `NavData`, and `positionHints` of `replicas/shell/position-hints.ts` in the timeline |
 | The Settings dialog over a window | `SettingsDialog` in `replicas/settings` with one pane for each section in `panes`, `RepositoriesPane` for the Repositories section, and `settingsDialog` of `replicas/settings/settings-dialog.ts` in the timeline |
+| The model picker of a composer, a start dialog, or the settings | `ModelTrigger`, `ModelPicker`, and `EffortTrack` in `replicas/models`, with the sample catalogs of `sample/models.ts`, and `modelPicker` of `replicas/models/model-picker.ts` in the timeline. The composer, `ModelFields`, and `RoleDefault` show the trigger |
 
 ## Add a scene
 
@@ -78,7 +79,8 @@ Build these parts from their replicas. Do not copy their markup, their styles, o
 - In the browser, `PageScene` plays as a scene of the website: in its play zone, with the pause control of the page, and with the reduced motion setting. It loads GSAP, its player, and its timeline when the view is one screen height or less from the screen. With reduced motion, a loop scene loads nothing and keeps its static frame, and a chapter player loads for its tabs. The unmount stops it and removes its listeners.
 - When the timeline of a `PageScene` does not load, the static frame stays, the `failure` node of the host shows under it, and the error goes to the error handler of the page. A later mount loads the timeline again.
 - To show its own captions next to a scene, a host sets `captioned` on the view. The scene then hides the step list of the documentation and the display of the held keys, and keeps its scale. The host shows the held keys in its captions, as the `KeyCast` of a film does.
-- To put a scene in a frame of the host, set `framed` on the React `Scene`. The scene then fills its container, and it shows no window border and no pointer. Do not style the internals of a scene from the host.
+- A feature tile of the website sizes a scene from its height or its minimum height, and stretches it to the end of its row (`apps/marketing-website/src/ui/FeatureTile.css`).
+- To put a scene in a frame of the host, set `framed` on the React `Scene`. The scene then fills its container, and it shows no window border and no pointer. A scene whose story depends on the clicks of the visitor, such as `workflow-editor`, keeps its pointer with `data-keep-pointer` on its root. Do not style the internals of a scene from the host.
 
 ## Films
 

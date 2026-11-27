@@ -72,7 +72,7 @@ export function HeroView({
       stock={<HeroStock />}
     >
       <AppWindow
-        chrome={{ sidebar: "full", nav: { ...HERO_NAV, omitted }, kanban: true, version }}
+        chrome={{ sidebar: "full", nav: { ...HERO_NAV, omitted }, page: "kanban", version }}
         keys={frame.keys}
         className="hero-window"
         style={designWidthStyle(designWidth)}

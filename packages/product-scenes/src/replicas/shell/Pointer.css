@@ -21,7 +21,7 @@
     }
     /* The system crosshair of the element picker, centered on the tip of the arrow: thin dark
        lines with a white edge, open in the middle. */
-    .cursor .cursor-cross {
+    .cursor :is(.cursor-cross, .cursor-beam) {
       display: none;
       fill: none;
       stroke-linecap: square;
@@ -34,10 +34,11 @@
       stroke: #0f172a;
       stroke-width: 1.2;
     }
-    .cursor[data-shape="crosshair"] .cursor-arrow {
+    .cursor[data-shape] .cursor-arrow {
       display: none;
     }
-    .cursor[data-shape="crosshair"] .cursor-cross {
+    .cursor[data-shape="crosshair"] .cursor-cross,
+    .cursor[data-shape="text"] .cursor-beam {
       display: inline;
     }
     .click-ring {

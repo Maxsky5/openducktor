@@ -1,0 +1,97 @@
+@layer replica {
+  :where(.stage) {
+    /* The React Flow pane on --workflow-canvas, with the dots of Background gap 20 in
+       --xy-background-pattern-dots-color. The dots move and scale with the viewport. */
+    .wfe-canvas {
+      --vx: var(--fit-x);
+      --vy: var(--fit-y);
+      --zoom: var(--fit-zoom);
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      background-color: var(--workflow-canvas);
+      background-image: radial-gradient(
+        circle,
+        var(--workflow-dots) calc(0.7 * var(--u)),
+        transparent calc(1.1 * var(--u))
+      );
+      background-size: calc(20 * var(--zoom) * var(--u)) calc(20 * var(--zoom) * var(--u));
+      /* 50% places the middle of a tile at the middle of the pane, so half a tile is added. */
+      background-position: calc(50% + (var(--vx) + 10 * var(--zoom)) * var(--u))
+        calc(var(--vy) * var(--u));
+    }
+    /* react-flow__viewport: the flow origin at the pan from the middle of the pane, scaled by the
+       zoom. */
+    .wfe-flow {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translate(calc(var(--vx) * var(--u)), calc(var(--vy) * var(--u)))
+        scale(var(--zoom));
+      transform-origin: 0 0;
+    }
+    /* The toolbar Panel at the top left with !m-3 and gap-2. Its buttons are outline sm buttons
+       with gap-1.5, bg-sidebar, and shadow-xs. */
+    .wfe-toolbar {
+      position: absolute;
+      top: calc(12 * var(--u));
+      left: calc(12 * var(--u));
+      z-index: 5;
+      display: flex;
+      gap: calc(8 * var(--u));
+    }
+    .wfe-tool.ui-button {
+      gap: calc(6 * var(--u));
+      background: var(--sidebar);
+      box-shadow: var(--shadow-xs);
+    }
+    /* OutlineToggle: only the narrow editor of a phone stage shows it. */
+    .wfe-elements.ui-button {
+      display: none;
+    }
+    /* The Controls of React Flow at the bottom left, 15px from the edges, with the border and the
+       radius of workflow-canvas.css. Each button is 26px with padding 4px and a bottom border, and
+       its icon is 12px, or 14px for a Lucide icon. */
+    .wfe-controls {
+      position: absolute;
+      bottom: calc(15 * var(--u));
+      left: calc(15 * var(--u));
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(8 * var(--u));
+    }
+    .wfe-controls > span {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: calc(26 * var(--u));
+      height: calc(26 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+      background: var(--sidebar);
+      color: var(--foreground);
+    }
+    /* workflow-more-below: the "More below" control in the selection colour. */
+    .wfe-controls > .wfe-more-below {
+      color: var(--workflow-selection);
+    }
+    .wfe-controls svg:not(.lucide) {
+      width: calc(12 * var(--u));
+      max-height: calc(12 * var(--u));
+      fill: currentColor;
+    }
+    .wfe-controls .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    /* The narrow editor of a phone stage shows the Elements toggle in the toolbar. */
+    @container stage (width <= 500px) {
+      .wfe-elements.ui-button {
+        display: inline-flex;
+      }
+    }
+  }
+}

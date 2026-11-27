@@ -1,8 +1,9 @@
 // The page of the video renderer. It renders one loop scene or one film from its query, and mounts
 // its timeline, which stays paused. A scene scales to fit the video frame. The renderer then shows
 // each frame with `window.__sceneVideo.seek`. Query: `scene` with `width` and `height`, or `film`;
-// `theme` (light or dark, default light), `keys` (mac or pc, default mac), and `version` (default
-// the version of the repository) are optional. With `preview`, the page plays in real time.
+// `theme` (light or dark, default light), `keys` (mac or pc, default mac), `version` (default
+// the version of the repository), and `stage` (the stage width in CSS pixels, default the design
+// width of the scene) are optional. With `preview`, the page plays in real time.
 import "../styles/index.css";
 import "./page.css";
 import { createElement } from "react";
@@ -101,6 +102,9 @@ function optionsOf(version: string): OptionsByScene {
     gitlab: {},
     "approve-merged": {},
     "keyboard-shortcuts": {},
+    processes: {},
+    usage: {},
+    "workflow-editor": {},
   };
 }
 
@@ -158,7 +162,9 @@ async function startScene(): Promise<Mounted> {
   const height = pixels("height");
   const theme = choice("theme", THEMES, "light");
   const options = optionsOf(param("version", rootPackage.version))[name];
-  const design = SCENES[name].size;
+  // A narrower stage, such as `stage=390`, shows the phone layout of a scene in a preview.
+  const stage = query.has("stage") ? pixels("stage") : undefined;
+  const design = stage ? { width: stage, height: height - 2 * MARGIN * height } : SCENES[name].size;
   const margin = Math.round(MARGIN * Math.min(width, height));
   const scale = Math.min(
     (width - 2 * margin) / design.width,

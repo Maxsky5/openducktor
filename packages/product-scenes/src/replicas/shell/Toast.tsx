@@ -34,13 +34,18 @@ function SuccessIcon(): ReactElement {
   );
 }
 
-/** The toast of feedback.show("success"): the icon, the title, and the description. */
+/**
+ * The toast of feedback.show("success") or toast.success: the icon, the title, the description,
+ * and the action button of a toast that has one.
+ */
 export function SuccessToast({
   title,
   description,
+  action,
 }: {
   title: string;
   description: string;
+  action?: string;
 }): ReactElement {
   return (
     <div className="toast" data-kind="success">
@@ -54,6 +59,7 @@ export function SuccessToast({
         <strong>{title}</strong>
         <p>{description}</p>
       </div>
+      {action === undefined ? null : <span className="toast-action">{action}</span>}
     </div>
   );
 }

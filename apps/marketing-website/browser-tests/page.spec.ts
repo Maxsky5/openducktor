@@ -55,7 +55,15 @@ test("the header links go to their sections below the sticky header", async ({
     .locator(".site-nav a")
     .evaluateAll((items) => items.map((item) => item.getAttribute("href") ?? ""));
   // On the home page, the links stay in the page. The 404 test covers the links of another page.
-  expect(hrefs).toEqual(["#workflow", "#palette", "#features", "#local", "#install", "#faq"]);
+  expect(hrefs).toEqual([
+    "#workflow",
+    "#palette",
+    "#features",
+    "#oversight",
+    "#local",
+    "#install",
+    "#faq",
+  ]);
   for (const href of hrefs) await expect(page.locator(href)).toHaveCount(1);
   test.skip(!testInfo.project.name.startsWith("desktop"), "The phone header has no section links.");
   for (const [name, heading] of [
@@ -229,7 +237,7 @@ test("the local section names the files on disk, and the closing repeats the ins
 }) => {
   const local = page.locator("#local");
   await expect(local.locator(".icon-list li")).toHaveCount(4);
-  await expect(local.locator(".icon-list")).toContainText("~/.openducktor/task-stores");
+  await expect(local.locator(".icon-list")).toContainText("~/.openducktor/database.sqlite");
   await expect(local.locator(".icon-list")).toContainText("~/.openducktor/worktrees");
   await expect(local.getByRole("link", { name: "GitHub", exact: true })).toHaveAttribute(
     "href",

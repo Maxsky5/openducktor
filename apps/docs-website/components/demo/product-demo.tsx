@@ -11,7 +11,8 @@ const CAPTIONS = {
   runtimes: "Choose a model of another harness for a role.",
   autopilot: "Autopilot starts the next agent. You answer questions and approve the task.",
   chat: "A workspace session creates the missing tasks, then starts a Builder in the background.",
-  "new-session": "Start a session in a new worktree, then send the first message to the agent.",
+  "new-session":
+    "Choose a new worktree, then send the first message. The naming model names the branch and the session.",
   fork: "Fork a session from an earlier reply into a new worktree, then send another follow-up.",
   "import-session":
     "Import a Claude Code conversation of the repository, then continue it in OpenDucktor.",
@@ -53,6 +54,11 @@ const CAPTIONS = {
     "The task branch is merged, so the card shows Merged. Select Close Task, then confirm. The task moves to Done.",
   "keyboard-shortcuts":
     "Hold Command to see the number of each session, and press a number to open its session. Then record new keys for Fork from message in Settings, and save them.",
+  "workflow-editor":
+    "Add the state Test, connect Fixing to it, give the transition a button, then publish version 2.",
+  usage: "Open Usage from the sidebar, point at the busiest day, then switch from Tokens to Cost.",
+  processes:
+    "Open Processes from the rail, stop the test watcher, detach the list, then open the board: the window stays.",
 } as const satisfies { [Name in PageSceneProps["name"]]?: string };
 
 type DemoScene = keyof typeof CAPTIONS;

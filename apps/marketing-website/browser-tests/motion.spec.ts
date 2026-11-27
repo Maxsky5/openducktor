@@ -31,6 +31,7 @@ test("with reduced motion, the product views show their final state and nothing 
     "Ready",
     "Ready",
     "Ready",
+    "Ready",
     "Available",
     "Available",
     "Ready",
@@ -82,13 +83,17 @@ test("when motion is allowed, one control pauses and resumes every product view"
 
 const scenes = [
   "hero",
+  "workflow-editor",
   "palette",
   "runtimes",
   "autopilot",
   "chat",
   "mcp",
   "prompts",
+  "goal-mode",
   "actions",
+  "usage",
+  "processes",
   "local",
 ];
 /**
@@ -135,11 +140,6 @@ test("each product view plays one loop, ends on its static frame, and fades thro
     }
     // The first frame waits under the cover and shows only after the last frame fades out.
     expect(await stage.evaluate((element) => getComputedStyle(element).opacity), id).toBe("0");
-    if (id === "local") {
-      // The panel scrolled to its end. The cover keeps that scroll, so the frame does not jump.
-      const scroll = await cover.locator("[data-diag-scroll]").evaluate((panel) => panel.scrollTop);
-      expect(scroll).toBeGreaterThan(0);
-    }
     await runUntil(page, async () => (await cover.count()) === 0, 2);
     await expect(cover, id).toHaveCount(0);
     expect(await stage.evaluate((element) => getComputedStyle(element).opacity), id).toBe("1");

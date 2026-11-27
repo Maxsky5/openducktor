@@ -1,0 +1,147 @@
+@layer replica {
+  :where(.stage) {
+    /* The edge layer of React Flow at the flow origin. One SVG unit is one flow unit, and the
+       paths paint outside the box. */
+    .wfe-lines {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: calc(100 * var(--u));
+      height: calc(100 * var(--u));
+      overflow: visible;
+      pointer-events: none;
+    }
+    /* The arrowhead: fill and stroke in the line colour, stroke-width 1. */
+    .wfe-arrowhead > polyline {
+      fill: var(--workflow-edge-stroke);
+      stroke: var(--workflow-edge-stroke);
+      stroke-width: 1;
+    }
+    #wfe-arrow-selected > polyline {
+      fill: var(--workflow-selection);
+      stroke: var(--workflow-selection);
+    }
+    /* BaseEdge: --xy-edge-stroke in --xy-edge-stroke-width 1.5. */
+    .wfe-line {
+      fill: none;
+      stroke: var(--workflow-edge-stroke);
+      stroke-width: 1.5;
+      transition: opacity 150ms ease-out;
+    }
+    /* workflow-canvas.css: a line without a trigger is dotted, the selected line takes the
+       selection colour in 2.5, a related line the soft selection colour, and a dimmed line
+       opacity 0.35. */
+    .wfe-line[data-untriggered] {
+      stroke-dasharray: 2 5;
+      stroke-linecap: round;
+    }
+    .wfe-line[data-emphasis="selected"] {
+      stroke: var(--workflow-selection);
+      stroke-width: 2.5;
+    }
+    .wfe-line[data-emphasis="related"] {
+      stroke: var(--workflow-selection-soft);
+    }
+    .wfe-line[data-emphasis="dimmed"] {
+      opacity: 0.35;
+    }
+    /* The line of a new transition: --xy-connectionline-stroke in width 2. */
+    .wfe-connection {
+      display: none;
+      fill: none;
+      stroke: var(--workflow-selection);
+      stroke-width: 2;
+    }
+    .wfe-connection[data-dragging] {
+      display: inline;
+    }
+    /* EdgeLabel: absolute flex items-center justify-center gap-1.5 rounded-full border
+       border-border bg-card px-3 text-[13px] leading-none font-medium whitespace-nowrap
+       text-card-foreground shadow-xs, in the box of the route, 26 high. */
+    .wfe-label {
+      position: absolute;
+      top: 0;
+      left: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: calc(6 * var(--u));
+      width: calc(var(--lw) * var(--u));
+      height: calc(26 * var(--u));
+      padding: 0 calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: 999px;
+      background: var(--card);
+      color: var(--card-foreground);
+      box-shadow: var(--shadow-xs);
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      line-height: 1;
+      white-space: nowrap;
+      translate: calc(var(--lx) * var(--u)) calc(var(--ly) * var(--u));
+      transition:
+        opacity 150ms ease-out,
+        border-color 150ms ease-out;
+    }
+    .wfe-label > .lucide {
+      flex: none;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    .wfe-label-text {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    /* A triggered line shows the icon of its board button: MousePointerClick in the amber of
+       KIND_ICON_CLASSES. */
+    .wfe-label-button.lucide {
+      color: var(--amber-500);
+    }
+    :where([data-theme="dark"]) & .wfe-label-button.lucide {
+      color: var(--amber-400);
+    }
+    /* A line without a trigger: border-dashed font-normal text-muted-foreground, a dashed circle,
+       and the warning marker. */
+    .wfe-label[data-untriggered] {
+      border-style: dashed;
+      color: var(--muted-foreground);
+      font-weight: 400;
+    }
+    .wfe-label-marker.lucide {
+      color: var(--warning-muted);
+    }
+    .wfe-label:not([data-untriggered]) :is(.wfe-label-dashed, .wfe-label-marker),
+    .wfe-label[data-untriggered] .wfe-label-button {
+      display: none;
+    }
+    /* LABEL_CLASSES: the selected label takes the selection border and ring-2, a related label the
+       soft border, and a dimmed label opacity-60. */
+    .wfe-label[data-emphasis="selected"] {
+      border-color: var(--workflow-selection);
+      box-shadow:
+        0 0 0 calc(2 * var(--u)) var(--workflow-selection-ring),
+        var(--shadow-xs);
+    }
+    .wfe-label[data-emphasis="related"] {
+      border-color: var(--workflow-selection-soft);
+    }
+    .wfe-label[data-emphasis="dimmed"] {
+      opacity: 0.6;
+    }
+    /* workflow-edge-grip: a 14px circle with a 2px selection border on bg-sidebar and a 3px ring,
+       centered on the end of the line. */
+    .wfe-grip {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      border: calc(2 * var(--u)) solid var(--workflow-selection);
+      border-radius: 999px;
+      background: var(--sidebar);
+      box-shadow: 0 0 0 calc(3 * var(--u)) var(--workflow-selection-ring);
+      translate: calc(var(--x) * var(--u) - 50%) calc(var(--y) * var(--u) - 50%);
+    }
+  }
+}

@@ -30,6 +30,16 @@
     .nc-item > svg {
       flex: none;
     }
+    /* ShortcutHint of shortcut-controls.tsx: ml-auto pl-3 font-mono text-xs opacity-75. */
+    .nc-hint {
+      flex: none;
+      margin-left: auto;
+      padding-left: calc(12 * var(--u));
+      font-family: var(--mono);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      opacity: 0.75;
+    }
     .nc-item[data-hover] {
       background: color-mix(in oklab, var(--accent) 60%, transparent);
     }

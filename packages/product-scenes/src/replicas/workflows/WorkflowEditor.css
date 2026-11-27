@@ -1,0 +1,69 @@
+@layer replica {
+  :where(.stage) {
+    /* workflow-editor.css: the canvas a step below the panels, and the selection colour of the
+       canvas, the outline, and the line labels. workflow-canvas.css: the line colour and the dots
+       of the grid. */
+    .wfe {
+      --workflow-canvas: color-mix(in oklab, var(--muted) 70%, var(--sidebar));
+      --workflow-selection: var(--primary);
+      --workflow-selection-soft: color-mix(in oklab, var(--primary) 50%, white);
+      --workflow-selection-ring: color-mix(in oklab, var(--primary) 20%, transparent);
+      --workflow-edge-stroke: var(--muted-foreground);
+      --workflow-dots: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+      background: var(--sidebar);
+      color: var(--foreground);
+    }
+    :where([data-theme="dark"]) & .wfe {
+      --workflow-canvas: var(--background);
+      --workflow-selection: color-mix(in oklab, var(--primary) 60%, white);
+      --workflow-selection-soft: color-mix(in oklab, var(--primary) 55%, var(--muted-foreground));
+      --workflow-selection-ring: color-mix(in oklab, var(--primary) 40%, transparent);
+    }
+    /* EditorPanels: the element list at 272px, the canvas, and the details at 400px. */
+    .wfe-panels {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+    .wfe-outline-panel {
+      flex: 0 0 calc(272 * var(--u));
+      min-width: 0;
+      background: var(--sidebar);
+    }
+    .wfe-center {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .wfe-details {
+      flex: 0 0 calc(400 * var(--u));
+      min-width: 0;
+      background: var(--sidebar);
+    }
+    /* A phone stage shows the narrow editor of workflow-editor.tsx: no element list, and the
+       details of the selection under the canvas. details.ts reads the column direction. */
+    @container stage (width <= 500px) {
+      .wfe-panels {
+        flex-direction: column;
+      }
+      .wfe-panels > :is(.wfe-outline-panel, .ui-handle) {
+        display: none;
+      }
+      .wfe-center {
+        flex: 1;
+        min-height: 0;
+      }
+      .wfe-details {
+        flex: 0 0 calc(280 * var(--u));
+        min-height: 0;
+        overflow: hidden;
+        border-top: calc(1 * var(--u)) solid var(--border);
+      }
+    }
+  }
+}

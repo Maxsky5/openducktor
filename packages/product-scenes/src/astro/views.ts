@@ -7,13 +7,17 @@ import type { SceneViews } from "../frame/SceneFrame";
 import { ActionsView } from "../scenes/actions/view";
 import { AutopilotView } from "../scenes/autopilot/view";
 import { ChatView } from "../scenes/chat/view";
+import { GoalModeView } from "../scenes/goal-mode/view";
 import { HeroView } from "../scenes/hero/view";
 import { LocalView } from "../scenes/local/view";
 import { McpView } from "../scenes/mcp/view";
 import { PaletteView } from "../scenes/palette/view";
+import { ProcessesView } from "../scenes/processes/view";
 import { PromptsView } from "../scenes/prompts/view";
 import { RuntimesView } from "../scenes/runtimes/view";
+import { UsageView } from "../scenes/usage/view";
 import { WorkflowView } from "../scenes/workflow/view";
+import { WorkflowEditorView } from "../scenes/workflow-editor/view";
 
 export const ASTRO_VIEWS = {
   hero: HeroView,
@@ -22,10 +26,14 @@ export const ASTRO_VIEWS = {
   autopilot: AutopilotView,
   runtimes: RuntimesView,
   chat: ChatView,
+  "goal-mode": GoalModeView,
   mcp: McpView,
   prompts: PromptsView,
   actions: ActionsView,
   local: LocalView,
+  usage: UsageView,
+  processes: ProcessesView,
+  "workflow-editor": WorkflowEditorView,
 } as const satisfies Partial<SceneViews>;
 
 export type SiteSceneName = keyof typeof ASTRO_VIEWS;

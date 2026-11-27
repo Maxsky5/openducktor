@@ -23,6 +23,11 @@ const runtimes = [
     name: "Claude Code",
     text: "OpenDucktor uses your Claude Code installation and its sign-in. Set the permission mode, the Bash sandbox, and the Allow, Ask, and Deny rules.",
   },
+  {
+    kind: "antigravity" as const,
+    name: "Antigravity",
+    text: "Turn on the Google Antigravity CLI in Settings. Choose its session mode for each role: Default, Accept edits, Auto, or Bypass permissions.",
+  },
 ];
 ---
 
@@ -32,8 +37,9 @@ const runtimes = [
       <SectionHead eyebrow="Runtimes" id="runtimes-title">
         <Fragment slot="title">Use the coding agent that you already have.</Fragment>
         <p>
-          OpenDucktor includes no model. It starts OpenCode, Codex, or Claude Code on your computer.
-          In each repository, you choose a runtime and a model for each role.
+          OpenDucktor includes no model. It starts OpenCode, Codex, Claude Code, or Antigravity on
+          your computer. In each repository, you choose a runtime, a model, and an effort for each
+          role.
         </p>
       </SectionHead>
       <IconList>

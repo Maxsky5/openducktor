@@ -920,7 +920,7 @@ describe("AppShell", () => {
     expect(mainFrames).not.toContain("");
     expect(screen.queryByRole("heading", { name: "Open your first workspace" })).toBeNull();
     const tour = await screen.findByRole("dialog");
-    expect(within(tour).getByText("1 of 8")).toBeDefined();
+    expect(within(tour).getByText("1 of 9")).toBeDefined();
     expect(within(tour).getByRole("heading", { name: "Welcome to OpenDucktor" })).toBeDefined();
     // This flow renders the app shell and several onboarding stages.
   }, 2_500);

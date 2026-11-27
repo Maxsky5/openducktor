@@ -53,9 +53,12 @@
     flex-direction: column;
     min-width: 0;
   }
-  /* The content of a scene never sets its height: the minimum height and the tile do. */
+  /*
+   * The content of a scene never sets its height: the height or the minimum height of the scene
+   * does, and the tile stretches the scene to the end of its row.
+   */
   .feature-visual .replica {
-    flex: 1;
+    flex: 1 0 auto;
     contain: size;
   }
   /* A full-width tile puts the copy in two columns, so the scene starts higher on the screen. */

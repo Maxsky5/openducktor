@@ -15,7 +15,6 @@ import { ForkView } from "../scenes/fork/view";
 import { GitConflictView } from "../scenes/git-conflict/view";
 import { GitlabView } from "../scenes/gitlab/view";
 import { GoalCommandView } from "../scenes/goal-command/view";
-import { GoalModeView } from "../scenes/goal-mode/view";
 import { ImportSessionView } from "../scenes/import-session/view";
 import { KeyboardShortcutsView } from "../scenes/keyboard-shortcuts/view";
 import { MobileApproveView } from "../scenes/mobile-approve/view";
@@ -55,7 +54,6 @@ export const PAGE_VIEWS = {
   "mobile-start-builder": MobileStartBuilderView,
   "mobile-approve": MobileApproveView,
   "mobile-pull-request": MobilePullRequestView,
-  "goal-mode": GoalModeView,
   "goal-command": GoalCommandView,
   artifacts: ArtifactsView,
   gitlab: GitlabView,

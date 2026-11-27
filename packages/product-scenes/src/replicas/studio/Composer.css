@@ -86,6 +86,31 @@
     .st-box[data-activity="waiting"] .st-editor .when-ready {
       display: none;
     }
+    /* While a new session starts, the composer is read-only: the attach button and the model
+       trigger dim. */
+    .st-attach,
+    .st-box .mt {
+      transition: opacity 150ms;
+    }
+    .st-box[data-starting] :is(.st-attach, .mt) {
+      opacity: 0.5;
+    }
+    /* While a new session starts, the read-only reason of the draft is the placeholder. */
+    .st-editor .when-starting,
+    .st-box[data-starting] .st-editor .when-ready {
+      display: none;
+    }
+    .st-box[data-starting] .st-editor .when-starting {
+      position: absolute;
+      top: calc(10 * var(--u));
+      right: calc(12 * var(--u));
+      left: calc(12 * var(--u));
+      display: block;
+      overflow: hidden;
+      color: var(--muted-foreground);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .st-box[data-activity="waiting"] .st-editor .when-waiting {
       display: inline;
       color: var(--muted-foreground);
@@ -134,49 +159,6 @@
       border-radius: calc(12 * var(--u));
       color: var(--muted-foreground);
     }
-    .st-chip {
-      position: relative;
-      display: inline-flex;
-      align-items: center;
-      gap: calc(8 * var(--u));
-      height: calc(28 * var(--u));
-      padding: 0 calc(8 * var(--u));
-      border-radius: calc(12 * var(--u));
-      color: var(--muted-foreground);
-      font-size: calc(12 * var(--u));
-      white-space: nowrap;
-    }
-    .st-chip .runtime-logo {
-      width: calc(16 * var(--u));
-      height: calc(16 * var(--u));
-    }
-    /* The Combobox value of the effort keeps 8 pixels on its right, so it sits 16 pixels from
-       ChevronsUpDown. The label of the model picker has no padding. */
-    .st-chip:is(.effort, .agent) > span {
-      padding-right: calc(8 * var(--u));
-    }
-    .st-chip > .lucide:last-child {
-      color: var(--muted-foreground);
-    }
-    /* SpeedSelect: a 28 pixel ghost icon button. A level above Standard shows its Zap color. */
-    .st-speed {
-      display: grid;
-      place-items: center;
-      width: calc(28 * var(--u));
-      height: calc(28 * var(--u));
-      border-radius: calc(12 * var(--u));
-      color: var(--muted-foreground);
-    }
-    .st-speed[data-speed="fast"] {
-      color: var(--speed-fast);
-    }
-    .st-chip:is(.effort, .agent) {
-      padding-left: calc(28 * var(--u));
-    }
-    .st-chip:is(.effort, .agent) > .lucide:first-child {
-      position: absolute;
-      left: calc(8 * var(--u));
-    }
     /* The context ring and the token count, as in agent-context-usage-indicator.tsx. The ring
        arc has a path length of 100, so --used is the usage percent. */
     .st-context {
@@ -222,6 +204,15 @@
       color: var(--primary-foreground);
       opacity: 0.5;
       transition: opacity 200ms;
+    }
+    /* AgentChatComposerSendControl shows LoaderCircle while it prepares the first message of a
+       new session. */
+    .st-send-busy,
+    .st-box[data-starting] .st-send-icon {
+      display: none;
+    }
+    .st-box[data-starting] .st-send-busy {
+      display: block;
     }
     .st-send[data-ready],
     .st-send:has(.st-send-badge:not(:empty)) {
@@ -283,8 +274,7 @@
     }
     /* A phone stage keeps the main controls of the composer and a narrower margin. */
     @container stage (width <= 500px) {
-      .st-attach,
-      .st-chip.effort {
+      .st-attach {
         display: none;
       }
       .st-composer {

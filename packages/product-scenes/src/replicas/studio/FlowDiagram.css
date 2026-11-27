@@ -1,45 +1,70 @@
 @layer replica {
   :where(.stage) {
-    /* The diagram box: my-3 rounded-md border bg-white p-3, also in the dark theme. */
+    /* The diagram canvas of markdown.css, with the base colors and the indigo step hue of the
+       diagram theme in @openducktor/theme/diagrams.css. The light hue is Tailwind indigo-500. */
     .flow {
+      --flow-canvas: color-mix(in oklab, var(--muted) 55%, var(--card));
+      --flow-node-base: var(--card);
+      --flow-hue: oklch(0.585 0.233 277.117);
+      --flow-fill-mix: 15%;
+      --flow-text-mix: 35%;
+      --flow-line: color-mix(in oklab, var(--foreground) 75%, var(--flow-canvas));
       display: flex;
-      justify-content: center;
+      justify-content: safe center;
       margin: calc(12 * var(--u)) 0;
-      padding: calc(12 * var(--u));
+      padding: calc(24 * var(--u)) calc(20 * var(--u));
       border: calc(1 * var(--u)) solid var(--border);
-      border-radius: calc(10 * var(--u));
-      background: #fff;
+      border-radius: calc(12 * var(--u));
+      background: var(--flow-canvas);
+    }
+    /* In the dark theme, nodes mix into the canvas, and the hue is Tailwind indigo-400. */
+    :where([data-theme="dark"]) & .flow {
+      --flow-canvas: color-mix(in oklab, var(--muted) 38%, var(--card));
+      --flow-node-base: var(--flow-canvas);
+      --flow-hue: oklch(0.673 0.182 276.935);
+      --flow-fill-mix: 20%;
+      --flow-text-mix: 25%;
     }
     .flow svg {
-      width: min(100%, calc(380 * var(--u)));
+      width: calc(240 * var(--u));
+      max-width: 100%;
       height: auto;
-      font-family: "trebuchet ms", verdana, arial, sans-serif;
+      text-rendering: geometricPrecision;
     }
-    /* The default Mermaid theme: lavender nodes, dark edges, and grey edge labels. */
+    /* A step: an indigo tint, a border from the hue toward the text color, and a radius of 10. */
     .flow-node {
-      fill: #ececff;
-      stroke: #9370db;
+      fill: color-mix(in oklab, var(--flow-hue) var(--flow-fill-mix), var(--flow-node-base));
+      stroke: color-mix(in oklab, var(--flow-hue) 66%, var(--foreground));
       stroke-width: 1;
+      rx: 10px;
     }
     .flow-text {
-      fill: #333;
+      fill: color-mix(in oklab, var(--flow-hue) var(--flow-text-mix), var(--foreground));
       font-size: 14px;
+      font-weight: 500;
       text-anchor: middle;
     }
     .flow-edge {
       fill: none;
-      stroke: #333;
+      stroke: var(--flow-line);
       stroke-width: 1.5;
+      stroke-linecap: round;
     }
     .flow-head {
-      fill: #333;
+      fill: var(--flow-line);
+      stroke: var(--flow-line);
+      stroke-width: 1.5;
+      stroke-linejoin: round;
     }
+    /* Pele puts a canvas plate behind each edge label. */
     .flow-label {
-      fill: rgb(232 232 232 / 0.8);
+      fill: var(--flow-canvas);
+      rx: 3px;
     }
     .flow-label-text {
-      fill: #333;
+      fill: color-mix(in oklab, var(--foreground) 88%, var(--muted-foreground));
       font-size: 12px;
+      font-weight: 500;
       text-anchor: middle;
     }
   }

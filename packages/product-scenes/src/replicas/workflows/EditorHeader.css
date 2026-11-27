@@ -1,0 +1,131 @@
+@layer replica {
+  :where(.stage) {
+    /* EditorHeader: flex h-14 shrink-0 items-center gap-3 border-b border-border px-4. */
+    .wfe-header {
+      display: flex;
+      flex: none;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      height: calc(56 * var(--u));
+      padding: 0 calc(16 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+    }
+    /* The breadcrumb: flex min-w-0 items-center gap-1.5, the link in text-sm text-muted-foreground,
+       a size-3.5 chevron, and the name in text-sm font-semibold. */
+    .wfe-crumbs {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    .wfe-crumb,
+    .wfe-crumbs > .lucide {
+      flex: none;
+      color: var(--muted-foreground);
+    }
+    .wfe-crumbs .wfe-name {
+      overflow: hidden;
+      font-weight: 600;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    /* STATUS_PILL_CLASS with pr-2: inline-flex h-6 items-center gap-1.5 rounded-full border
+       border-border px-2.5 text-xs font-medium text-muted-foreground, a size-1.5 dot, and a
+       size-3.5 chevron. */
+    .wfe-version {
+      display: inline-flex;
+      flex: none;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      height: calc(24 * var(--u));
+      padding: 0 calc(8 * var(--u)) 0 calc(10 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: 999px;
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+      white-space: nowrap;
+    }
+    .wfe-version-dot {
+      flex: none;
+      width: calc(6 * var(--u));
+      height: calc(6 * var(--u));
+      border-radius: 50%;
+      background: var(--emerald-500);
+    }
+    .wfe-version[data-tone="draft"] .wfe-version-dot {
+      background: var(--amber-500);
+    }
+    /* The commands: ml-auto flex shrink-0 items-center gap-1. */
+    .wfe-commands {
+      display: flex;
+      flex: none;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      margin-left: auto;
+    }
+    /* SaveStatus: flex w-16 items-center gap-1 text-xs text-muted-foreground, with a spinner while
+       the draft saves and a check after. */
+    .wfe-save {
+      display: flex;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      width: calc(64 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .wfe-save:not([data-saving]) .wfe-saving-icon,
+    .wfe-save[data-saving] .wfe-saved-icon {
+      display: none;
+    }
+    /* Undo, Redo, and More commands: ghost buttons in size-8 with a size-4 icon. A disabled button
+       has disabled:opacity-50, and More commands has text-muted-foreground. */
+    .wfe-icon-button {
+      display: grid;
+      flex: none;
+      place-items: center;
+      width: calc(32 * var(--u));
+      height: calc(32 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: var(--foreground);
+    }
+    .wfe-icon-button[data-disabled] {
+      opacity: 0.5;
+    }
+    .wfe-more {
+      color: var(--muted-foreground);
+    }
+    /* Publish: a size sm button with gap-1.5 in a ml-1 slot. */
+    .wfe-publish {
+      display: flex;
+      margin-left: calc(4 * var(--u));
+    }
+    .wfe-publish .ui-button {
+      gap: calc(6 * var(--u));
+    }
+    /* A phone stage: the header takes two lines, and the status goes last, alone on the second
+       line, whatever its length. Undo, Redo, and More commands do not show. */
+    @container stage (width <= 500px) {
+      .wfe-header {
+        flex-wrap: wrap;
+        row-gap: calc(6 * var(--u));
+        height: auto;
+        padding: calc(8 * var(--u)) calc(16 * var(--u));
+      }
+      .wfe-version {
+        order: 2;
+        margin-right: 100%;
+      }
+      .wfe-commands {
+        min-height: calc(32 * var(--u));
+      }
+      .wfe-commands .wfe-icon-button {
+        display: none;
+      }
+    }
+  }
+}

@@ -1,0 +1,147 @@
+@layer replica {
+  :where(.stage) {
+    /* The overview: grid gap-x-12 gap-y-8 with grid-cols-[minmax(0,20rem)_minmax(0,1fr)] at @4xl. */
+    .usage-overview {
+      display: grid;
+      grid-template-columns: minmax(0, calc(320 * var(--u))) minmax(0, 1fr);
+      gap: calc(32 * var(--u)) calc(48 * var(--u));
+    }
+    .usage-overview-side {
+      display: flex;
+      flex-direction: column;
+      gap: calc(28 * var(--u));
+      min-width: 0;
+    }
+    .usage-total {
+      display: flex;
+      flex-direction: column;
+      gap: calc(4 * var(--u));
+    }
+    /* text-xs font-medium text-muted-foreground. */
+    .usage-total-title {
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      font-weight: 500;
+      color: var(--muted-foreground);
+    }
+    /* text-5xl font-semibold tracking-tight tabular-nums. */
+    .usage-total-value {
+      display: flex;
+      height: calc(48 * var(--u));
+      font-size: calc(48 * var(--u));
+      line-height: 1;
+      font-weight: 600;
+      letter-spacing: -0.025em;
+      font-variant-numeric: tabular-nums;
+    }
+    .usage-total-summary {
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+      color: var(--muted-foreground);
+    }
+    /* By runtime: grid grid-cols-1 gap-y-4. */
+    .usage-runtimes {
+      display: grid;
+      gap: calc(16 * var(--u));
+      list-style: none;
+    }
+    .usage-runtime {
+      display: flex;
+      flex-direction: column;
+      gap: calc(4 * var(--u));
+    }
+    .usage-runtime-head {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+    }
+    .usage-runtime-head .runtime-logo {
+      flex-shrink: 0;
+    }
+    .usage-runtime-name {
+      overflow: hidden;
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+      font-weight: 500;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    /* ml-auto text-sm font-semibold tabular-nums. */
+    .usage-runtime-value {
+      display: flex;
+      flex-shrink: 0;
+      align-items: center;
+      margin-left: auto;
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    /* flex flex-wrap gap-x-1 pl-4 text-xs text-muted-foreground, each part on one line. */
+    .usage-runtime-line {
+      display: flex;
+      flex-wrap: wrap;
+      column-gap: calc(4 * var(--u));
+      padding-left: calc(16 * var(--u));
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .usage-runtime-line > span {
+      white-space: nowrap;
+    }
+    .usage-trend {
+      display: flex;
+      flex-direction: column;
+      gap: calc(12 * var(--u));
+      min-width: 0;
+    }
+    .usage-trend-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(12 * var(--u));
+    }
+    .usage-trend-title {
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+      font-weight: 600;
+    }
+    .usage-trend-legend {
+      display: flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      color: var(--muted-foreground);
+    }
+    /* h-0.5 w-3 rounded-full bg-foreground. */
+    .usage-legend-swatch {
+      width: calc(12 * var(--u));
+      height: calc(2 * var(--u));
+      border-radius: 999px;
+      background: var(--foreground);
+    }
+    .usage-chart-narrow {
+      display: none;
+    }
+    /*
+     * A phone stage: the narrow page of the app, under its @3xl and @4xl widths. The overview takes
+     * one column with the chart under the runtimes, each runtime takes the full width, and the
+     * line of a runtime drops the noun after its share. The chart of the narrow column shows.
+     */
+    @container stage (width <= 500px) {
+      .usage-overview {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .usage-share-noun,
+      .usage-chart-wide {
+        display: none;
+      }
+      .usage-chart-narrow {
+        display: block;
+      }
+    }
+  }
+}

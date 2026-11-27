@@ -1,5 +1,6 @@
-// The tabs of the right panel of a task session, from panel-tab-kinds.ts: Artifacts, Diffs, Files,
-// and CI Checks, which shows only with a linked pull request. A dot on the CI Checks icon shows
+// The tabs of the right panel of a session, from panel-tab-kinds.ts: Artifacts, Diffs, Files,
+// and CI Checks, which shows only with a linked pull request. A workspace session has no
+// Artifacts tab. A dot on the CI Checks icon shows
 // the state of the checks, and a count shows the open review threads. The children hold more tabs,
 // such as a terminal or a browser tab, and `start` holds the controls before the tabs.
 import { FileDiff, FileText, FolderTree, ListChecks } from "lucide-react";
@@ -23,6 +24,8 @@ type PanelTabsProps = {
   showEnd?: boolean;
   /** The controls before the tabs, such as Back to workspace. */
   start?: ReactNode;
+  /** The Artifacts tab of a task session. */
+  artifacts?: boolean;
   children?: ReactNode;
 };
 
@@ -32,14 +35,17 @@ export function PanelTabs({
   fadeStart = false,
   showEnd = false,
   start,
+  artifacts = true,
   children,
 }: PanelTabsProps): ReactElement {
   return (
     <PanelStrip panel="right" fadeStart={fadeStart} showEnd={showEnd}>
       {start}
-      <PanelTab id="document" label="Artifacts" active={active === "document"}>
-        <FileText />
-      </PanelTab>
+      {artifacts && (
+        <PanelTab id="document" label="Artifacts" active={active === "document"}>
+          <FileText />
+        </PanelTab>
+      )}
       <PanelTab id="diffs" label="Diffs" active={active === "diffs"}>
         <FileDiff />
       </PanelTab>

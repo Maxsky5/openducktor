@@ -74,11 +74,30 @@ On iOS, the first connection to a host on your local network asks for **Local Ne
 To connect without the camera, open the **Enter a code** tab of **Add device** on the host. In the app, type its address in **Host address**, tap <Action>Continue</Action>, and type its six-digit code. The sixth digit connects.
 
 <ScreenRow>
-<Screenshot id="phone-connect" alt="Connect to a host, with Scan QR code, the Host address field, and Continue." />
+<Screenshot id="phone-connect" alt="Connect to a host, with Scan QR code, the Host address field, Continue, and Try demo under or explore first." />
 <Screenshot id="phone-pair" alt="The pairing step: Connecting to http://192.168.1.9:14328, six empty Pairing code boxes, Connect to host, and the HTTP warning." />
 </ScreenRow>
 
 The phone stays paired when the app or the host restarts. An `http://` address shows `HTTP is not encrypted.` Use it only on a trusted private network, or give the host an HTTPS address. If the app and the host do not work together, the app tells you which one to update. See [Compatibility](/remote-control/#compatibility).
+
+## Try the demo [#demo]
+
+The demo shows the app with sample data on the phone. It needs no computer and no account.
+
+<Steps>
+<Step>On **Connect to a host**, tap <Action>Try demo</Action>. If the app already has a host, open the **Host** tab, then tap **Try demo** under **Demo**.</Step>
+<Step>Use the app as with a host. The **Demo mode** label shows at the top of each screen.</Step>
+<Step>To leave, open the **Host** tab and tap <Action>Exit demo</Action>. The app discards your demo changes and keeps your saved hosts.</Step>
+</Steps>
+
+<Screenshot id="phone-demo" alt="The Sessions tab in demo mode. The Demo mode label shows under the title. Needs you lists three fieldnotes sessions that wait for a permission, a question, and a blocked task.">The demo opens on **Sessions**, with sample sessions that wait for you.</Screenshot>
+
+To start again with the sample data, tap <Action>Reset demo</Action> on the **Host** tab.
+
+- The links of the sample data and of the demo terminals open no web page.
+- A demo terminal runs only demo commands. Type `help` to list them.
+- Some actions need a computer. The app then tells you to connect to a host.
+- To add a host, exit the demo first.
 
 ## Find your way [#tabs]
 
@@ -114,7 +133,7 @@ The app connects to one host at a time. The **Host** tab lists your hosts.
 
 Tap **Diagnostics** to check the connected host:
 
-- **Agent runtimes**: the runtimes that the host found, and their versions.
+- **Agent runtimes**: the harnesses that the host found, and their versions.
 - **Tools and services**: Git, the `PATH`, and the OpenDucktor MCP bridge.
 - **Workspace**: the checks of the selected workspace.
 

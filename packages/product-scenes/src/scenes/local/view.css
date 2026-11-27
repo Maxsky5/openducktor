@@ -1,9 +1,11 @@
 @layer views {
   :where(.stage) {
-    /* The Diagnostics sheet at the scale of the stage. The panel scrolls to the workspace checks. */
+    /* The Diagnostics sheet at the scale of the stage. The panel scrolls the Claude row to its top
+       edge. At this height the task store then shows in full: at 720 pixels, the panel cannot
+       scroll that far, and the scroll would stop inside the Codex row. */
     .diag-sheet {
       --design-width: 576;
-      height: calc(720 * var(--u));
+      height: calc(694 * var(--u));
     }
     /* Narrow stages show the sheet at the width of a phone. */
     @container stage (width <= 440px) {

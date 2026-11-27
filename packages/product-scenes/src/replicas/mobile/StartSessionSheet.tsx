@@ -14,7 +14,7 @@
 import { GitBranch, Layers, MessageSquare, Play, ZapOff } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import type { Session } from "../../sample/sessions";
-import { modelName } from "../../sample/models";
+import { modelName, RUNTIME_LABELS } from "../../sample/models";
 import { RuntimeIcon } from "../ui/RuntimeIcon";
 import type { Role } from "../vocabulary";
 import { FormField, SegmentedControl, SelectTrigger, SwitchCard } from "./FormRows";
@@ -23,8 +23,6 @@ import { SheetButton, WorkflowSheet } from "./WorkflowSheet";
 import "./StartSessionSheet.css";
 
 /** The labels of the runtimes, as the runtime descriptors name them. */
-const RUNTIME_LABELS = { codex: "Codex", claude: "Claude", opencode: "OpenCode" } as const;
-
 /** The fixed text of the start sheet. */
 export const START_SHEET_TEXT = {
   freshLead: "Start a new session.",

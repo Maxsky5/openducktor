@@ -45,12 +45,12 @@ export const modelChoice = chainDiagram({
 export const permissionOrder = chainDiagram({
   name: "permission-order",
   label:
-    "The permission settings apply in this order: the native settings of your OpenCode or Claude Code setup, then the defaults for every role, then the role overrides for one role, then the workflow role limits. The workflow role limits apply last and reject write requests from Spec, Planner, and QA.",
+    "The permission settings apply in this order: the native settings of your OpenCode, Claude Code, or Antigravity setup, then the defaults for every role, then the role overrides for one role, then the workflow role limits. The workflow role limits apply last and reject write requests from read-only roles, such as Spec, Planner, and QA.",
   steps: [
     {
       id: "native",
       title: "Native settings",
-      text: "Your OpenCode or Claude Code setup",
+      text: "Your OpenCode, Claude Code, or Antigravity setup",
       Icon: Wrench,
     },
     { id: "defaults", title: "Defaults", text: "Every role", Icon: SlidersHorizontal },
@@ -58,7 +58,7 @@ export const permissionOrder = chainDiagram({
     {
       id: "limits",
       title: "Workflow role limits",
-      text: "Apply last. Reject write requests from Spec, Planner, and QA.",
+      text: "Apply last. Reject write requests from read-only roles.",
       Icon: ShieldCheck,
       tone: "system",
     },

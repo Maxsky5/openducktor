@@ -1,4 +1,5 @@
-// The sample data of the composer scene: a Builder session of the PDF export task on Claude Code.
+// The sample data of the composer scene: a Builder session of the PDF export task on Claude Code,
+// at the Fast speed, which the model trigger shows with its Zap.
 // The slash menu merges the catalog of Claude Code with the reusable prompts of the workspace, as
 // use-chat-composer-slash-commands.ts does. The skills, the prompts, and the files are fictional.
 import type { FileKind } from "../../replicas/transcript/ReferenceChip";
@@ -11,7 +12,7 @@ export const COMPOSER_SESSION = {
   effort: "high",
   window: 200_000,
   used: 31.4,
-  speed: "standard",
+  speed: "fast",
 } satisfies Session;
 
 /** The source of a slash command, which the menu shows as a badge. */

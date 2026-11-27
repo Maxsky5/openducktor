@@ -10,7 +10,7 @@ export const FAQS = [
   {
     question: "Does OpenDucktor include model access?",
     answer:
-      "No. OpenDucktor runs the coding agent that you install: OpenCode, Codex, or Claude Code. The agent uses its own sign-in, and your provider charges you as usual.",
+      "No. OpenDucktor runs the coding agent that you install: OpenCode, Codex, Claude Code, or Antigravity. The agent uses its own sign-in, and your provider charges you as usual. The Usage page shows the tokens of each agent and their estimated cost at API rates.",
   },
   {
     question: "Where do my tasks and code go?",
@@ -25,7 +25,7 @@ export const FAQS = [
   {
     question: "Must every task go through every step?",
     answer:
-      "No. A feature needs a spec and a plan. A task or a bug can go straight to the Builder. The QA review is on by default, and you can turn it off for each task.",
+      "No. In the built-in workflow, a feature needs a spec and a plan, and a task or a bug can go straight to the Builder. You can skip the QA review and approve the task. To change the steps, design your own workflow on the Workflows page.",
   },
   {
     question: "Which Git hosts work with pull requests?",
@@ -39,6 +39,6 @@ export const FAQS = [
   {
     question: "Can I use it from another device?",
     answer:
-      "Yes, with the browser version. By default it accepts connections only from your computer. For remote use, bind it to a private network such as Tailscale. Do not expose it to the public internet.",
+      "Yes. Pair the mobile app or another computer with Remote control in Settings. You can also run the browser version: by default it accepts connections only from your computer. For remote use, bind it to a private network such as Tailscale. Do not expose it to the public internet.",
   },
 ];

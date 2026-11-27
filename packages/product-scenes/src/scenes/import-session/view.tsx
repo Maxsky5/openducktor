@@ -42,13 +42,13 @@ export function ImportSessionView(props: SceneViewProps): ReactElement {
       alt="The Kanban board with the open sidebar. The visitor opens the arrow beside New task and selects Import session from an external runtime. The Import session dialog opens. The visitor chooses the runtime Claude, and the dialog lists four Claude Code conversations of the repository and of its worktree, each with its title, its directory, its session ID, and its time. The visitor types search, and two conversations match. The visitor selects Import on Speed up search in large notebooks. The session page opens with the history of the conversation, and the session shows in the sidebar. The visitor sends a follow-up, and the agent starts to work."
       stock={
         <Stock name={"menu" satisfies ImportSessionTemplate}>
-          <CreateMenu importLabel={ISSUE_IMPORT} />
+          <CreateMenu importLabel={ISSUE_IMPORT} keys={props.keys} />
         </Stock>
       }
     >
       <SessionWindow
         nav={NAV}
-        kanban
+        page="kanban"
         keys={props.keys}
         session={SESSION}
         pane="sidebar"

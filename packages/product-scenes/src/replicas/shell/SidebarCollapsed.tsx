@@ -13,13 +13,14 @@ import {
 } from "lucide-react";
 import type { ReactElement } from "react";
 import { type NavData, navGroupViews } from "./nav";
+import type { SidebarPage } from "./Sidebar";
 import { NavIcon } from "./NavIcon";
 import "./NavGroups.css";
 import "./SidebarCollapsed.css";
 
-type SidebarCollapsedProps = { nav: NavData; kanban?: boolean };
+type SidebarCollapsedProps = { nav: NavData; page?: SidebarPage | undefined };
 
-export function SidebarCollapsed({ nav, kanban = false }: SidebarCollapsedProps): ReactElement {
+export function SidebarCollapsed({ nav, page }: SidebarCollapsedProps): ReactElement {
   const groups = navGroupViews(nav.entries);
   return (
     <div className="sb-collapsed">
@@ -32,7 +33,7 @@ export function SidebarCollapsed({ nav, kanban = false }: SidebarCollapsedProps)
         <span className="sbc-button large">
           <Search />
         </span>
-        <span className="sbc-button large" aria-current={kanban ? "true" : undefined}>
+        <span className="sbc-button large" aria-current={page === "kanban" ? "true" : undefined}>
           <Columns3 />
         </span>
         <span className="sbc-button large primary">

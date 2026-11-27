@@ -1,44 +1,46 @@
-// A Mermaid flowchart of a document, as markdown-mermaid.tsx shows it: the default Mermaid theme
-// on a white box with a border, in both themes. This copy draws the diagram of the sample plan.
+// A Mermaid flowchart of a document, as markdown-diagram.ts shows it: Pele draws it in the app theme
+// of @openducktor/theme/diagrams.css on the diagram canvas of markdown.css. The shapes and the
+// positions are the drawing of Pele with the options of the app, which measures the labels in
+// Space Grotesk. The preview button shows only on hover, so this copy leaves it out.
 import type { ReactElement } from "react";
 import "./FlowDiagram.css";
 
 export function FlowDiagram(): ReactElement {
   return (
     <div className="flow">
-      <svg viewBox="0 0 380 268" aria-hidden="true">
-        <path className="flow-edge" d="M95 52C95 80 172 74 172 97" />
-        <path className="flow-edge" d="M285 52C285 80 208 74 208 97" />
-        <path className="flow-edge" d="M190 144V189" />
-        <path className="flow-head" d="M167 97h10l-5 9z" />
-        <path className="flow-head" d="M203 97h10l-5 9z" />
-        <path className="flow-head" d="M185 189h10l-5 9z" />
-        <rect className="flow-label" x="102" y="66" width="56" height="18" />
-        <text className="flow-label-text" x="130" y="79">
+      <svg viewBox="0 0 240 291" aria-hidden="true">
+        <path className="flow-edge" d="M55.57 53V116" />
+        <path className="flow-edge" d="M187.13 53V116" />
+        <path className="flow-edge" d="M121.35 168V231" />
+        <path className="flow-head" d="M55.57 123L52.21 115H58.93Z" />
+        <path className="flow-head" d="M187.13 123L183.77 115H190.49Z" />
+        <path className="flow-head" d="M121.35 238L117.99 230H124.71Z" />
+        <rect className="flow-label" x="29.52" y="79" width="52.11" height="18" />
+        <text className="flow-label-text" x="55.57" y="92.2">
           mounts
         </text>
-        <rect className="flow-label" x="222" y="66" width="60" height="18" />
-        <text className="flow-label-text" x="252" y="79">
+        <rect className="flow-label" x="156.84" y="79" width="60.58" height="18" />
+        <text className="flow-label-text" x="187.13" y="92.2">
           keydown
         </text>
-        <rect className="flow-label" x="150" y="161" width="80" height="18" />
-        <text className="flow-label-text" x="190" y="174">
+        <rect className="flow-label" x="82.45" y="194" width="77.8" height="18" />
+        <text className="flow-label-text" x="121.35" y="207.2">
           openSearch
         </text>
-        <rect className="flow-node" x="30" y="14" width="130" height="38" />
-        <text className="flow-text" x="95" y="38">
+        <rect className="flow-node" x="8" y="8" width="95.15" height="45" />
+        <text className="flow-text" x="55.57" y="35.4">
           AppShell
         </text>
-        <rect className="flow-node" x="220" y="14" width="130" height="38" />
-        <text className="flow-text" x="285" y="38">
-          window
-        </text>
-        <rect className="flow-node" x="105" y="106" width="170" height="38" />
-        <text className="flow-text" x="190" y="130">
+        <rect className="flow-node" x="37.44" y="123" width="167.81" height="45" />
+        <text className="flow-text" x="121.35" y="150.4">
           useSearchShortcut
         </text>
-        <rect className="flow-node" x="120" y="198" width="140" height="38" />
-        <text className="flow-text" x="190" y="222">
+        <rect className="flow-node" x="143.15" y="8" width="87.96" height="45" />
+        <text className="flow-text" x="187.13" y="35.4">
+          window
+        </text>
+        <rect className="flow-node" x="58.98" y="238" width="124.73" height="45" />
+        <text className="flow-text" x="121.35" y="265.4">
           SearchDialog
         </text>
       </svg>

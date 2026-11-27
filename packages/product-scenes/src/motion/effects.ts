@@ -102,7 +102,11 @@ export function riseIn(
 }
 
 /** Grows an element from zero height, so the elements after it move instead of jumping. */
-export function growIn(element: HTMLElement, duration = 0.4): gsap.core.Tween {
+export function growIn(
+  element: HTMLElement,
+  duration = 0.4,
+  ease: string = EASE.enter,
+): gsap.core.Tween {
   const style = getComputedStyle(element);
   const grown = {
     height: element.offsetHeight,
@@ -119,7 +123,7 @@ export function growIn(element: HTMLElement, duration = 0.4): gsap.core.Tween {
       ...grown,
       autoAlpha: 1,
       duration,
-      ease: EASE.enter,
+      ease,
       clearProps: GROWN,
       onComplete: () => element.removeAttribute(RESIZING),
     },
@@ -127,7 +131,11 @@ export function growIn(element: HTMLElement, duration = 0.4): gsap.core.Tween {
 }
 
 /** Shrinks an element to zero height, then removes it. */
-export function shrinkOut(element: HTMLElement, duration = 0.35): gsap.core.Tween {
+export function shrinkOut(
+  element: HTMLElement,
+  duration = 0.35,
+  ease: string = EASE.exit,
+): gsap.core.Tween {
   element.toggleAttribute(RESIZING, true);
   return gsap.to(element, {
     height: 0,
@@ -137,7 +145,7 @@ export function shrinkOut(element: HTMLElement, duration = 0.35): gsap.core.Twee
     marginBottom: 0,
     autoAlpha: 0,
     duration,
-    ease: EASE.exit,
+    ease,
     onComplete: () => element.remove(),
   });
 }

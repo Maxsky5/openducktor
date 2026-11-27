@@ -102,7 +102,8 @@
   .motion-toggle[aria-pressed="true"] .pause-icon {
     display: none;
   }
-  @media (width <= 1023px) {
+  /* The section links show only where all of them fit in one row next to the actions. */
+  @media (width <= 1279px) {
     .site-nav {
       display: none;
     }

@@ -1,71 +1,56 @@
-// One role card of settings-repository-agents-section.tsx: the role label, Clear, and the
-// Runtime and model, Agent profile, and Effort fields. Only OpenCode supports agent profiles.
-// The trigger holds the three runtime logos and `data-runtime` shows one, so a scene can
-// change the runtime without new markup.
-import type { ReactElement } from "react";
-import { modelName, type RoleDefault as RoleDefaultData, RUNTIMES } from "../../sample/models";
-import { flag } from "../flag";
+// The Agent defaults by role section of repository-model-defaults-fields.tsx: a card with its
+// header and one row for each role. A row has the role label, Clear, and the model picker trigger
+// that sums up the runtime, the model, the effort, and the speed of the role default.
+import type { ReactElement, ReactNode } from "react";
+import type { ModelChoice } from "../../sample/models";
+import { ModelTrigger } from "../models/ModelTrigger";
 import { Button } from "../ui/Button";
-import { Combobox } from "../ui/Combobox";
-import { RuntimeIcon } from "../ui/RuntimeIcon";
-import { ModelPicker, type ModelPickerProps } from "./ModelPicker";
 import "./RoleDefault.css";
 
-type RoleDefaultProps = RoleDefaultData & {
-  /** The open model picker under the Runtime and model field. */
-  picker?: ModelPickerProps | undefined;
+/** The default of one role of the built-in workflow. */
+export type RoleDefaultData = {
+  role: "spec" | "planner" | "build" | "qa";
+  label: string;
+  value: ModelChoice;
 };
 
+/** One role row: flex-col gap-2 rounded-lg border border-border/80 bg-muted/20 p-3. */
 export function RoleDefault({
   role,
   label,
-  runtime,
-  model,
-  profile,
-  variant,
+  value,
   picker,
-}: RoleDefaultProps): ReactElement {
+}: RoleDefaultData & {
+  /** The open model picker under the trigger. */
+  picker?: ReactNode;
+}): ReactElement {
   return (
-    <div className="set-card role-card" data-role={role}>
-      <div className="role-head">
+    <div className="rd-row" data-role={role}>
+      <div className="rd-head">
         <p>{label}</p>
-        <Button variant="ghost" size="sm">
+        <Button variant="ghost" size="xs" className="rd-clear">
           Clear
         </Button>
       </div>
-      <div className="role-fields">
-        <div className="set-field">
-          <span className="set-label">Runtime and model</span>
-          <Combobox data-model-trigger>
-            <span className="rt-swap" data-runtime={runtime} data-runtime-logos="">
-              {RUNTIMES.map((kind) => (
-                <RuntimeIcon kind={kind} key={kind} />
-              ))}
-            </span>
-            <span data-model-name="">{modelName({ runtime, model })}</span>
-          </Combobox>
-          {picker && <ModelPicker {...picker} />}
-        </div>
-        <div className="set-field">
-          <span className="set-label">Agent profile</span>
-          <Combobox data-disabled={flag(!profile)}>
-            {profile ? (
-              <>
-                <i className="profile-dot" />
-                <span>{profile}</span>
-              </>
-            ) : (
-              <span className="set-placeholder">Not supported by runtime</span>
-            )}
-          </Combobox>
-        </div>
-        <div className="set-field">
-          <span className="set-label">Effort</span>
-          <Combobox>
-            <span>{variant}</span>
-          </Combobox>
-        </div>
+      <div className="rd-field">
+        <ModelTrigger value={value} variant="form" />
+        {picker}
       </div>
+    </div>
+  );
+}
+
+/** The section card, with the header of RepositoryRoleDefaultsHeader in settings. */
+export function RoleDefaults({ children }: { children: ReactNode }): ReactElement {
+  return (
+    <div className="rd-section">
+      <div className="rd-section-head">
+        <div className="rd-section-title" data-section-title="">
+          Agent defaults by role
+        </div>
+        <p>Override the workspace default for specific roles.</p>
+      </div>
+      <div className="rd-grid">{children}</div>
     </div>
   );
 }

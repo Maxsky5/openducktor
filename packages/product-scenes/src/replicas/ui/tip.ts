@@ -15,9 +15,9 @@ const CLOSE = 0.05;
 /**
  * The side of the trigger where a tooltip shows. TooltipContent of Radix shows on the top side
  * when the product gives no side, but the toolbar buttons of the scenes give `bottom`, so the
- * replica shows there when a step gives no side.
+ * replica shows there when a step gives no side. A button of a vertical rail gives `right`.
  */
-type Side = "top" | "bottom";
+type Side = "top" | "bottom" | "right";
 
 /** The steps of a tooltip. */
 export type Tip = {
@@ -42,19 +42,26 @@ export function tooltip(scene: Scene, root: HTMLElement): Tip {
     tip.hidden = false;
     const pixel = designPixel(root);
     const place = offsetIn(target, root);
-    const center = place.x + target.offsetWidth / 2;
-    const edge = 4 * pixel;
-    const left = gsap.utils.clamp(
-      edge,
-      root.clientWidth - tip.offsetWidth - edge,
-      center - tip.offsetWidth / 2,
-    );
-    const top =
-      side === "top"
-        ? place.y - tip.offsetHeight - 5 * pixel
-        : place.y + target.offsetHeight + 5 * pixel;
-    gsap.set(tip, { x: left, y: top });
-    gsap.set(arrow, { left: center - left });
+    if (side === "right") {
+      const middle = place.y + target.offsetHeight / 2;
+      const top = middle - tip.offsetHeight / 2;
+      gsap.set(tip, { x: place.x + target.offsetWidth + 5 * pixel, y: top });
+      gsap.set(arrow, { clearProps: "left", top: middle - top });
+    } else {
+      const center = place.x + target.offsetWidth / 2;
+      const edge = 4 * pixel;
+      const left = gsap.utils.clamp(
+        edge,
+        root.clientWidth - tip.offsetWidth - edge,
+        center - tip.offsetWidth / 2,
+      );
+      const top =
+        side === "top"
+          ? place.y - tip.offsetHeight - 5 * pixel
+          : place.y + target.offsetHeight + 5 * pixel;
+      gsap.set(tip, { x: left, y: top });
+      gsap.set(arrow, { clearProps: "top", left: center - left });
+    }
     if (!opening) return;
     scene.run(
       gsap.fromTo(

@@ -1,0 +1,250 @@
+@layer replica {
+  :where(.stage) {
+    /* The panel of processes-panel.tsx: flex min-h-0 flex-col. The list takes the rest. */
+    .pp {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    /* The toolbar: flex h-12 shrink-0 items-center gap-2 border-b border-border/70 pl-3.5, and
+       pr-2 with the buttons of a surface or pr-3.5 without them. */
+    .pp-toolbar {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      height: calc(48 * var(--u));
+      padding: 0 calc(14 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid color-mix(in oklab, var(--border) 70%, transparent);
+    }
+    .pp-toolbar[data-actions] {
+      padding-right: calc(8 * var(--u));
+    }
+    .pp-toolbar .pp-search {
+      flex: 0 0 auto;
+      color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
+      stroke-width: 1.75;
+    }
+    /* The empty filter: text-sm with the placeholder in text-muted-foreground/70. */
+    .pp-filter {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
+      font-size: calc(14 * var(--u));
+      white-space: nowrap;
+    }
+    /* The live dot (run-dot of PortsButton.css) and the counts (text-xs text-muted-foreground
+       tabular-nums). */
+    .pp-status {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      font-variant-numeric: tabular-nums;
+      line-height: calc(16 * var(--u));
+      white-space: nowrap;
+    }
+    .pp-list {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+    /* A checkout header: a sticky h3 with border-b border-border/60 bg-popover over a button with
+       flex h-7 items-center gap-2 bg-muted/50 px-3. */
+    .pp-group-head {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      height: calc(28 * var(--u));
+      margin: 0;
+      padding: 0 calc(12 * var(--u));
+      overflow: hidden;
+      border-bottom: calc(1 * var(--u)) solid color-mix(in oklab, var(--border) 60%, transparent);
+      background:
+        linear-gradient(
+          color-mix(in oklab, var(--muted) 50%, transparent),
+          color-mix(in oklab, var(--muted) 50%, transparent)
+        ),
+        var(--popover);
+      font-size: calc(13 * var(--u));
+      font-weight: 400;
+    }
+    .pp .lucide.pp-chevron,
+    .pp .lucide.pp-group-icon {
+      flex: 0 0 auto;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    /* An open checkout or command turns its chevron to point down. */
+    .pp .pp-chevron {
+      rotate: 90deg;
+      color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
+    }
+    .pp-group-icon {
+      color: var(--muted-foreground);
+    }
+    .pp-group-title {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--foreground);
+      font-size: calc(13 * var(--u));
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* The task IDs of a worktree: max-w-48 truncate font-mono text-[11px] text-muted-foreground. */
+    .pp-group-ids {
+      max-width: calc(192 * var(--u));
+      min-width: 0;
+      overflow: hidden;
+      color: var(--muted-foreground);
+      font-family: var(--mono);
+      font-size: calc(11 * var(--u));
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* This task: rounded-sm bg-info-surface px-1.5 py-px text-[10px] font-medium
+       text-info-surface-foreground. */
+    .pp-focused {
+      flex: 0 0 auto;
+      padding: calc(1 * var(--u)) calc(6 * var(--u));
+      border-radius: calc(8 * var(--u));
+      background: var(--info-surface);
+      color: var(--info-surface-foreground);
+      font-size: calc(10 * var(--u));
+      font-weight: 500;
+      line-height: calc(15 * var(--u));
+    }
+    .pp-commands {
+      display: flex;
+      flex-direction: column;
+      margin: 0;
+      padding: calc(4 * var(--u)) 0 0;
+      list-style: none;
+    }
+    /* A command: flex h-8 items-center gap-3 pr-2, with opacity-50 while it stops. */
+    .pp-line {
+      display: flex;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      height: calc(32 * var(--u));
+      padding-right: calc(8 * var(--u));
+    }
+    .pp-line[data-stopping] {
+      opacity: 0.5;
+    }
+    /* The line with an open stop confirmation: has-[[data-state=open]]:bg-accent/40. */
+    .pp-line[data-confirming] {
+      background: color-mix(in oklab, var(--accent) 40%, transparent);
+    }
+    /* The button of the line: flex min-w-0 flex-1 items-center gap-2 pl-[34px]. Its chevron lines
+       up with the icon of the checkout. */
+    .pp-label {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+      height: 100%;
+      padding-left: calc(34 * var(--u));
+    }
+    .pp-label .pp-chevron {
+      rotate: none;
+      color: color-mix(in oklab, var(--muted-foreground) 60%, transparent);
+    }
+    /* The folder, the prompt, and the command: flex min-w-0 items-baseline gap-1.5 font-mono
+       text-xs. */
+    .pp-text {
+      display: flex;
+      align-items: baseline;
+      gap: calc(6 * var(--u));
+      min-width: 0;
+      overflow: hidden;
+      font-family: var(--mono);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      white-space: nowrap;
+    }
+    .pp-dir {
+      max-width: calc(192 * var(--u));
+      overflow: hidden;
+      color: var(--muted-foreground);
+      text-overflow: ellipsis;
+    }
+    .pp-prompt {
+      flex: 0 0 auto;
+      color: color-mix(in oklab, var(--muted-foreground) 60%, transparent);
+    }
+    .pp-cmd {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--foreground);
+      text-overflow: ellipsis;
+    }
+    /* The ports: flex items-center gap-2 font-mono text-xs tabular-nums. A web port is a link in
+       text-status-running-foreground. */
+    .pp-ports {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      color: var(--status-running-foreground);
+      font-family: var(--mono);
+      font-size: calc(12 * var(--u));
+      font-variant-numeric: tabular-nums;
+    }
+    /* The ports button of a narrow line: hidden @max-[24rem]/row:inline-flex. A scene shows it
+       in place of the ports for a line of 24rem or less. */
+    .pp-line .pp-ports-compact {
+      display: none;
+    }
+    .pp-line[data-stopping] :is(.pp-ports, .pp-ports-compact) {
+      display: none;
+    }
+    /* Stopping…: flex items-center gap-1.5 text-xs text-muted-foreground with a size-3.5 spinner.
+       Only a line that stops shows it. */
+    .pp-line:not([data-stopping]) .pp-stopping {
+      display: none;
+    }
+    .pp-stopping {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+    }
+    .pp-stopping .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      animation: spin 1s linear infinite;
+    }
+    /* Stop: size-6 rounded-md bg-muted text-muted-foreground with a filled size-2.5 square. The
+       open confirmation gives it bg-destructive/15 text-destructive. */
+    .pp-stop {
+      display: grid;
+      flex: 0 0 auto;
+      place-items: center;
+      width: calc(24 * var(--u));
+      height: calc(24 * var(--u));
+      border-radius: calc(10 * var(--u));
+      background: var(--muted);
+      color: var(--muted-foreground);
+    }
+    .pp-stop .lucide {
+      width: calc(10 * var(--u));
+      height: calc(10 * var(--u));
+      fill: currentColor;
+      stroke-width: 0;
+    }
+    .pp-line[data-confirming] .pp-stop {
+      background: color-mix(in oklab, var(--destructive) 15%, transparent);
+      color: var(--destructive);
+    }
+  }
+}

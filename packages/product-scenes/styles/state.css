@@ -15,8 +15,9 @@
       border-radius: 0;
       box-shadow: none;
     }
-    /* A framed scene shows no pointer and no click ring. The scene still moves them. */
-    :where([data-framed]) & :is(.cursor, .click-ring) {
+    /* A framed scene shows no pointer and no click ring, unless its view keeps them with
+       data-keep-pointer. The scene still moves them. */
+    :where([data-framed]) & :is(.cursor, .click-ring):not(:where([data-keep-pointer] *)) {
       display: none;
     }
   }
