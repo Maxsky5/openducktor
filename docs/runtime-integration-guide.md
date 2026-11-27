@@ -420,8 +420,6 @@ Read the effective model catalog from the runtime so proxy and third-party provi
 
 OpenCode catalog reads register their repository and working directory with the owned runtime adapter. Catalog update events invalidate these scopes even before a live conversation exists. A directory event changes only matching scopes. A global event changes each known repository once. Runtime release clears the registered scopes.
 
-On an owned OpenCode connection, the adapter checks the checkout's plugin inventory before it reads models, profiles, commands, subagents, or skills. If the inventory is empty, the adapter waits for the checkout's `plugin.updated` event on its existing stream. If the runtime closes or the wait reaches 30 seconds, the catalog reports the readiness error for each surface. After readiness, a list error affects only its surface.
-
 For a repository that is not yet a workspace, `agent_runtime_preview_models` reads Claude, Codex, or OpenCode models through a short-lived native session or process. The host checks the Git path, does not connect the OpenDucktor MCP bridge, and closes the session or process after the read. Keep this preview out of the host runtime registry and use a separate frontend query key.
 
 Keep names that the runtime accepts. A bad catalog entry fails that catalog request and names the entry. It does not block history or session reads.
