@@ -565,22 +565,9 @@ test.each(runtimeKinds)("Autopilot queues a message for a working %s session", a
 
   const ref = { repoPath: "/repo", ...source };
   const live = h.live.get(agentSessionRefKey(ref))!;
-  live.activity = "idle";
   live.pendingQuestions = [{ requestId: "late-question", questions: [], blocking: false }];
   h.setTaskStatus("blocked");
-  h.messageDelivery.observeChanges([
-    {
-      type: "transcript_event",
-      event: {
-        type: "session_idle",
-        sessionRef: ref,
-        externalSessionId: ref.externalSessionId,
-        timestamp,
-        turnOutcome: "completed",
-      },
-    },
-  ]);
-  await h.runBackground();
+  await completeTurn(h, source);
   expect(h.sends).toHaveLength(2);
   expect(h.sends[1]).toMatchObject({
     ...ref,

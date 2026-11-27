@@ -6,8 +6,8 @@ import type {
   SessionLaunchResult,
 } from "@openducktor/contracts";
 import { sessionLaunchFailureMessage } from "@openducktor/core";
-import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
-import { errorMessage, HostValidationError } from "../../effect/host-errors";
+import { Cause, Deferred, Effect, Exit, Fiber, Result } from "effect";
+import { errorMessage, type HostError, HostValidationError } from "../../effect/host-errors";
 import { createSerialGate } from "../../effect/serial-gate";
 import {
   AgentSessionMessageAcceptedError,
@@ -66,6 +66,7 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
   >;
   /** The result before the launch runs. A request that cannot launch fails here. */
   initial: (request: Request) => Effect.Effect<Result, HostValidationError>;
+  unconfirmedDeliveryError?: (request: Request) => HostError | undefined;
   key: (request: Request) => string;
   target?: (request: Request) => AgentSessionLiveRef | undefined;
   run: (context: SessionLaunchContext<Request, Result>) => Effect.Effect<unknown, unknown>;
@@ -135,7 +136,7 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
         let sent = false;
         let queueState: "queued" | "acceptance_unknown" | undefined;
         // The send stays interruptible, so shutdown does not wait for a slow runtime.
-        const reply = yield* Effect.result(
+        const delivered = yield* Effect.result(
           deliver({
             assertCurrent: () => assertCurrent(attempt),
             onSent: () => {
@@ -146,6 +147,11 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
             },
           }),
         );
+        const unconfirmedError =
+          delivered._tag === "Success" && queueState === "acceptance_unknown"
+            ? deps.unconfirmedDeliveryError?.(attempt.request)
+            : undefined;
+        const reply = unconfirmedError ? Result.fail(unconfirmedError) : delivered;
         if (reply._tag === "Success") {
           if (reply.success) attempt.result.acceptedMessage = reply.success;
           yield* updateStartup((progress) => {

@@ -241,7 +241,6 @@ export const createWorkflowLaunchService = (
         }
         if (request.policy.kind === "manual" && decision.startMode !== "reuse")
           return deps.runtime.sendUserMessage(input, options);
-        const submissionId = crypto.randomUUID();
         return deps.messageDelivery
           .submit(
             {
@@ -251,7 +250,7 @@ export const createWorkflowLaunchService = (
               externalSessionId: input.externalSessionId,
               sessionScope: input.sessionScope,
               parts: input.parts,
-              submissionId,
+              submissionId: crypto.randomUUID(),
               mode: "default",
             },
             options,
@@ -275,29 +274,21 @@ export const createWorkflowLaunchService = (
                     ),
           )
           .pipe(
-            Effect.flatMap((result) => {
-              if (result.kind === "accepted") return Effect.succeed(result.acceptedMessage);
-              if (
-                result.kind === "queued" &&
-                request.policy.kind === "manual" &&
-                result.queue.entries.some(
-                  (entry) =>
-                    entry.submissionId === submissionId && entry.state === "acceptance_unknown",
-                )
-              )
-                return Effect.fail(
-                  new HostOperationError({
-                    operation: "workflow-launch.instruction",
-                    message: "The runtime did not confirm the instruction.",
-                  }),
-                );
-              return Effect.succeed(undefined);
-            }),
+            Effect.map((result) =>
+              result.kind === "accepted" ? result.acceptedMessage : undefined,
+            ),
           );
       });
     });
   return createSessionLaunchService<WorkflowLaunchAttemptRequest, WorkflowLaunchResult>({
     runtime: deps.runtime,
+    unconfirmedDeliveryError: (request) =>
+      request.policy.kind === "manual"
+        ? new HostOperationError({
+            operation: "workflow-launch.instruction",
+            message: "The runtime did not confirm the instruction.",
+          })
+        : undefined,
     // The launch result names the role, so a missing task fails the launch before it starts.
     initial: (request) =>
       deps.taskReader
