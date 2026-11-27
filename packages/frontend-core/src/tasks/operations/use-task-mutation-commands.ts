@@ -27,7 +27,7 @@ import {
   toUpdateSuccessDescription,
 } from "./task-operations-model";
 import { useClientConnection } from "../../connection/client-connection-react";
-import type { HostClient } from "@openducktor/host-client";
+import type { BackgroundOperationInvocation, HostClient } from "@openducktor/host-client";
 import type { CloseTaskOptions } from "../../types/task-close";
 import type { TaskCreateWorkspace, TaskMutationCommands } from "../../types/state-slices";
 
@@ -112,75 +112,62 @@ export const createTaskMutationCommands = ({
   };
 
   const deleteTask = async (taskId: string): Promise<void> => {
+    const workspace = scopeFor(requireActiveRepo(activeRepoPath));
     await runTaskMutation({
       background: {
-        workspace: scopeFor(requireActiveRepo(activeRepoPath)),
+        workspace,
         taskId,
         action: "Delete task",
       },
-      run: async (repoPath, tracking) => {
+      run: async (tracking: BackgroundOperationInvocation) => {
         await taskChatDraftCleanup.runMutation({
           queryClient,
-          repoPath,
-          workspaceId: activeWorkspaceId,
+          repoPath: workspace.repoPath,
+          workspaceId: workspace.workspaceId,
           taskIds: [taskId],
           mutation: async () => {
             try {
-              await hostPort.taskDelete(
-                scopeFor(repoPath),
-                taskId,
-                ...(tracking ? ([tracking] as const) : []),
-              );
+              await hostPort.taskDelete(workspace, taskId, tracking);
             } finally {
-              await invalidateTaskStopImpact(queryClient, scopeFor(repoPath));
+              await invalidateTaskStopImpact(queryClient, workspace);
             }
           },
         });
       },
-      successTitle: "Task deleted",
-      successDescription: taskId,
-      failureTitle: "Failed to delete task",
     });
-    const repoPath = requireActiveRepo(activeRepoPath);
     await Promise.all([
-      invalidateRepoIssueItemsQueries(queryClient, scopeFor(repoPath)),
-      removeAgentSessionListQueries(queryClient, scopeFor(repoPath), [taskId]),
+      invalidateRepoIssueItemsQueries(queryClient, workspace),
+      removeAgentSessionListQueries(queryClient, workspace, [taskId]),
     ]);
   };
 
   const closeTask = async (
     taskId: string,
     { removeWorktree }: CloseTaskOptions,
-  ): Promise<TaskCard> =>
-    runTaskMutation({
+  ): Promise<TaskCard> => {
+    const workspace = scopeFor(requireActiveRepo(activeRepoPath));
+    return runTaskMutation({
       background: {
-        workspace: scopeFor(requireActiveRepo(activeRepoPath)),
+        workspace,
         taskId,
         action: "Close task",
       },
-      run: (repoPath, tracking) =>
+      run: (tracking: BackgroundOperationInvocation) =>
         taskChatDraftCleanup.runMutation({
           queryClient,
-          repoPath,
-          workspaceId: activeWorkspaceId,
+          repoPath: workspace.repoPath,
+          workspaceId: workspace.workspaceId,
           taskIds: [taskId],
           mutation: async () => {
             try {
-              return await hostPort.taskClose(
-                scopeFor(repoPath),
-                taskId,
-                removeWorktree,
-                ...(tracking ? ([tracking] as const) : []),
-              );
+              return await hostPort.taskClose(workspace, taskId, removeWorktree, tracking);
             } finally {
-              await invalidateTaskStopImpact(queryClient, scopeFor(repoPath));
+              await invalidateTaskStopImpact(queryClient, workspace);
             }
           },
         }),
-      successTitle: "Task closed",
-      successDescription: worktreeCleanupDescription(taskId, removeWorktree),
-      failureTitle: "Failed to close task",
     });
+  };
 
   const removeTaskWorktree = async (taskId: string): Promise<void> => {
     const workspace = scopeFor(requireActiveRepo(activeRepoPath));
@@ -190,10 +177,8 @@ export const createTaskMutationCommands = ({
         taskId,
         action: "Remove worktree",
       },
-      run: (_repoPath, tracking) => hostPort.taskWorktreeRemove(workspace, taskId, tracking),
-      successTitle: "Worktree removed",
-      successDescription: worktreeCleanupDescription(taskId, true),
-      failureTitle: "Failed to remove worktree",
+      run: (tracking: BackgroundOperationInvocation) =>
+        hostPort.taskWorktreeRemove(workspace, taskId, tracking),
     });
   };
 
@@ -236,8 +221,3 @@ export function useTaskMutationCommands({
 
 const invalidateTaskStopImpact = (queryClient: QueryClient, scope: WorkspaceRef): Promise<void> =>
   queryClient.invalidateQueries({ queryKey: taskStopImpactQueryKeys.repo(scope) });
-
-const worktreeCleanupDescription = (taskId: string, removed: boolean): string =>
-  removed
-    ? `${taskId}. Its worktree and local branch were removed.`
-    : `${taskId}. Its worktree and local branch were kept.`;

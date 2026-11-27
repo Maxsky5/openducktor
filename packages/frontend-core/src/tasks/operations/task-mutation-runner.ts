@@ -7,17 +7,18 @@ import { formatTaskAssetFailure, taskAssetFailureFromError } from "./task-asset-
 import { requireActiveRepo } from "./task-operations-model";
 import { refreshTaskWorktreeAfterOperation } from "./task-worktree-settlement";
 
-type RunTaskMutationOptions<Result> = {
-  run: (repoPath: string, tracking?: BackgroundOperationInvocation) => Promise<Result>;
-  background?: {
-    workspace: WorkspaceRef;
-    taskId: string;
-    action: string;
-  };
-  successTitle?: string;
-  successDescription: string;
-  failureTitle: string;
-};
+type RunTaskMutationOptions<Result> =
+  | {
+      background: { workspace: WorkspaceRef; taskId: string; action: string };
+      run: (tracking: BackgroundOperationInvocation) => Promise<Result>;
+    }
+  | {
+      background?: never;
+      run: (repoPath: string) => Promise<Result>;
+      successTitle?: string;
+      successDescription: string;
+      failureTitle: string;
+    };
 
 type UseTaskMutationRunnerArgs = {
   activeRepoPath: string | null;
@@ -37,7 +38,7 @@ export function useTaskMutationRunner({
         const { workspace, taskId, action } = options.background;
         return backgroundOperations.run(
           { workspace, target: { kind: "task", taskId }, action },
-          (tracking) => options.run(workspace.repoPath, tracking),
+          options.run,
           {
             onSettled: (attempt) =>
               refreshTaskWorktreeAfterOperation(queryClient, feedback, attempt),

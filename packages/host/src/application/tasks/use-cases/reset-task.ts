@@ -14,7 +14,7 @@ import {
   appendTaskCleanupProgress,
   clearTaskResetDelivery,
   createTaskCleanupProgressState,
-  recordStoppedAgentSessionCount,
+  stopTaskSessionsWithProgress,
 } from "../support/task-cleanup-progress";
 import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
 import {
@@ -117,8 +117,8 @@ export const createTaskFullResetUseCase = ({
       );
       const cleanupProgress = createTaskCleanupProgressState();
       if (hasWorkflowSessions && activityGuard) {
-        const { stoppedSessionCount } = yield* backgroundStep(
-          { id: "sessions", label: "Stop task sessions" },
+        yield* stopTaskSessionsWithProgress(
+          cleanupProgress,
           activityGuard.cleanupTaskSessions({
             workspaceId: input.workspaceId,
             repoPath: effectiveRepoPath,
@@ -129,9 +129,7 @@ export const createTaskFullResetUseCase = ({
               },
             ],
           }),
-          (result) => ({ details: [`Stopped sessions: ${result.stoppedSessionCount}`] }),
         );
-        recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
       }
       let taskStoreWriteCompleted = false;
       const artifactIds = (yield* taskStore.listArtifacts(input)).map(

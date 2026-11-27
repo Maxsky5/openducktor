@@ -1,7 +1,7 @@
 import {
   backgroundOperationTargetSchema,
-  type BackgroundOperationTarget,
-  workspaceIdSchema,
+  workspaceRefSchema,
+  workspaceSessionRefInputSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z } from "zod";
@@ -19,14 +19,10 @@ import type { HostEventBusPort } from "../../events/host-event-bus";
 import type { HostCommandArgs } from "../../interface/commands/command-inputs";
 
 const taskScopeSchema = z.object({
-  workspaceId: workspaceIdSchema,
-  repoPath: z.string().trim().min(1),
+  ...workspaceRefSchema.shape,
   taskId: z.string().trim().min(1),
 });
-const chatScopeSchema = z.object({
-  workspaceId: workspaceIdSchema,
-  sessionId: z.string().min(1),
-});
+const chatScopeSchema = z.object(workspaceSessionRefInputSchema.shape);
 
 export const createNodeBackgroundOperationTracker = ({
   hostInstanceId,
@@ -49,7 +45,6 @@ export const createNodeBackgroundOperationTracker = ({
     ) =>
       workers.run(
         Effect.gen(function* () {
-          let target: BackgroundOperationTarget;
           const parsed = yield* Effect.try({
             try: () =>
               command === "workspace_session_archive"
@@ -65,7 +60,7 @@ export const createNodeBackgroundOperationTracker = ({
           const config = yield* "taskId" in parsed
             ? getScopedRepoConfig(settings, parsed)
             : settings.getRepoConfig(parsed.workspaceId);
-          target = backgroundOperationTargetSchema.parse(
+          const target = backgroundOperationTargetSchema.parse(
             "taskId" in parsed
               ? { kind: "task", taskId: parsed.taskId }
               : { kind: "chat", sessionId: parsed.sessionId },
@@ -94,7 +89,6 @@ export const createNodeBackgroundOperationTracker = ({
               work.pipe(Effect.provideService(CurrentBackgroundOperation, progress)),
             );
             if (result._tag === "Success") {
-              progress.update({ ...request, state: "completed" });
               progress.settle();
               return result.value;
             }

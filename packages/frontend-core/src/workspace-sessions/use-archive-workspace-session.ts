@@ -1,9 +1,9 @@
 import type { WorkspaceRecord, WorkspaceSessionArchiveInput } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
+import { useSyncExternalStore } from "react";
 import { useClientConnection } from "../connection/client-connection-react";
 import { errorMessage } from "../lib/errors";
 import type { ArchiveFileDraft } from "../operations/background-operation-store";
-import { useBackgroundAttempts } from "../operations/use-background-attempts";
 import { filesystemQueryKeys } from "../queries/filesystem";
 import { invalidateRepoBranchesQuery, resetGitWorkingDirectoryQueries } from "../queries/git";
 import { terminalQueryKeys } from "../queries/terminals";
@@ -16,13 +16,10 @@ export type ArchiveWorkspaceSessionInput = WorkspaceSessionArchiveInput & {
 export const useArchiveWorkspaceSession = (workspaceId: string, sessionId: string | null) => {
   const queryClient = useQueryClient();
   const { backgroundOperations, feedback, host } = useClientConnection();
-  const isPending = useBackgroundAttempts().some(
-    (attempt) =>
-      attempt.workspace.workspaceId === workspaceId &&
-      attempt.target.kind === "chat" &&
-      attempt.target.sessionId === sessionId &&
-      attempt.phase === "running",
-  );
+  const isArchiving = () =>
+    sessionId !== null &&
+    backgroundOperations.isRunning({ workspaceId }, { kind: "chat", sessionId });
+  const isPending = useSyncExternalStore(backgroundOperations.subscribe, isArchiving, isArchiving);
 
   return {
     isPending,

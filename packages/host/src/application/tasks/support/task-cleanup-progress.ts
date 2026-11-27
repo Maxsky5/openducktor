@@ -28,6 +28,19 @@ export const recordStoppedAgentSessionCount = (
   }
 };
 
+export const stopTaskSessionsWithProgress = <E, R>(
+  progress: TaskCleanupProgressState,
+  cleanup: Effect.Effect<{ stoppedSessionCount: number }, E, R>,
+) =>
+  Effect.gen(function* () {
+    const { stoppedSessionCount } = yield* backgroundStep(
+      { id: "sessions", label: "Stop task sessions" },
+      cleanup,
+      (result) => ({ details: [`Stopped sessions: ${result.stoppedSessionCount}`] }),
+    );
+    recordStoppedAgentSessionCount(progress, stoppedSessionCount);
+  });
+
 const cleanupLabels = {
   task_close: { label: "Close", retryVerb: "close" },
   task_delete: { label: "Delete", retryVerb: "delete" },

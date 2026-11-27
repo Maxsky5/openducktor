@@ -80,8 +80,12 @@ const createOperationsHarness = (options: OperationsHarnessOptions = {}) => {
   const refreshTaskData = mock(async () => {});
   const notification = createNotificationPort();
   const pullRequestHostPort = options.pullRequestHostPort ?? createPullRequestHostPort();
-  const runTaskMutation =
-    options.runTaskMutation ?? ((mutationOptions) => mutationOptions.run("/repo"));
+  const runTaskMutation: TaskMutationRunner["runTaskMutation"] =
+    options.runTaskMutation ??
+    ((mutationOptions) =>
+      mutationOptions.background
+        ? mutationOptions.run({ operationId: "operation-1" })
+        : mutationOptions.run("/repo"));
   const cleanupEvents: string[] = [];
   const taskChatDraftCleanup: TaskPullRequestChatDraftCleanupPort =
     options.taskChatDraftCleanup ?? {
@@ -430,8 +434,10 @@ describe("useTaskPullRequestOperations", () => {
   test("restores unlink progress after a workspace round trip and invalidates CI review data", async () => {
     const unlinkResult = Promise.withResolvers<{ ok: boolean }>();
     const taskPullRequestUnlink = mock(() => unlinkResult.promise);
-    const runTaskMutation: TaskMutationRunner["runTaskMutation"] = (options) =>
-      options.run("/repo");
+    const runTaskMutation: TaskMutationRunner["runTaskMutation"] = async (options) => {
+      if (options.background) throw new Error("Unexpected background unlink");
+      return options.run("/repo");
+    };
     const testHarness = createOperationsHarness({
       pullRequestHostPort: createPullRequestHostPort({ taskPullRequestUnlink }),
       runTaskMutation,
@@ -730,6 +736,7 @@ describe("useTaskPullRequestOperations", () => {
     const unlinkFailure = new Error("GitHub is unavailable");
     const mutationFailureTitle = createRef<string>();
     const runTaskMutation: TaskMutationRunner["runTaskMutation"] = async (options) => {
+      if (options.background) throw new Error("Unexpected background unlink");
       mutationFailureTitle.current = options.failureTitle;
       await options.run("/repo");
       throw unlinkFailure;

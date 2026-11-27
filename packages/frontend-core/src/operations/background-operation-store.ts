@@ -45,13 +45,28 @@ type OperationHandlers = {
   onProgress?: (progress: BackgroundOperationSnapshot) => void;
 };
 
+type WorkspaceIdentity = Pick<WorkspaceRef, "workspaceId">;
+
 const SUCCESS_DURATION = 10_000;
-const targetKey = ({ workspace, target }: Pick<Origin, "workspace" | "target">) =>
+const targetKey = ({
+  workspace,
+  target,
+}: {
+  workspace: WorkspaceIdentity;
+  target: BackgroundOperationTarget;
+}): string =>
   JSON.stringify([
     workspace.workspaceId,
     target.kind,
     target.kind === "task" ? target.taskId : target.sessionId,
   ]);
+
+const matchesChat = (
+  { workspace, target }: BackgroundAttempt,
+  workspaceId: string,
+  sessionId: string,
+): boolean =>
+  target.kind === "chat" && target.sessionId === sessionId && workspace.workspaceId === workspaceId;
 
 export const backgroundAttemptOrigin = ({
   workspace,
@@ -129,11 +144,15 @@ export const createBackgroundOperationStore = (
       if (retained.length > 0) entry.attempt.archiveDraftFileIds = retained;
       else delete entry.attempt.archiveDraftFileIds;
     }
-    if (phase !== "unconfirmed") delete entry.consentedArchiveDraft;
+    const notifySettled = entry.onSettled;
+    if (phase !== "unconfirmed") {
+      delete entry.consentedArchiveDraft;
+      delete entry.onSettled;
+    }
     expireSuccess(entry.attempt);
     publish();
     onSettled?.(entry.attempt);
-    entry.onSettled?.(entry.attempt);
+    notifySettled?.(entry.attempt);
   };
   const accept = (progress: BackgroundOperationSnapshot) => {
     const entry = entries.get(progress.operationId);
@@ -145,8 +164,7 @@ export const createBackgroundOperationStore = (
       return;
     if (
       progress.workspace.repoPath !== entry.attempt.workspace.repoPath ||
-      targetKey({ ...entry.attempt, workspace: progress.workspace, target: progress.target }) !==
-        targetKey(entry.attempt) ||
+      targetKey(progress) !== targetKey(entry.attempt) ||
       progress.revision <= (entry.attempt.progress?.revision ?? -1)
     )
       return;
@@ -197,13 +215,7 @@ export const createBackgroundOperationStore = (
         for (const entry of entries.values()) {
           const { attempt } = entry;
           const { archiveDraftFileIds } = attempt;
-          if (
-            attempt.workspace.workspaceId !== workspaceId ||
-            attempt.target.kind !== "chat" ||
-            attempt.target.sessionId !== sessionId ||
-            !archiveDraftFileIds
-          )
-            continue;
+          if (!archiveDraftFileIds || !matchesChat(attempt, workspaceId, sessionId)) continue;
           const remaining = archiveDraftFileIds.filter((id) => id !== fileId);
           if (remaining.length === archiveDraftFileIds.length) continue;
           entry.attempt = { ...attempt, archiveDraftFileIds: remaining };
@@ -212,25 +224,26 @@ export const createBackgroundOperationStore = (
         publish();
         return;
       }
-      const pending = [...entries.values()].filter(
-        ({ attempt }) =>
-          (attempt.phase === "running" || attempt.phase === "unconfirmed") &&
-          attempt.workspace.workspaceId === workspaceId &&
-          attempt.target.kind === "chat" &&
-          attempt.target.sessionId === sessionId,
-      );
-      if (!retained && pending.length === 0) return;
-      archiveDrafts.set(key, next);
+      let hasPendingArchive = false;
       let changed = false;
-      for (const entry of pending) {
-        const fileIds = entry.attempt.archiveDraftFileIds ?? [];
+      for (const entry of entries.values()) {
+        const { attempt } = entry;
+        if (
+          (attempt.phase !== "running" && attempt.phase !== "unconfirmed") ||
+          !matchesChat(attempt, workspaceId, sessionId)
+        )
+          continue;
+        hasPendingArchive = true;
+        const fileIds = attempt.archiveDraftFileIds ?? [];
         if (fileIds.includes(fileId)) continue;
-        entry.attempt = { ...entry.attempt, archiveDraftFileIds: [...fileIds, fileId] };
+        entry.attempt = { ...attempt, archiveDraftFileIds: [...fileIds, fileId] };
         changed = true;
       }
+      if (!retained && !hasPendingArchive) return;
+      archiveDrafts.set(key, next);
       if (changed) publish();
     },
-    isRunning: (workspace: WorkspaceRef, target: BackgroundOperationTarget) =>
+    isRunning: (workspace: WorkspaceIdentity, target: BackgroundOperationTarget) =>
       running.has(targetKey({ workspace, target })),
     getSnapshot: () => snapshot,
     subscribe(listener: () => void) {

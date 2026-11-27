@@ -1,7 +1,4 @@
-import {
-  planBackgroundSteps,
-  backgroundStep,
-} from "../../operation-progress/background-operation-progress";
+import { planBackgroundSteps } from "../../operation-progress/background-operation-progress";
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { Effect } from "effect";
 import { HostDependencyError } from "../../../effect/host-errors";
@@ -13,7 +10,7 @@ import {
 import {
   appendTaskCleanupProgress,
   createTaskCleanupProgressState,
-  recordStoppedAgentSessionCount,
+  stopTaskSessionsWithProgress,
 } from "../support/task-cleanup-progress";
 import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
 import { runTaskLocalCleanup } from "../support/task-cleanup-support";
@@ -109,8 +106,8 @@ export const createTaskCloseUseCase = ({
           ? yield* collectCleanupTargets
           : { worktreePaths: noRemovedWorktrees, branchNames: [] };
         if (hasWorkflowSessions && taskActivityGuard) {
-          const { stoppedSessionCount } = yield* backgroundStep(
-            { id: "sessions", label: "Stop task sessions" },
+          yield* stopTaskSessionsWithProgress(
+            cleanupProgress,
             taskActivityGuard.cleanupTaskSessions({
               workspaceId: input.workspaceId,
               repoPath: effectiveRepoPath,
@@ -121,9 +118,7 @@ export const createTaskCloseUseCase = ({
                 },
               ],
             }),
-            (result) => ({ details: [`Stopped sessions: ${result.stoppedSessionCount}`] }),
           );
-          recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
         }
         yield* runTaskLocalCleanup({
           beforeWorktreeRemoval: {

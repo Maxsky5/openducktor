@@ -1,7 +1,4 @@
-import {
-  planBackgroundSteps,
-  backgroundStep,
-} from "../../operation-progress/background-operation-progress";
+import { planBackgroundSteps } from "../../operation-progress/background-operation-progress";
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { Effect } from "effect";
 import { collectRelatedTaskBranches } from "../support/task-branch-tips";
@@ -12,7 +9,7 @@ import { requireTaskDeleteDependencies } from "../support/task-cleanup-dependenc
 import {
   appendTaskCleanupProgress,
   createTaskCleanupProgressState,
-  recordStoppedAgentSessionCount,
+  stopTaskSessionsWithProgress,
 } from "../support/task-cleanup-progress";
 import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
 import {
@@ -113,16 +110,14 @@ export const createTaskDeleteUseCase = ({
       );
       const cleanupProgress = createTaskCleanupProgressState();
       if (hasWorkflowSessions && activityGuard) {
-        const { stoppedSessionCount } = yield* backgroundStep(
-          { id: "sessions", label: "Stop task sessions" },
+        yield* stopTaskSessionsWithProgress(
+          cleanupProgress,
           activityGuard.cleanupTaskSessions({
             workspaceId: input.workspaceId,
             repoPath: effectiveRepoPath,
             taskSessions: targetTaskSessions,
           }),
-          (result) => ({ details: [`Stopped sessions: ${result.stoppedSessionCount}`] }),
         );
-        recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
       }
       let durableDeleteCommitted = false;
       return yield* Effect.gen(function* () {

@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  hasMountedModalDialog,
   returnFocusOnClose,
   subscribeDialogFocusReleased,
   subscribeOpenDialogs,
@@ -166,13 +167,7 @@ function BackgroundResults({
   useEffect(() => {
     if (!next || showing) return;
     const check = () => {
-      // Radix and closing dialog animations keep the old focus scope until content leaves.
-      if (
-        document.querySelector(
-          '[data-slot="dialog-content"][aria-modal="true"], [data-slot="dialog-positioner"]',
-        )
-      )
-        return;
+      if (hasMountedModalDialog()) return;
       returnTarget.current =
         document.activeElement instanceof HTMLElement ? document.activeElement : null;
       setShowing(next);
