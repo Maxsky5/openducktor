@@ -2,6 +2,7 @@ import { createDomRenderer, type HtmlIsland, type HtmlOptions } from "@pierre/wo
 import type { ReactiveIslands } from "@pierre/words/react";
 import { type HTMLAttributes, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import type { MarkdownLocalLinks } from "./markdown-html";
 import { createInlineFileLinkRenderer } from "./markdown-inline-file-links";
 
 type DomRenderer = ReturnType<typeof createDomRenderer>;
@@ -30,6 +31,7 @@ type Props = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
   children: string;
   streaming: boolean;
   options: HtmlOptions;
+  chip: MarkdownLocalLinks["chip"];
   islands?: ReactiveIslands | undefined;
 };
 
@@ -38,6 +40,7 @@ export function MarkdownWithInlineFileLinks({
   children,
   streaming,
   islands,
+  chip,
   options: htmlOptions,
   ...props
 }: Props) {
@@ -62,7 +65,7 @@ export function MarkdownWithInlineFileLinks({
     return next;
   }, [htmlOptions, htmlIslands, id]);
   const [initial] = useState(() => {
-    const formatter = createInlineFileLinkRenderer(options);
+    const formatter = createInlineFileLinkRenderer(options, chip);
     try {
       const markup = { __html: formatter.render(children, streaming, streaming).html };
       return { formatter, options, markup };
@@ -83,6 +86,7 @@ export function MarkdownWithInlineFileLinks({
   useLayoutEffect(() => {
     const dom = renderer.current;
     if (!dom) return;
+    initial.formatter.setLinkChip(chip);
     dom.configure(options);
     dom.update(children, streaming, streaming);
     if (islands || mountedIslands.length) {
@@ -91,7 +95,7 @@ export function MarkdownWithInlineFileLinks({
         setMountedIslands(next);
       }
     }
-  }, [children, islands, mountedIslands, options, streaming]);
+  }, [children, chip, initial, islands, mountedIslands, options, streaming]);
 
   return (
     <>

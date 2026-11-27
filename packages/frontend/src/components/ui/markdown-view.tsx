@@ -108,7 +108,8 @@ function useFileLinkSpriteRootId(
   localLinks: MarkdownLocalLinks | null,
 ): string | undefined {
   const markdownId = useId();
-  const rootId = hasLinks && localLinks?.chip ? markdownId : undefined;
+  const mayHaveFileLink = hasLinks || (localLinks?.inlineFilePaths && markdown.includes("`"));
+  const rootId = mayHaveFileLink && localLinks?.chip ? markdownId : undefined;
   // Words commits the link markup in its layout effect. Check it before the browser paints.
   useLayoutEffect(() => {
     if (rootId) mountFileTypeIconSpriteForLinks(rootId);
@@ -243,7 +244,12 @@ export const MarkdownView = memo(function MarkdownView({
   return (
     <>
       {localLinks?.inlineFilePaths ? (
-        <MarkdownWithInlineFileLinks {...contentProps} options={options} streaming={streaming}>
+        <MarkdownWithInlineFileLinks
+          {...contentProps}
+          options={options}
+          chip={localLinks.chip}
+          streaming={streaming}
+        >
           {markdown}
         </MarkdownWithInlineFileLinks>
       ) : (

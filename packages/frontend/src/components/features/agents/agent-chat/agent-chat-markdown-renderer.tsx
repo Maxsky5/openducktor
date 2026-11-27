@@ -55,7 +55,7 @@ export const AgentChatMarkdownRenderer = memo(function AgentChatMarkdownRenderer
       local: {
         handles: isChatLocalDestination,
         inlineFilePaths: true,
-        chip: (href, labelHtml) => {
+        chip: (href, labelHtml, source) => {
           const destination = parseChatFileLink(href);
           if (destination.kind !== "path") return null;
           const { path, absolute } = destination;
@@ -65,7 +65,10 @@ export const AgentChatMarkdownRenderer = memo(function AgentChatMarkdownRenderer
           const iconPath = windows ? path.replaceAll("\\", "/") : path;
           return {
             iconHtml: getAgentChatFileReferenceIconMarkup("default", iconPath),
-            labelHtml: compactFileLabel(labelHtml, iconPath, href, windows),
+            labelHtml:
+              source === "inline-code"
+                ? labelHtml
+                : compactFileLabel(labelHtml, iconPath, href, windows),
           };
         },
         open: (destination, anchor) => {

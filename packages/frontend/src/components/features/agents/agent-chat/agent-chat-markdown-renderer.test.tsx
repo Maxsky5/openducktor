@@ -149,12 +149,16 @@ describe("chat file links", () => {
 
     expect(view.getByText(path).tagName).toBe("CODE");
     expect(view.queryByRole("link", { name: path })).toBeNull();
+    expect(document.querySelector("[data-file-type-icon-sprite]")).toBeNull();
 
     const partialSecond = `${prefix}\`\n- Then see \`${path}`;
     view.rerender(reply(`${prefix}\``));
     const firstLink = view.getByRole("link", { name: path });
     expect(firstLink.querySelector("code")?.textContent).toBe(path);
-    fireEvent.click(firstLink);
+    const icon = firstLink.querySelector("svg use");
+    expect(icon?.getAttribute("href")).toContain("typescript");
+    expect(document.querySelector("[data-file-type-icon-sprite]")).not.toBeNull();
+    if (icon) fireEvent.click(icon);
     expect(open).toHaveBeenCalledWith(path, firstLink);
 
     view.rerender(reply(partialSecond));
@@ -168,6 +172,11 @@ describe("chat file links", () => {
     view.rerender(reply(`${partialSecond}\``, false));
     expect(view.getAllByRole("link", { name: path })).toHaveLength(2);
     expect(view.getByText("Intro.")).toBe(intro);
+
+    const citation = render(withFiles(open, chat(`[Auth](${path})`)));
+    expect(citation.getByRole("link", { name: "Auth" }).querySelector("svg use")?.outerHTML).toBe(
+      icon?.outerHTML,
+    );
   });
 
   test("keeps ambiguous code and explicit Markdown links as written", () => {

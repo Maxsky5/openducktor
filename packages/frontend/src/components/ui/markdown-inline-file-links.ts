@@ -1,6 +1,6 @@
 import { createHtmlSession } from "@pierre/words";
-import { createHtmlRenderer, escapeHtml, type HtmlOptions } from "@pierre/words/html";
-import { LOCAL_LINK_ATTRIBUTE } from "./markdown-html";
+import { createHtmlRenderer, type HtmlOptions } from "@pierre/words/html";
+import { type MarkdownLocalLinks, renderMarkdownLocalLink } from "./markdown-html";
 
 const MAX_PATH_LENGTH = 255;
 // Limit the source check to code spans that could contain a relative path. It can overmatch.
@@ -27,7 +27,11 @@ function* fileSpans(html: string) {
   }
 }
 
-function linkFileSpans(html: string, verify?: () => string): string {
+function linkFileSpans(
+  html: string,
+  chip: MarkdownLocalLinks["chip"],
+  verify?: () => string,
+): string {
   let confirmed: ReturnType<typeof fileSpans> | undefined;
   let start = 0;
   let linked = "";
@@ -37,10 +41,7 @@ function linkFileSpans(html: string, verify?: () => string): string {
       // Incomplete Markdown can add a code span at the end that has no closing backtick.
       if (confirmed.next().value?.path !== path) break;
     }
-    const destination = escapeHtml(path);
-    linked +=
-      html.slice(start, index) +
-      `<a href="#" ${LOCAL_LINK_ATTRIBUTE}="${destination}" data-inline-file-link="" title="${destination}">${markup}</a>`;
+    linked += html.slice(start, index) + renderMarkdownLocalLink(path, markup, chip, "inline-code");
     start = index + markup.length;
   }
   return start === 0 ? html : linked + html.slice(start);
@@ -50,8 +51,12 @@ type HtmlRenderer = ReturnType<typeof createHtmlRenderer>;
 type HtmlUpdate = ReturnType<HtmlRenderer["render"]>;
 
 /** Decorate Words' own updates so it can keep the completed DOM and apply only its normal delta. */
-export function createInlineFileLinkRenderer(initial: HtmlOptions): HtmlRenderer {
+export function createInlineFileLinkRenderer(
+  initial: HtmlOptions,
+  initialChip: MarkdownLocalLinks["chip"],
+): HtmlRenderer & { setLinkChip(chip: MarkdownLocalLinks["chip"]): void } {
   const renderer = createHtmlRenderer(initial);
+  let chip = initialChip;
   let options = initial;
   let strict: ReturnType<typeof createHtmlSession> | undefined;
   let previousSource = "";
@@ -60,6 +65,9 @@ export function createInlineFileLinkRenderer(initial: HtmlOptions): HtmlRenderer
   let result: HtmlUpdate | undefined;
 
   return {
+    setLinkChip(next) {
+      chip = next;
+    },
     configure(next, reset) {
       options = next;
       renderer.configure(next, reset);
@@ -81,9 +89,9 @@ export function createInlineFileLinkRenderer(initial: HtmlOptions): HtmlRenderer
         return update;
       }
 
-      const addition = update.reset ? "" : linkFileSpans(update.addition);
+      const addition = update.reset ? "" : linkFileSpans(update.addition, chip);
       const stable = update.reset
-        ? linkFileSpans(update.stable)
+        ? linkFileSpans(update.stable, chip)
         : (result?.stable ?? "") + addition;
       let pending: string | undefined;
       const verify = incomplete
@@ -101,7 +109,7 @@ export function createInlineFileLinkRenderer(initial: HtmlOptions): HtmlRenderer
         reset: update.reset,
         revision: update.revision,
         get pending() {
-          return (pending ??= linkFileSpans(update.pending, verify));
+          return (pending ??= linkFileSpans(update.pending, chip, verify));
         },
         get html() {
           return stable + this.pending;
