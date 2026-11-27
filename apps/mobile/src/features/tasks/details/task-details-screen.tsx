@@ -7,7 +7,11 @@ import { routeParam } from "@/navigation/route-params";
 
 /** The task details route. It opens in the app stack above the tabs. */
 export function TaskDetailsScreen(): ReactElement {
-  const params = useLocalSearchParams<{ workspaceId: string; taskId: string }>();
+  const params = useLocalSearchParams<{
+    workspaceId: string;
+    taskId: string;
+    confirmation?: string;
+  }>();
   const workspaceId = routeParam(params.workspaceId);
   const taskId = routeParam(params.taskId);
   return (
@@ -17,6 +21,7 @@ export function TaskDetailsScreen(): ReactElement {
           key={`${workspaceId}:${taskId}`}
           workspaceId={workspaceId}
           taskId={taskId}
+          confirmClose={params.confirmation === "close"}
         />
       ) : (
         <EmptyState

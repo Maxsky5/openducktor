@@ -1,4 +1,9 @@
-import type { HostCommandArgs, HostCommandName, HostInvokeFailure } from "@openducktor/contracts";
+import type {
+  FailedBackgroundOperation,
+  HostCommandArgs,
+  HostCommandName,
+  HostInvokeFailure,
+} from "@openducktor/contracts";
 import { z } from "zod";
 
 export class HostInvokeError extends Error {
@@ -8,6 +13,7 @@ export class HostInvokeError extends Error {
     message: string,
     readonly failure: HostInvokeFailure | null = null,
     cause?: unknown,
+    readonly operationProgress?: FailedBackgroundOperation,
   ) {
     super(message);
     this.name = "HostInvokeError";
@@ -20,6 +26,10 @@ export type InvokeOptions = {
   signal?: AbortSignal;
   /** Refuse the request before dispatch if the open channel belongs to a different host instance. */
   expectedHostEpoch?: string;
+};
+
+export type BackgroundOperationInvocation = Pick<InvokeOptions, "expectedHostEpoch"> & {
+  operationId: string;
 };
 
 export type InvokeFn = <Result>(

@@ -1640,59 +1640,60 @@ describe("KanbanPage session start modal flow", () => {
     });
   });
 
-  kanbanTest("reset implementation keeps the modal open when reset fails", async () => {
-    currentTaskFixture = createTaskCardFixture({
-      id: "TASK-123",
-      status: "in_progress",
-      availableActions: ["reset_implementation"],
-    });
-    currentSessionsFixture = [
-      createAgentSessionFixture({
-        runtimeKind: "opencode",
-        externalSessionId: "session-build-idle",
-        sessionAssociation: {
-          kind: "workflow",
-          workspaceId: "repo",
-          taskId: "TASK-123",
-          role: "build",
-        },
+  kanbanTest(
+    "reset implementation closes its confirmation when the submitted reset fails",
+    async () => {
+      currentTaskFixture = createTaskCardFixture({
+        id: "TASK-123",
+        status: "in_progress",
+        availableActions: ["reset_implementation"],
+      });
+      currentSessionsFixture = [
+        createAgentSessionFixture({
+          runtimeKind: "opencode",
+          externalSessionId: "session-build-idle",
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "repo",
+            taskId: "TASK-123",
+            role: "build",
+          },
 
-        status: "idle",
-        startedAt: "2026-01-02T00:00:00.000Z",
-      }),
-    ];
-    const renderer = await renderPage();
+          status: "idle",
+          startedAt: "2026-01-02T00:00:00.000Z",
+        }),
+      ];
+      const renderer = await renderPage();
 
-    await act(async () => {
-      runTaskAction(renderer, "reset_implementation");
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+      await act(async () => {
+        runTaskAction(renderer, "reset_implementation");
+        await Promise.resolve();
+        await Promise.resolve();
+      });
 
-    resetTaskImplementationMock.mockImplementationOnce(async () => {
-      throw new Error("reset failed");
-    });
+      resetTaskImplementationMock.mockImplementationOnce(async () => {
+        throw new Error("reset failed");
+      });
 
-    const resetModal = renderer.getResetImplementationModalModel();
-    if (!resetModal) {
-      throw new Error("Expected reset implementation modal.");
-    }
+      const resetModal = renderer.getResetImplementationModalModel();
+      if (!resetModal) {
+        throw new Error("Expected reset implementation modal.");
+      }
 
-    await act(async () => {
-      resetModal.onConfirm();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+      await act(async () => {
+        resetModal.onConfirm();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
 
-    await waitFor(() => {
-      expect(renderer.getResetImplementationModalModel()?.errorMessage).toBe("reset failed");
-      expect(renderer.getResetImplementationModalModel()?.open).toBe(true);
-    });
+      expect(renderer.getResetImplementationModalModel()).toBeNull();
+      expect(resetTaskImplementationMock).toHaveBeenCalledTimes(1);
 
-    await act(async () => {
-      renderer.unmount();
-    });
-  });
+      await act(async () => {
+        renderer.unmount();
+      });
+    },
+  );
 
   kanbanTest(
     "reset implementation reports a missing task instead of silently returning",

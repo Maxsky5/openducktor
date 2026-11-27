@@ -1,3 +1,4 @@
+import type { ArchiveFileDraft } from "@openducktor/frontend-core/operations/background-operation-store";
 import {
   createContext,
   type ReactNode,
@@ -11,9 +12,9 @@ import { type Location, useBlocker } from "react-router";
 import { SESSIONS_PATH } from "@/features/session-navigation/sessions-route";
 
 type RequestTransition = (
-  apply: () => void | Promise<void | boolean>,
+  apply: (archiveDraft?: ArchiveFileDraft) => void | Promise<void | boolean>,
   cancel?: () => void,
-  options?: { waitForSuccess?: boolean; kind?: "root_branch_switch" },
+  options?: { waitForSuccess?: boolean; kind?: "root_branch_switch" | "archive_chat" },
 ) => void;
 /**
  * A page that must ask before any route change leaves it, such as an editor with an unsaved

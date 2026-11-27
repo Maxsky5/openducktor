@@ -233,3 +233,5 @@ export {
   createFilesystemRemoteApprovalStore,
   remoteHostOwnerFromEnvironment,
 } from "./adapters/node/filesystem-remote-approval-store";
+
+export { backgroundOperationFailureProgress } from "./application/operation-progress/background-operation-progress";

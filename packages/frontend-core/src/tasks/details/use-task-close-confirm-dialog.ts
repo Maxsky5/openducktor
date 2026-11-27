@@ -54,6 +54,7 @@ export function useTaskCloseConfirmDialog({
     task.removeWorktreeOnClose,
   );
   const { openDialog, dialog } = useTaskAsyncConfirmDialog({
+    closeOnSubmit: true,
     enabled,
     initiallyOpen,
     scopeKey: task.id,

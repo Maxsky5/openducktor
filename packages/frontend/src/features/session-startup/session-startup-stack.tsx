@@ -1,3 +1,7 @@
+import {
+  BackgroundOperationNotifications,
+  type FinishClosingTask,
+} from "./background-operation-notifications";
 import { Check, LoaderCircle, OctagonAlert } from "lucide-react";
 import { type ReactElement, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -31,7 +35,11 @@ import {
   startupTitle,
 } from "./startup-summary";
 
-export function StartupNotifications(): ReactElement | null {
+export function StartupNotifications({
+  finishClosingTask,
+}: {
+  finishClosingTask?: FinishClosingTask | undefined;
+}): ReactElement {
   const connection = useClientConnection();
   const { startupAttempts } = connection;
   const attempts = useStartupAttempts();
@@ -49,9 +57,9 @@ export function StartupNotifications(): ReactElement | null {
     };
   }, [startupAttempts]);
   const notifications = attempts.filter((attempt) => attempt.presentation === "notification");
-  if (!notifications.length) return null;
   return (
     <>
+      <BackgroundOperationNotifications finishClosingTask={finishClosingTask} />
       {notifications.map((attempt) => (
         <StartupNotice key={attempt.id} attempt={attempt} />
       ))}

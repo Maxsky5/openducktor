@@ -1,3 +1,4 @@
+import type { ArchiveFileDraft } from "@openducktor/frontend-core/operations/background-operation-store";
 import { ShortcutScope, ShortcutButton } from "@/features/shortcuts/shortcut-controls";
 
 import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
@@ -65,6 +66,7 @@ type TaskExecutionSelectedFilePreviewProps = {
   requireBranch?: boolean;
   /** A chat sends its session with reads and saves under its directory. */
   workspaceSession?: WorkspaceSessionRefInput | undefined;
+  archiveDraftRef?: { current: ArchiveFileDraft | null };
 };
 
 export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelectedFilePreview({
@@ -83,6 +85,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   branch = null,
   requireBranch = false,
   workspaceSession,
+  archiveDraftRef,
 }: TaskExecutionSelectedFilePreviewProps): ReactElement | null {
   const [committedSnapshot, setCommittedSnapshot] = useState<CommittedFilePreviewSnapshot | null>(
     null,
@@ -128,6 +131,8 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     branch: selectedFile?.access === "local" ? null : branch,
     requireBranch: selectedFile?.access === "local" ? false : requireBranch,
     scope: fileScope,
+    archiveDraftRef,
+    workspaceSession,
     onFileSaved,
     onLeavePolicyChange,
   });

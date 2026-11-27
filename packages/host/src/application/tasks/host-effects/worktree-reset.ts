@@ -1,3 +1,7 @@
+import {
+  planBackgroundSteps,
+  backgroundStep,
+} from "../../operation-progress/background-operation-progress";
 import { mapTaskMutationProgressErrors } from "../task-error-mapping";
 import { loadTaskSessions } from "../support/task-sessions";
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
@@ -21,7 +25,10 @@ import {
   createTaskMutationProgressFailure,
   TaskMutationProgressFailure,
 } from "../task-mutation-progress-failure";
-import { createTaskCleanupProgressState } from "../support/task-cleanup-progress";
+import {
+  clearTaskResetDelivery,
+  createTaskCleanupProgressState,
+} from "../support/task-cleanup-progress";
 import type { TaskServiceUseCaseInput } from "../task-service";
 import type { HostEffectHandler } from "./host-effect-registry";
 
@@ -48,6 +55,15 @@ export const createWorktreeResetEffect = ({
 }: TaskServiceUseCaseInput): HostEffectHandler => {
   const reset: HostEffectHandler = ({ input, effect, artifactChanges }, commit) =>
     Effect.gen(function* () {
+      yield* planBackgroundSteps(
+        { id: "terminals", label: "Stop task terminals" },
+        { id: "session-records", label: "Clear affected session records" },
+        { id: "artifacts", label: "Clear review artifacts" },
+        { id: "pull-request", label: "Clear pull request link" },
+        { id: "direct-merge", label: "Clear merge record" },
+        { id: "delivery", label: "Clear delivery state" },
+        { id: "task-reset", label: "Reset task status" },
+      );
       const { repoPath, taskId } = input;
       const dependencies = yield* requireDependencies(() =>
         requireTaskDeleteDependencies(gitPort, settingsConfig, workspaceSettingsService),
@@ -126,45 +142,43 @@ export const createWorktreeResetEffect = ({
           worktreePaths: removedWorktreePaths,
         });
         if (canonicalTarget) {
-          yield* dependencies.gitPort.restoreWorktreeToReference(
-            canonicalTarget.worktreePath,
-            canonicalTarget.restoreReference,
+          yield* backgroundStep(
+            { id: "restore", label: "Restore canonical worktree" },
+            dependencies.gitPort.restoreWorktreeToReference(
+              canonicalTarget.worktreePath,
+              canonicalTarget.restoreReference,
+            ),
           );
           cleanupProgress.completedSteps.push(
             `Restored canonical worktree ${canonicalWorktree} to ${canonicalTarget.restoreReference}.`,
           );
         }
-        yield* storeDependencies.clearAgentSessionsByRoles({
-          ...input,
-          repoPath: effectiveRepoPath,
-          roles: [...effect.clearsSessionsOf],
-        });
+        yield* backgroundStep(
+          { id: "session-records", label: "Clear affected session records" },
+          storeDependencies.clearAgentSessionsByRoles({
+            ...input,
+            repoPath: effectiveRepoPath,
+            roles: [...effect.clearsSessionsOf],
+          }),
+        );
         taskStoreWriteCompleted = true;
         cleanupProgress.completedSteps.push("Cleared the session records of the reset roles.");
-        yield* storeDependencies.clearWorkflowArtifacts({
-          ...input,
-          repoPath: effectiveRepoPath,
-          codes: workflow.reviewArtifactCodes,
-        });
+        yield* backgroundStep(
+          { id: "artifacts", label: "Clear review artifacts" },
+          storeDependencies.clearWorkflowArtifacts({
+            ...input,
+            repoPath: effectiveRepoPath,
+            codes: workflow.reviewArtifactCodes,
+          }),
+        );
         for (const code of workflow.reviewArtifactCodes)
           artifactChanges.push(workflowArtifactChange(taskId, code, true));
         cleanupProgress.completedSteps.push("Cleared the review artifacts.");
-        yield* storeDependencies.setPullRequest({
-          ...input,
-          repoPath: effectiveRepoPath,
-          pullRequest: null,
-        });
-        cleanupProgress.completedSteps.push("Cleared pull request metadata.");
-        yield* Effect.uninterruptible(
-          Effect.gen(function* () {
-            yield* storeDependencies.setDirectMerge({
-              ...input,
-              repoPath: effectiveRepoPath,
-              directMerge: null,
-            });
-            cleanupProgress.completedSteps.push("Cleared direct merge metadata.");
-            yield* completionState.discard({ ...input, repoPath: effectiveRepoPath });
-          }),
+        yield* clearTaskResetDelivery(
+          storeDependencies,
+          completionState,
+          { ...input, repoPath: effectiveRepoPath },
+          cleanupProgress,
         );
         return yield* commit;
       }).pipe(

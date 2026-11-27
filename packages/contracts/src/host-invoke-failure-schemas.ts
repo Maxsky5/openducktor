@@ -1,3 +1,4 @@
+import { failedBackgroundOperationSchema } from "./background-operation-schemas";
 import { z } from "zod";
 import { startupOperationSnapshotSchema } from "./session-startup-schemas";
 import { runtimeQueryFailureSchema } from "./runtime-query-failure-schemas";
@@ -125,6 +126,7 @@ export const hostErrorResponseSchema = z
   .object({
     error: z.string().trim().min(1).optional(),
     failure: hostInvokeFailureSchema.optional(),
+    operationProgress: failedBackgroundOperationSchema.optional(),
     failureKind: z.string().trim().min(1).optional(),
     message: z.string().trim().min(1).optional(),
   })

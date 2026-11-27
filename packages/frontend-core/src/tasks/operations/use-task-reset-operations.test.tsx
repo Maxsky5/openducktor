@@ -79,6 +79,7 @@ describe("useTaskResetOperations", () => {
         { workspaceId: "workspace-1", repoPath: "/repo" },
         "A",
         "reset-implementation",
+        { operationId: expect.any(String) },
       );
       expect(setup.feedback.shownOf("error")).toEqual([
         {
@@ -111,6 +112,7 @@ describe("useTaskResetOperations", () => {
       expect(setup.taskReset).toHaveBeenCalledWith(
         { workspaceId: "workspace-1", repoPath: "/repo" },
         "A",
+        { operationId: expect.any(String) },
       );
       expect(setup.feedback.shownOf("error")).toEqual([
         {

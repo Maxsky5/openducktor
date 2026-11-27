@@ -43,6 +43,7 @@ export function useTaskRemoveWorktreeConfirmDialog({
 }): UseTaskRemoveWorktreeConfirmDialogResult {
   const canRemove = enabled && run !== undefined && canRemoveTaskWorktree(task);
   const { openDialog, dialog } = useTaskAsyncConfirmDialog({
+    closeOnSubmit: true,
     enabled: canRemove,
     scopeKey: task.id,
     run: run ? () => run(task.id) : undefined,

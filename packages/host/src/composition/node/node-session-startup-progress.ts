@@ -1,3 +1,5 @@
+import { createNodeBackgroundOperationTracker } from "./node-background-operation-progress";
+import type { HostCommandHandlerError } from "../../interface/router/host-command-router";
 import {
   startupOperationContextSchema,
   agentSessionControlSummarySchema,
@@ -179,3 +181,15 @@ const commands = new Set([
   "workspace_session_fork",
   "workspace_session_launch",
 ]);
+
+export const createNodeHostCommandProgress = (
+  dispose: () => Effect.Effect<void, HostCommandHandlerError>,
+  dependencies: Parameters<typeof createNodeSessionStartupTracker>[0],
+) => {
+  const background = createNodeBackgroundOperationTracker(dependencies);
+  return {
+    dispose: () => background.shutdown().pipe(Effect.andThen(dispose)),
+    trackBackgroundOperation: background.track,
+    trackCommand: createNodeSessionStartupTracker(dependencies),
+  };
+};

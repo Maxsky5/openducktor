@@ -18,6 +18,7 @@ import {
 } from "@openducktor/contracts";
 import {
   hostInvokeFailureFromError,
+  backgroundOperationFailureProgress,
   type EffectNodeHostCommandRouter,
   type HostCommandResult,
 } from "@openducktor/host";
@@ -117,6 +118,8 @@ export const hostErrorResponse = (cause: unknown): HostErrorResponse => {
   const response: HostErrorResponse = { message: errorMessage(cause) };
   const failure = hostInvokeFailureFromError(cause);
   if (failure) response.failure = failure;
+  const progress = backgroundOperationFailureProgress(cause);
+  if (progress) response.operationProgress = progress;
   return response;
 };
 

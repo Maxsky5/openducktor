@@ -28,6 +28,7 @@ export type FeedbackState = {
   toastStackHeight: number;
   startupVisible: boolean;
   startupCovers: number;
+  nativeModalCount: number;
 };
 
 /** Whether an open menu hides the toasts. */
@@ -55,6 +56,7 @@ export const createFeedbackStore = () => {
     toastStackHeight: 0,
     startupVisible: false,
     startupCovers: 0,
+    nativeModalCount: 0,
   }));
   let nextId = 1;
   // The messages that a window showed. A toast that moves to another window, as when a sheet
@@ -119,6 +121,11 @@ export const createFeedbackStore = () => {
       store.setState(({ startupCovers }) => ({ startupCovers: startupCovers - 1 }));
     };
   };
+  const openNativeModal = () => {
+    store.setState(({ nativeModalCount }) => ({ nativeModalCount: nativeModalCount + 1 }));
+    return () =>
+      store.setState(({ nativeModalCount }) => ({ nativeModalCount: nativeModalCount - 1 }));
+  };
   /** A window showed the toast of message `id`. */
   const markPresented = (id: string) => {
     if (store.getState().messages.some((entry) => entry.id === id)) presented.add(id);
@@ -139,6 +146,7 @@ export const createFeedbackStore = () => {
     openWindow,
     openMenu,
     coverStartup,
+    openNativeModal,
     markPresented,
     wasPresented,
     setToastStackHeight,

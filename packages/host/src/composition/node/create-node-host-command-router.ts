@@ -71,7 +71,7 @@ import { createNodeTaskSessionServices } from "./node-task-session-services";
 import { createNodeWorkspaceSessionPersistence } from "./node-workspace-session-persistence";
 import { createNodeWorkspaceSessionServices } from "./node-workspace-session-services";
 import { createClaudeSessionMetadataAdapter } from "../../adapters/claude/claude-session-metadata-adapter";
-import { createNodeSessionStartupTracker } from "./node-session-startup-progress";
+import { createNodeHostCommandProgress } from "./node-session-startup-progress";
 export type { CreateNodeHostCommandRouterInput, EffectNodeHostCommandRouter };
 export const assembleNodeEffectHostCommandRouter = (
   input: CreateNodeHostCommandRouterInput,
@@ -476,9 +476,9 @@ export const assembleNodeEffectHostCommandRouter = (
     ...createWorkspaceLifecycleCommandHandlers(workspaceSettingsService, workspaceLifecycleService),
   };
   const router = createEffectHostCommandRouter({
-    ...hostRouterLifecycle,
+    initialize: hostRouterLifecycle.initialize,
     handlers,
-    trackCommand: createNodeSessionStartupTracker({
+    ...createNodeHostCommandProgress(hostRouterLifecycle.dispose, {
       hostInstanceId,
       eventBus,
       settings: workspaceSettingsService,

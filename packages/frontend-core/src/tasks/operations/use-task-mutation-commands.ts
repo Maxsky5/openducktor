@@ -13,10 +13,8 @@ import {
   type AgentSessionReadPort,
   removeAgentSessionListQueries,
 } from "../../queries/agent-sessions";
-import { taskWorktreeQueryKeys } from "../../queries/build-runtime";
 import { invalidateRepoIssueItemsQueries } from "../../queries/issue-items";
 import { taskStopImpactQueryKeys } from "../../queries/task-stop-impact";
-import { invalidateTaskWorktreeCleanupImpact } from "../../queries/task-worktree-cleanup-impact";
 import {
   createProductionTaskChatDraftCleanup,
   type TaskChatDraftCleanup,
@@ -115,7 +113,12 @@ export const createTaskMutationCommands = ({
 
   const deleteTask = async (taskId: string): Promise<void> => {
     await runTaskMutation({
-      run: async (repoPath) => {
+      background: {
+        workspace: scopeFor(requireActiveRepo(activeRepoPath)),
+        taskId,
+        action: "Delete task",
+      },
+      run: async (repoPath, tracking) => {
         await taskChatDraftCleanup.runMutation({
           queryClient,
           repoPath,
@@ -123,7 +126,11 @@ export const createTaskMutationCommands = ({
           taskIds: [taskId],
           mutation: async () => {
             try {
-              await hostPort.taskDelete(scopeFor(repoPath), taskId);
+              await hostPort.taskDelete(
+                scopeFor(repoPath),
+                taskId,
+                ...(tracking ? ([tracking] as const) : []),
+              );
             } finally {
               await invalidateTaskStopImpact(queryClient, scopeFor(repoPath));
             }
@@ -138,28 +145,36 @@ export const createTaskMutationCommands = ({
     await Promise.all([
       invalidateRepoIssueItemsQueries(queryClient, scopeFor(repoPath)),
       removeAgentSessionListQueries(queryClient, scopeFor(repoPath), [taskId]),
-      invalidateTaskWorktree(queryClient, scopeFor(repoPath), taskId),
     ]);
   };
 
-  const closeTask = (taskId: string, { removeWorktree }: CloseTaskOptions): Promise<TaskCard> =>
+  const closeTask = async (
+    taskId: string,
+    { removeWorktree }: CloseTaskOptions,
+  ): Promise<TaskCard> =>
     runTaskMutation({
-      run: (repoPath) =>
+      background: {
+        workspace: scopeFor(requireActiveRepo(activeRepoPath)),
+        taskId,
+        action: "Close task",
+      },
+      run: (repoPath, tracking) =>
         taskChatDraftCleanup.runMutation({
           queryClient,
           repoPath,
           workspaceId: activeWorkspaceId,
           taskIds: [taskId],
           mutation: async () => {
-            let committed: TaskCard;
             try {
-              committed = await hostPort.taskClose(scopeFor(repoPath), taskId, removeWorktree);
+              return await hostPort.taskClose(
+                scopeFor(repoPath),
+                taskId,
+                removeWorktree,
+                ...(tracking ? ([tracking] as const) : []),
+              );
             } finally {
               await invalidateTaskStopImpact(queryClient, scopeFor(repoPath));
             }
-            // The cleanup impact keeps no cache, so the next confirmation reads it again.
-            await invalidateTaskWorktree(queryClient, scopeFor(repoPath), taskId);
-            return committed;
           },
         }),
       successTitle: "Task closed",
@@ -168,17 +183,14 @@ export const createTaskMutationCommands = ({
     });
 
   const removeTaskWorktree = async (taskId: string): Promise<void> => {
+    const workspace = scopeFor(requireActiveRepo(activeRepoPath));
     await runTaskMutation({
-      run: async (repoPath) => {
-        try {
-          await hostPort.taskWorktreeRemove(scopeFor(repoPath), taskId);
-        } finally {
-          await Promise.all([
-            invalidateTaskWorktree(queryClient, scopeFor(repoPath), taskId),
-            invalidateTaskWorktreeCleanupImpact(queryClient, scopeFor(repoPath), taskId),
-          ]);
-        }
+      background: {
+        workspace,
+        taskId,
+        action: "Remove worktree",
       },
+      run: (_repoPath, tracking) => hostPort.taskWorktreeRemove(workspace, taskId, tracking),
       successTitle: "Worktree removed",
       successDescription: worktreeCleanupDescription(taskId, true),
       failureTitle: "Failed to remove worktree",
@@ -224,15 +236,6 @@ export function useTaskMutationCommands({
 
 const invalidateTaskStopImpact = (queryClient: QueryClient, scope: WorkspaceRef): Promise<void> =>
   queryClient.invalidateQueries({ queryKey: taskStopImpactQueryKeys.repo(scope) });
-
-const invalidateTaskWorktree = (
-  queryClient: QueryClient,
-  scope: WorkspaceRef,
-  taskId: string,
-): Promise<void> =>
-  queryClient.invalidateQueries({
-    queryKey: taskWorktreeQueryKeys.taskWorktree({ ...scope, taskId }),
-  });
 
 const worktreeCleanupDescription = (taskId: string, removed: boolean): string =>
   removed

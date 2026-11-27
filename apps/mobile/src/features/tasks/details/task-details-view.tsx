@@ -71,10 +71,12 @@ export function TaskDetailsView({
   workspaceId,
   taskId,
   embedded = false,
+  confirmClose = false,
 }: {
   workspaceId: string;
   taskId: string;
   embedded?: boolean;
+  confirmClose?: boolean;
 }): ReactElement {
   const ownerRef = useMemo(
     () => ({ kind: "task" as const, workspaceId, taskId }),
@@ -97,6 +99,7 @@ export function TaskDetailsView({
       workspace={owner.workspace}
       task={owner.task}
       embedded={embedded}
+      confirmClose={confirmClose}
       onDeleteStarted={() => setDeleting(owner)}
       onDeleteFailed={() => setDeleting(null)}
     />
@@ -129,12 +132,14 @@ function TaskDetailsContent({
   workspace,
   task,
   embedded,
+  confirmClose,
   onDeleteStarted,
   onDeleteFailed,
 }: {
   workspace: WorkspaceRecord;
   task: TaskCard;
   embedded: boolean;
+  confirmClose: boolean;
   /** The user confirmed Delete, and it runs. */
   onDeleteStarted: () => void;
   /** The Delete failed, and its confirmation closed. */
@@ -207,6 +212,7 @@ function TaskDetailsContent({
     summaries,
     records,
     scopeReady: scope.ready,
+    confirmClose,
     showUnlink: pullRequestActions.showUnlink,
     unlinking,
     embedded,

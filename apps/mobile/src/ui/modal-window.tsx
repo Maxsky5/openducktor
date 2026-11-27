@@ -1,4 +1,5 @@
-import { memo, type ReactElement, useMemo } from "react";
+import { useFeedbackStore } from "@/app-shell/app-services";
+import { memo, type ReactElement, useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { Modal, type ModalProps, Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -17,10 +18,28 @@ type ModalWindowProps = Omit<ModalProps, "visible" | "onShow"> & {
 };
 
 /** Uses native iOS presentation and a short UI-thread fade in an Android window. */
-export function ModalWindow(props: ModalWindowProps): ReactElement {
-  if (Platform.OS !== "ios") return <AndroidModalWindow {...props} />;
+export function ModalWindow({ onDismiss, ...props }: ModalWindowProps): ReactElement {
+  const feedback = useFeedbackStore();
+  const release = useRef<(() => void) | undefined>(undefined);
+  const releaseWindow = useCallback(() => {
+    release.current?.();
+    release.current = undefined;
+  }, []);
+  useLayoutEffect(() => {
+    if (props.visible && !release.current) release.current = feedback.openNativeModal();
+  }, [feedback, props.visible]);
+  useLayoutEffect(() => releaseWindow, [releaseWindow]);
+  const dismissed = () => {
+    releaseWindow();
+    onDismiss?.();
+  };
+  if (Platform.OS !== "ios") return <AndroidModalWindow {...props} onDismiss={dismissed} />;
   return (
-    <Modal supportedOrientations={["portrait", "portrait-upside-down", "landscape"]} {...props}>
+    <Modal
+      supportedOrientations={["portrait", "portrait-upside-down", "landscape"]}
+      {...props}
+      onDismiss={dismissed}
+    >
       <SafeAreaProvider>
         <GestureHandlerRootView style={styles.fill}>
           <ModalContent visible={props.visible}>{props.children}</ModalContent>

@@ -1152,7 +1152,7 @@ describe("useTaskApprovalFlow", () => {
     expect(closeTaskMock).toHaveBeenCalledWith("TASK-1", { removeWorktree: false });
     expect(taskDirectMergeMock).not.toHaveBeenCalled();
     expect(onCommitted).toHaveBeenCalledTimes(1);
-    expect(expectApprovalModal().isSubmitting).toBe(true);
+    await waitForTaskApprovalModalClosed();
     await act(async () => continuation.resolve());
     await waitForTaskApprovalModalClosed();
 
@@ -1212,7 +1212,7 @@ describe("useTaskApprovalFlow", () => {
     });
   });
 
-  test("keeps the recovery modal open when completion fails from missing-builder-worktree recovery", async () => {
+  test("dismisses the recovery modal when submitting a close that later fails", async () => {
     taskApprovalContextGetMock.mockResolvedValueOnce(createMissingWorktreeApprovalContextResult());
     closeTaskMock.mockImplementationOnce(async () => {
       throw new Error("Task is no longer reviewable");
@@ -1247,12 +1247,7 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
 
-    expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("missing_worktree");
-    expect(latestHarnessValue?.taskApprovalModal?.isSubmitting).toBe(false);
-    expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBe(
-      "Task is no longer reviewable",
-    );
-    // The close shows its own failure toast, so the modal adds none.
+    await waitForTaskApprovalModalClosed();
     expect(toastErrorMock).not.toHaveBeenCalledWith("Approval failed", expect.anything());
 
     await act(async () => {

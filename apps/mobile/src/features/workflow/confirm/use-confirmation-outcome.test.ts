@@ -31,10 +31,12 @@ describe("useConfirmationOutcome", () => {
     expect(events).toEqual(["started 1", "succeeded 1"]);
   });
 
-  test("reports a failure when the confirmation closes without a success", () => {
+  test("reports a failure that arrives after the confirmation closed", () => {
     const { events, outcome } = renderOutcome();
     outcome().started(DELETE);
     outcome().closed(DELETE.id);
+    expect(events).toEqual(["started 1"]);
+    outcome().failed(DELETE);
     expect(events).toEqual(["started 1", "failed 1"]);
   });
 
@@ -47,12 +49,12 @@ describe("useConfirmationOutcome", () => {
     expect(events).toEqual(["started 1"]);
   });
 
-  test("reports a success at once when the confirmation unmounted first", () => {
+  test("leaves navigation alone after the screen unmounts", () => {
     const { events, outcome, unmount } = renderOutcome();
     const { started, succeeded } = outcome();
     started(DELETE);
     unmount();
     succeeded(DELETE);
-    expect(events).toEqual(["started 1", "succeeded 1"]);
+    expect(events).toEqual(["started 1"]);
   });
 });

@@ -1,3 +1,4 @@
+import { backgroundStep } from "../../operation-progress/background-operation-progress";
 import type { AgentSessionRecord, RepoConfig } from "@openducktor/contracts";
 import type { TaskWorkflow } from "@openducktor/workflows";
 import { Effect } from "effect";
@@ -116,11 +117,14 @@ export const cleanupImplementationResetActivity = (
     if (!activityGuard) {
       return;
     }
-    const { stoppedSessionCount } = yield* activityGuard.cleanupTaskSessions({
-      workspaceId: activity.workspaceId,
-      repoPath: activity.repoPath,
-      taskSessions: [{ taskId: activity.taskId, sessions: activity.sessions }],
-    });
+    const { stoppedSessionCount } = yield* backgroundStep(
+      { id: "sessions", label: "Stop task sessions" },
+      activityGuard.cleanupTaskSessions({
+        workspaceId: activity.workspaceId,
+        repoPath: activity.repoPath,
+        taskSessions: [{ taskId: activity.taskId, sessions: activity.sessions }],
+      }),
+    );
     recordStoppedAgentSessionCount(progress, stoppedSessionCount);
   });
 

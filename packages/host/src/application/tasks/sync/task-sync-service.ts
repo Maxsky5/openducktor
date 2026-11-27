@@ -1,3 +1,4 @@
+import { backgroundGate } from "../../operation-progress/background-operation-progress";
 import {
   type ExternalTaskSyncEvent,
   type TaskAutoCloseFailure,
@@ -124,7 +125,7 @@ export const createTaskSyncService = ({
   // Mutations of one repository run in arrival order.
   const mutationGate = createSerialGate();
   const runMutation: TaskSyncService["runMutation"] = (repoPath, mutation) =>
-    mutationGate.run(repoPath, mutation);
+    backgroundGate(mutationGate, repoPath, mutation, "Wait for the earlier task operation");
   const runStatusMutation: TaskSyncService["runStatusMutation"] = (
     workspace,
     operation,

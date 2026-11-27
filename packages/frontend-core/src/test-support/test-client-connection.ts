@@ -38,6 +38,7 @@ export const createTestHostConnection = (
       },
       client,
     ),
+    subscribeBackgroundOperationProgress: noSubscription,
     subscribeStartupProgress: noSubscription,
     connectionState: connectedHostConnectionState,
     subscribeWorkspaceProviderSetupUpdates: noSubscription,

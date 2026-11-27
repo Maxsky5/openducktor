@@ -241,7 +241,7 @@ test.each(
     (["background", "selected", "left"] as const).map((selection) => [source, selection] as const),
   ),
 )(
-  "archive from the sidebar %s waits for confirmation and keeps the correct selection: %s",
+  "archive from the sidebar %s submits in the background for selection %s",
   async (source, selection) => {
     const entry = chatEntry("archive");
     const remaining = chatEntry("keep");
@@ -282,14 +282,17 @@ test.each(
       dialog = await openArchive();
       fireEvent.click(dialog.getByRole("button", { name: "Archive session" }));
       await waitFor(() => expect(archive).toHaveBeenCalledTimes(1));
-      expect(archive).toHaveBeenCalledWith({
-        workspaceId: "beta",
-        sessionId: "archive",
-        confirmStop: true,
-        removeWorktree: false,
-      });
-      expect(dialog.getByRole("button", { name: "Archiving…" }).hasAttribute("disabled")).toBe(
-        true,
+      expect(archive).toHaveBeenCalledWith(
+        {
+          workspaceId: "beta",
+          sessionId: "archive",
+          confirmStop: true,
+          removeWorktree: false,
+        },
+        { operationId: expect.any(String) },
+      );
+      await waitFor(() =>
+        expect(view.queryByRole("dialog", { name: "Archive session" })).toBeNull(),
       );
       if (selection === "left")
         fireEvent.click(view.getByRole("link", { name: "Kanban", hidden: true }));
@@ -310,7 +313,7 @@ test.each(
       expect(view.getByRole("button", { name: /Chat keep/ })).toBeTruthy();
       expect(view.getByLabelText("Current address").textContent).toBe(
         selection === "selected"
-          ? "/sessions?workspace=beta&kind=workspace&session=keep"
+          ? "/sessions?workspace=beta&kind=workspace&session=archive"
           : selection === "left"
             ? "/kanban"
             : "/sessions?workspace=alpha&kind=task",

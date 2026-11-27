@@ -1,3 +1,4 @@
+import { backgroundStep } from "../operation-progress/background-operation-progress";
 import type {
   GitTargetBranch,
   RepoConfig,
@@ -114,11 +115,22 @@ export const removeWorkspaceSessionWorktree = (
           field: "branchName",
           message: "The worktree branch changed. Reopen Archive session to confirm it.",
         });
-      yield* git.removeWorktree(repoPath, worktreePath, true);
+      yield* backgroundStep(
+        { id: "worktrees", label: "Remove worktree" },
+        git.removeWorktree(repoPath, worktreePath, true),
+        () => ({ resources: [{ kind: "worktree", value: worktreePath, state: "removed" }] }),
+      );
     }
-    if (aliasRemoval) yield* aliasRemoval.remove;
+    if (aliasRemoval)
+      yield* backgroundStep(
+        { id: "worktree-alias", label: "Remove worktree alias" },
+        aliasRemoval.remove,
+      );
     if (yield* git.referenceExists(repoPath, `refs/heads/${target.branchName}`)) {
-      yield* git.deleteLocalBranch(repoPath, target.branchName, true);
+      yield* backgroundStep(
+        { id: "branches", label: "Delete local branch" },
+        git.deleteLocalBranch(repoPath, target.branchName, true),
+      );
     }
     return { ...target, worktreeState: "removed" as const };
   });

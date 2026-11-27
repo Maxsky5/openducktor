@@ -1,3 +1,7 @@
+import {
+  backgroundStep,
+  CurrentBackgroundOperation,
+} from "../operation-progress/background-operation-progress";
 import type {
   TaskChangeSet,
   TaskArtifactChange,
@@ -10,6 +14,8 @@ import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
 import type { TaskMutationOperation } from "./task-mutation-operation";
 import type { TaskServiceError } from "./task-service";
 import type { TaskSyncService } from "./sync/task-sync-service";
+
+const publicationStep = { id: "publish", label: "Update workspace views" };
 
 /** Keep the write, card projection, and receipt in one repository mutation gate. */
 export const createMutationPublisher = ({
@@ -35,19 +41,30 @@ export const createMutationPublisher = ({
           Effect.gen(function* () {
             if (result._tag === "Failure") {
               if (result.failure instanceof TaskMutationProgressFailure) {
-                yield* taskSyncService.publishTasksUpdated(
-                  workspace,
-                  result.failure.changes,
-                  operation,
-                  statusChanges,
-                  result.failure.failure,
-                  result.failure.artifactChanges,
+                const publication = backgroundStep(
+                  publicationStep,
+                  taskSyncService.publishTasksUpdated(
+                    workspace,
+                    result.failure.changes,
+                    operation,
+                    statusChanges,
+                    result.failure.failure,
+                    result.failure.artifactChanges,
+                  ),
                 );
+                const tracking = yield* CurrentBackgroundOperation;
+                // The tracked snapshot retains a separate publication failure. The reply keeps the
+                // original mutation failure and its type.
+                if (tracking) yield* publication.pipe(Effect.result);
+                else yield* publication;
                 return yield* Effect.fail(result.failure.failure);
               }
               return yield* Effect.fail(result.failure);
             }
-            return yield* publishSuccess(result.success, statusChanges);
+            return yield* backgroundStep(
+              publicationStep,
+              publishSuccess(result.success, statusChanges),
+            );
           }),
       ),
     );

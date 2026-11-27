@@ -1,3 +1,7 @@
+import {
+  backgroundStep,
+  updateBackgroundOperation,
+} from "../../operation-progress/background-operation-progress";
 import type { TaskWorkflow } from "@openducktor/workflows";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -258,11 +262,15 @@ export const runTaskRuntimeCleanup = ({
   terminalService: TaskTerminalCleanupPort;
 }) =>
   Effect.gen(function* () {
-    const terminalResult = yield* terminalService.acquireTaskCleanup({
-      workspaceId,
-      repoPath,
-      taskIds,
-    });
+    const terminalResult = yield* backgroundStep(
+      { id: "terminals", label: "Stop task terminals" },
+      terminalService.acquireTaskCleanup({
+        workspaceId,
+        repoPath,
+        taskIds,
+      }),
+      (result) => ({ details: result.closedTerminalIds }),
+    );
     if (terminalResult.closedTerminalIds.length > 0)
       progress.completedSteps.push(
         `terminated task terminals: ${terminalResult.closedTerminalIds.join(", ")}`,
@@ -305,10 +313,13 @@ export const runTaskBrowserTabCleanup = ({
         message: "The browser service is required for task_delete.",
       });
     }
-    yield* closeOwnerBrowserTabs(
-      browserTabs,
-      taskIds.map((taskId) => ({ kind: "task", workspaceId, taskId })),
-      "task_delete.browser_tabs",
+    yield* backgroundStep(
+      { id: "browser-tabs", label: "Close task browser tabs" },
+      closeOwnerBrowserTabs(
+        browserTabs,
+        taskIds.map((taskId) => ({ kind: "task", workspaceId, taskId })),
+        "task_delete.browser_tabs",
+      ),
     );
     progress.completedSteps.push("closed task browser tabs");
   });
@@ -387,6 +398,16 @@ export const runTaskLocalCleanup = ({
         ? yield* requireTaskCleanupWorktreeFiles(worktreeFiles, worktreeCleanupOperation)
         : null;
 
+    yield* updateBackgroundOperation((operation) =>
+      operation.plan(
+        [
+          { id: "terminals", label: "Stop task terminals" },
+          ...(cleanupFiles ? [{ id: "worktrees", label: "Remove worktrees" }] : []),
+          ...(branchNames.length > 0 ? [{ id: "branches", label: "Delete local branches" }] : []),
+        ],
+        "terminals",
+      ),
+    );
     yield* runTaskRuntimeCleanup({
       workspaceId,
       progress,
@@ -396,39 +417,64 @@ export const runTaskLocalCleanup = ({
     });
 
     if (cleanupFiles) {
-      for (const worktreePath of worktreePaths) {
-        yield* removeTaskWorktree(
-          {
-            beforeWorktreeRemoval,
-            gitPort,
-            settingsConfig,
-            worktreeFiles: cleanupFiles,
-          },
-          {
-            repoPath,
-            worktreePath,
-            force: forceWorktreeRemoval,
-            managedWorktreeBasePath,
-            missingOutsideManagedRootPathPolicy: "skip",
-          },
-        );
-        progress.removedWorktrees.push(worktreePath);
-      }
-    }
-
-    for (const [index, branchName] of branchNames.entries()) {
-      // The task worktrees are gone, so a retry cannot find a branch that only the worktree
-      // checkout tied to the task. The error names each branch that stays.
-      yield* gitPort.deleteLocalBranch(repoPath, branchName, true, onBranchDeleting).pipe(
-        Effect.mapError((cause) => {
-          const remaining = branchNames.slice(index).join(" ");
-          return new HostOperationError({
-            operation: "task.cleanup.delete_branch",
-            message: `${errorMessage(cause)} OpenDucktor removed the task worktrees, so a retry may not find the branches ${remaining}. Delete them with git branch -D ${remaining}.`,
-            cause,
-          });
+      yield* backgroundStep(
+        { id: "worktrees", label: "Remove worktrees" },
+        Effect.gen(function* () {
+          for (const worktreePath of worktreePaths) {
+            yield* removeTaskWorktree(
+              {
+                beforeWorktreeRemoval,
+                gitPort,
+                settingsConfig,
+                worktreeFiles: cleanupFiles,
+              },
+              {
+                repoPath,
+                worktreePath,
+                force: forceWorktreeRemoval,
+                managedWorktreeBasePath,
+                missingOutsideManagedRootPathPolicy: "skip",
+              },
+            );
+            progress.removedWorktrees.push(worktreePath);
+            yield* updateBackgroundOperation((operation) =>
+              operation.addResource("worktrees", {
+                kind: "worktree",
+                value: worktreePath,
+                state: "removed",
+              }),
+            );
+          }
         }),
       );
-      progress.deletedBranches.push(branchName);
     }
+
+    if (branchNames.length > 0)
+      yield* backgroundStep(
+        { id: "branches", label: "Delete local branches" },
+        Effect.gen(function* () {
+          for (const [index, branchName] of branchNames.entries()) {
+            // The task worktrees are gone, so a retry cannot find a branch that only the worktree
+            // checkout tied to the task. The error names each branch that stays.
+            yield* gitPort.deleteLocalBranch(repoPath, branchName, true, onBranchDeleting).pipe(
+              Effect.mapError((cause) => {
+                const remaining = branchNames.slice(index).join(" ");
+                return new HostOperationError({
+                  operation: "task.cleanup.delete_branch",
+                  message: `${errorMessage(cause)} OpenDucktor removed the task worktrees, so a retry may not find the branches ${remaining}. Delete them with git branch -D ${remaining}.`,
+                  cause,
+                });
+              }),
+            );
+            progress.deletedBranches.push(branchName);
+            yield* updateBackgroundOperation((operation) =>
+              operation.addResource("branches", {
+                kind: "branch",
+                value: branchName,
+                state: "removed",
+              }),
+            );
+          }
+        }),
+      );
   });

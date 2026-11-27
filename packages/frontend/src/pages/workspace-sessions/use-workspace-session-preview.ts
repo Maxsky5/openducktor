@@ -1,3 +1,4 @@
+import type { ArchiveFileDraft } from "@openducktor/frontend-core/operations/background-operation-store";
 import { useCallback, useEffect, useRef } from "react";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
 import { useTaskExecutionFilePreviewController } from "@/components/features/agents/file-preview/use-task-execution-file-preview-controller";
@@ -8,6 +9,7 @@ export function useWorkspaceSessionPreview(
   selectedFile: TaskExecutionSelectedFile | null,
   onSelectionChange: (selectedFile: TaskExecutionSelectedFile | null) => void,
   isWorktree: boolean,
+  archiveDraft?: { readonly current: ArchiveFileDraft | null },
 ) {
   const { register } = useWorkspacePreviewTransitionGuard();
   const isActive = useSessionViewActive();
@@ -27,6 +29,12 @@ export function useWorkspaceSessionPreview(
               pendingExitRef.current = pendingExit;
               preview.requestContextTransition(
                 () => {
+                  if (options?.kind === "archive_chat") {
+                    if (pendingExitRef.current === pendingExit) pendingExitRef.current = null;
+                    apply(pendingExit.discarded ? (archiveDraft?.current ?? undefined) : undefined);
+                    // Consent only applies after a confirmed archive. Release the editor now.
+                    return Promise.resolve(false);
+                  }
                   if (options?.waitForSuccess) {
                     return Promise.resolve()
                       .then(async () => (await apply()) === true)
@@ -59,7 +67,7 @@ export function useWorkspaceSessionPreview(
             },
           )
         : undefined,
-    [isActive, isWorktree, onSelectionChange, preview, register],
+    [archiveDraft, isActive, isWorktree, onSelectionChange, preview, register],
   );
 
   const onDiscard = useCallback(() => {

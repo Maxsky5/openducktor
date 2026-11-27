@@ -101,8 +101,11 @@ export const SINGLE_SHEET = { dangerouslySingular: true } as const;
 export const routes = {
   sessions: () => ({ pathname: "/" }) as const,
   archivedChats: () => ({ pathname: "/archived-chats" }) as const,
-  task: (workspaceId: string, taskId: string) =>
-    ({ pathname: "/task/[workspaceId]/[taskId]", params: { workspaceId, taskId } }) as const,
+  task: (workspaceId: string, taskId: string, confirmation?: "close") =>
+    ({
+      pathname: "/task/[workspaceId]/[taskId]",
+      params: { workspaceId, taskId, ...(confirmation && { confirmation }) },
+    }) as const,
   session: (params: SessionRouteParams) => ({ pathname: "/session", params }) as const,
   /** The details of one call of the session screen under it, which keeps its transcript live. */
   toolCall: (identity: AgentSessionIdentity, messageId: string, title: string) =>

@@ -1,3 +1,8 @@
+import { Effect } from "effect";
+import { backgroundStep } from "../../operation-progress/background-operation-progress";
+import type { TaskStorePort } from "../../../ports/task-repository-ports";
+import type { createTaskCompletionState } from "../task-completion-state";
+import type { TaskIdInput } from "../task-inputs";
 import { errorMessage, HostOperationError } from "../../../effect/host-errors";
 
 export type TaskCleanupProgressState = {
@@ -70,3 +75,30 @@ export const appendTaskCleanupProgress = <E>(
     cause: error,
   });
 };
+
+export const clearTaskResetDelivery = (
+  store: Pick<TaskStorePort, "setPullRequest" | "setDirectMerge">,
+  completion: Pick<ReturnType<typeof createTaskCompletionState>, "discard">,
+  scope: TaskIdInput,
+  progress: TaskCleanupProgressState,
+) =>
+  Effect.gen(function* () {
+    yield* backgroundStep(
+      { id: "pull-request", label: "Clear pull request link" },
+      store.setPullRequest({ ...scope, pullRequest: null }),
+    );
+    progress.completedSteps.push("cleared pull request metadata");
+    yield* Effect.uninterruptible(
+      Effect.gen(function* () {
+        yield* backgroundStep(
+          { id: "direct-merge", label: "Clear merge record" },
+          store.setDirectMerge({ ...scope, directMerge: null }),
+        );
+        progress.completedSteps.push("cleared direct merge metadata");
+        yield* backgroundStep(
+          { id: "delivery", label: "Clear delivery state" },
+          completion.discard(scope),
+        );
+      }),
+    );
+  });

@@ -69,6 +69,7 @@ export const hostChannelInvokeError = (cause: unknown): Error => {
       cause.message,
       cause.error.kind === "host" ? (cause.error.response.failure ?? null) : null,
       cause,
+      cause.error.kind === "host" ? cause.error.response.operationProgress : undefined,
     );
   // A mismatch with the host and a changed host are not a lost connection.
   return cause instanceof HostChannelProtocolError || cause instanceof HostInvocationEpochError

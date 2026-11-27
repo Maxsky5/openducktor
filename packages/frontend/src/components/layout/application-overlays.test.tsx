@@ -5,6 +5,7 @@ import { knownRuntimeKindValues, OPENCODE_RUNTIME_DESCRIPTOR } from "@openduckto
 import {
   ActiveWorkspaceContext,
   RuntimeDefinitionsContext,
+  TasksStateContext,
 } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { runtimeExecutableQueryOptions } from "@openducktor/frontend-core/queries/runtime";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
@@ -44,6 +45,7 @@ import {
   createChecksStateFixture,
   createHostRuntimeStatusContextValue,
   createSettingsSnapshotFixture,
+  createTasksStateFixture,
   createTaskWorkflowActionsFixture,
   createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
@@ -153,9 +155,11 @@ const renderOnboardingOverlays = () => {
                       <NotificationContext.Provider value={notificationContextValue}>
                         <DiagnosticsAutoOpenProvider>
                           <WorkspacePreviewTransitionGuardProvider>
-                            <ApplicationOverlays>
-                              <OpenSettingsButton />
-                            </ApplicationOverlays>
+                            <TasksStateContext.Provider value={createTasksStateFixture()}>
+                              <ApplicationOverlays>
+                                <OpenSettingsButton />
+                              </ApplicationOverlays>
+                            </TasksStateContext.Provider>
                           </WorkspacePreviewTransitionGuardProvider>
                         </DiagnosticsAutoOpenProvider>
                       </NotificationContext.Provider>

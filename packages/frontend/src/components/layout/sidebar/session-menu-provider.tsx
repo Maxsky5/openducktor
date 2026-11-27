@@ -1,3 +1,5 @@
+import type { ArchiveFileDraft } from "@openducktor/frontend-core/operations/background-operation-store";
+import { workspaceSessionTitle } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import type { WorkspaceSession, WorkspaceSessionArchiveInput } from "@openducktor/contracts";
 import type { WorkspaceSessionDraftLifecycle } from "@openducktor/frontend-core/drafts/new-workspace-session-draft-store";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
@@ -26,7 +28,6 @@ import {
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { WorkspaceSessionArchiveDialog } from "@/pages/workspace-sessions/workspace-session-archive-dialog";
 import { WorkspaceSessionRenameDialog } from "@/pages/workspace-sessions/workspace-session-rename-dialog";
-import { useMountedRef } from "@openducktor/frontend-core/lib/use-mounted-ref";
 import { useRequiredContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { useArchiveWorkspaceSession } from "@openducktor/frontend-core/workspace-sessions/use-archive-workspace-session";
 import { readFallbackWorkspaceSessionId } from "@openducktor/frontend-core/queries/workspace-sessions";
@@ -203,11 +204,8 @@ function SavedSessionMenuDialogs({
   onClose: () => void;
 }): ReactElement {
   const { record, workspace } = dialog;
-  const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const location = useLocation();
   const [params] = useSearchParams();
-  // The archive event clears the visible session before the command returns.
   const isSelected = matchesWorkspaceSessionRoute(
     location.pathname,
     params,
@@ -215,17 +213,8 @@ function SavedSessionMenuDialogs({
     WORKSPACE_SESSION_QUERY_KEYS.session,
     record.id,
   );
-  const mounted = useMountedRef();
   const { run: guardTransition } = useWorkspacePreviewTransitionGuard();
-  const archive = useArchiveWorkspaceSession((archived, input) => {
-    if (!mounted.current) return;
-    if (isSelected) {
-      void navigate(workspaceFallbackHref(queryClient, input.workspaceId, archived.id), {
-        replace: true,
-      });
-    }
-    onClose();
-  });
+  const archive = useArchiveWorkspaceSession(workspace.workspaceId, record.id);
 
   if (dialog.action === "rename") {
     return (
@@ -243,24 +232,24 @@ function SavedSessionMenuDialogs({
     removeWorktree: boolean,
     worktreeConfirmation?: WorkspaceSessionArchiveInput["worktreeConfirmation"],
   ) => {
-    const apply = async () => {
-      try {
-        await archive.mutateAsync({
+    const apply = (draft?: ArchiveFileDraft) => {
+      archive.submit(
+        {
           workspaceId: workspace.workspaceId,
           repoPath: workspace.repoPath,
           sessionId: record.id,
           confirmStop: true,
           removeWorktree,
           worktreeConfirmation,
-        });
-        return true;
-      } catch {
-        return false;
-      }
+        },
+        { workspaceLabel: workspace.workspaceName, targetLabel: workspaceSessionTitle(record) },
+        draft,
+      );
+      onClose();
     };
-    if (isSelected) {
-      guardTransition(apply, undefined, { waitForSuccess: true });
-    } else void apply();
+    if (isSelected)
+      guardTransition(apply, undefined, { waitForSuccess: true, kind: "archive_chat" });
+    else apply();
   };
   return (
     <WorkspaceSessionArchiveDialog
@@ -268,7 +257,6 @@ function SavedSessionMenuDialogs({
       workspaceId={workspace.workspaceId}
       record={record}
       isArchiving={archive.isPending}
-      error={archive.error}
       onArchive={beginArchive}
       onClose={onClose}
       onCloseAutoFocus={dialog.onCloseAutoFocus}

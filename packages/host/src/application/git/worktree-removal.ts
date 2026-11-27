@@ -1,3 +1,4 @@
+import { updateBackgroundOperation } from "../operation-progress/background-operation-progress";
 import { Effect } from "effect";
 import { canonicalPathsEqual } from "../../domain/path-comparison";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
@@ -125,6 +126,15 @@ export const removeWorktreeAndFilesystemPath = (
     );
     if (removalResult._tag === "Failure" && !force) {
       return yield* Effect.fail(removalResult.failure);
+    }
+    if (removalResult._tag === "Success") {
+      yield* updateBackgroundOperation((operation) =>
+        operation.addResource("worktrees", {
+          kind: "worktree",
+          value: worktreePath,
+          state: "removed",
+        }),
+      );
     }
     const currentCleanup = yield* inspectFilesystemCleanup(
       dependencies,

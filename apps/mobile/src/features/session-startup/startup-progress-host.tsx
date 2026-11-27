@@ -1,3 +1,8 @@
+import { useBackgroundAttempts } from "@openducktor/frontend-core/operations/use-background-attempts";
+import {
+  BackgroundOperationCard,
+  BackgroundOperationResults,
+} from "./background-operation-feedback";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useStartupAttempts } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 import {
@@ -52,19 +57,27 @@ const CARD_RESIZE = {
 export function StartupProgressHost(): ReactElement | null {
   const feedback = useFeedbackStore();
   const attempts = useStartupAttempts();
-  const startupVisible = attempts.some((attempt) => attempt.presentation === "notification");
+  const operations = useBackgroundAttempts();
+  const startupVisible =
+    operations.some((attempt) => !attempt.toastDismissed) ||
+    attempts.some((attempt) => attempt.presentation === "notification");
   useEffect(() => {
     feedback.setStartupVisible(startupVisible);
     return () => feedback.setStartupVisible(false);
   }, [feedback, startupVisible]);
   const inRoot = useStore(feedback.store, (state) => toastWindowOf(state) === null);
-  if (Platform.OS === "ios")
-    return (
-      <FullWindowOverlay unstable_accessibilityContainerViewIsModal={false}>
+  return (
+    <>
+      {Platform.OS === "ios" ? (
+        <FullWindowOverlay unstable_accessibilityContainerViewIsModal={false}>
+          <StartupStack />
+        </FullWindowOverlay>
+      ) : inRoot ? (
         <StartupStack />
-      </FullWindowOverlay>
-    );
-  return inRoot ? <StartupStack /> : null;
+      ) : null}
+      <BackgroundOperationResults />
+    </>
+  );
 }
 
 function StartupStack(): ReactElement | null {
@@ -89,7 +102,8 @@ function StartupStack(): ReactElement | null {
     if (!hidden) startupAttempts.expireSuccess();
   }, [hidden, startupAttempts]);
   const visible = attempts.filter((attempt) => attempt.presentation === "notification");
-  const empty = visible.length === 0;
+  const operations = useBackgroundAttempts().filter((attempt) => !attempt.toastDismissed);
+  const empty = visible.length === 0 && operations.length === 0;
   useLayoutEffect(() => {
     setHeldSize(empty ? { ...measured.current } : null);
   }, [empty]);
@@ -133,6 +147,11 @@ function StartupStack(): ReactElement | null {
               attemptId={attempt.id}
               detailsMaxHeight={maxHeight * 0.45}
             />
+          ))}
+          {operations.map((attempt) => (
+            <View key={attempt.id} style={styles.card}>
+              <BackgroundOperationCard attempt={attempt} />
+            </View>
           ))}
         </ScrollView>
       </View>

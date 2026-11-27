@@ -1,3 +1,7 @@
+import {
+  planBackgroundSteps,
+  backgroundStep,
+} from "../../operation-progress/background-operation-progress";
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { Effect } from "effect";
 import { collectRelatedTaskBranches } from "../support/task-branch-tips";
@@ -38,6 +42,11 @@ export const createTaskDeleteUseCase = ({
 }: TaskServiceUseCaseInput): Pick<TaskServiceWithMutationProgress, "deleteTask"> => ({
   deleteTask(input) {
     return Effect.gen(function* () {
+      yield* planBackgroundSteps(
+        { id: "terminals", label: "Stop task terminals" },
+        { id: "browser-tabs", label: "Close task browser tabs" },
+        { id: "task-delete", label: "Delete task" },
+      );
       const { repoPath, taskId } = input;
       const dependencies = yield* requireDependencies(() =>
         requireTaskDeleteDependencies(gitPort, settingsConfig, workspaceSettingsService),
@@ -104,11 +113,15 @@ export const createTaskDeleteUseCase = ({
       );
       const cleanupProgress = createTaskCleanupProgressState();
       if (hasWorkflowSessions && activityGuard) {
-        const { stoppedSessionCount } = yield* activityGuard.cleanupTaskSessions({
-          workspaceId: input.workspaceId,
-          repoPath: effectiveRepoPath,
-          taskSessions: targetTaskSessions,
-        });
+        const { stoppedSessionCount } = yield* backgroundStep(
+          { id: "sessions", label: "Stop task sessions" },
+          activityGuard.cleanupTaskSessions({
+            workspaceId: input.workspaceId,
+            repoPath: effectiveRepoPath,
+            taskSessions: targetTaskSessions,
+          }),
+          (result) => ({ details: [`Stopped sessions: ${result.stoppedSessionCount}`] }),
+        );
         recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
       }
       let durableDeleteCommitted = false;

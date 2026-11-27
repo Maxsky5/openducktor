@@ -1,3 +1,7 @@
+import {
+  backgroundStep,
+  CurrentBackgroundOperation,
+} from "../../operation-progress/background-operation-progress";
 import type { TaskArtifactChange, TaskCard } from "@openducktor/contracts";
 import type { TaskWorkflow } from "@openducktor/workflows";
 import { Effect, Result, type Scope } from "effect";
@@ -91,23 +95,33 @@ export const createTaskEventUseCase = (
         const current = yield* taskStore.getTask(request);
         const workflow = taskWorkflows.forTask(current);
         const admitted = yield* Effect.fromResult(decideEventAction(workflow, current, request));
+        const effects = workflow.eventEffects(request.eventId);
+        if (
+          (yield* CurrentBackgroundOperation) &&
+          !effects.some((effect) => effect.id === "worktree.reset")
+        )
+          return yield* new HostValidationError({
+            field: "eventId",
+            message: "This action does not reset the implementation. Refresh the task actions.",
+          });
         const artifactChanges: TaskArtifactChange[] = [];
-        const commit: Effect.Effect<TaskCard, HostEffectError, Scope.Scope> = commitWorkflowEvent(
-          taskStore,
-          request,
-          commitDecision(workflow, taskWorkflows, current, admitted, request),
-        ).pipe(
-          Effect.map((updated) => enrichTask(taskWorkflows.forTask(updated), updated)),
-          mapTaskMutationProgressErrors,
+        const commit: Effect.Effect<TaskCard, HostEffectError, Scope.Scope> = backgroundStep(
+          { id: "task-reset", label: "Reset task status" },
+          commitWorkflowEvent(
+            taskStore,
+            request,
+            commitDecision(workflow, taskWorkflows, current, admitted, request),
+          ).pipe(
+            Effect.map((updated) => enrichTask(taskWorkflows.forTask(updated), updated)),
+            mapTaskMutationProgressErrors,
+          ),
         );
         const { workspaceId, repoPath, taskId, eventId } = request;
         const context = { input: { workspaceId, repoPath, taskId }, eventId, artifactChanges };
-        const task = yield* workflow
-          .eventEffects(eventId)
-          .reduceRight(
-            (next, effect) => hostEffects[effect.id]({ ...context, effect }, next),
-            commit,
-          );
+        const task = yield* effects.reduceRight(
+          (next, effect) => hostEffects[effect.id]({ ...context, effect }, next),
+          commit,
+        );
         return { task, artifactChanges };
       }).pipe(Effect.scoped, mapTaskMutationProgressErrors);
     },

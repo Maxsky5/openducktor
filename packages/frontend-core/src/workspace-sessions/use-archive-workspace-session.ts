@@ -1,44 +1,64 @@
-import type {
-  WorkspaceRecord,
-  WorkspaceSession,
-  WorkspaceSessionArchiveInput,
-} from "@openducktor/contracts";
+import type { WorkspaceRecord, WorkspaceSessionArchiveInput } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
-import { useSingleFlightMutation } from "../lib/use-single-flight";
+import { useClientConnection } from "../connection/client-connection-react";
+import { errorMessage } from "../lib/errors";
+import type { ArchiveFileDraft } from "../operations/background-operation-store";
+import { useBackgroundAttempts } from "../operations/use-background-attempts";
 import { invalidateRepoBranchesQuery } from "../queries/git";
 import { terminalQueryKeys } from "../queries/terminals";
 import { updateWorkspaceSessionQueries } from "../queries/workspace-sessions";
-import { useHostClient } from "../connection/client-connection-react";
 
 export type ArchiveWorkspaceSessionInput = WorkspaceSessionArchiveInput & {
   repoPath: WorkspaceRecord["repoPath"];
 };
 
-/**
- * Update the same caches whether a chat is archived from its header or the sidebar. A second
- * call while one archive runs sends no second command. A new call replaces the last error, so a
- * caller does not reset the mutation first: a reset would hide the running archive.
- */
-export const useArchiveWorkspaceSession = (
-  onArchived: (record: WorkspaceSession, input: ArchiveWorkspaceSessionInput) => void,
-) => {
+export const useArchiveWorkspaceSession = (workspaceId: string, sessionId: string | null) => {
   const queryClient = useQueryClient();
-  const host = useHostClient();
-  return useSingleFlightMutation({
-    mutationFn: ({ repoPath: _repoPath, ...input }: ArchiveWorkspaceSessionInput) =>
-      host.workspaceSessionArchive(input),
-    onSuccess: (record, input) => {
-      updateWorkspaceSessionQueries(queryClient, input.workspaceId, record);
-      onArchived(record, input);
+  const { backgroundOperations, feedback, host } = useClientConnection();
+  const isPending = useBackgroundAttempts().some(
+    (attempt) =>
+      attempt.workspace.workspaceId === workspaceId &&
+      attempt.target.kind === "chat" &&
+      attempt.target.sessionId === sessionId &&
+      attempt.phase === "running",
+  );
+
+  return {
+    isPending,
+    submit(
+      { repoPath, ...input }: ArchiveWorkspaceSessionInput,
+      labels: { workspaceLabel: string; targetLabel: string },
+      archiveDraft?: ArchiveFileDraft,
+    ): void {
+      const workspace = { workspaceId: input.workspaceId, repoPath };
+      const target = { kind: "chat", sessionId: input.sessionId } as const;
+      void backgroundOperations
+        .run(
+          {
+            workspace,
+            target,
+            action: "Archive session",
+            ...labels,
+            ...(archiveDraft && { archiveDraft }),
+          },
+          (tracking) => host.client.workspaceSessionArchive(input, tracking),
+          () => {
+            void Promise.all([
+              invalidateRepoBranchesQuery(queryClient, repoPath),
+              queryClient.invalidateQueries({
+                queryKey: terminalQueryKeys.workspaceSession(input),
+              }),
+            ]).catch((cause: unknown) =>
+              feedback.show("error", "Could not refresh chat cleanup details", {
+                description: errorMessage(cause),
+              }),
+            );
+          },
+        )
+        .then(
+          (record) => updateWorkspaceSessionQueries(queryClient, input.workspaceId, record),
+          () => {},
+        );
     },
-    onSettled: (_record, _error, input) => {
-      void invalidateRepoBranchesQuery(queryClient, input.repoPath);
-      void queryClient.invalidateQueries({
-        queryKey: terminalQueryKeys.workspaceSession({
-          workspaceId: input.workspaceId,
-          sessionId: input.sessionId,
-        }),
-      });
-    },
-  });
+  };
 };

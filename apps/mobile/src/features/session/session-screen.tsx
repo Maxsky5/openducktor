@@ -1,3 +1,4 @@
+import { useBackgroundAttempts } from "@openducktor/frontend-core/operations/use-background-attempts";
 import type { AgentSessionAssociation, WorkspaceRecord } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
@@ -14,7 +15,7 @@ import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-o
 import { useQuery } from "@tanstack/react-query";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { type ReactElement, useCallback, useEffect, useMemo } from "react";
-import { switchedSessionParams } from "@/navigation/routes";
+import { routes, switchedSessionParams } from "@/navigation/routes";
 import {
   projectAcceptedWorkspaceChat,
   subscribeHandoffCommit,
@@ -216,6 +217,19 @@ function SessionTargetResolver({
   });
   const workOwner = useResolvedWorkOwner(resolution, workspace.workspaceId, identity);
   const owner = resolution.status === "ready" ? resolution.owner : null;
+  const chatId = owner?.kind === "chat" ? owner.record.id : null;
+  const archived = useBackgroundAttempts().some(
+    (attempt) =>
+      attempt.phase === "succeeded" &&
+      attempt.workspace.workspaceId === workspace.workspaceId &&
+      attempt.target.kind === "chat" &&
+      attempt.target.sessionId === chatId,
+  );
+  useFocusEffect(
+    useCallback(() => {
+      if (archived && !readOnly) router.replace(routes.sessions());
+    }, [archived, readOnly, router]),
+  );
   const taskHandoff = useTaskRuntimeHandoff(
     owner?.kind === "task" ? { ...chatRef, taskId: owner.taskId, role: owner.role } : null,
     identity,

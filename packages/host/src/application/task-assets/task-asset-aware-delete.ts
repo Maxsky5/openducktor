@@ -1,3 +1,7 @@
+import {
+  backgroundStep,
+  planBackgroundSteps,
+} from "../operation-progress/background-operation-progress";
 import { Effect, Exit } from "effect";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskAssetFilePort } from "../../ports/task-asset-file-port";
@@ -27,7 +31,7 @@ export const createTaskAssetAwareDelete =
   }): TaskStorePort["deleteTask"] =>
   (input) => {
     if (!assetPersistenceEnabled) {
-      return inner.deleteTask(input);
+      return backgroundStep({ id: "task-delete", label: "Delete task" }, inner.deleteTask(input));
     }
     const quarantineIds: string[] = [];
     const affectedAssetIds: string[] = [];
@@ -42,7 +46,10 @@ export const createTaskAssetAwareDelete =
         scope: "description",
       });
       affectedAssetIds.push(...registered.map((asset) => asset.id));
-      const quarantineId = yield* filePort.quarantineTaskDirectory({ workspaceId, taskId });
+      const quarantineId = yield* backgroundStep(
+        { id: "stage-attachments", label: "Prepare attachment cleanup" },
+        filePort.quarantineTaskDirectory({ workspaceId, taskId }),
+      );
       if (!quarantineId && registered.length > 0) {
         return yield* new TaskAssetError({
           operation: "delete",
@@ -57,11 +64,18 @@ export const createTaskAssetAwareDelete =
       }
       if (quarantineId) {
         quarantineIds.push(quarantineId);
+        yield* planBackgroundSteps({ id: "attachments", label: "Clean up task attachments" });
       }
-      const deleted = yield* inner.deleteTask(input);
+      const deleted = yield* backgroundStep(
+        { id: "task-delete", label: "Delete task" },
+        inner.deleteTask(input),
+      );
       committed = true;
       for (const quarantineId of quarantineIds) {
-        yield* filePort.purgeQuarantine(quarantineId);
+        yield* backgroundStep(
+          { id: "attachments", label: "Clean up task attachments" },
+          filePort.purgeQuarantine(quarantineId),
+        );
       }
       return deleted;
     });

@@ -1,3 +1,4 @@
+import { connectionOf } from "../../connection/client-connection";
 import type { HostClient } from "@openducktor/host-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -12,6 +13,7 @@ import type {
 import type { RunTaskMutationWithChatDraftCleanupInput } from "./task-chat-draft-cleanup";
 import type { TaskMutationRunner } from "./task-mutation-runner";
 import { requireActiveRepo, requireWorkspaceRef } from "./task-operations-model";
+import { refreshTaskWorktreeAfterOperation } from "./task-worktree-settlement";
 import type { UseTaskOperationsResult } from "./task-operations-types";
 import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { CloseTaskOptions } from "../../types/task-close";
@@ -53,6 +55,7 @@ export function useTaskPullRequestOperations({
   taskChatDraftCleanup,
 }: Args): TaskPullRequestOperations {
   const queryClient = useQueryClient();
+  const { backgroundOperations } = connectionOf(queryClient);
   const [operations, setOperations] = useState(() => new Map<string, Operation>());
   const operationsRef = useRef(operations);
   const activeRepoPathRef = useRef(activeRepoPath);
@@ -104,8 +107,7 @@ export function useTaskPullRequestOperations({
   );
   const pendingMergedOperation =
     activeOperations.find(
-      (operation): operation is MergedOperation =>
-        operation.phase === "confirming" || operation.phase === "linking",
+      (operation): operation is MergedOperation => operation.phase === "confirming",
     ) ?? null;
   const pendingMergedPullRequest = useMemo(
     () =>
@@ -137,13 +139,8 @@ export function useTaskPullRequestOperations({
             workspace.workspaceId === operation.workspaceId &&
             workspace.repoPath === operation.repoPath,
         );
-        if (isOpen || operation.phase === "unlinking") continue;
-        if (operation.phase === "linking") {
-          if (operation.keepConfirmation)
-            updateOperation(operation, { ...operation, keepConfirmation: false });
-        } else {
-          updateOperation(operation, null);
-        }
+        if (isOpen || operation.phase === "unlinking" || operation.phase === "linking") continue;
+        updateOperation(operation, null);
       }
     };
     dropClosed();
@@ -191,7 +188,6 @@ export function useTaskPullRequestOperations({
             workspaceId: scope.workspaceId,
             pullRequest: result.pullRequest,
             phase: "confirming",
-            keepConfirmation: true,
           });
           if (
             activeRepoPathRef.current !== repoPath ||
@@ -263,41 +259,50 @@ export function useTaskPullRequestOperations({
       const { repoPath, taskId, workspaceId, pullRequest } = current;
       const linking: MergedOperation = { ...current, phase: "linking" };
       updateOperation(linking, linking);
-      let linked = false;
+      const workspace = { workspaceId, repoPath };
       try {
-        await taskChatDraftCleanup.runMutation({
-          queryClient,
-          repoPath,
-          workspaceId,
-          taskIds: [taskId],
-          mutation: async () => {
-            await pullRequestHostPort.taskPullRequestLinkMerged(
-              { workspaceId, repoPath },
-              taskId,
-              pullRequest,
-              removeWorktree,
-            );
+        await backgroundOperations.run(
+          {
+            workspace,
+            target: { kind: "task", taskId },
+            action: "Link merged pull request",
+            ...(current.taskTitle && { targetLabel: current.taskTitle }),
           },
-        });
-        linked = true;
-        await refreshTaskData({ workspaceId, repoPath }, taskId);
-        await invalidatePullRequestReviewContextQueries(queryClient);
-        feedback.show("success", "Merged pull request linked", {
-          description: `PR #${pullRequest.number} for ${taskId} (${repoPath}); task moved to Done.`,
-        });
-      } catch (error) {
-        feedback.show("error", "Failed to link merged pull request", {
-          description: `${taskId} (${repoPath}): ${errorMessage(error)}`,
-        });
+          (tracking) =>
+            taskChatDraftCleanup.runMutation({
+              queryClient,
+              repoPath,
+              workspaceId,
+              taskIds: [taskId],
+              mutation: () =>
+                pullRequestHostPort.taskPullRequestLinkMerged(
+                  workspace,
+                  taskId,
+                  pullRequest,
+                  removeWorktree,
+                  tracking,
+                ),
+            }),
+          (attempt) => {
+            if (removeWorktree) refreshTaskWorktreeAfterOperation(queryClient, feedback, attempt);
+          },
+        );
+      } catch {
+        return;
       } finally {
-        const latest = operationsRef.current.get(taskKey(linking));
-        updateOperation(
-          linking,
-          !linked && latest?.phase === "linking" && latest.keepConfirmation ? current : null,
+        updateOperation(linking, null);
+        void Promise.all([
+          refreshTaskData(workspace, taskId),
+          invalidatePullRequestReviewContextQueries(queryClient),
+        ]).catch((error) =>
+          feedback.show("error", "Could not refresh task metadata", {
+            description: `${taskId} · ${repoPath}. ${errorMessage(error)}`,
+          }),
         );
       }
     },
     [
+      backgroundOperations,
       feedback,
       pendingMergedOperation,
       pullRequestHostPort,
@@ -373,7 +378,6 @@ type WorkspaceTask = TaskKey;
 type MergedOperation = WorkspaceTask &
   PendingMergedPullRequest & {
     phase: "confirming" | "linking";
-    keepConfirmation: boolean;
   };
 
 type Operation = (WorkspaceTask & { phase: "detecting" | "unlinking" }) | MergedOperation;

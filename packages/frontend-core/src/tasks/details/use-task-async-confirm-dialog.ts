@@ -62,6 +62,7 @@ type UseTaskAsyncConfirmDialogOptions<Result> = {
   initiallyOpen?: boolean;
   /** A new key resets the dialog and ignores the result of a run that started before. */
   scopeKey: string | null;
+  closeOnSubmit?: boolean;
   run: (() => Promise<Result>) | undefined;
   onSucceeded: () => void;
   /** Gets the result of the committed run, such as the task card that the host returned. */
@@ -73,11 +74,12 @@ export type TaskAsyncConfirmDialog<Result> = {
   dialog: Omit<TaskConfirmDialogState, "impact">;
 };
 
-/** A confirmation that runs an async action and keeps the dialog open with its error on failure. */
+/** Keeps the confirmation and its committed continuation tied to the request scope. */
 export function useTaskAsyncConfirmDialog<Result>({
   enabled,
   initiallyOpen = false,
   scopeKey,
+  closeOnSubmit = false,
   run,
   onSucceeded,
   onCommitted,
@@ -138,7 +140,9 @@ export function useTaskAsyncConfirmDialog<Result>({
     requestInFlightRef.current = true;
     dispatch({ type: "started" });
 
-    void run()
+    const result = run();
+    if (closeOnSubmit) dispatch({ type: "openChanged", open: false });
+    void result
       .then(async (result) => {
         if (requestToken !== requestTokenRef.current) {
           return;
@@ -148,7 +152,7 @@ export function useTaskAsyncConfirmDialog<Result>({
         onSucceeded();
       })
       .catch((cause: unknown) => {
-        if (requestToken !== requestTokenRef.current) {
+        if (closeOnSubmit || requestToken !== requestTokenRef.current) {
           return;
         }
         dispatch({
@@ -164,7 +168,7 @@ export function useTaskAsyncConfirmDialog<Result>({
         requestInFlightRef.current = false;
         dispatch({ type: "finished" });
       });
-  }, [onSucceeded, run]);
+  }, [closeOnSubmit, onSucceeded, run]);
 
   return {
     openDialog,

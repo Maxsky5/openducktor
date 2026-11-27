@@ -336,27 +336,18 @@ export function useTaskApprovalFlow({
       submissionRoute.kind === "close_task"
     ) {
       if (removeWorktree === null) return;
-      void submitFlight.start(async () => {
-        dispatch({ type: "clear_error" });
-        dispatch({ type: "start_submitting" });
-        try {
-          // The close shows its own success and failure toasts.
-          const committed = await closeTask(submissionRoute.approval.taskId, { removeWorktree });
-          if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
-            return;
+      const continuation = continuationRef.current;
+      const result = closeTask(submissionRoute.approval.taskId, { removeWorktree });
+      reset();
+      void result
+        .then(async (committed) => {
+          if (hasSameWorkspaceIdentity(workspaceIdentityRef.current, submissionWorkspace)) {
+            await continuation?.(committed);
           }
-          await completeApproval(committed);
-        } catch (error) {
-          if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
-            return;
-          }
-          dispatch({
-            type: "return_to_editable",
-            errorMessage: errorMessage(error),
-            errorOutcomeUnknown: isOutcomeUnknown(error),
-          });
-        }
-      });
+        })
+        .catch(() => {
+          // The background operation reports the command outcome.
+        });
       return;
     }
 

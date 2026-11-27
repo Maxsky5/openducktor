@@ -40,7 +40,7 @@ import {
   taskStoreCheckSchema,
   taskWorktreeSummarySchema,
 } from "@openducktor/contracts";
-import type { InvokeFn, InvokeOptions } from "./invoke-utils";
+import type { BackgroundOperationInvocation, InvokeFn, InvokeOptions } from "./invoke-utils";
 import { arrayResultSchema, booleanResultSchema, okResultSchema } from "./invoke-utils";
 import { type TaskCard, taskCardSchema } from "@openducktor/contracts";
 
@@ -191,6 +191,7 @@ const taskPullRequestLinkMerged = async (
   taskId: string,
   pullRequest: PullRequest,
   removeWorktree: boolean,
+  tracking?: BackgroundOperationInvocation,
 ) => {
   return invokeFn(
     "task_pull_request_link_merged",
@@ -200,8 +201,10 @@ const taskPullRequestLinkMerged = async (
       taskId,
       pullRequest,
       removeWorktree,
+      ...(tracking && { operationId: tracking.operationId }),
     },
     taskCardSchema,
+    tracking,
   );
 };
 
@@ -323,8 +326,16 @@ export class HostAgentClient {
     taskId: string,
     pullRequest: PullRequest,
     removeWorktree: boolean,
+    tracking?: BackgroundOperationInvocation,
   ) {
-    return taskPullRequestLinkMerged(this.invokeFn, scope, taskId, pullRequest, removeWorktree);
+    return taskPullRequestLinkMerged(
+      this.invokeFn,
+      scope,
+      taskId,
+      pullRequest,
+      removeWorktree,
+      tracking,
+    );
   }
 
   async repoPullRequestSync(scope: WorkspaceRef): Promise<RepoPullRequestSyncResponse> {

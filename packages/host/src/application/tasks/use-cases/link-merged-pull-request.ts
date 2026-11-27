@@ -1,3 +1,9 @@
+import {
+  planBackgroundSteps,
+  backgroundStep,
+  CurrentBackgroundOperation,
+  updateBackgroundOperation,
+} from "../../operation-progress/background-operation-progress";
 import { TASK_CLOSED_STATE } from "@openducktor/contracts";
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { Effect } from "effect";
@@ -36,6 +42,11 @@ export const createTaskLinkMergedPullRequestUseCase = ({
   linkMergedPullRequest(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, pullRequest, removeWorktree } = input;
+      yield* planBackgroundSteps(
+        { id: "pr-link", label: "Link merged pull request" },
+        { id: "terminals", label: "Stop task terminals" },
+        { id: "task-close", label: "Close task" },
+      );
       const current = yield* taskStore.getTask(input);
       const metadata = yield* taskStore.getTaskMetadata(input);
       const sameExistingPullRequest =
@@ -107,6 +118,16 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         );
       }
 
+      if (sameExistingPullRequest) {
+        yield* updateBackgroundOperation((progress) =>
+          progress.update({
+            id: "pr-link",
+            label: "Link merged pull request",
+            state: "completed",
+            details: [`Pull request #${pullRequest.number} was already linked.`],
+          }),
+        );
+      }
       let removeCheckedWorktree = false;
       if (!sameExistingPullRequest || removeWorktree) {
         const branchState = yield* inspectTaskBranches(dependencies, {
@@ -115,19 +136,28 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           task: current,
           operationLabel: "Pull request linking",
         });
-        if (branchState.kind === "unavailable" && !sameExistingPullRequest)
-          return yield* branchState.error;
+        if (
+          branchState.kind === "unavailable" &&
+          (!sameExistingPullRequest || (yield* CurrentBackgroundOperation))
+        )
+          return yield* backgroundStep(
+            { id: "check-branch", label: "Check task branch" },
+            Effect.fail(branchState.error),
+          );
         removeCheckedWorktree = removeWorktree && branchState.kind === "available";
       }
       if (removeCheckedWorktree) {
         yield* requireWorktreeFiles(dependencies.worktreeFiles);
       }
-      yield* taskStore.setPullRequest({
-        workspaceId: input.workspaceId,
-        repoPath,
-        taskId,
-        pullRequest,
-      });
+      yield* backgroundStep(
+        { id: "pr-link", label: "Link merged pull request" },
+        taskStore.setPullRequest({
+          workspaceId: input.workspaceId,
+          repoPath,
+          taskId,
+          pullRequest,
+        }),
+      );
       const postLink = yield* Effect.result(
         completeTaskClosure({
           workspaceId: input.workspaceId,

@@ -1,3 +1,4 @@
+import { useWorkspaceIntentRunner } from "@/features/command-palette/use-workspace-intent-runner";
 import { ShortcutPreferencesProvider } from "@/features/shortcuts/shortcut-preferences-provider";
 import { CommandPaletteRegistryProvider } from "@/features/command-palette/command-palette-registry";
 import { type PropsWithChildren, type ReactElement, useCallback } from "react";
@@ -39,6 +40,21 @@ function NotificationFailurePromptHost(): ReactElement {
   );
 }
 
+function ApplicationStartupNotifications(): ReactElement {
+  const { runIntent } = useWorkspaceIntentRunner();
+  return (
+    <StartupNotifications
+      finishClosingTask={(workspaceId, taskId) => {
+        runIntent({
+          workspaceId,
+          taskId,
+          run: ({ workflow }) => workflow.onConfirmTaskAction(taskId, "close"),
+        });
+      }}
+    />
+  );
+}
+
 // Central composition layer for cross-page overlays that can be opened from anywhere in the app.
 export function ApplicationOverlays({ children }: PropsWithChildren): ReactElement {
   return (
@@ -60,7 +76,7 @@ export function ApplicationOverlays({ children }: PropsWithChildren): ReactEleme
                       <AgentSessionTranscriptDialogHost>
                         <NotificationNavigationRegistrar />
                         {children}
-                        <StartupNotifications />
+                        <ApplicationStartupNotifications />
                         <AppUpdatePrompt />
                       </AgentSessionTranscriptDialogHost>
                       {/*

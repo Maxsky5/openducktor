@@ -6,9 +6,7 @@ import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import { taskQueryKeys } from "../../queries/tasks";
 import { issueItemsQueryKeys } from "../../queries/issue-items";
 import { agentSessionQueryKeys } from "../../queries/agent-sessions";
-import { taskWorktreeQueryKeys } from "../../queries/build-runtime";
 import { taskStopImpactQueryKeys } from "../../queries/task-stop-impact";
-import { taskWorktreeCleanupImpactQueryKeys } from "../../queries/task-worktree-cleanup-impact";
 import type { TaskChatDraftCleanup } from "./task-chat-draft-cleanup";
 import type { TaskMutationRunner } from "./task-mutation-runner";
 import {
@@ -235,10 +233,8 @@ describe("createTaskMutationCommands", () => {
     const scope = { workspaceId: "workspace-1", repoPath: "/repo" };
     const sessionsKey = agentSessionQueryKeys.list(scope, "task-1");
     const stopImpactKey = taskStopImpactQueryKeys.repo(scope);
-    const worktreeKey = taskWorktreeQueryKeys.taskWorktree({ ...scope, taskId: "task-1" });
     queryClient.setQueryData(sessionsKey, []);
     queryClient.setQueryData(stopImpactKey, {});
-    queryClient.setQueryData(worktreeKey, {});
     const cleanupTaskIds: string[][] = [];
     const taskChatDraftCleanup: Pick<TaskChatDraftCleanup, "runMutation"> = {
       runMutation: async (input) => {
@@ -264,7 +260,6 @@ describe("createTaskMutationCommands", () => {
     expect(cleanupTaskIds).toEqual([["task-1"]]);
     expect(queryClient.getQueryState(sessionsKey)).toBeUndefined();
     expect(queryClient.getQueryState(stopImpactKey)?.isInvalidated).toBe(true);
-    expect(queryClient.getQueryState(worktreeKey)?.isInvalidated).toBe(true);
   });
 
   test("invalidates cached issue links for the deleted task's repository", async () => {
@@ -333,34 +328,6 @@ describe("createTaskMutationCommands", () => {
     expect(received[0]?.successDescription).toBe(
       "task-1. Its worktree and local branch were kept.",
     );
-  });
-
-  test("removes the worktree of a closed task and reads its cleanup impact again", async () => {
-    const calls: string[] = [];
-    const queryClient = createQueryClient();
-    const impactKey = taskWorktreeCleanupImpactQueryKeys.get(
-      { workspaceId: "workspace-1", repoPath: "/repo" },
-      "task-1",
-    );
-    queryClient.setQueryData(impactKey, {});
-    const commands = createTaskMutationCommands({
-      activeRepoPath: "/repo",
-      activeWorkspaceId: "workspace-1",
-      runTaskMutation: createRunTaskMutation([]),
-      hostPort: {
-        ...createHostPort(),
-        taskWorktreeRemove: async (repoPath, taskId) => {
-          calls.push(`remove:${repoPath.repoPath}:${taskId}`);
-        },
-      },
-      queryClient,
-      taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
-    });
-
-    await commands.removeTaskWorktree("task-1");
-
-    expect(calls).toEqual(["remove:/repo:task-1"]);
-    expect(queryClient.getQueryState(impactKey)?.isInvalidated).toBe(true);
   });
 
   test("invalidates stop impact after a failed close attempt", async () => {

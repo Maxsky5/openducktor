@@ -3,7 +3,6 @@ import type { QueryClient } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { errorMessage } from "../../lib/errors";
-import { taskWorktreeQueryKeys } from "../../queries/build-runtime";
 import { taskStopImpactQueryKeys } from "../../queries/task-stop-impact";
 import { invalidateCachedTaskDocumentQueries } from "../../queries/documents";
 import {
@@ -11,6 +10,7 @@ import {
   refreshAgentSessionListQuery,
 } from "../../queries/agent-sessions";
 import { requireActiveRepo, requireWorkspaceRef } from "./task-operations-model";
+import { refreshTaskWorktreeAfterOperation } from "./task-worktree-settlement";
 import type { UseTaskOperationsResult } from "./task-operations-types";
 import { useClientConnection } from "../../connection/client-connection-react";
 
@@ -34,26 +34,29 @@ export function useTaskResetOperations({
   refreshTaskData,
 }: UseTaskResetOperationsArgs): TaskResetOperations {
   const queryClient = useQueryClient();
-  const { feedback, host } = useClientConnection();
+  const { backgroundOperations, feedback, host } = useClientConnection();
   const hostClient = host.client;
 
-  const resetTaskImplementation = useCallback(
-    async (taskId: string, eventId: string): Promise<TaskCard> => {
+  const reset = useCallback(
+    async (taskId: string, eventId?: string): Promise<TaskCard> => {
       const repoPath = requireActiveRepo(activeRepoPath);
       const scope = requireWorkspaceRef(repoPath, activeWorkspaceId);
-      let committed: TaskCard;
-      try {
-        try {
-          committed = await hostClient.taskApplyEvent(scope, taskId, eventId);
-        } finally {
-          await invalidateTaskStopImpact(queryClient, scope);
-        }
-      } catch (error) {
-        feedback.show("error", "Failed to reset implementation", {
-          description: errorMessage(error),
-        });
-        throw error;
-      }
+      const action = eventId ? "Reset implementation" : "Reset task";
+      const committed = await backgroundOperations.run(
+        { workspace: scope, target: { kind: "task", taskId }, action },
+        (tracking) =>
+          eventId
+            ? hostClient.taskApplyEvent(scope, taskId, eventId, tracking)
+            : hostClient.taskReset(scope, taskId, tracking),
+        (attempt) => {
+          refreshTaskWorktreeAfterOperation(queryClient, feedback, attempt);
+          void invalidateTaskStopImpact(queryClient, scope).catch((error) =>
+            feedback.show("error", "Could not refresh task activity", {
+              description: errorMessage(error),
+            }),
+          );
+        },
+      );
       try {
         await refreshTaskAfterReset(
           queryClient,
@@ -63,61 +66,23 @@ export function useTaskResetOperations({
           agentSessionReadPort,
         );
       } catch (error) {
-        feedback.show("error", "Implementation reset, but metadata refresh failed", {
-          description: `${repoPath} · ${taskId}: ${errorMessage(error)}`,
-        });
-        return committed;
-      }
-      feedback.show("success", "Implementation reset", { description: taskId });
-      return committed;
-    },
-    [
-      activeRepoPath,
-      activeWorkspaceId,
-      agentSessionReadPort,
-      feedback,
-      hostClient,
-      queryClient,
-      refreshTaskData,
-    ],
-  );
-
-  const resetTask = useCallback(
-    async (taskId: string): Promise<TaskCard> => {
-      const repoPath = requireActiveRepo(activeRepoPath);
-      const scope = requireWorkspaceRef(repoPath, activeWorkspaceId);
-      let committed: TaskCard;
-      try {
-        try {
-          committed = await hostClient.taskReset(scope, taskId);
-        } finally {
-          await invalidateTaskStopImpact(queryClient, scope);
-        }
-      } catch (error) {
-        feedback.show("error", "Failed to reset task", { description: errorMessage(error) });
-        throw error;
-      }
-      try {
-        await refreshTaskAfterReset(
-          queryClient,
-          scope,
-          taskId,
-          refreshTaskData,
-          agentSessionReadPort,
+        feedback.show(
+          "error",
+          eventId
+            ? "Implementation reset, but metadata refresh failed"
+            : "Task reset, but metadata refresh failed",
+          {
+            description: `${repoPath} · ${taskId}: ${errorMessage(error)}`,
+          },
         );
-      } catch (error) {
-        feedback.show("error", "Task reset, but metadata refresh failed", {
-          description: `${repoPath} · ${taskId}: ${errorMessage(error)}`,
-        });
-        return committed;
       }
-      feedback.show("success", "Task reset", { description: taskId });
       return committed;
     },
     [
       activeRepoPath,
       activeWorkspaceId,
       agentSessionReadPort,
+      backgroundOperations,
       feedback,
       hostClient,
       queryClient,
@@ -125,7 +90,7 @@ export function useTaskResetOperations({
     ],
   );
 
-  return { resetTaskImplementation, resetTask };
+  return { resetTaskImplementation: reset, resetTask: reset };
 }
 
 const refreshTaskAfterReset = async (
@@ -161,8 +126,5 @@ const invalidateTaskWorkflowQueries = async (
   await Promise.all([
     invalidateCachedTaskDocumentQueries(queryClient, scope, [taskId]),
     refreshAgentSessionListQuery(queryClient, scope, taskId, agentSessionReadPort),
-    queryClient.invalidateQueries({
-      queryKey: taskWorktreeQueryKeys.taskWorktree({ ...scope, taskId }),
-    }),
   ]);
 };

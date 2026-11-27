@@ -39,7 +39,7 @@ type Props = {
   workspaceId: string;
   record: WorkspaceSession;
   isArchiving: boolean;
-  error: Error | null;
+  error?: Error | null;
   onArchive: (
     removeWorktree: boolean,
     confirmation?: WorkspaceSessionArchiveInput["worktreeConfirmation"],

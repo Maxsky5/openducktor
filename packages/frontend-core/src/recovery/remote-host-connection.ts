@@ -289,6 +289,20 @@ export const createRemoteHostConnection = ({
         throw cause;
       }
     },
+    backgroundOperationHostEpoch: () => remote.readState().host?.hostInstanceId,
+    subscribeBackgroundOperationProgress: async (listener) => {
+      const stop = await subscribe((event) => {
+        if (event.channel === "openducktor://background-operation-progress")
+          logListenerFailure(listener(event));
+      }, listener);
+      try {
+        await remote.connect();
+        return stop;
+      } catch (cause) {
+        stop();
+        throw cause;
+      }
+    },
     subscribeWorkspaceSessionUpdates: (listener) =>
       subscribe((event) => {
         if (event.channel === "openducktor://workspace-session-updated")

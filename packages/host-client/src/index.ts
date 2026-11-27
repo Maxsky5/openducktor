@@ -19,6 +19,7 @@ import {
 export {
   BROWSER_EVENT_STREAM_NAME,
   STARTUP_EVENT_STREAM_NAME,
+  BACKGROUND_OPERATION_EVENT_STREAM_NAME,
   USAGE_EVENT_STREAM_NAME,
   hostEventStreamEventName,
   agentSessionLiveEnvelopeRepoPath,
@@ -45,7 +46,7 @@ export {
   isHostUnreachableError,
 } from "./host-unreachable-error";
 export { HostInvokeError } from "./invoke-utils";
-export type { InvokeFn, InvokeOptions } from "./invoke-utils";
+export type { BackgroundOperationInvocation, InvokeFn, InvokeOptions } from "./invoke-utils";
 export { HostTerminalClientError } from "./terminal-client";
 export { HostBrowserClientError } from "./browser-client";
 
