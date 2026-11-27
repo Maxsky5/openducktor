@@ -71,7 +71,7 @@ export const NAMING_PROMPT_TEMPLATES: readonly NamingPromptTemplate[] = [
     key: namingKey(NAMING_PROMPT_IDS.branchName),
     label: "Branch name",
     description:
-      "Names the branch of a new task worktree, and of a new chat worktree without a name.",
+      "Names the branch of a new task worktree, and of a new workspace session worktree without a branch name.",
     builtinVersion: 1,
     template: BRANCH_NAME_TEMPLATE,
     requiredPlaceholders: NAMING_PROMPT_PLACEHOLDERS,
