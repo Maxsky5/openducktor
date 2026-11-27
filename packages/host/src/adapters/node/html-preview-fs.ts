@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { constants as fsConstants } from "node:fs";
-import { open, type FileHandle } from "node:fs/promises";
+import { lstat, open, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { Effect } from "effect";
 
@@ -35,6 +35,10 @@ export const readRegularFileNoFollow = (
   Effect.promise(async (): Promise<ReadRegularFileResult> => {
     let handle: FileHandle | undefined;
     try {
+      // Windows does not define O_NOFOLLOW; check lstat before open so symlinks are rejected on
+      // every platform while POSIX still enforces O_NOFOLLOW atomically on open.
+      const entry = await lstat(filePath);
+      if (entry.isSymbolicLink()) return { kind: "symlink" };
       const flags =
         fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0) | (fsConstants.O_NONBLOCK ?? 0);
       handle = await open(filePath, flags);

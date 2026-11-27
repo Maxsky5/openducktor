@@ -1,7 +1,7 @@
 import type { Effect } from "effect";
 import type { HostValidationError } from "../effect/host-errors";
 
-export type ReadLocalPreviewImageResult =
+type ReadLocalPreviewImageResult =
   | { kind: "ok"; bytes: Uint8Array; size: number; extension: string }
   | { kind: "too_large"; size: number }
   | { kind: "outside_allowed" }

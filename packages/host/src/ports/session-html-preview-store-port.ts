@@ -6,17 +6,17 @@ import type {
   HostValidationError,
 } from "../effect/host-errors";
 
-export type SessionHtmlPreviewStoreScope = {
+type SessionHtmlPreviewStoreScope = {
   workspaceId: string;
 };
 
-export type SaveSessionHtmlPreviewInput = SessionHtmlPreviewStoreScope & {
+type SaveSessionHtmlPreviewInput = SessionHtmlPreviewStoreScope & {
   previewId: string;
   html: string;
   byteSize: number;
 };
 
-export type ReadSessionHtmlPreviewInput = SessionHtmlPreviewStoreScope & {
+type ReadSessionHtmlPreviewInput = SessionHtmlPreviewStoreScope & {
   previewId: string;
 };
 

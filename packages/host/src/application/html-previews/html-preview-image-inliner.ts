@@ -29,6 +29,27 @@ const utf8Decoder = new TextDecoder("utf-8");
 const isExplicitLocalPath = (reference: string): boolean =>
   /^file:\/\//i.test(reference) || /^[a-z]:[\\/]/i.test(reference);
 
+const NAMED_HTML_ENTITIES = new Map<string, string>([
+  ["amp", "&"],
+  ["lt", "<"],
+  ["gt", ">"],
+  ["quot", '"'],
+  ["apos", "'"],
+]);
+
+const decodeHtmlEntities = (value: string): string => {
+  if (!value.includes("&")) return value;
+  return value.replaceAll(/&(?:#x([0-9a-f]+)|#([0-9]+)|([a-z]+));/gi, (match, hex, dec, named) => {
+    if (named !== undefined) {
+      return NAMED_HTML_ENTITIES.get(String(named).toLowerCase()) ?? match;
+    }
+    const codePoint = hex !== undefined ? Number.parseInt(hex, 16) : Number.parseInt(dec, 10);
+    if (!Number.isInteger(codePoint) || codePoint <= 0 || codePoint > 0x10ffff) return match;
+    if (codePoint >= 0xd800 && codePoint <= 0xdfff) return match;
+    return String.fromCodePoint(codePoint);
+  });
+};
+
 const formatMib = (bytes: number): string => `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
 
 const bytesToBase64 = (bytes: Uint8Array): string => {
@@ -111,13 +132,14 @@ const isImageBytes = (bytes: Uint8Array, ext: string): boolean => {
   return isPng || isJpeg || isGif || isIco || isBmp || isWebp || isAvif;
 };
 
-export type LocalImageRef = { start: number; end: number; path: string };
+type LocalImageRef = { start: number; end: number; path: string };
 
 const collectCssUrls = (
   html: string,
   segment: string,
   baseOffset: number,
   refs: LocalImageRef[],
+  decodeEntities: boolean,
 ): void => {
   const withoutComments = segment.replaceAll(CSS_COMMENT, (match) => " ".repeat(match.length));
   for (const match of withoutComments.matchAll(CSS_URL)) {
@@ -125,9 +147,10 @@ const collectCssUrls = (
     if (!span) continue;
     const start = baseOffset + span[0];
     const end = baseOffset + span[1];
-    const value = html.slice(start, end);
-    if (IMAGE_URL_CANDIDATE.test(value)) {
-      refs.push({ start, end, path: value });
+    const rawValue = html.slice(start, end);
+    const decoded = decodeEntities ? decodeHtmlEntities(rawValue) : rawValue;
+    if (IMAGE_URL_CANDIDATE.test(decoded)) {
+      refs.push({ start, end, path: decoded });
     }
   }
 };
@@ -143,10 +166,11 @@ const collectSrcsetUrls = (
     const trimmedLeading = part.length - part.trimStart().length;
     const body = part.trimStart();
     const urlEnd = body.search(/\s/);
-    const url = urlEnd === -1 ? body : body.slice(0, urlEnd);
-    if (url.length > 0 && IMAGE_URL_CANDIDATE.test(url)) {
+    const rawUrl = urlEnd === -1 ? body : body.slice(0, urlEnd);
+    const decoded = decodeHtmlEntities(rawUrl);
+    if (decoded.length > 0 && IMAGE_URL_CANDIDATE.test(decoded)) {
       const start = baseOffset + cursor + trimmedLeading;
-      refs.push({ start, end: start + url.length, path: html.slice(start, start + url.length) });
+      refs.push({ start, end: start + rawUrl.length, path: decoded });
     }
     cursor += part.length + 1;
   }
@@ -156,14 +180,14 @@ const collectSrcsetUrls = (
  * Scans only real image-bearing HTML attributes (`src`, `poster`, `srcset`, `style`) and `<style>`
  * CSS `url(...)` values outside comments, scripts, textareas, and templates.
  */
-export const findLocalImageRefsInMarkup = (html: string): LocalImageRef[] => {
+const findLocalImageRefsInMarkup = (html: string): LocalImageRef[] => {
   const masked = maskHtmlNonMarkup(html);
   const refs: LocalImageRef[] = [];
 
   for (const styleMatch of masked.matchAll(HTML_STYLE_ELEMENT)) {
     const bodySpan = styleMatch.indices?.[1];
     if (bodySpan) {
-      collectCssUrls(html, masked.slice(bodySpan[0], bodySpan[1]), bodySpan[0], refs);
+      collectCssUrls(html, masked.slice(bodySpan[0], bodySpan[1]), bodySpan[0], refs, false);
     }
   }
 
@@ -173,13 +197,16 @@ export const findLocalImageRefsInMarkup = (html: string): LocalImageRef[] => {
     if (!tagSpan) continue;
     for (const attribute of scanStartTagAttributes(tagMatch[0], tagSpan[0])) {
       if (!IMAGE_TARGET_ATTRS.has(attribute.name)) continue;
-      const value = html.slice(attribute.valueStart, attribute.valueEnd);
+      const rawValue = html.slice(attribute.valueStart, attribute.valueEnd);
       if (attribute.name === "style") {
-        collectCssUrls(html, value, attribute.valueStart, refs);
+        collectCssUrls(html, rawValue, attribute.valueStart, refs, true);
       } else if (attribute.name === "srcset") {
-        collectSrcsetUrls(html, value, attribute.valueStart, refs);
-      } else if (IMAGE_URL_CANDIDATE.test(value)) {
-        refs.push({ start: attribute.valueStart, end: attribute.valueEnd, path: value });
+        collectSrcsetUrls(html, rawValue, attribute.valueStart, refs);
+      } else {
+        const decoded = decodeHtmlEntities(rawValue);
+        if (IMAGE_URL_CANDIDATE.test(decoded)) {
+          refs.push({ start: attribute.valueStart, end: attribute.valueEnd, path: decoded });
+        }
       }
     }
   }

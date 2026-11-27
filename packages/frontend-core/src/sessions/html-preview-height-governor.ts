@@ -6,9 +6,11 @@ export type HtmlPreviewHeightGovernorOptions = {
   maxChangesPerWindow?: number;
   windowMs?: number;
   repeatGrowthLimit?: number;
+  repeatGrowthDurationMs?: number;
   repeatStepMaxPx?: number;
   repeatGapMaxMs?: number;
   repeatTolerancePx?: number;
+  freezeRecoveryQuietMs?: number;
   now?: () => number;
 };
 
@@ -17,24 +19,27 @@ export type HtmlPreviewHeightGovernor = {
   accept(rawHeight: number): number | null;
   /** Resets governor state for a new preview document. */
   reset(initialHeight?: number | null): void;
-  /** True once a runaway growth loop tripped the circuit breaker. */
+  /** True while a runaway growth loop has tripped the circuit breaker. */
   isGrowthFrozen(): boolean;
 };
 
 const DEFAULT_MIN_HEIGHT = 80;
-const DEFAULT_MAX_CHANGES_PER_WINDOW = 20;
+const DEFAULT_MAX_CHANGES_PER_WINDOW = 60;
 const DEFAULT_WINDOW_MS = 1_000;
 const DEFAULT_REPEAT_GROWTH_LIMIT = 10;
+const DEFAULT_REPEAT_GROWTH_DURATION_MS = 1_000;
 const DEFAULT_REPEAT_STEP_MAX_PX = 64;
 const DEFAULT_REPEAT_GAP_MAX_MS = 500;
 const DEFAULT_REPEAT_TOLERANCE_PX = 1;
+const DEFAULT_FREEZE_RECOVERY_QUIET_MS = 1_000;
 
 /**
  * Runtime height governor for auto-sizing HTML preview frames.
  *
- * Clamps reported heights, rate-limits resize bursts, and freezes upward growth if a page enters
- * a repeating incremental growth feedback loop (for example via JS or CSS viewport-height quirks).
- * Shrinkage remains permitted even after upward growth is frozen.
+ * Clamps reported heights, rate-limits extreme resize bursts without permanently locking the frame,
+ * and temporarily freezes upward growth only if a page sustains a repeating incremental growth loop
+ * (for example via JS or CSS viewport-height quirks). Finite expand animations finish cleanly,
+ * shrinkage stays permitted while frozen, and the breaker recovers after a quiet pause.
  */
 export const createHtmlPreviewHeightGovernor = (
   options: HtmlPreviewHeightGovernorOptions = {},
@@ -44,16 +49,21 @@ export const createHtmlPreviewHeightGovernor = (
   const maxChangesPerWindow = options.maxChangesPerWindow ?? DEFAULT_MAX_CHANGES_PER_WINDOW;
   const windowMs = options.windowMs ?? DEFAULT_WINDOW_MS;
   const repeatGrowthLimit = options.repeatGrowthLimit ?? DEFAULT_REPEAT_GROWTH_LIMIT;
+  const repeatGrowthDurationMs =
+    options.repeatGrowthDurationMs ?? DEFAULT_REPEAT_GROWTH_DURATION_MS;
   const repeatStepMaxPx = options.repeatStepMaxPx ?? DEFAULT_REPEAT_STEP_MAX_PX;
   const repeatGapMaxMs = options.repeatGapMaxMs ?? DEFAULT_REPEAT_GAP_MAX_MS;
   const repeatTolerancePx = options.repeatTolerancePx ?? DEFAULT_REPEAT_TOLERANCE_PX;
+  const freezeRecoveryQuietMs = options.freezeRecoveryQuietMs ?? DEFAULT_FREEZE_RECOVERY_QUIET_MS;
   const now = options.now ?? Date.now;
 
   let currentHeight: number | null = null;
   let growthFrozen = false;
+  let lastGrowthActivityAt = 0;
   let recentChangeTimes: number[] = [];
   let lastGrowthStep: number | null = null;
   let lastGrowthAt = 0;
+  let repeatGrowthStartAt = 0;
   let repeatGrowthCount = 0;
 
   const clamp = (height: number): number =>
@@ -68,17 +78,22 @@ export const createHtmlPreviewHeightGovernor = (
       if (currentHeight !== null && nextHeight === currentHeight) {
         return null;
       }
+      const timestamp = now();
       const isGrowing = currentHeight !== null && nextHeight > currentHeight;
+
       if (growthFrozen && isGrowing) {
-        return null;
+        if (timestamp - lastGrowthActivityAt < freezeRecoveryQuietMs) {
+          lastGrowthActivityAt = timestamp;
+          return null;
+        }
+        // The page stopped trying to grow for the full quiet window, so allow settled updates.
+        growthFrozen = false;
+        repeatGrowthCount = 0;
+        lastGrowthStep = null;
       }
 
-      const timestamp = now();
       recentChangeTimes = recentChangeTimes.filter((time) => timestamp - time < windowMs);
       if (recentChangeTimes.length >= maxChangesPerWindow) {
-        if (isGrowing) {
-          growthFrozen = true;
-        }
         return null;
       }
 
@@ -93,11 +108,16 @@ export const createHtmlPreviewHeightGovernor = (
             repeatGrowthCount += 1;
           } else {
             repeatGrowthCount = 1;
+            repeatGrowthStartAt = timestamp;
           }
           lastGrowthStep = step;
           lastGrowthAt = timestamp;
-          if (repeatGrowthCount >= repeatGrowthLimit) {
+          if (
+            repeatGrowthCount >= repeatGrowthLimit &&
+            timestamp - repeatGrowthStartAt >= repeatGrowthDurationMs
+          ) {
             growthFrozen = true;
+            lastGrowthActivityAt = timestamp;
             return null;
           }
         } else {
@@ -120,9 +140,11 @@ export const createHtmlPreviewHeightGovernor = (
           ? clamp(initialHeight)
           : null;
       growthFrozen = false;
+      lastGrowthActivityAt = 0;
       recentChangeTimes = [];
       lastGrowthStep = null;
       lastGrowthAt = 0;
+      repeatGrowthStartAt = 0;
       repeatGrowthCount = 0;
     },
 

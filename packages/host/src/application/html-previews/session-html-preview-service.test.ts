@@ -123,16 +123,19 @@ describe("createSessionHtmlPreviewService", () => {
       archived: false,
     });
     const pngPath = path.join(repoDir, "chart.png");
+    const ampPngPath = path.join(repoDir, "a&b.png");
     const svgPath = path.join(tempRoot, "icon.svg");
     const htmlPath = path.join(worktreeBase, "report.html");
     await writeFile(pngPath, ONE_PIXEL_PNG);
+    await writeFile(ampPngPath, ONE_PIXEL_PNG);
     await writeFile(
       svgPath,
       '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"></svg>',
     );
+    const escapedAmpUrl = pathToFileURL(ampPngPath).href.replaceAll("&", "&amp;");
     await writeFile(
       htmlPath,
-      `<!doctype html><html><head><link rel="icon" href="/favicon.ico" /><style>.hero{background:url("${pngPath}")}</style></head><body><div title='img src="file:///missing-decoy.png"' data-snippet='src="${pngPath}"'></div><img alt="x"src="${pngPath}" /><img src="/assets/logo.png" /><img src="${pathToFileURL(svgPath).href}" /><script>const untouched = "${pngPath}";</script></body></html>`,
+      `<!doctype html><html><head><link rel="icon" href="/favicon.ico" /><style>.hero{background:url("${pngPath}")}</style></head><body><div title='img src="file:///missing-decoy.png"' data-snippet='src="${pngPath}"'></div><img alt="x"src="${pngPath}" /><img src="${escapedAmpUrl}" /><img src="/assets/logo.png" /><img src="${pathToFileURL(svgPath).href}" /><script>const untouched = "${pngPath}";</script></body></html>`,
     );
 
     const published = await Effect.runPromise(
@@ -154,6 +157,7 @@ describe("createSessionHtmlPreviewService", () => {
     const pngDataUri = `data:image/png;base64,${ONE_PIXEL_PNG.toString("base64")}`;
     expect(loaded.html).toContain(`background:url("${pngDataUri}")`);
     expect(loaded.html).toContain(`alt="x"src="${pngDataUri}"`);
+    expect(loaded.html).not.toContain("&amp;b.png");
     expect(loaded.html).toContain('src="data:image/svg+xml;base64,');
     expect(loaded.html).toContain('href="/favicon.ico"');
     expect(loaded.html).toContain('src="/assets/logo.png"');

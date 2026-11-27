@@ -28,7 +28,7 @@ import type {
 import { inlineLocalHtmlPreviewImages } from "./html-preview-image-inliner";
 import { findHtmlPreviewViewportHeight } from "./html-preview-validation";
 
-export type SessionHtmlPreviewPublishError =
+type SessionHtmlPreviewPublishError =
   | HostError
   | HostValidationError
   | ManagedCallerResolverError
@@ -36,9 +36,9 @@ export type SessionHtmlPreviewPublishError =
   | TaskStoreError
   | WorkspaceSettingsError;
 
-export type SessionHtmlPreviewReadError = SessionHtmlPreviewStoreReadError | WorkspaceSettingsError;
+type SessionHtmlPreviewReadError = SessionHtmlPreviewStoreReadError | WorkspaceSettingsError;
 
-export type SessionHtmlPreviewSource =
+type SessionHtmlPreviewSource =
   | { readonly kind: "html"; readonly html: string }
   | { readonly kind: "path"; readonly path: string };
 
