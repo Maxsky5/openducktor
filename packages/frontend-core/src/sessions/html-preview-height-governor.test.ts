@@ -87,4 +87,72 @@ describe("createHtmlPreviewHeightGovernor", () => {
     clock += 1001;
     expect(governor.accept(500)).toBe(500);
   });
+
+  test("coalesces rate-limited 120Hz expand updates and applies the final settled height after the window expires", () => {
+    let clock = 1_000;
+    const deferred: number[] = [];
+    let scheduled: { run: () => void; at: number; canceled: boolean } | null = null;
+    const governor = createHtmlPreviewHeightGovernor({
+      now: () => clock,
+      onDeferredHeight: (height) => deferred.push(height),
+      schedule: (callback, delayMs) => {
+        const entry = { run: callback, at: clock + delayMs, canceled: false };
+        scheduled = entry;
+        return () => {
+          entry.canceled = true;
+        };
+      },
+    });
+
+    // 81 reports from 100px to 900px in 10px steps every 8ms exceeds the 60/sec window.
+    let lastImmediate = 0;
+    for (let step = 0; step <= 80; step += 1) {
+      const applied = governor.accept(100 + step * 10);
+      if (applied !== null) lastImmediate = applied;
+      clock += 8;
+    }
+
+    expect(lastImmediate).toBe(690);
+    expect(governor.isGrowthFrozen()).toBe(false);
+    expect(deferred).toEqual([]);
+    expect(scheduled).not.toBeNull();
+
+    // Advance to when the oldest slot expires and run the coalesced flush.
+    const flush = scheduled!;
+    expect(flush.canceled).toBe(false);
+    clock = flush.at;
+    flush.run();
+
+    expect(deferred).toEqual([900]);
+    expect(governor.isGrowthFrozen()).toBe(false);
+  });
+
+  test("cancels a pending deferred flush on reset or dispose", () => {
+    let clock = 1_000;
+    const deferred: number[] = [];
+    let canceledCount = 0;
+    const governor = createHtmlPreviewHeightGovernor({
+      now: () => clock,
+      maxChangesPerWindow: 2,
+      windowMs: 1_000,
+      onDeferredHeight: (height) => deferred.push(height),
+      schedule: () => () => {
+        canceledCount += 1;
+      },
+    });
+
+    expect(governor.accept(100)).toBe(100);
+    expect(governor.accept(200)).toBe(200);
+    expect(governor.accept(300)).toBeNull();
+    governor.reset();
+    expect(canceledCount).toBe(1);
+
+    clock += 1_001;
+    expect(governor.accept(100)).toBe(100);
+    expect(governor.accept(200)).toBe(200);
+    expect(governor.accept(300)).toBeNull();
+    governor.dispose();
+    expect(canceledCount).toBe(2);
+    expect(deferred).toEqual([]);
+  });
 });

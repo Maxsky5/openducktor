@@ -108,9 +108,18 @@ export const mountHtmlPreviewFrame = ({
   const frame = document.createElement("iframe");
   const channel = new MessageChannel();
   const generation = crypto.randomUUID();
+  const applyMeasuredHeight = (height: number): void => {
+    if (disposed) return;
+    if (fitContent) {
+      owner.style.height = `${height}px`;
+    }
+    if (contentKey) rememberHtmlPreviewHeight(contentKey, height);
+  };
+
   const governor = createHtmlPreviewHeightGovernor({
     minHeight: HTML_PREVIEW_MIN_CONTENT_HEIGHT,
     maxHeight: HTML_PREVIEW_MAX_CONTENT_HEIGHT,
+    onDeferredHeight: applyMeasuredHeight,
   });
   const remembered = readMeasuredHtmlPreviewHeight(contentKey);
   if (remembered !== undefined) {
@@ -142,6 +151,7 @@ export const mountHtmlPreviewFrame = ({
 
   const dispose = (): void => {
     clearPendingTimeout();
+    governor.dispose();
     frame.removeEventListener("load", initialize);
     frame.removeEventListener("error", fail);
     if (disposed) return;
@@ -221,10 +231,7 @@ export const mountHtmlPreviewFrame = ({
     if (message.data.type === "resize") {
       const height = governor.accept(message.data.height);
       if (height === null) return;
-      if (fitContent) {
-        owner.style.height = `${height}px`;
-      }
-      if (contentKey) rememberHtmlPreviewHeight(contentKey, height);
+      applyMeasuredHeight(height);
       return;
     }
     if (message.data.type === "open-link") {

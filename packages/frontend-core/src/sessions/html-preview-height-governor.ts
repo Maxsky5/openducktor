@@ -12,13 +12,19 @@ export type HtmlPreviewHeightGovernorOptions = {
   repeatTolerancePx?: number;
   freezeRecoveryQuietMs?: number;
   now?: () => number;
+  /** Called once the rate-limit window clears if a burst rejected a newer settled height. */
+  onDeferredHeight?: (height: number) => void;
+  /** Schedules a deferred flush callback; defaults to `setTimeout` / `clearTimeout`. */
+  schedule?: (callback: () => void, delayMs: number) => () => void;
 };
 
 export type HtmlPreviewHeightGovernor = {
-  /** Returns the next clamped height to apply, or `null` when ignored or growth-frozen. */
+  /** Returns the next clamped height to apply, or `null` when ignored, deferred, or growth-frozen. */
   accept(rawHeight: number): number | null;
-  /** Resets governor state for a new preview document. */
+  /** Resets governor state and cancels any pending deferred flush for a new preview document. */
   reset(initialHeight?: number | null): void;
+  /** Cancels any pending deferred flush when the viewer unmounts. */
+  dispose(): void;
   /** True while a runaway growth loop has tripped the circuit breaker. */
   isGrowthFrozen(): boolean;
 };
@@ -56,6 +62,13 @@ export const createHtmlPreviewHeightGovernor = (
   const repeatTolerancePx = options.repeatTolerancePx ?? DEFAULT_REPEAT_TOLERANCE_PX;
   const freezeRecoveryQuietMs = options.freezeRecoveryQuietMs ?? DEFAULT_FREEZE_RECOVERY_QUIET_MS;
   const now = options.now ?? Date.now;
+  const onDeferredHeight = options.onDeferredHeight;
+  const schedule =
+    options.schedule ??
+    ((callback: () => void, delayMs: number) => {
+      const timer = setTimeout(callback, delayMs);
+      return () => clearTimeout(timer);
+    });
 
   let currentHeight: number | null = null;
   let growthFrozen = false;
@@ -65,76 +78,108 @@ export const createHtmlPreviewHeightGovernor = (
   let lastGrowthAt = 0;
   let repeatGrowthStartAt = 0;
   let repeatGrowthCount = 0;
+  let pendingRawHeight: number | null = null;
+  let cancelDeferredFlush: (() => void) | null = null;
+
+  const clearPendingFlush = (): void => {
+    pendingRawHeight = null;
+    if (cancelDeferredFlush !== null) {
+      cancelDeferredFlush();
+      cancelDeferredFlush = null;
+    }
+  };
 
   const clamp = (height: number): number =>
     Math.max(minHeight, Math.min(maxHeight, Math.ceil(height)));
 
-  return {
-    accept: (rawHeight) => {
-      if (!Number.isFinite(rawHeight) || rawHeight <= 0) {
-        return null;
-      }
-      const nextHeight = clamp(rawHeight);
-      if (currentHeight !== null && nextHeight === currentHeight) {
-        return null;
-      }
-      const timestamp = now();
-      const isGrowing = currentHeight !== null && nextHeight > currentHeight;
+  const accept = (rawHeight: number): number | null => {
+    if (!Number.isFinite(rawHeight) || rawHeight <= 0) {
+      return null;
+    }
+    const nextHeight = clamp(rawHeight);
+    if (currentHeight !== null && nextHeight === currentHeight) {
+      return null;
+    }
+    const timestamp = now();
+    const isGrowing = currentHeight !== null && nextHeight > currentHeight;
 
-      if (growthFrozen && isGrowing) {
-        if (timestamp - lastGrowthActivityAt < freezeRecoveryQuietMs) {
-          lastGrowthActivityAt = timestamp;
-          return null;
+    if (growthFrozen && isGrowing) {
+      if (timestamp - lastGrowthActivityAt < freezeRecoveryQuietMs) {
+        lastGrowthActivityAt = timestamp;
+        return null;
+      }
+      // The page stopped trying to grow for the full quiet window, so allow settled updates.
+      growthFrozen = false;
+      repeatGrowthCount = 0;
+      lastGrowthStep = null;
+    }
+
+    recentChangeTimes = recentChangeTimes.filter((time) => timestamp - time < windowMs);
+    if (recentChangeTimes.length >= maxChangesPerWindow) {
+      if (onDeferredHeight) {
+        pendingRawHeight = nextHeight;
+        if (cancelDeferredFlush === null) {
+          const oldest = recentChangeTimes[0] ?? timestamp;
+          const delayMs = Math.max(1, windowMs - (timestamp - oldest));
+          cancelDeferredFlush = schedule(() => {
+            cancelDeferredFlush = null;
+            const deferred = pendingRawHeight;
+            pendingRawHeight = null;
+            if (deferred === null) return;
+            const applied = accept(deferred);
+            if (applied !== null) {
+              onDeferredHeight(applied);
+            }
+          }, delayMs);
         }
-        // The page stopped trying to grow for the full quiet window, so allow settled updates.
-        growthFrozen = false;
-        repeatGrowthCount = 0;
-        lastGrowthStep = null;
       }
+      return null;
+    }
 
-      recentChangeTimes = recentChangeTimes.filter((time) => timestamp - time < windowMs);
-      if (recentChangeTimes.length >= maxChangesPerWindow) {
-        return null;
-      }
-
-      if (isGrowing && currentHeight !== null) {
-        const step = nextHeight - currentHeight;
-        if (step <= repeatStepMaxPx) {
-          if (
-            lastGrowthStep !== null &&
-            Math.abs(step - lastGrowthStep) <= repeatTolerancePx &&
-            timestamp - lastGrowthAt <= repeatGapMaxMs
-          ) {
-            repeatGrowthCount += 1;
-          } else {
-            repeatGrowthCount = 1;
-            repeatGrowthStartAt = timestamp;
-          }
-          lastGrowthStep = step;
-          lastGrowthAt = timestamp;
-          if (
-            repeatGrowthCount >= repeatGrowthLimit &&
-            timestamp - repeatGrowthStartAt >= repeatGrowthDurationMs
-          ) {
-            growthFrozen = true;
-            lastGrowthActivityAt = timestamp;
-            return null;
-          }
+    if (isGrowing && currentHeight !== null) {
+      const step = nextHeight - currentHeight;
+      if (step <= repeatStepMaxPx) {
+        if (
+          lastGrowthStep !== null &&
+          Math.abs(step - lastGrowthStep) <= repeatTolerancePx &&
+          timestamp - lastGrowthAt <= repeatGapMaxMs
+        ) {
+          repeatGrowthCount += 1;
         } else {
-          repeatGrowthCount = 0;
-          lastGrowthStep = null;
+          repeatGrowthCount = 1;
+          repeatGrowthStartAt = timestamp;
+        }
+        lastGrowthStep = step;
+        lastGrowthAt = timestamp;
+        if (
+          repeatGrowthCount >= repeatGrowthLimit &&
+          timestamp - repeatGrowthStartAt >= repeatGrowthDurationMs
+        ) {
+          growthFrozen = true;
+          lastGrowthActivityAt = timestamp;
+          clearPendingFlush();
+          return null;
         }
       } else {
         repeatGrowthCount = 0;
         lastGrowthStep = null;
       }
+    } else {
+      repeatGrowthCount = 0;
+      lastGrowthStep = null;
+    }
 
-      currentHeight = nextHeight;
-      recentChangeTimes.push(timestamp);
-      return nextHeight;
-    },
+    clearPendingFlush();
+    currentHeight = nextHeight;
+    recentChangeTimes.push(timestamp);
+    return nextHeight;
+  };
+
+  return {
+    accept,
 
     reset: (initialHeight = null) => {
+      clearPendingFlush();
       currentHeight =
         initialHeight !== null && Number.isFinite(initialHeight) && initialHeight > 0
           ? clamp(initialHeight)
@@ -146,6 +191,10 @@ export const createHtmlPreviewHeightGovernor = (
       lastGrowthAt = 0;
       repeatGrowthStartAt = 0;
       repeatGrowthCount = 0;
+    },
+
+    dispose: () => {
+      clearPendingFlush();
     },
 
     isGrowthFrozen: () => growthFrozen,

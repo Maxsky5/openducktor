@@ -140,10 +140,22 @@ export const HtmlPreviewViewer = memo(function HtmlPreviewViewer({
     generation: 0,
     messageToken: crypto.randomUUID(),
   }));
+  const latestRef = useRef({
+    currentTheme,
+    initialHeight: initialHeight ?? null,
+    messageToken: session.messageToken,
+    onHeightChange,
+    openLink,
+    scroll,
+  });
   const [governor] = useState(() =>
     createHtmlPreviewHeightGovernor({
       minHeight: HTML_PREVIEW_MIN_CONTENT_HEIGHT,
       maxHeight: HTML_PREVIEW_MOBILE_MAX_INLINE_HEIGHT,
+      onDeferredHeight: (height) => {
+        if (latestRef.current.scroll !== "inline") return;
+        latestRef.current.onHeightChange?.(height);
+      },
     }),
   );
   const source = useMemo(
@@ -166,14 +178,6 @@ export const HtmlPreviewViewer = memo(function HtmlPreviewViewer({
   const wentToBackground = useRef(false);
   const lastOpenLinkAtRef = useRef(0);
 
-  const latestRef = useRef({
-    currentTheme,
-    initialHeight: initialHeight ?? null,
-    messageToken: session.messageToken,
-    onHeightChange,
-    openLink,
-    scroll,
-  });
   useLayoutEffect(() => {
     latestRef.current = {
       currentTheme,
@@ -197,6 +201,8 @@ export const HtmlPreviewViewer = memo(function HtmlPreviewViewer({
   useEffect(() => {
     governor.reset(latestRef.current.initialHeight);
   }, [governor, html, session.generation]);
+
+  useEffect(() => () => governor.dispose(), [governor]);
 
   // Push live theme updates into the running wrapper without reloading the page or losing state.
   // Theme changes that arrive before `onLoadEnd` are replayed in `markLoaded`.
