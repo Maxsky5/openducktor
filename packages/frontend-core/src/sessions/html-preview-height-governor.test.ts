@@ -155,4 +155,35 @@ describe("createHtmlPreviewHeightGovernor", () => {
     expect(canceledCount).toBe(2);
     expect(deferred).toEqual([]);
   });
+
+  test("cancels a stale deferred height when content returns to the already applied height", () => {
+    let clock = 1_000;
+    const deferred: number[] = [];
+    let canceled = false;
+    const flushes: Array<() => void> = [];
+    const governor = createHtmlPreviewHeightGovernor({
+      now: () => clock,
+      maxChangesPerWindow: 2,
+      windowMs: 1_000,
+      onDeferredHeight: (height) => deferred.push(height),
+      schedule: (callback) => {
+        flushes.push(callback);
+        return () => {
+          canceled = true;
+        };
+      },
+    });
+
+    expect(governor.accept(100)).toBe(100);
+    expect(governor.accept(200)).toBe(200);
+    // Burst queues stale 100, then content settles back at 200.
+    expect(governor.accept(100)).toBeNull();
+    expect(governor.accept(200)).toBeNull();
+    expect(canceled).toBe(true);
+
+    clock += 1_001;
+    // Even if a callback already ran, pendingRawHeight was cleared so nothing is emitted.
+    flushes[0]?.();
+    expect(deferred).toEqual([]);
+  });
 });

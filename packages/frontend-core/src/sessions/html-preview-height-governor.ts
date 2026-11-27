@@ -98,6 +98,7 @@ export const createHtmlPreviewHeightGovernor = (
     }
     const nextHeight = clamp(rawHeight);
     if (currentHeight !== null && nextHeight === currentHeight) {
+      clearPendingFlush();
       return null;
     }
     const timestamp = now();
