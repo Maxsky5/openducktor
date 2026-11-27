@@ -9,6 +9,7 @@ import {
   createTestHostConnection,
 } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { createHostConnectionStore } from "@openducktor/frontend-core/connection/host-connection-state";
+import { HostUnreachableError } from "@openducktor/host-client";
 import { useSessionNavigationRecovery } from "@openducktor/frontend-core/sessions/navigation/use-session-navigation-recovery";
 import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
 import { createHookHarness as createSharedHookHarness } from "./agent-studio-test-utils";
@@ -149,6 +150,44 @@ describe("useAgentStudioWorkspaceStateSave", () => {
     await harness.run(() => connectionState.setState("connected"));
     await harness.waitFor(() => workspaceReplaceAgentStudioState.mock.calls.length === 1);
     expect(workspaceReplaceAgentStudioState).toHaveBeenCalledWith("repo-a", nextState);
+    await harness.unmount();
+  });
+
+  test("saves again after the reconnect when the host drops during a save", async () => {
+    const loadedState = { openTaskIds: ["task-1"] };
+    const nextState = { openTaskIds: ["task-1", "task-2"] };
+    const connectionState = createHostConnectionStore();
+    const workspaceReplaceAgentStudioState = mock(
+      async (_workspaceId: string, state: WorkspaceAgentStudioState) => createRepoConfig(state),
+    );
+    workspaceReplaceAgentStudioState.mockImplementationOnce(async () => {
+      // The transport reports the lost connection before the request fails.
+      connectionState.setState("reconnecting");
+      throw new HostUnreachableError(new TypeError("Failed to fetch"));
+    });
+    const harness = createSharedHookHarness(
+      useAgentStudioWorkspaceStateSave,
+      { workspaceId: "repo-a", loadedState, state: loadedState, enabled: true },
+      {
+        connection: createTestClientConnection({
+          host: createTestHostConnection({
+            connectionState,
+            client: asApplyHost(workspaceReplaceAgentStudioState),
+          }),
+        }),
+      },
+    );
+
+    await harness.mount();
+    await harness.update({ workspaceId: "repo-a", loadedState, state: nextState, enabled: true });
+    await harness.waitFor(() => workspaceReplaceAgentStudioState.mock.calls.length === 1);
+    // The connection indicator explains the lost host, so the page keeps its workspace.
+    expect(harness.getLatest().saveError).toBeNull();
+
+    await harness.run(() => connectionState.setState("connected"));
+    await harness.waitFor(() => workspaceReplaceAgentStudioState.mock.calls.length === 2);
+    expect(workspaceReplaceAgentStudioState).toHaveBeenLastCalledWith("repo-a", nextState);
+    expect(harness.getLatest().saveError).toBeNull();
     await harness.unmount();
   });
 

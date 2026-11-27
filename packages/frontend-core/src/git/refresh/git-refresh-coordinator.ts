@@ -1,3 +1,4 @@
+import { HostUnreachableError } from "@openducktor/host-client";
 import { CancelledError } from "@tanstack/react-query";
 import { isConnectionFailure } from "../../lib/command-outcome";
 import { errorMessage } from "../../lib/errors";
@@ -104,7 +105,8 @@ export class GitRefreshCoordinator {
   readonly #waiters = new Set<(view: GitRefreshView | null) => void>();
   readonly #listeners = new Set<() => void>();
   readonly #manualRuns = new Map<string, ManualRun>();
-  // Counts the reconnects that `clearConnectionFailures` reported.
+  #hostConnected = true;
+  // Counts the reconnects that `setHostConnected` reported.
   #reconnects = 0;
   readonly #fetches = new Map<string, FetchRun>();
   readonly #fetchedAt = new Map<string, number>();
@@ -172,10 +174,11 @@ export class GitRefreshCoordinator {
     };
     this.#manualRuns.set(key, run);
     this.#notify();
-    run.promise = this.#settleManual(
-      run,
-      withFiles("hard", () => this.#runManual(view, run)),
-    );
+    // A user action fails at once while the host is away, so no host work runs later.
+    const refresh = this.#hostConnected
+      ? withFiles("hard", () => this.#runManual(view, run))
+      : Promise.reject(new HostUnreachableError(new Error("The host connection is lost.")));
+    run.promise = this.#settleManual(run, refresh);
     return run.promise;
   }
 
@@ -199,8 +202,14 @@ export class GitRefreshCoordinator {
     this.#notify();
   }
 
-  /** Clears each Refresh failure that a lost host connection caused, after the connection returns. */
-  clearConnectionFailures(): void {
+  /**
+   * Follows the host connection. A reconnect clears each Refresh failure that the lost connection
+   * caused, because the reconnect reads the views again.
+   */
+  setHostConnected(connected: boolean): void {
+    const reconnected = connected && !this.#hostConnected;
+    this.#hostConnected = connected;
+    if (!reconnected) return;
     this.#reconnects += 1;
     let cleared = false;
     for (const [key, run] of this.#manualRuns) {
@@ -310,6 +319,9 @@ export class GitRefreshCoordinator {
     const readLocal = (): Promise<void> =>
       fetches || !earlyLocal ? steps.readLocal() : earlyLocal();
     let checkFailure: { error: unknown } | null = null;
+    // A manual Refresh whose reads waited for a reconnect does not send its fetch after it.
+    if (run.manual && run.manual.reconnects !== this.#reconnects)
+      throw new HostUnreachableError(new Error("The host connection was lost during the Refresh."));
     if (steps.comparison) {
       try {
         await this.#fetch(steps.comparison, mode);
