@@ -2,3 +2,7 @@
 body:has([data-slot="dialog-content"][data-state="open"]) .background-operation-toast {
   visibility: hidden;
 }
+
+[data-sonner-toast].background-operation-toast {
+  touch-action: pan-y;
+}

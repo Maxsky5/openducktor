@@ -810,7 +810,8 @@ describe("browser service popups and engine events", () => {
     await run(harness.service.openTab({ owner: taskOwner, tabId: tabId(1), address: null }));
     await run(harness.service.openTab({ owner: sessionOwner, tabId: tabId(2), address: null }));
 
-    await run(harness.service.closeOwnerTabs(taskOwner));
+    expect(await run(harness.service.closeOwnerTabs(taskOwner))).toBe(true);
+    expect(await run(harness.service.closeOwnerTabs(taskOwner))).toBe(false);
 
     expect(harness.engine.closed).toEqual([tabId(1)]);
     expect((await run(harness.service.listTabs())).map((tab) => tab.tabId)).toEqual([tabId(2)]);

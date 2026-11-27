@@ -123,6 +123,7 @@ export const releaseMergedTaskSessions = (
         repoPath: yield* dependencies.gitPort.canonicalizePath(repoPath),
         taskSessions: [{ taskId, sessions: workflowSessions }],
       }),
+      ({ stoppedSessionCount }) => stoppedSessionCount > 0 && {},
     );
   });
 /**

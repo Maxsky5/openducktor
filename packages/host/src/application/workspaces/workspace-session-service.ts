@@ -354,6 +354,8 @@ export const createWorkspaceSessionService = (
             yield* backgroundStep(
               { id: "terminals", label: "Stop session terminals" },
               acquireWorkspaceSessionTerminalCleanup(dependencies.terminalService, input),
+              ({ closedTerminalIds }) =>
+                closedTerminalIds.length > 0 && { details: closedTerminalIds },
             );
             yield* backgroundStep(
               { id: "browser-tabs", label: "Close session browser tabs" },
@@ -368,6 +370,7 @@ export const createWorkspaceSessionService = (
                 ],
                 "workspaceSession.archive.browser_tabs",
               ),
+              (closed) => closed && {},
             );
             return yield* Effect.uninterruptible(
               Effect.gen(function* () {

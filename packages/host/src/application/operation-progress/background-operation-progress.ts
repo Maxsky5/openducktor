@@ -62,6 +62,10 @@ export const createBackgroundOperationProgress = (
   };
   return {
     update,
+    omit(id: string) {
+      const snapshot = progress.current();
+      progress.commit({ ...snapshot, steps: snapshot.steps.filter((step) => step.id !== id) });
+    },
     addResource(id: string, resource: NonNullable<BackgroundOperationStep["resources"]>[number]) {
       const step = progress.current().steps.find((item) => item.id === id);
       if (
@@ -90,7 +94,10 @@ export const createBackgroundOperationProgress = (
     },
     settle(failure?: WorkflowFailure) {
       const snapshot = progress.current();
-      const steps = snapshot.steps.map((step): BackgroundOperationStep => {
+      const applicable = failure
+        ? snapshot.steps
+        : snapshot.steps.filter((step) => step.state !== "pending");
+      const steps = applicable.map((step): BackgroundOperationStep => {
         if (step.state === "running" || step.state === "waiting") {
           return failure ? { ...step, state: "failed", failure } : { ...step, state: "completed" };
         }
@@ -115,10 +122,11 @@ export const updateBackgroundOperation = (update: (progress: Progress) => void) 
 export const planBackgroundSteps = (...steps: Step[]) =>
   updateBackgroundOperation((progress) => progress.plan(steps));
 
+/** Return false from the evidence callback if the successful effect changed nothing. */
 export const backgroundStep = <A, E, R>(
   step: Step,
   work: Effect.Effect<A, E, R>,
-  evidence?: (value: A) => Partial<StepEvidence>,
+  evidence?: (value: A) => Partial<StepEvidence> | false,
 ): Effect.Effect<A, E, R> =>
   Effect.gen(function* () {
     const progress = yield* CurrentBackgroundOperation;
@@ -126,7 +134,11 @@ export const backgroundStep = <A, E, R>(
     progress.update({ ...step, state: "running" });
     return yield* work.pipe(
       Effect.tap((value) =>
-        Effect.sync(() => progress.update({ ...step, state: "completed", ...evidence?.(value) })),
+        Effect.sync(() => {
+          const result = evidence?.(value);
+          if (result === false) progress.omit(step.id);
+          else progress.update({ ...step, state: "completed", ...result });
+        }),
       ),
       Effect.tapError((cause) =>
         Effect.sync(() =>
@@ -149,12 +161,7 @@ export const backgroundGate = <A, E, R>(
     operation.update({ ...step, state: "waiting" });
     return yield* gate.run(
       key,
-      Effect.sync(() =>
-        operation.update({
-          ...step,
-          state: "completed",
-        }),
-      ).pipe(Effect.andThen(work)),
+      Effect.sync(() => operation.omit(step.id)).pipe(Effect.andThen(work)),
     );
   });
 

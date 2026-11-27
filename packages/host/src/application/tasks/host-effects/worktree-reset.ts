@@ -1,7 +1,4 @@
-import {
-  planBackgroundSteps,
-  backgroundStep,
-} from "../../operation-progress/background-operation-progress";
+import { backgroundStep } from "../../operation-progress/background-operation-progress";
 import { mapTaskMutationProgressErrors } from "../task-error-mapping";
 import { loadTaskSessions } from "../support/task-sessions";
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
@@ -28,6 +25,7 @@ import {
 import {
   clearTaskResetDelivery,
   createTaskCleanupProgressState,
+  planTaskResetSteps,
 } from "../support/task-cleanup-progress";
 import type { TaskServiceUseCaseInput } from "../task-service";
 import type { HostEffectHandler } from "./host-effect-registry";
@@ -55,15 +53,6 @@ export const createWorktreeResetEffect = ({
 }: TaskServiceUseCaseInput): HostEffectHandler => {
   const reset: HostEffectHandler = ({ input, effect, artifactChanges }, commit) =>
     Effect.gen(function* () {
-      yield* planBackgroundSteps(
-        { id: "terminals", label: "Stop task terminals" },
-        { id: "session-records", label: "Unlink affected sessions" },
-        { id: "artifacts", label: "Clear review artifacts" },
-        { id: "pull-request", label: "Clear pull request link" },
-        { id: "direct-merge", label: "Clear merge record" },
-        { id: "delivery", label: "Clear merge and push progress" },
-        { id: "task-reset", label: "Reset task status" },
-      );
       const { repoPath, taskId } = input;
       const dependencies = yield* requireDependencies(() =>
         requireTaskDeleteDependencies(gitPort, settingsConfig, workspaceSettingsService),
@@ -74,6 +63,16 @@ export const createWorktreeResetEffect = ({
       const current = yield* taskStore.getTask(input);
       const workflow = taskWorkflows.forTask(current);
       const currentSessions = yield* loadTaskSessions(taskStore, input);
+      const hasAffectedSessions = currentSessions.some((session) =>
+        effect.clearsSessionsOf.includes(session.role),
+      );
+      const hasReviewArtifacts = workflow.reviewArtifactCodes.some(
+        (code) => current.artifactSummary[code]?.present,
+      );
+      yield* planTaskResetSteps(current, [
+        hasAffectedSessions && { id: "session-records", label: "Unlink affected sessions" },
+        hasReviewArtifacts && { id: "artifacts", label: "Clear review artifacts" },
+      ]);
       const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
       const {
@@ -160,9 +159,11 @@ export const createWorktreeResetEffect = ({
             repoPath: effectiveRepoPath,
             roles: [...effect.clearsSessionsOf],
           }),
+          () => hasAffectedSessions && {},
         );
         taskStoreWriteCompleted = true;
-        cleanupProgress.completedSteps.push("Cleared the session records of the reset roles.");
+        if (hasAffectedSessions)
+          cleanupProgress.completedSteps.push("Cleared the session records of the reset roles.");
         yield* backgroundStep(
           { id: "artifacts", label: "Clear review artifacts" },
           storeDependencies.clearWorkflowArtifacts({
@@ -170,14 +171,17 @@ export const createWorktreeResetEffect = ({
             repoPath: effectiveRepoPath,
             codes: workflow.reviewArtifactCodes,
           }),
+          () => hasReviewArtifacts && {},
         );
         for (const code of workflow.reviewArtifactCodes)
           artifactChanges.push(workflowArtifactChange(taskId, code, true));
-        cleanupProgress.completedSteps.push("Cleared the review artifacts.");
+        if (hasReviewArtifacts)
+          cleanupProgress.completedSteps.push("Cleared the review artifacts.");
         yield* clearTaskResetDelivery(
           storeDependencies,
           completionState,
           { ...input, repoPath: effectiveRepoPath },
+          current,
           cleanupProgress,
         );
         return yield* commit;

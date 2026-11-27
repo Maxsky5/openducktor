@@ -150,9 +150,12 @@ export const createBrowserService = (input: CreateBrowserServiceInput): BrowserS
    */
   const closeEach = (listed: () => readonly { tabId: string }[]) =>
     Effect.gen(function* () {
+      let closed = false;
       for (let next = listed()[0]; next !== undefined; next = listed()[0]) {
         yield* tabs.closeTab(next.tabId);
+        closed = true;
       }
+      return closed;
     });
 
   const withTab = <A>(

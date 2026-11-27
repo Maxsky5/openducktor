@@ -308,7 +308,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       claudeSessionMetadata: createClaudeSessionMetadataTestDouble(),
       runtimeAdmission: { admit: (_kind, work) => work },
       runForkSourceOperation: (_target, work) => work,
-      browserTabs: { closeOwnerTabs: () => Effect.void },
+      browserTabs: { closeOwnerTabs: () => Effect.succeed(false) },
       terminalService: {
         acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
       },
@@ -2122,7 +2122,10 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect((await Effect.runPromise(h.service.get(ref))).archivedAt).toBeNull();
 
     h.dependencies.browserTabs.closeOwnerTabs = (owner) =>
-      Effect.sync(() => void owners.push(owner));
+      Effect.sync(() => {
+        owners.push(owner);
+        return true;
+      });
     expect((await archive()).archivedAt).not.toBeNull();
     expect(owners).toEqual([
       { kind: "workspace_session", workspaceId: "fairnest", sessionId: session.id },
@@ -2792,8 +2795,6 @@ describe("host-owned Workspace Session lifecycle", () => {
     );
     expect(progress.settle().steps).toMatchObject([
       { label: "Stop agent work", state: "completed" },
-      { label: "Stop session terminals", state: "completed" },
-      { label: "Close session browser tabs", state: "completed" },
       {
         label: "Remove worktree",
         state: "completed",

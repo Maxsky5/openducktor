@@ -110,12 +110,21 @@ function BackgroundToast({ attempt }: { attempt: BackgroundAttempt }) {
             <div className={cn("flex min-w-0 flex-col gap-1", STARTUP_TEXT_INSET)}>
               <p className="break-words">{backgroundAttemptOrigin(attempt)}</p>
               {pending && steps.length === 0 ? <p>Waiting for the host…</p> : null}
+              {attempt.progress?.phase === "succeeded" && steps.length === 0 ? (
+                <p>No changes needed.</p>
+              ) : null}
               {attempt.phase === "unconfirmed" ? (
                 <p className="text-warning-surface-foreground">{attempt.message}</p>
               ) : null}
             </div>
             {steps.length > 0 ? (
-              <div className="max-h-52 overflow-y-auto">
+              <div
+                className="max-h-[clamp(3rem,calc(100dvh-10rem),13rem)] overflow-y-auto overscroll-contain rounded-sm focus-visible:ring-2 focus-visible:ring-ring"
+                tabIndex={0}
+                role="region"
+                aria-label="Operation steps"
+                onPointerDown={(event) => event.stopPropagation()}
+              >
                 <OperationSteps steps={steps} compact />
               </div>
             ) : null}

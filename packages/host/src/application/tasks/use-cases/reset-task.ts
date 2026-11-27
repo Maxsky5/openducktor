@@ -1,7 +1,4 @@
-import {
-  planBackgroundSteps,
-  backgroundStep,
-} from "../../operation-progress/background-operation-progress";
+import { backgroundStep } from "../../operation-progress/background-operation-progress";
 import { loadTaskSessions } from "../support/task-sessions";
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { Effect } from "effect";
@@ -14,6 +11,7 @@ import {
   appendTaskCleanupProgress,
   clearTaskResetDelivery,
   createTaskCleanupProgressState,
+  planTaskResetSteps,
   stopTaskSessionsWithProgress,
 } from "../support/task-cleanup-progress";
 import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
@@ -44,15 +42,6 @@ export const createTaskFullResetUseCase = ({
 }: TaskServiceUseCaseInput) => ({
   resetTask(input: Parameters<TaskService["resetTask"]>[0]) {
     return Effect.gen(function* () {
-      yield* planBackgroundSteps(
-        { id: "terminals", label: "Stop task terminals" },
-        { id: "artifacts", label: "Clear task artifacts" },
-        { id: "session-records", label: "Remove task session links" },
-        { id: "pull-request", label: "Clear pull request link" },
-        { id: "direct-merge", label: "Clear merge record" },
-        { id: "delivery", label: "Clear merge and push progress" },
-        { id: "task-reset", label: "Reset task status" },
-      );
       const { repoPath, taskId } = input;
       const dependencies = yield* requireDependencies(() =>
         requireTaskDeleteDependencies(gitPort, settingsConfig, workspaceSettingsService),
@@ -122,12 +111,7 @@ export const createTaskFullResetUseCase = ({
           activityGuard.cleanupTaskSessions({
             workspaceId: input.workspaceId,
             repoPath: effectiveRepoPath,
-            taskSessions: [
-              {
-                taskId,
-                sessions: currentSessions,
-              },
-            ],
+            taskSessions: [{ taskId, sessions: currentSessions }],
           }),
         );
       }
@@ -135,6 +119,10 @@ export const createTaskFullResetUseCase = ({
       const artifactIds = (yield* taskStore.listArtifacts(input)).map(
         (artifact) => artifact.artifactId,
       );
+      yield* planTaskResetSteps(current, [
+        artifactIds.length > 0 && { id: "artifacts", label: "Clear task artifacts" },
+        hasWorkflowSessions && { id: "session-records", label: "Remove task session links" },
+      ]);
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({
           beforeWorktreeRemoval: {
@@ -157,21 +145,31 @@ export const createTaskFullResetUseCase = ({
         yield* backgroundStep(
           { id: "artifacts", label: "Clear task artifacts" },
           taskStore.clearTaskArtifacts(taskRef),
+          () => artifactIds.length > 0 && {},
         );
         taskStoreWriteCompleted = true;
-        cleanupProgress.completedSteps.push("cleared task artifacts");
+        if (artifactIds.length > 0) cleanupProgress.completedSteps.push("cleared task artifacts");
         yield* backgroundStep(
           { id: "session-records", label: "Remove task session links" },
           taskStore.clearAgentSessionsByRoles({ ...taskRef, roles: [...workflowRoles] }),
+          () => hasWorkflowSessions && {},
         );
-        cleanupProgress.completedSteps.push("cleared linked agent sessions");
-        yield* clearTaskResetDelivery(taskStore, completionState, taskRef, cleanupProgress);
+        if (hasWorkflowSessions)
+          cleanupProgress.completedSteps.push("cleared linked agent sessions");
+        yield* clearTaskResetDelivery(
+          taskStore,
+          completionState,
+          taskRef,
+          current,
+          cleanupProgress,
+        );
         const updated = yield* backgroundStep(
           { id: "task-reset", label: "Reset task status" },
           taskStore.transitionTask({
             ...taskRef,
             decide: coreTaskTransition(taskWorkflows, "reset"),
           }),
+          (updated) => updated.status !== current.status && {},
         );
         return { task: enrichTask(workflow, updated), removedArtifactIds: artifactIds };
       }).pipe(

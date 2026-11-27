@@ -85,7 +85,7 @@ export type BrowserService = {
     input: OdtBrowserToolInput<Name>,
   ): Effect.Effect<OdtBrowserToolResult, BrowserServiceError>;
   /** Closes the tabs of a deleted task or an archived Workspace Session. */
-  closeOwnerTabs(owner: BrowserTabOwner): Effect.Effect<void, BrowserServiceError>;
+  closeOwnerTabs(owner: BrowserTabOwner): Effect.Effect<boolean, BrowserServiceError>;
   /** Closes the tabs of a removed workspace and deletes its profile and site permissions. */
   removeWorkspace(workspaceId: string): Effect.Effect<void, BrowserServiceError>;
   dispose(): Effect.Effect<void>;

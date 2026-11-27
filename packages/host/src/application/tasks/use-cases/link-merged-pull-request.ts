@@ -189,6 +189,8 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           createTaskMutationProgressFailure("link-merged-pull-request", taskId, postLink.failure),
         );
       }
+      if (sameExistingPullRequest)
+        yield* updateBackgroundOperation((progress) => progress.omit("pr-link"));
       return enrichTask(workflow, postLink.success);
     });
   },

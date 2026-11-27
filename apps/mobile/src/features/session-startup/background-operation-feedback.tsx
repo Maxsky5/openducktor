@@ -32,6 +32,11 @@ export function BackgroundOperationCard({ attempt }: { attempt: BackgroundAttemp
       <Text variant="footnote" tone="secondary">
         {backgroundAttemptOrigin(attempt)}
       </Text>
+      {attempt.progress?.phase === "succeeded" && attempt.progress.steps.length === 0 ? (
+        <Text variant="footnote" tone="secondary">
+          No changes needed.
+        </Text>
+      ) : null}
       {attempt.progress?.steps.map((step) => (
         <OperationStep key={step.id} step={step} />
       ))}

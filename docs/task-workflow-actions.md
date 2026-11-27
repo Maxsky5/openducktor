@@ -110,6 +110,8 @@ Uncommitted changes block Direct Merge and Pull Request. When merge detection re
 
 Delete Task, Reset Task, Reset Implementation, Close Task, Remove Worktree, and Link Merged Pull Request close their confirmation after final consent. The progress toast identifies the original workspace and task. Other tasks stay available.
 
+The toast omits cleanup steps that made no changes. For example, Reset Task shows a pull request link removal only if the task had a link.
+
 A confirmed failure opens a result dialog after the current confirmation closes. The dialog lists the completed steps, the failure, and steps that did not run when the host knows them. If the result is unconfirmed, check the original task and give fresh consent before submitting again.
 
 ## Reset implementation

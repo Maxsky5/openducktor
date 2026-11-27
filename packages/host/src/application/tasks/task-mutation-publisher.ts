@@ -1,6 +1,7 @@
 import {
-  backgroundStep,
   CurrentBackgroundOperation,
+  operationFailure,
+  updateBackgroundOperation,
 } from "../operation-progress/background-operation-progress";
 import type {
   TaskChangeSet,
@@ -16,6 +17,19 @@ import type { TaskServiceError } from "./task-service";
 import type { TaskSyncService } from "./sync/task-sync-service";
 
 const publicationStep = { id: "publish", label: "Refresh workspace task list" };
+
+const reportPublicationFailure = <A>(publication: Effect.Effect<A, TaskServiceError>) =>
+  publication.pipe(
+    Effect.tapError((cause) =>
+      updateBackgroundOperation((progress) =>
+        progress.update({
+          ...publicationStep,
+          state: "failed",
+          failure: operationFailure(publicationStep.id, cause),
+        }),
+      ),
+    ),
+  );
 
 /** Keep the write, card projection, and receipt in one repository mutation gate. */
 export const createMutationPublisher = ({
@@ -41,8 +55,7 @@ export const createMutationPublisher = ({
           Effect.gen(function* () {
             if (result._tag === "Failure") {
               if (result.failure instanceof TaskMutationProgressFailure) {
-                const publication = backgroundStep(
-                  publicationStep,
+                const publication = reportPublicationFailure(
                   taskSyncService.publishTasksUpdated(
                     workspace,
                     result.failure.changes,
@@ -61,10 +74,7 @@ export const createMutationPublisher = ({
               }
               return yield* Effect.fail(result.failure);
             }
-            return yield* backgroundStep(
-              publicationStep,
-              publishSuccess(result.success, statusChanges),
-            );
+            return yield* reportPublicationFailure(publishSuccess(result.success, statusChanges));
           }),
       ),
     );

@@ -269,7 +269,7 @@ export const runTaskRuntimeCleanup = ({
         repoPath,
         taskIds,
       }),
-      (result) => ({ details: result.closedTerminalIds }),
+      ({ closedTerminalIds }) => closedTerminalIds.length > 0 && { details: closedTerminalIds },
     );
     if (terminalResult.closedTerminalIds.length > 0)
       progress.completedSteps.push(
@@ -313,15 +313,16 @@ export const runTaskBrowserTabCleanup = ({
         message: "The browser service is required for task_delete.",
       });
     }
-    yield* backgroundStep(
+    const closedTabs = yield* backgroundStep(
       { id: "browser-tabs", label: "Close task browser tabs" },
       closeOwnerBrowserTabs(
         browserTabs,
         taskIds.map((taskId) => ({ kind: "task", workspaceId, taskId })),
         "task_delete.browser_tabs",
       ),
+      (closed) => closed && {},
     );
-    progress.completedSteps.push("closed task browser tabs");
+    if (closedTabs) progress.completedSteps.push("closed task browser tabs");
   });
 
 /**
@@ -343,7 +344,7 @@ export const removeTaskWorktree = (
     if (yield* dependencies.settingsConfig.pathExists(worktreePath)) {
       yield* runBeforeWorktreeRemovalScript(dependencies.beforeWorktreeRemoval, worktreePath);
     }
-    yield* removeWorktreeAndFilesystemPath(dependencies, input);
+    return yield* removeWorktreeAndFilesystemPath(dependencies, input);
   });
 
 export const runTaskLocalCleanup = ({
@@ -421,7 +422,7 @@ export const runTaskLocalCleanup = ({
         { id: "worktrees", label: "Remove worktrees" },
         Effect.gen(function* () {
           for (const worktreePath of worktreePaths) {
-            yield* removeTaskWorktree(
+            const removed = yield* removeTaskWorktree(
               {
                 beforeWorktreeRemoval,
                 gitPort,
@@ -436,6 +437,7 @@ export const runTaskLocalCleanup = ({
                 missingOutsideManagedRootPathPolicy: "skip",
               },
             );
+            if (!removed) continue;
             progress.removedWorktrees.push(worktreePath);
             yield* updateBackgroundOperation((operation) =>
               operation.addResource("worktrees", {
@@ -446,6 +448,7 @@ export const runTaskLocalCleanup = ({
             );
           }
         }),
+        () => progress.removedWorktrees.length > 0 && {},
       );
     }
 

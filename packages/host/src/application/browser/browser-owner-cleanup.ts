@@ -11,19 +11,16 @@ export const closeOwnerBrowserTabs = (
   browserTabs: BrowserOwnerCleanupPort,
   owners: readonly BrowserTabOwner[],
   operation: string,
-): Effect.Effect<void, HostOperationError> =>
-  Effect.forEach(
-    owners,
-    (owner) =>
-      browserTabs.closeOwnerTabs(owner).pipe(
-        Effect.mapError(
-          (cause) =>
-            new HostOperationError({
-              operation,
-              message: `Could not close the browser tabs of this ${owner.kind === "task" ? "task" : "session"}: ${cause.message}`,
-              cause,
-            }),
-        ),
+): Effect.Effect<boolean, HostOperationError> =>
+  Effect.forEach(owners, (owner) =>
+    browserTabs.closeOwnerTabs(owner).pipe(
+      Effect.mapError(
+        (cause) =>
+          new HostOperationError({
+            operation,
+            message: `Could not close the browser tabs of this ${owner.kind === "task" ? "task" : "session"}: ${cause.message}`,
+            cause,
+          }),
       ),
-    { discard: true },
-  );
+    ),
+  ).pipe(Effect.map((closed) => closed.some(Boolean)));

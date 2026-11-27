@@ -199,7 +199,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       claudeSessionMetadata: createClaudeSessionMetadataTestDouble(),
       runtimeAdmission: { admit: (_kind, work) => work },
       runForkSourceOperation: (_target, work) => work,
-      browserTabs: { closeOwnerTabs: () => Effect.void },
+      browserTabs: { closeOwnerTabs: () => Effect.succeed(false) },
       terminalService: {
         acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
       },

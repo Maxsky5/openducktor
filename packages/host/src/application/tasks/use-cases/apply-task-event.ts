@@ -115,6 +115,7 @@ export const createTaskEventUseCase = (
             Effect.map((updated) => enrichTask(taskWorkflows.forTask(updated), updated)),
             mapTaskMutationProgressErrors,
           ),
+          (updated) => updated.status !== current.status && {},
         );
         const { workspaceId, repoPath, taskId, eventId } = request;
         const context = { input: { workspaceId, repoPath, taskId }, eventId, artifactChanges };

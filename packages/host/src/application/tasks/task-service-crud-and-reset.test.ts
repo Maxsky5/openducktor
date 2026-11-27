@@ -9,6 +9,10 @@ import { createTaskDeleteUseCase } from "./use-cases/delete-task";
 import { createTaskSessionLifecycleCoordinator } from "./worktrees/task-session-lifecycle-coordinator";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
+import {
+  createBackgroundOperationProgress,
+  CurrentBackgroundOperation,
+} from "../operation-progress/background-operation-progress";
 import { createRuntimeTaskActivityGuard } from "./runtime-task-activity-guard";
 import {
   createAgentSessionRecord,
@@ -18,6 +22,7 @@ import {
   createRuntimeRegistryPort,
   createTaskService,
   createTaskServiceWithMutationProgress,
+  pullRequest,
   type TaskActivityGuardPort,
   type TaskStorePort,
   task,
@@ -344,7 +349,7 @@ describe("createTaskService task mutations and reset", () => {
         completionState,
         taskSessionLifecycleCoordinator: createTaskSessionLifecycleCoordinator(),
         terminalService: { acquireTaskCleanup: () => Effect.succeed({ closedTerminalIds: [] }) },
-        browserTabs: { closeOwnerTabs: () => Effect.void },
+        browserTabs: { closeOwnerTabs: () => Effect.succeed(false) },
       });
       const result = await Effect.runPromise(
         Effect.result(
@@ -799,7 +804,7 @@ describe("createTaskService task mutations and reset", () => {
           taskStore,
           browserTabs: {
             closeOwnerTabs: (owner) =>
-              Effect.sync(() => void calls.push({ type: "closeTabs", owner })),
+              Effect.sync(() => calls.push({ type: "closeTabs", owner }) > 0),
           },
           worktreeOwners: noWorktreeOwners,
           worktreeFiles: createCleanupWorktreeFiles(calls),
@@ -1303,7 +1308,7 @@ describe("createTaskService task mutations and reset", () => {
           taskActivityGuard,
         }).deleteTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
-    ).rejects.toThrow(/Delete cleanup already completed: Stopped 2 live agent sessions,/);
+    ).rejects.toThrow("Delete cleanup already completed: Stopped 2 live agent sessions.");
   });
   test("resets implementation after activity guard and cleans task state", async () => {
     const calls: unknown[] = [];
@@ -1571,7 +1576,7 @@ describe("createTaskService task mutations and reset", () => {
       },
     ]);
   });
-  test("resets a task by clearing workflow artifacts and rolling status back to open", async () => {
+  test.each([false, true])("reports actual reset changes (linked PR: %s)", async (linked) => {
     const calls: unknown[] = [];
     const currentSessions = [
       createAgentSessionRecord({
@@ -1582,6 +1587,17 @@ describe("createTaskService task mutations and reset", () => {
     const currentTask = task({
       status: "human_review",
     });
+    if (linked) currentTask.pullRequest = pullRequest();
+    const workspace = { workspaceId: "repo", repoPath: "/repo" };
+    const progress = createBackgroundOperationProgress(
+      {
+        operationId: crypto.randomUUID(),
+        hostInstanceId: "host",
+        workspace,
+        target: { kind: "task", taskId: currentTask.id },
+      },
+      () => {},
+    );
     const taskStore: TaskStorePort = {
       listTasks(input) {
         return Effect.tryPromise({
@@ -1757,9 +1773,18 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { beforeWorktreeRemoval: [] },
           }),
-        }).resetTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+        })
+          .resetTask({ ...workspace, taskId: "task-1" })
+          .pipe(Effect.provideService(CurrentBackgroundOperation, progress)),
       ),
     ).resolves.toMatchObject({ id: "task-1", status: "open" });
+    expect(progress.settle().steps.map(({ id, state }) => [id, state])).toEqual([
+      ["worktrees", "completed"],
+      ["branches", "completed"],
+      ["session-records", "completed"],
+      ...(linked ? [["pull-request", "completed"]] : []),
+      ["task-reset", "completed"],
+    ]);
     expect(calls).toMatchObject([
       { type: "list", input: { repoPath: "/repo" } },
       { type: "listBranches", workingDir: "/repo" },

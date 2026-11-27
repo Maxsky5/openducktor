@@ -150,7 +150,7 @@ export const removeWorktreeAndFilesystemPath = (
       initialCleanup.kind === "outside" &&
       !currentCleanup.targetExists
     ) {
-      return;
+      return true;
     }
     if (removalResult._tag === "Failure") {
       const registered = yield* gitPort.isRegisteredWorktree(
@@ -161,7 +161,7 @@ export const removeWorktreeAndFilesystemPath = (
         return yield* Effect.fail(removalResult.failure);
       }
       if (input.missingOutsideManagedRootPathPolicy === "skip" && missingOutsideCleanup) {
-        return;
+        return false;
       }
       if (initialCleanup.kind === "outside") {
         return yield* Effect.fail(
@@ -176,7 +176,7 @@ export const removeWorktreeAndFilesystemPath = (
     }
     if (!cleanupIdentityIsStable) {
       if (input.missingOutsideManagedRootPathPolicy === "skip" && missingOutsideCleanup) {
-        return;
+        return removalResult._tag === "Success";
       }
       return yield* Effect.fail(
         initialCleanup.kind === "outside" || currentCleanup.kind === "outside"
@@ -199,4 +199,5 @@ export const removeWorktreeAndFilesystemPath = (
           }),
       ),
     );
+    return removalResult._tag === "Success" || currentCleanup.targetExists;
   });

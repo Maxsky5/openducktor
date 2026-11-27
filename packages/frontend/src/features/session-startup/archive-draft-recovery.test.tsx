@@ -162,6 +162,15 @@ test.each(["success", "partial failure"] as const)(
         await closed;
       }
       const notifications = await view.findByRole("region", { name: /^Notifications/ });
+      if (outcome === "partial failure") {
+        const steps = await within(notifications).findByRole("region", {
+          name: "Operation steps",
+        });
+        steps.focus();
+        expect(document.activeElement).toBe(steps);
+        fireEvent.pointerDown(steps, { button: 0, pointerId: 1 });
+        expect(steps.closest("[data-sonner-toast]")?.getAttribute("data-swiping")).toBe("false");
+      }
       const copy = await within(notifications).findByRole(
         "button",
         { name: "Copy retained draft" },
