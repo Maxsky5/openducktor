@@ -176,14 +176,12 @@ const useTaskSessionMenus = ({
   target,
   taskId,
   task,
-  sessionWorking,
 }: {
   target: SessionTarget;
   /** The task of a task session that is not read-only, or null. */
   taskId: string | null;
   /** The loaded task of `taskId`, or null. */
   task: TaskCard | null;
-  sessionWorking: boolean;
 }) => {
   const router = useRouter();
   const { repoPath, identity } = target;
@@ -212,7 +210,6 @@ const useTaskSessionMenus = ({
     repoPath,
     task,
     summaries,
-    sessionWorking,
   });
   const quickItems = useMemo(() => quickActionItems(quickActions, task), [quickActions, task]);
   const actionTasks = useMemo(() => (task ? [task] : []), [task]);
@@ -304,7 +301,6 @@ export function SessionHeader({
       target,
       taskId: workflowTaskId,
       task: workflowTaskId ? (task ?? null) : null,
-      sessionWorking: facts.isWorking,
     });
 
   const actionCount = [historyItems, quickItems, menu.items].filter(

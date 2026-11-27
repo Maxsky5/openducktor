@@ -32,7 +32,6 @@ type BuildWorkflowModelContextArgs = {
   sessionsForTask: AgentSessionSummary[];
   selectedSessionIdentity: AgentSessionIdentity | null;
   role: AgentRole | null;
-  isSessionWorking: boolean;
   roleLabelByRole: Record<AgentRole, string>;
   gitProviderContext?: RepositoryGitProviderContext | undefined;
   gitProviderReadError?: string | null;
@@ -54,7 +53,6 @@ export type WorkflowModelContext = {
   gitConflictQuickAction: AgentStudioSessionQuickActionOption | null;
   selectedRoleAvailable: boolean;
   selectedRoleReadOnlyReason: string | null;
-  createSessionDisabled: boolean;
 };
 
 export const buildWorkflowModelContext = ({
@@ -62,7 +60,6 @@ export const buildWorkflowModelContext = ({
   sessionsForTask,
   selectedSessionIdentity,
   role,
-  isSessionWorking,
   roleLabelByRole,
   gitProviderContext,
   gitProviderReadError = null,
@@ -102,18 +99,15 @@ export const buildWorkflowModelContext = ({
   const sessionSelectorValue = selectedSessionIdentity
     ? agentSessionIdentityKey(selectedSessionIdentity)
     : "";
-  const createSessionDisabled = Boolean(selectedSessionIdentity && isSessionWorking);
   const sessionCreateOptions = buildSessionCreateOptions({
     task: selectedTask,
     roleEnabledByTask,
-    createSessionDisabled,
     roleLabelByRole,
   });
   const quickActions = buildAgentStudioQuickActions({
     selectedTask,
     sessionsForTask,
     roleEnabledByTask,
-    createSessionDisabled,
     gitProviderContext,
     gitProviderReadError,
     mergedTarget,
@@ -131,10 +125,8 @@ export const buildWorkflowModelContext = ({
     gitConflictQuickAction: buildGitConflictQuickAction({
       selectedTask,
       roleEnabledByTask,
-      createSessionDisabled,
     }),
     selectedRoleAvailable,
     selectedRoleReadOnlyReason,
-    createSessionDisabled,
   };
 };

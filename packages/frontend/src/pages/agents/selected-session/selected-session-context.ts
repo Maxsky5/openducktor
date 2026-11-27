@@ -63,7 +63,6 @@ export type AgentStudioSelectedSessionContextInput = {
   sessionsForTask: AgentSessionSummary[];
   selectedSession: AgentStudioSelectedSessionState;
   sessionActions: {
-    isSessionWorking: boolean;
     onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
     isSubmittingQuestionByRequestId: Record<string, boolean>;
     isSubmittingApprovalByRequestId: Record<string, boolean>;
@@ -95,7 +94,6 @@ export const buildAgentStudioSelectedSessionContext = ({
     sessionsForTask,
     selectedSessionIdentity,
     role,
-    isSessionWorking: sessionActions.isSessionWorking,
     roleLabelByRole,
     gitProviderContext,
     gitProviderReadError,

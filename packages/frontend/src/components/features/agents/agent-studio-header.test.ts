@@ -141,7 +141,6 @@ const buildModel = () => ({
       launchActionId: "build_implementation_start" as const,
       label: "Prepare Builder session",
       description: "Open a Builder composer without sending a kickoff.",
-      disabled: false,
     },
   ],
   onPrepareMessageFirstSession: () => {},
@@ -479,7 +478,6 @@ describe("AgentStudioHeader", () => {
               launchActionId: "spec_initial" as const,
               label: "Prepare Spec session",
               description: "Open a Spec composer without sending a kickoff.",
-              disabled: false,
             },
             {
               id: "planner:planner_initial:message_first",
@@ -487,7 +485,6 @@ describe("AgentStudioHeader", () => {
               launchActionId: "planner_initial" as const,
               label: "Prepare Planner session",
               description: "Open a Planner composer without sending a kickoff.",
-              disabled: false,
             },
             {
               id: "qa:qa_review:message_first",
@@ -495,7 +492,6 @@ describe("AgentStudioHeader", () => {
               launchActionId: "qa_review" as const,
               label: "Prepare QA session",
               description: "Open a QA composer without sending a kickoff.",
-              disabled: false,
             },
           ],
           onQuickAction,
@@ -528,18 +524,17 @@ describe("AgentStudioHeader", () => {
     );
   });
 
-  test("keeps Approve Task reachable while a working session disables session actions", async () => {
+  test("keeps Approve Task reachable when the pull request action lacks a Builder session", async () => {
     const onQuickAction = mock(() => {});
-    const busyPrimary = {
+    const unavailablePullRequest = {
       kind: "session_start" as const,
-      id: "quick:qa_review",
-      role: "qa" as const,
-      launchActionId: "qa_review" as const,
-      label: "Request QA Review",
-      description: "Open the start-session flow for QA.",
+      id: "quick:pull_request",
+      role: "build" as const,
+      launchActionId: "pull_request" as const,
+      label: "Generate Pull Request",
       postStartAction: "kickoff" as const,
       disabled: true,
-      disabledReason: "Wait for the current session to finish.",
+      disabledReason: "Requires an existing Builder session.",
     };
     const approveTask = {
       kind: "task_action" as const,
@@ -558,15 +553,15 @@ describe("AgentStudioHeader", () => {
         model: {
           ...buildModel(),
           sessionCreateOptions: [],
-          quickActions: [busyPrimary, approveTask],
-          primaryQuickAction: busyPrimary,
+          quickActions: [unavailablePullRequest, approveTask],
+          primaryQuickAction: unavailablePullRequest,
           onQuickAction,
         },
       }),
     );
 
     const primary = screen.getByRole<HTMLButtonElement>("button", {
-      name: /Run quick action: Request QA Review/i,
+      name: /Run quick action: Generate Pull Request/i,
     });
     expect(primary.disabled).toBe(true);
     const menuTrigger = screen.getByRole<HTMLButtonElement>("button", {
@@ -631,16 +626,15 @@ describe("AgentStudioHeader", () => {
   });
 
   test("keeps the quick-actions menu closed when every action is disabled", () => {
-    const busyPrimary = {
+    const unavailablePullRequest = {
       kind: "session_start" as const,
-      id: "quick:qa_review",
-      role: "qa" as const,
-      launchActionId: "qa_review" as const,
-      label: "Request QA Review",
-      description: "Open the start-session flow for QA.",
+      id: "quick:pull_request",
+      role: "build" as const,
+      launchActionId: "pull_request" as const,
+      label: "Generate Pull Request",
       postStartAction: "kickoff" as const,
       disabled: true,
-      disabledReason: "Wait for the current session to finish.",
+      disabledReason: "Requires an existing Builder session.",
     };
     const html = renderToStaticMarkup(
       createElement(
@@ -653,8 +647,8 @@ describe("AgentStudioHeader", () => {
           model: {
             ...buildModel(),
             sessionCreateOptions: [],
-            quickActions: [busyPrimary],
-            primaryQuickAction: busyPrimary,
+            quickActions: [unavailablePullRequest],
+            primaryQuickAction: unavailablePullRequest,
           },
         }),
       ),

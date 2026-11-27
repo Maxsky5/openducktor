@@ -944,7 +944,6 @@ describe("buildSessionCreateOptions", () => {
     const options = buildSessionCreateOptions({
       task: qaRejectedTask,
       roleEnabledByTask: { spec: false, planner: true, build: true, qa: false },
-      createSessionDisabled: false,
       roleLabelByRole: { ...BUILTIN_ROLE_LABEL_BY_ROLE },
     });
 
@@ -966,7 +965,6 @@ describe("buildSessionCreateOptions", () => {
       for (const option of buildSessionCreateOptions({
         task,
         roleEnabledByTask: { spec: true, planner: true, build: true, qa: true },
-        createSessionDisabled: false,
         roleLabelByRole: { ...BUILTIN_ROLE_LABEL_BY_ROLE },
       })) {
         expect(option.launchActionId).toBe(
@@ -976,11 +974,10 @@ describe("buildSessionCreateOptions", () => {
     }
   });
 
-  test("keeps role order and disables options while a session is working", () => {
+  test("keeps role order in human review", () => {
     const options = buildSessionCreateOptions({
       task: buildTask({ status: "human_review" }),
       roleEnabledByTask: { spec: true, planner: true, build: true, qa: true },
-      createSessionDisabled: true,
       roleLabelByRole: { ...BUILTIN_ROLE_LABEL_BY_ROLE },
     });
 
@@ -990,9 +987,5 @@ describe("buildSessionCreateOptions", () => {
       "build_after_human_request_changes",
       "qa_review",
     ]);
-    for (const option of options) {
-      expect(option.disabled).toBe(true);
-      expect(option.disabledReason).toBe("Wait for the current session to finish.");
-    }
   });
 });

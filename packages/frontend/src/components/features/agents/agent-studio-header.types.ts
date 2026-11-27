@@ -40,8 +40,6 @@ export type AgentSessionCreateOption = {
   launchActionId: SessionLaunchActionId;
   label: string;
   description: string;
-  disabled: boolean;
-  disabledReason?: string;
 };
 
 export type AgentStudioHeaderModel = {

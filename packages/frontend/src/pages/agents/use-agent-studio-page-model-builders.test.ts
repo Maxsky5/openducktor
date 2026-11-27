@@ -42,7 +42,6 @@ describe("use-agent-studio-page-model-builders", () => {
       sessionsForTask: [builderSession],
       selectedSessionIdentity: null,
       role: "build",
-      isSessionWorking: true,
       roleLabelByRole,
     });
 
@@ -75,7 +74,6 @@ describe("use-agent-studio-page-model-builders", () => {
       sessionsForTask: [plannerSession],
       selectedSessionIdentity: null,
       role: "planner",
-      isSessionWorking: false,
       roleLabelByRole,
     });
 
@@ -84,7 +82,6 @@ describe("use-agent-studio-page-model-builders", () => {
     const plannerSessionValue = agentSessionIdentityKey(plannerSession);
     expect(context.sessionSelectorValue).toBe("");
     expect(context.sessionSelectorAutofocusByValue[plannerSessionValue]).toBe(false);
-    expect(context.createSessionDisabled).toBe(false);
   });
 
   test("buildWorkflowModelContext marks only immediately interactive sessions for header autofocus", () => {
@@ -123,7 +120,6 @@ describe("use-agent-studio-page-model-builders", () => {
       sessionsForTask: [specSession, qaWaitingSession],
       selectedSessionIdentity: null,
       role: "spec",
-      isSessionWorking: false,
       roleLabelByRole,
     });
 
@@ -133,15 +129,17 @@ describe("use-agent-studio-page-model-builders", () => {
     });
   });
 
-  test("buildWorkflowModelContext includes follow-up build launch action from human feedback", () => {
+  test("keeps review quick actions available while the selected Builder session is running", () => {
     const activeSession = createSession({
+      status: "running",
+      foregroundTurnActive: true,
       runtimeKind: "opencode",
-      externalSessionId: "spec-session",
+      externalSessionId: "builder-session",
       sessionAssociation: {
         kind: "workflow",
         workspaceId: "workspace-1",
         taskId: "task-1",
-        role: "spec",
+        role: "build",
       },
     });
     const taskWithFeedback = createTaskCardFixture({
@@ -164,8 +162,7 @@ describe("use-agent-studio-page-model-builders", () => {
       selectedTask: taskWithFeedback,
       sessionsForTask: [activeSession],
       selectedSessionIdentity: selectedIdentityFromSession(activeSession),
-      role: "spec",
-      isSessionWorking: true,
+      role: "build",
       roleLabelByRole,
       gitProviderContext: createGitProviderContextFixture(),
     });
@@ -173,14 +170,18 @@ describe("use-agent-studio-page-model-builders", () => {
     expect(context.sessionSelectorValue).toBe(agentSessionIdentityKey(activeSession));
     const optionIds = context.sessionCreateOptions.map((option) => option.id);
     expect(optionIds).toContain("build:build_after_human_request_changes:message_first");
-    expect(context.sessionCreateOptions.every((option) => option.disabled)).toBe(true);
     expect(context.primaryQuickAction).toMatchObject({
       launchActionId: "pull_request",
       label: "Generate Pull Request",
-      disabled: true,
-      disabledReason: "Wait for the current session to finish.",
+      disabled: false,
     });
-    expect(context.createSessionDisabled).toBe(true);
+    expect(context.quickActions).toContainEqual(
+      expect.objectContaining({ id: "task:human_request_changes", disabled: false }),
+    );
+    expect(context.gitConflictQuickAction).toMatchObject({
+      surface: "git_conflict",
+      disabled: false,
+    });
   });
 
   test("buildWorkflowModelContext does not treat ai review request changes as human feedback follow-up", () => {
@@ -205,7 +206,6 @@ describe("use-agent-studio-page-model-builders", () => {
       sessionsForTask: [],
       selectedSessionIdentity: null,
       role: "build",
-      isSessionWorking: false,
       roleLabelByRole,
     });
 
@@ -235,7 +235,6 @@ describe("use-agent-studio-page-model-builders", () => {
       sessionsForTask: [],
       selectedSessionIdentity: null,
       role: "build",
-      isSessionWorking: false,
       roleLabelByRole,
     });
 

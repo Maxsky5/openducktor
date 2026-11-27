@@ -12,21 +12,18 @@ import { useMemo } from "react";
 
 /**
  * The desktop Agent Studio quick actions of a task. Only a task in human review offers the pull
- * request action, so only that task reads the Git provider. While the session on the screen
- * works, each action waits for it, as on desktop. A merged task branch puts Close Task first.
+ * request action, so only that task reads the Git provider. A merged task branch puts Close Task first.
  */
 export function useTaskQuickActions({
   workspaceId,
   repoPath,
   task,
   summaries,
-  sessionWorking,
 }: {
   workspaceId: string;
   repoPath: string;
   task: TaskCard | null;
   summaries: readonly AgentSessionSummary[];
-  sessionWorking: boolean;
 }) {
   const provider = useQuery({
     ...repositoryGitProviderContextQueryOptions({ workspaceId, repoPath }),
@@ -41,11 +38,10 @@ export function useTaskQuickActions({
         selectedTask: task,
         sessionsForTask: summaries.filter((summary) => summary.taskId === task?.id),
         roleEnabledByTask: buildRoleEnabledMapForTask(task),
-        createSessionDisabled: sessionWorking,
         gitProviderContext: providerContext,
         gitProviderReadError: providerError,
         mergedTarget,
       }),
-    [mergedTarget, providerContext, providerError, sessionWorking, summaries, task],
+    [mergedTarget, providerContext, providerError, summaries, task],
   );
 }

@@ -95,7 +95,7 @@ export const canOpenQuickActionsMenu = ({
       primaryAction,
       onResolveGitConflictQuickAction,
     });
-  // A working session disables the session actions, but an enabled task action stays reachable.
+  // An enabled task action stays reachable when session starts are unavailable.
   const hasEnabledTaskAction = options.some(
     (option) => option.kind === "task_action" && !option.disabled,
   );

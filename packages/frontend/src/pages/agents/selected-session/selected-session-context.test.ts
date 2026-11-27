@@ -96,7 +96,6 @@ const createInput = (
     },
 
     sessionActions: {
-      isSessionWorking: false,
       onSubmitQuestionAnswers: async () => {},
       isSubmittingQuestionByRequestId: {},
       isSubmittingApprovalByRequestId: {},

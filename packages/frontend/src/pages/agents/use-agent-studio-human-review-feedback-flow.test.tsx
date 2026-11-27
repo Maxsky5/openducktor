@@ -102,7 +102,6 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
         role: "build",
         label: "Builder",
         description: "Create builder session",
-        disabled: false,
       }),
     ).toBe(true);
     expect(
@@ -112,7 +111,6 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
         role: "build",
         label: "Builder",
         description: "Create builder session",
-        disabled: false,
       }),
     ).toBe(false);
     expect(
@@ -122,7 +120,6 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
         role: "qa",
         label: "QA",
         description: "Create QA session",
-        disabled: false,
       }),
     ).toBe(false);
 

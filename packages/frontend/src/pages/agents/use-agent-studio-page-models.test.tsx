@@ -226,7 +226,6 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     ...overrides.sessionActions,
   };
   const selectedSessionActions: AgentStudioSelectedSessionContextInput["sessionActions"] = {
-    isSessionWorking: sessionActions.isSessionWorking,
     onSubmitQuestionAnswers: async () => {},
     isSubmittingQuestionByRequestId: {},
     isSubmittingApprovalByRequestId: {},

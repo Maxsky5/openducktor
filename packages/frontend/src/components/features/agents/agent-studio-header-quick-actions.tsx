@@ -103,15 +103,7 @@ const getEntryDisabledReason = (
     return "The task session view is not ready.";
   }
 
-  if (sessionStartBlockedReason) {
-    return sessionStartBlockedReason;
-  }
-
-  if (entry.option.disabled) {
-    return entry.option.disabledReason ?? "Action unavailable.";
-  }
-
-  return null;
+  return sessionStartBlockedReason;
 };
 
 const buildQuickActionMenuEntries = (
@@ -160,8 +152,8 @@ function QuickActionCommandItem({
   onSelect,
 }: QuickActionCommandItemProps): ReactElement {
   const { option } = entry;
-  const isDisabled = option.disabled || disabledReason !== null;
-  const description = disabledReason ?? option.disabledReason ?? option.description;
+  const isDisabled = disabledReason !== null;
+  const description = disabledReason ?? option.description;
   const Icon = entry.kind === "message_first" ? MessageCirclePlus : Zap;
 
   return (
