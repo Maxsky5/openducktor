@@ -319,16 +319,19 @@ describe("demo backend", () => {
       workingDirectory: builder.workingDirectory,
       externalSessionId: builder.externalSessionId,
     };
+    const target = {
+      repoPath: FIELDNOTES.repoPath,
+      ...sourceSession,
+      sessionScope: {
+        kind: "workflow" as const,
+        workspaceId: FIELDNOTES.workspaceId,
+        taskId: task.id,
+        role: "build",
+      },
+    };
     const send = (submissionId: string, text: string) =>
       demo.client.agentSessionMessageSubmit({
-        repoPath: FIELDNOTES.repoPath,
-        ...sourceSession,
-        sessionScope: {
-          kind: "workflow",
-          workspaceId: "fieldnotes",
-          taskId: task.id,
-          role: "build",
-        },
+        ...target,
         submissionId,
         mode: "default",
         parts: [{ kind: "text", text }],
@@ -354,6 +357,21 @@ describe("demo backend", () => {
     expect(launch.acceptedMessage).toBeUndefined();
     expect(launch.startupProgress?.instruction).toEqual({ state: "queued" });
     expect((await taskOf(demo, task.title)).pullRequest).toBeUndefined();
+
+    const snapshot = await demo.client.agentSessionLiveAttach({ repoPath: FIELDNOTES.repoPath });
+    const queue = snapshot.messageQueues.find(
+      ({ target }) => target.externalSessionId === builder.externalSessionId,
+    );
+    const pending = queue?.entries.find(({ parts }) =>
+      parts.some((part) => part.kind === "text" && part.text === kickoff),
+    );
+    if (!pending) throw new Error("The PR instruction did not enter the queue.");
+    await expect(
+      demo.client.agentSessionMessageQueueManage({
+        ...target,
+        action: { kind: "steer", submissionId: pending.submissionId },
+      }),
+    ).rejects.toThrow("This workflow action needs its own turn.");
 
     await demo.advance(45_000);
 

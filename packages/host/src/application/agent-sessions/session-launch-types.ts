@@ -9,7 +9,7 @@ import type { Effect } from "effect";
 import type { HostError } from "../../effect/host-errors";
 import type { SubmitOptions } from "./agent-message-queue-admission";
 
-export type SessionLaunchInstructionDelivery = (
+type SessionLaunchInstructionDelivery = (
   options: Required<SubmitOptions>,
 ) => Effect.Effect<AcceptedAgentInput | undefined, HostError>;
 

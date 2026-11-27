@@ -930,6 +930,8 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
           break;
         case "steer":
           if (entry?.state !== "queued") throw new Error("This message already left the queue.");
+          if (session.run && entry.buildScript)
+            throw new Error("This workflow action needs its own turn. Leave it queued.");
           if (session.run && systemCommandOf(entry.parts).kind !== "not_system")
             throw new Error("A slash command cannot join running work.");
           if (!session.run) checkDeliverable(session, entry);
