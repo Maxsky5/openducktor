@@ -64,15 +64,17 @@ export function parseChatFileLink(href: string): ChatFileDestination {
   if (/^file:/i.test(href) && /^\/[a-z]:[/\\]/i.test(path)) path = path.slice(1);
   if (path.startsWith("//") || path.startsWith("\\\\"))
     return invalid("Network file paths are not supported.");
-  const hasDrive = /^[a-z]:[/\\]/i.test(path);
+  const hasDrive = isWindowsChatPath(path);
   const slashPath = hasDrive ? path.replaceAll("\\", "/") : path;
   if (!slashPath || slashPath.endsWith("/") || /(?:^|\/)\.{1,2}$/.test(slashPath))
     return invalid("The destination must name a file.");
   return { kind: "path", path, absolute: isAbsoluteChatPath(path) };
 }
 
+export const isWindowsChatPath = (path: string): boolean => /^[a-z]:[/\\]/i.test(path);
+
 const isAbsoluteChatPath = (path: string): boolean =>
-  path.startsWith("/") || /^[a-z]:[/\\]/i.test(path);
+  path.startsWith("/") || isWindowsChatPath(path);
 
 /** Resolves a decoded path, such as a route parameter, like a parsed file link. */
 export const resolveChatFilePath = (
@@ -130,9 +132,9 @@ function parseFileDestination(href: string): { kind: "path"; path: string } | In
 }
 
 function resolveWorktreeFile(input: string, rootPath: string, root: ChatFileRoot): ChatFileLink {
-  const windows = /^[a-z]:[/\\]/i.test(rootPath);
+  const windows = isWindowsChatPath(rootPath);
   const path = windows ? input.replaceAll("\\", "/") : input;
-  const hasDrive = /^[a-z]:[/\\]/i.test(path);
+  const hasDrive = isWindowsChatPath(path);
   if (path.startsWith("//") || path.startsWith("\\\\"))
     return invalid("Network file paths are not supported.");
   if ((hasDrive && (!windows || !/^[a-z]:\//i.test(path))) || (windows && path.startsWith("/")))
@@ -166,7 +168,7 @@ function resolveWorktreeFile(input: string, rootPath: string, root: ChatFileRoot
 }
 
 function resolveLocalFile(path: string): ChatFileLink {
-  const windows = /^[a-z]:[/\\]/i.test(path);
+  const windows = isWindowsChatPath(path);
   const separator = windows && path[2] === "\\" ? "\\" : "/";
   const parts = segments(windows ? path.replaceAll("\\", "/") : path);
   const relativePath = parts?.pop();

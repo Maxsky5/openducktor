@@ -13,6 +13,7 @@ import type {
 import { type ReactElement, useEffect, useId, useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { badgeVariants } from "@/components/ui/badge-variants";
+import { mountFileTypeIconSprite } from "@/components/ui/file-type-icons";
 import { cn } from "@/lib/utils";
 import {
   type AgentChatComposerDraft,
@@ -63,6 +64,7 @@ const buildComposerFileReferenceChipMarkup = (
   file: AgentChatFileReferenceChipFile,
   segmentId: string,
 ): string => {
+  mountFileTypeIconSprite();
   return `<span contenteditable="false" data-chip-segment-id="${escapeHtml(segmentId)}" data-segment-id="${escapeHtml(segmentId)}" data-file-reference-path="${escapeHtml(file.path)}" class="${escapeHtml(
     cn(AGENT_CHAT_FILE_REFERENCE_CHIP_BASE_CLASS_NAME, "mr-2 max-w-full align-middle"),
   )}"><span class="${escapeHtml(AGENT_CHAT_FILE_REFERENCE_CHIP_ICON_CLASS_NAME)}">${getAgentChatFileReferenceIconMarkup(

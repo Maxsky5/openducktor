@@ -1,5 +1,5 @@
 import type { AgentFileSearchResultKind } from "@openducktor/core";
-import { mountFileTypeIconSprite, resolveFileTypeIcon } from "@/components/ui/file-type-icons";
+import { resolveFileTypeIcon } from "@/components/ui/file-type-icons";
 
 const FILE_REFERENCE_ICON_MARKUP = {
   directory: {
@@ -41,7 +41,6 @@ export const getAgentChatFileReferenceIconMarkup = (
 ): string => {
   const typeIcon = kind === "directory" ? null : resolveFileTypeIcon(path);
   if (typeIcon) {
-    mountFileTypeIconSprite();
     const style = typeIcon.color ? ` style="color:${typeIcon.color}"` : "";
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="${className} shrink-0"${style} aria-hidden="true"><use href="${typeIcon.href}"></use></svg>`;
   }

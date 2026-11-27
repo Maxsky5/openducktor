@@ -20,7 +20,9 @@ const chat = (markdown: string, streaming = false): ReactElement => (
 type OpenFile = (href: string, trigger: HTMLAnchorElement) => void;
 
 const withFiles = (open: OpenFile, children: ReactNode): ReactElement => (
-  <ChatFileLinkContext value={open}>{children}</ChatFileLinkContext>
+  <ChatFileLinkContext value={{ openFile: open, relativePathsAreWindows: false }}>
+    {children}
+  </ChatFileLinkContext>
 );
 
 describe("AgentChatMarkdownRenderer", () => {
@@ -133,6 +135,46 @@ describe("AgentChatMarkdownRenderer", () => {
 
 describe("chat file links", () => {
   test.each([
+    {
+      label: "apps/web/src/LandingPage.tsx",
+      path: "/repo/apps/web/src/LandingPage.tsx",
+      visible: "LandingPage.tsx",
+    },
+    {
+      label: "apps/api/__tests__/auth-config.test.ts",
+      path: "apps/api/__tests__/auth-config.test.ts",
+      visible: "auth-config.test.ts",
+    },
+    {
+      label: "`src/auth-config.ts:42`",
+      path: "src/auth-config.ts:42",
+      visible: "auth-config.ts:42",
+    },
+    { label: "**Sign-in** / settings", path: "src/auth-config.ts", visible: "Sign-in / settings" },
+  ])("shows $visible and keeps the full link target", ({ label, path, visible }) => {
+    const open = mock<OpenFile>(() => {});
+    const view = render(withFiles(open, chat(`[${label}](${path})`)));
+    const link = view.getByRole("link", { name: visible });
+
+    expect(link.title).toBe(path);
+    fireEvent.keyDown(link, { key: "Enter" });
+    expect(open).toHaveBeenCalledWith(path, link);
+  });
+
+  test.each([
+    { name: "a file whose name matches an inherited property", path: "src/constructor" },
+    { name: "a long filename", path: `src/${"a".repeat(253)}.ts` },
+  ])("shows the generic icon for $name without changing the destination", ({ path }) => {
+    const open = mock<OpenFile>(() => {});
+    const view = render(withFiles(open, chat(`[file](${path})`)));
+    const link = view.getByRole("link", { name: "file" });
+
+    expect(link.querySelector("svg.lucide-file-text")).not.toBeNull();
+    fireEvent.click(link);
+    expect(open).toHaveBeenCalledWith(path, link);
+  });
+
+  test.each([
     "[file](src/a.ts:42)",
     "[`file`](file:///repo/a.ts#L42)",
     "[file][source]\n\n[source]: <src/a b.ts>",
@@ -163,10 +205,18 @@ describe("chat file links", () => {
     const view = render(withFiles(open, chat("[file](src/a", true)));
 
     expect(view.queryByRole("link")).toBeNull();
-    view.rerender(withFiles(open, chat("[file](src/a.ts)", true)));
-    fireEvent.click(view.getByRole("link", { name: "file" }));
+    view.rerender(withFiles(open, chat("[`file`](src/a%20b.ts:42)", true)));
+    const link = view.getByRole("link", { name: "file" });
+    const icon = link.querySelector('svg[aria-hidden="true"] use');
 
-    expect(open.mock.calls.at(-1)?.[0]).toBe("src/a.ts");
+    expect(icon?.getAttribute("href")).toBe("#file-tree-builtin-typescript");
+    expect(document.getElementById("file-tree-builtin-typescript")).not.toBeNull();
+    expect(link.querySelector("code")?.textContent).toBe("file");
+    expect(link.title).toBe("src/a%20b.ts:42");
+    fireEvent.click(icon!);
+
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledWith("src/a%20b.ts:42", link);
   });
 
   test("keeps web links on the shell, drops unsafe schemes, and opens file links", () => {
@@ -176,19 +226,26 @@ describe("chat file links", () => {
       withShellPlatform(
         withFiles(
           openFile,
-          chat("[web](https://example.com) [unsafe](javascript:42) [file](a.ts:42) [empty]()"),
+          chat("[web](https://example.com) [unsafe](javascript:42) [file](config) [empty]()"),
         ),
         createShellBridgeFixture({ bridge: { openExternalUrl: openExternal } }),
       ),
     );
 
-    fireEvent.click(view.getByText("web"));
+    const web = view.getByRole("link", { name: "web" });
+    const file = view.getByRole("link", { name: "file" });
+    const empty = view.getByRole("link", { name: "empty" });
+
+    expect(web.querySelector("svg")).toBeNull();
+    expect(file.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect(empty.querySelector("svg")).toBeNull();
+    fireEvent.click(web);
     fireEvent.click(view.getByText("unsafe"));
-    fireEvent.click(view.getByText("file"));
-    fireEvent.click(view.getByText("empty"));
+    fireEvent.click(file);
+    fireEvent.click(empty);
 
     expect(openExternal.mock.calls).toEqual([["https://example.com"]]);
-    expect(openFile.mock.calls.map(([href]) => href)).toEqual(["a.ts:42", ""]);
+    expect(openFile.mock.calls.map(([href]) => href)).toEqual(["config", ""]);
   });
 
   test("says why a file link cannot open without a worktree", () => {
