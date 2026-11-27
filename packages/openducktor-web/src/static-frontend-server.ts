@@ -2,6 +2,10 @@ import {
   ARTIFACT_PREVIEW_BOOTSTRAP_PATH,
   artifactPreviewBootstrapResponse,
 } from "@openducktor/remote-host/artifact-preview-bootstrap";
+import {
+  HTML_PREVIEW_BOOTSTRAP_PATH,
+  htmlPreviewBootstrapResponse,
+} from "@openducktor/remote-host/html-preview-bootstrap";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
@@ -83,11 +87,19 @@ export const startStaticFrontendServerEffect = (
               }
               const requestUrl = new URL(request.url);
               if (
-                requestUrl.pathname === ARTIFACT_PREVIEW_BOOTSTRAP_PATH &&
-                !requestUrl.search &&
-                request.method === "GET"
-              )
-                return artifactPreviewBootstrapResponse();
+                requestUrl.pathname === ARTIFACT_PREVIEW_BOOTSTRAP_PATH ||
+                requestUrl.pathname === HTML_PREVIEW_BOOTSTRAP_PATH
+              ) {
+                if (request.method !== "GET") {
+                  return new Response(null, { status: 405, headers: { allow: "GET" } });
+                }
+                if (requestUrl.search) {
+                  return new Response("Not found", { status: 404 });
+                }
+                return requestUrl.pathname === ARTIFACT_PREVIEW_BOOTSTRAP_PATH
+                  ? artifactPreviewBootstrapResponse()
+                  : htmlPreviewBootstrapResponse();
+              }
               if (requestUrl.pathname === RUNTIME_CONFIG_PATH) {
                 const runtimeConfig = await readBrowserRuntimeConfig(runtimeConfigState);
                 return new Response(runtimeConfig, {

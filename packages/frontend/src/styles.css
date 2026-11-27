@@ -169,8 +169,13 @@ body {
   }
 }
 
+:root {
+  --app-font-sans: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+  --app-font-mono: "IBM Plex Mono", "SF Mono", Menlo, Monaco, Consolas, monospace;
+}
+
 body {
-  font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+  font-family: var(--app-font-sans);
   color: var(--foreground);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -296,7 +301,7 @@ body {
 
 code,
 pre {
-  font-family: "IBM Plex Mono", "SF Mono", Menlo, Monaco, Consolas, monospace;
+  font-family: var(--app-font-mono);
 }
 
 ::selection {

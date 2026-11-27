@@ -17,6 +17,8 @@ This matrix lists every allowed task transition. The backend validates it. The U
 | `odt_apply_workflow_event` | `taskId`, `eventId`, `note?` |
 | `odt_set_pull_request` | `taskId`, `number` |
 
+`odt_publish_html` publishes an HTML preview in the session transcript and stores it in the workspace `session-html-previews` folder. It changes no task status, task fields, or task artifact.
+
 The browser tools never change task status or artifacts. They are `odt_browser_list`, `odt_browser_open`, `odt_browser_navigate`, `odt_browser_close`, `odt_browser_snapshot`, `odt_browser_click`, `odt_browser_hover`, `odt_browser_type`, `odt_browser_press`, `odt_browser_select`, `odt_browser_scroll`, `odt_browser_screenshot`, `odt_browser_console`, `odt_browser_wait`, and `odt_browser_dialog`. See [External MCP](external-mcp.md#browser-tools).
 
 The public update tool never changes `status` or artifacts.

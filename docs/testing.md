@@ -112,9 +112,15 @@ bun run --filter @openducktor/web test src/browser-tabs/browser-tab-content.brow
 - Ask the user to start `bun run browser:dev`.
 - Connect to the running app. Do not start the browser runner yourself.
 
-The HTML artifact test needs an installed Chromium 152 or later. Set `ODT_ARTIFACT_PREVIEW_CHROME` to its executable to run the opt-in test. It starts headless Chrome with a temporary profile and tests the real bootstrap response, fragment navigation, and isolation. Without this variable, the normal test suite skips it.
+The HTML preview tests need an installed Chromium 152 or later. The session preview test also needs `openssl` to make a temporary certificate for a pending HTTPS asset. Set the executable path to run them. They start headless Chrome with a temporary profile and test the real bootstrap response, start before a pending asset, fragment navigation, isolation, and navigation blocking. A denied external link must leave the published controls usable while the pending asset request stays open. A page that redirects on every load must reach the preview failure state without repeating the redirect, for an immediate refresh and a one-second refresh. They also check that the page keeps its authored `html` and `head` attributes. Without these variables, the normal test suite skips them. The mobile wrapper test runs the production wrapper script in happy-dom, so it checks the restore paths, both restore limits, and the trusted error without a device. Check the Electron custom-protocol path in a hidden window, and check the two native WebViews on a device, simulator, or emulator; the Chromium tests cover HTTP and the wrapper only.
+
+| Test | Environment variable |
+|---|---|
+| Task-artifact HTML preview | `ODT_ARTIFACT_PREVIEW_CHROME` |
+| Session HTML preview | `ODT_HTML_PREVIEW_CHROME` |
 
 ```sh
 ODT_ARTIFACT_PREVIEW_CHROME="/path/to/chrome" \
-  bun run --filter @openducktor/remote-host test src/artifact-preview-bootstrap.live.test.ts
+ODT_HTML_PREVIEW_CHROME="/path/to/chrome" \
+  bun run --filter @openducktor/remote-host test src/artifact-preview-bootstrap.live.test.ts src/html-preview-bootstrap.live.test.ts
 ```

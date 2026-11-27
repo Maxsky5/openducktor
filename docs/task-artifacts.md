@@ -80,8 +80,10 @@ The mobile app shows the collection in the Artifacts work view of a task. A work
 | Other formats | File details, an unsupported-preview message, and Share. |
 
 - Share opens the system share sheet with the original bytes and the stored filename. It replaces Download.
-- The app never runs HTML. Phone browsers cannot block all network access, as [preview isolation](#preview-formats-and-isolation) requires.
+- The mobile app never runs task-artifact HTML. Phone browsers cannot block all network access, as [preview isolation](#preview-formats-and-isolation) requires.
 - The app does not add, rename, replace, or delete free artifacts. Use the desktop app or the browser runner for these actions.
+
+An HTML page that an agent publishes with `odt_publish_html` is not a task artifact. It renders in the session transcript with network access and its own isolation rules. See [HTML previews](html-previews.md).
 
 ## Task lifecycle
 

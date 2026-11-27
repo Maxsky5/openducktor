@@ -14,6 +14,11 @@ export const REMOTE_BASELINE_CAPABILITIES = [
  * only from such a host, because an older host rejects the unknown input field.
  */
 export const REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY = "history.tool_details.v1";
+/**
+ * The optional capability of a host that stores published session HTML previews and serves
+ * `session_html_preview_read`.
+ */
+export const REMOTE_SESSION_HTML_PREVIEWS_CAPABILITY = "session.html_previews.v1";
 export const REMOTE_CONNECTION_HEADER = "x-openducktor-connection-id";
 /** A remote host refuses a command reply that is larger than this limit. */
 export const REMOTE_MAX_REPLY_BYTES = 32 * 1024 * 1024;

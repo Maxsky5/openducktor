@@ -148,6 +148,7 @@ const createElectronApi = () => {
     systemWake: { subscribe: () => () => {} },
     getArtifactPreviewEnvironment: mock(async () => ({
       bootstrapUrl: "odt-artifact-preview://bootstrap",
+      htmlPreviewBootstrapUrl: "odt-html-preview://bootstrap",
       scriptedHtml: { supported: true as const },
     })),
     platform: "darwin" as const,
@@ -791,6 +792,7 @@ test("a remote host bridge previews artifacts through the desktop protocol", asy
   const { electronApi } = createElectronApi();
   const desktop = {
     bootstrapUrl: "odt-artifact-preview://bootstrap",
+    htmlPreviewBootstrapUrl: "odt-html-preview://bootstrap",
     scriptedHtml: { supported: true as const },
   };
   setElectronApi({ ...electronApi, getArtifactPreviewEnvironment: async () => desktop });
@@ -801,6 +803,7 @@ test("a remote host bridge previews artifacts through the desktop protocol", asy
     // The browser shell bridge builds this URL from the renderer origin, which is file:// here.
     getArtifactPreviewEnvironment: async () => ({
       bootstrapUrl: "file:///artifact-preview-bootstrap",
+      htmlPreviewBootstrapUrl: "file:///html-preview-bootstrap",
       scriptedHtml: { supported: true },
     }),
   });

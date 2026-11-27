@@ -9,6 +9,9 @@ export const ODT_MCP_SERVER_NAME = "openducktor";
 
 export const ODT_WORKSPACE_DISCOVERY_TOOL_NAME = "odt_get_workspaces" as const;
 
+/** Publishes an HTML preview in the calling session and stores it on the host. */
+export const ODT_HTML_PREVIEW_TOOL_NAME = "odt_publish_html" as const;
+
 export const ODT_WORKFLOW_AGENT_TOOL_NAMES = [
   "odt_create_task",
   "odt_search_tasks",
@@ -20,6 +23,7 @@ export const ODT_WORKFLOW_AGENT_TOOL_NAMES = [
   "odt_update_task",
   "odt_apply_workflow_event",
   "odt_set_pull_request",
+  ODT_HTML_PREVIEW_TOOL_NAME,
   ...ODT_BROWSER_TOOL_NAMES,
 ] as const;
 
@@ -47,7 +51,11 @@ export const ODT_MCP_TOOL_NAMES = [
 
 export const ODT_TOOL_NAMES = ODT_MCP_TOOL_NAMES;
 
-/** Tools that an MCP client without `ODT_ALLOWED_TOOLS` gets. Browser tools need a managed session. */
+/** Tools that need the session of a managed runtime. Other MCP clients never get them. */
+export const isOdtManagedOnlyToolName = (name: string): boolean =>
+  isOdtBrowserToolName(name) || name === ODT_HTML_PREVIEW_TOOL_NAME;
+
+/** Tools that an MCP client without `ODT_ALLOWED_TOOLS` gets. */
 export const ODT_EXTERNAL_MCP_TOOL_NAMES = ODT_MCP_TOOL_NAMES.filter(
-  (name) => !isOdtBrowserToolName(name),
+  (name) => !isOdtManagedOnlyToolName(name),
 );

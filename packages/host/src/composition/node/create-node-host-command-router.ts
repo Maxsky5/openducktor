@@ -61,6 +61,7 @@ import type { NodeHostSharedPorts } from "./node-shared-storage";
 import { createNodeBrowser } from "./node-browser-composition";
 import { createNodeWorkspaceStorageRemoval } from "./node-workspace-storage-removal";
 import type { NodeGitlabComposition } from "./git-provider-composition";
+import { createNodeHtmlPreviewServices } from "./node-html-preview-services";
 import { createGitlabConnectionCommandHandlers } from "../../interface/commands/gitlab-connection-command-handlers";
 import { createBrowserCommandHandlers } from "../../interface/commands/browser-command-handlers";
 import { createNodeHostRuntimeComposition } from "./node-host-runtime-composition";
@@ -84,24 +85,15 @@ export const assembleNodeEffectHostCommandRouter = (
     clientVersion,
     eventBus,
     lifecycleLogger = defaultLifecycleLogger,
-    mcpHostBridge,
     onBackgroundFailure,
-    runtimeStarter: configuredRuntimeStarter,
-    taskStore: configuredTaskStore,
-    taskEventPublicationReporter,
   } = input;
   const { taskWorkflows, workspaceWorkflows } = defaultPorts;
   const workflowWiring = createNodeTaskWorkflowWiring(defaultPorts);
   const {
-    filesystem,
     git,
-    localAttachments,
     configDir,
-    runtimeHealth,
     settingsConfig: baseSettingsConfig,
-    systemCommands,
     toolDiscovery,
-    startupEnv,
     worktreeFiles,
   } = defaultPorts;
   const automation = createNodeSessionAutomation(onBackgroundFailure, lifecycleLogger, git);
@@ -122,7 +114,7 @@ export const assembleNodeEffectHostCommandRouter = (
     configDir,
     contextManager: defaultPorts.taskDatabase,
     resolveTaskStoreAccess: workspaceAdmissionService.resolveTaskStoreAccess,
-    configuredTaskStore,
+    configuredTaskStore: input.taskStore,
     isWorkspaceBlocked: workspaceAdmissionService.isWorkspaceBlocked,
     onBackgroundFailure,
     workspaceSettingsService,
@@ -181,9 +173,9 @@ export const assembleNodeEffectHostCommandRouter = (
       lifecycleLogger,
     });
   const remoteFetch = createRemoteFetchService(git);
-  const localAttachmentService = createLocalAttachmentService(localAttachments);
+  const localAttachmentService = createLocalAttachmentService(defaultPorts.localAttachments);
   const workingDirectoryDependencies = { gitPort: git, settingsConfig, workspaceSettingsService };
-  let resolvedMcpHostBridge = mcpHostBridge;
+  let resolvedMcpHostBridge = input.mcpHostBridge;
   const taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator();
   const {
     hostInstanceId,
@@ -192,7 +184,7 @@ export const assembleNodeEffectHostCommandRouter = (
   } = createNodeHostRuntimeComposition({
     clientVersion,
     hostInstanceId: defaultPorts.hostInstanceId,
-    configuredRuntimeStarter,
+    configuredRuntimeStarter: input.runtimeStarter,
     defaultPorts,
     eventBus,
     lifecycleLogger,
@@ -233,6 +225,11 @@ export const assembleNodeEffectHostCommandRouter = (
     lifecycleLogger,
   });
   const worktreeActions = createWorktreeActionRunner(terminalService);
+  const htmlPreviews = createNodeHtmlPreviewServices(
+    configDir,
+    callers.managedCallers,
+    workingDirectoryDependencies,
+  );
   const taskSessions = createNodeTaskSessionServices({
     naming,
     runtimeAdmission,
@@ -246,7 +243,7 @@ export const assembleNodeEffectHostCommandRouter = (
       taskWorkflows,
       workspaceWorkflows,
       settingsConfig,
-      systemCommands,
+      systemCommands: defaultPorts.systemCommands,
       toolDiscovery,
       taskWorktreeService,
       workspaceSettingsService,
@@ -261,7 +258,7 @@ export const assembleNodeEffectHostCommandRouter = (
       observeStatusChanges: automation.observeStatusChanges,
       lifecycleLogger,
       onBackgroundFailure,
-      taskEventPublicationReporter,
+      taskEventPublicationReporter: input.taskEventPublicationReporter,
       workspaceSettingsService,
     },
     publishMergeStatus: (snapshot) =>
@@ -301,6 +298,7 @@ export const assembleNodeEffectHostCommandRouter = (
       azureDevOpsConnection,
       gitlabConnection: gitlab.connection,
       browserService,
+      sessionHtmlPreviewStore: htmlPreviews.store,
     }),
     taskSessionLifecycleCoordinator,
     taskStore,
@@ -333,6 +331,7 @@ export const assembleNodeEffectHostCommandRouter = (
     taskWorkflows,
     workspaceWorkflows,
     browserAgentTools: browserService,
+    sessionHtmlPreviews: htmlPreviews.service,
     ...callers,
     taskAssetReadService,
     taskService,
@@ -340,7 +339,7 @@ export const assembleNodeEffectHostCommandRouter = (
     discoveryMode: input.mcpBridgeDiscoveryMode,
     eventBus,
     hostInstanceId,
-    startupEnv,
+    startupEnv: defaultPorts.startupEnv,
   });
   const taskSessionStopService = createTaskSessionStopService({
     gitPort: git,
@@ -369,7 +368,9 @@ export const assembleNodeEffectHostCommandRouter = (
     eventBus,
     claudeSessionMetadata,
   });
-  const workspaceFiles = workspaceChats.scopeFiles(createWorkspaceFilesService(filesystem, git));
+  const workspaceFiles = workspaceChats.scopeFiles(
+    createWorkspaceFilesService(defaultPorts.filesystem, git),
+  );
   const launchControls = createNodeSessionLaunchControls(agentSessionCommandService, [
     taskSessions.workflowLaunchService,
     workspaceChats.workspaceSessionLaunchService,
@@ -451,7 +452,7 @@ export const assembleNodeEffectHostCommandRouter = (
     ),
     ...createNodeRuntimeExecutableCommandHandlers({
       runtimeDefinitionsService,
-      runtimeHealth,
+      runtimeHealth: defaultPorts.runtimeHealth,
       toolDiscovery,
     }),
     ...createRuntimeCommandHandlers(taskSessionStopService, hostRuntimeService, () =>
@@ -466,6 +467,7 @@ export const assembleNodeEffectHostCommandRouter = (
     }),
     ...createTerminalCommandHandlers(terminalService),
     ...createBrowserCommandHandlers(browserService),
+    ...htmlPreviews.handlers,
     ...createRepoActionCommandHandlers(
       createRepoActionService({ terminals: terminalService, settings: workspaceSettingsService }),
     ),

@@ -17,6 +17,7 @@ export const TOOL_LABELS = {
   odt_update_task: "Edit task details",
   odt_apply_workflow_event: "Move the task",
   odt_set_pull_request: "Link the pull request",
+  odt_publish_html: "Publish HTML previews",
   odt_browser_list: "List tabs",
   odt_browser_open: "Open a tab",
   odt_browser_navigate: "Go to a page",

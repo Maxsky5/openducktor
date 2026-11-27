@@ -443,6 +443,10 @@ export const TranscriptChatList = memo(function TranscriptChatList({
                 // transcript, and Android gives their taps to the list below them too.
                 keyboardDismissMode={KEYBOARD_DISMISS_ON_DRAG}
                 keyboardShouldPersistTaps="always"
+                // On Android, tapping a focusable element inside an embedded HTML preview WebView
+                // triggers ReactScrollView.requestChildFocus -> scrollToChild, jumping the transcript
+                // to align the entire tall WebView frame. Keep taps in place.
+                scrollsChildToFocus={false}
                 accessibilityLabel="Transcript"
                 accessibilityActions={accessibilityActions}
                 onAccessibilityAction={onAccessibilityAction}

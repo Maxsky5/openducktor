@@ -8,6 +8,7 @@ import { join } from "node:path";
 import {
   type ClaudePolicyFields,
   ODT_BROWSER_TOOL_NAMES,
+  ODT_HTML_PREVIEW_TOOL_NAME,
   ODT_MCP_TOOL_NAMES,
 } from "@openducktor/contracts";
 import type { AgentEvent, AgentModelSelection, AgentRole } from "@openducktor/core";
@@ -836,6 +837,7 @@ describe("buildClaudeAgentSdkOptions", () => {
         "odt_search_tasks",
         "odt_create_task",
         "odt_update_task",
+        ODT_HTML_PREVIEW_TOOL_NAME,
         ...ODT_BROWSER_TOOL_NAMES,
       ].join(","),
     );

@@ -167,6 +167,44 @@ describe("transcript rows", () => {
     });
   });
 
+  test("dispatch a completed HTML publication to its preview row", () => {
+    const message = (status: "completed" | "error" | "running"): AgentChatMessage => {
+      const meta = {
+        kind: "tool",
+        partId: "preview-part",
+        callId: "preview-call",
+        tool: "odt_publish_html",
+        toolType: "generic",
+        status,
+        input: { title: "Weekly report", html: "<p>Ready</p>" },
+      } as const;
+      return buildMessage("tool", "", {
+        id: "preview",
+        meta:
+          status === "completed"
+            ? {
+                ...meta,
+                output: JSON.stringify({
+                  htmlPreview: {
+                    previewId: "11111111-1111-4111-8111-111111111111",
+                    title: "Weekly report",
+                    byteSize: 14,
+                  },
+                }),
+              }
+            : meta,
+      });
+    };
+
+    const row = messageRowKind(message("completed"), presentToolCall);
+    expect("meta" in row ? row.kind : null).toBe("html_preview");
+    expect("preview" in row ? row.preview.title : null).toBe("Weekly report");
+    // A failed publication stays an ordinary tool row.
+    expect(messageRowKind(message("error"), presentToolCall).kind).toBe("tool");
+    // A running publication also stays an ordinary tool row.
+    expect(messageRowKind(message("running"), presentToolCall).kind).toBe("tool");
+  });
+
   test("resolve the tool presentation of a message once, however often the list asks", () => {
     const tool = buildMessage("tool", "", {
       id: "t1",

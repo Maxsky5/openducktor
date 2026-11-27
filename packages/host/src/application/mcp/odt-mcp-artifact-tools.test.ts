@@ -151,6 +151,7 @@ const bridgeWith = (
         owner === undefined ? Effect.die("Unexpected managed caller") : Effect.succeed(owner),
     } satisfies ManagedCallerResolver,
     taskAssetReadService: { readBatch: () => Effect.die("Unexpected task asset read") },
+    sessionHtmlPreviews: { publish: () => Effect.die("Unexpected HTML preview publish") },
     workspaceSettingsService: {
       listWorkspaces: () => Effect.die("Unexpected workspace scan"),
       getRepoConfig: (workspaceId) => {

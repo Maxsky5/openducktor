@@ -1,3 +1,5 @@
+import { ISOLATED_PREVIEW_PERMISSIONS_POLICY } from "@openducktor/contracts/preview-permissions-policy";
+
 export const ARTIFACT_PREVIEW_BOOTSTRAP_PATH = "/artifact-preview-bootstrap";
 
 export const artifactPreviewBootstrapResponse = (): Response => new Response(html, { headers });
@@ -7,8 +9,7 @@ const headers = {
   "Connection-Allowlist": "()",
   "Content-Security-Policy":
     "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; base-uri about:; form-action 'none'; sandbox allow-scripts",
-  "Permissions-Policy":
-    "accelerometer=(), ambient-light-sensor=(), autoplay=(), bluetooth=(), camera=(), clipboard-read=(), clipboard-write=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), idle-detection=(), local-fonts=(), magnetometer=(), microphone=(), midi=(), payment=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), usb=(), web-share=(), xr-spatial-tracking=()",
+  "Permissions-Policy": ISOLATED_PREVIEW_PERMISSIONS_POLICY,
   "Referrer-Policy": "no-referrer",
   "X-Content-Type-Options": "nosniff",
   "Cache-Control": "no-store",

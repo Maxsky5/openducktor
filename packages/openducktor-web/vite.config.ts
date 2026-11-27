@@ -2,6 +2,10 @@ import {
   ARTIFACT_PREVIEW_BOOTSTRAP_PATH,
   artifactPreviewBootstrapResponse,
 } from "@openducktor/remote-host/artifact-preview-bootstrap";
+import {
+  HTML_PREVIEW_BOOTSTRAP_PATH,
+  htmlPreviewBootstrapResponse,
+} from "@openducktor/remote-host/html-preview-bootstrap";
 import { createOpenDucktorStartupSplashPlugin } from "@openducktor/frontend/startup-splash/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
@@ -25,6 +29,7 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     createOpenDucktorStartupSplashPlugin(),
     artifactPreviewBootstrapPlugin(),
+    htmlPreviewBootstrapPlugin(),
     react(),
     tailwindcss(),
     ...(mode === "standalone" ? [clientHeaders()] : []),
@@ -85,19 +90,19 @@ const clientHeaders = (): Plugin => ({
   },
 });
 
-/** The bootstrap contains no host data and keeps its own document isolation policy. */
-function artifactPreviewBootstrapPlugin(): Plugin {
-  const middleware: import("vite").Connect.NextHandleFunction = (request, response, next) => {
-    if (request.url !== ARTIFACT_PREVIEW_BOOTSTRAP_PATH || request.method !== "GET") return next();
-    const bootstrap = artifactPreviewBootstrapResponse();
-    bootstrap.headers.forEach((value, name) => response.setHeader(name, value));
+/** A bootstrap contains no host data and keeps its own document isolation policy. */
+function bootstrapPlugin(name: string, path: string, response: () => Response): Plugin {
+  const middleware: import("vite").Connect.NextHandleFunction = (request, httpResponse, next) => {
+    if (request.url !== path || request.method !== "GET") return next();
+    const bootstrap = response();
+    bootstrap.headers.forEach((value, headerName) => httpResponse.setHeader(headerName, value));
     void bootstrap
       .text()
-      .then((html) => response.end(html))
+      .then((html) => httpResponse.end(html))
       .catch(next);
   };
   return {
-    name: "openducktor-artifact-preview-bootstrap",
+    name: `openducktor-${name}`,
     configureServer(server) {
       server.middlewares.use(middleware);
     },
@@ -107,9 +112,23 @@ function artifactPreviewBootstrapPlugin(): Plugin {
     async generateBundle() {
       this.emitFile({
         type: "asset",
-        fileName: ARTIFACT_PREVIEW_BOOTSTRAP_PATH.slice(1),
-        source: await artifactPreviewBootstrapResponse().text(),
+        fileName: path.slice(1),
+        source: await response().text(),
       });
     },
   };
 }
+
+const artifactPreviewBootstrapPlugin = (): Plugin =>
+  bootstrapPlugin(
+    "artifact-preview-bootstrap",
+    ARTIFACT_PREVIEW_BOOTSTRAP_PATH,
+    artifactPreviewBootstrapResponse,
+  );
+
+const htmlPreviewBootstrapPlugin = (): Plugin =>
+  bootstrapPlugin(
+    "html-preview-bootstrap",
+    HTML_PREVIEW_BOOTSTRAP_PATH,
+    htmlPreviewBootstrapResponse,
+  );

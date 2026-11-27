@@ -167,6 +167,7 @@ An additive optional capability keeps the current protocol version.
 | Optional capability | Meaning |
 |---|---|
 | `history.tool_details.v1` | The host reads `toolDetails: "on_demand"` in a session history read and serves `agent_runtime_load_session_tool_part`. See [reply size and compact history](#reply-size-and-compact-history). |
+| `session.html_previews.v1` | The host stores published session HTML previews in a workspace folder and serves `session_html_preview_read`. |
 
 Discovery returns `shell`, `appVersion`, `hostInstanceId`, `hostId`, `accessPolicy: "pairing"`, and supported protocol versions with capability names.
 `hostInstanceId` identifies the live host run; it is not a durable trust identity.
@@ -186,7 +187,7 @@ Negotiation sends this client hello:
   "clientKind": "mobile",
   "pairingCode": "123456",
   "requiredCapabilities": ["host.work.v1", "host.channel.v1", "agent.live.v1", "terminal.v3", "work.resources.v1"],
-  "optionalCapabilities": ["history.tool_details.v1"]
+  "optionalCapabilities": ["history.tool_details.v1", "session.html_previews.v1"]
 }
 ```
 

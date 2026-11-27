@@ -254,6 +254,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     azureAreaPathsList: taskClient.azureAreaPathsList.bind(taskClient),
     taskArtifactsList: taskClient.taskArtifactsList.bind(taskClient),
     taskArtifactRead: taskClient.taskArtifactRead.bind(taskClient),
+    sessionHtmlPreviewRead: taskClient.sessionHtmlPreviewRead.bind(taskClient),
     taskArtifactCreate: taskClient.taskArtifactCreate.bind(taskClient),
     taskArtifactRename: taskClient.taskArtifactRename.bind(taskClient),
     taskArtifactReplace: taskClient.taskArtifactReplace.bind(taskClient),

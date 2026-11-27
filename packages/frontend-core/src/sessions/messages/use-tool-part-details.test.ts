@@ -70,7 +70,7 @@ describe("useToolPartDetails", () => {
   test("reads cut details only while the row asks for them", async () => {
     const read = mock(async () => fullPart);
     const view = renderDetails(read, { meta: cutMeta, read: false });
-    expect(view.result.current).toMatchObject({ meta: cutMeta, error: null });
+    expect(view.result.current).toMatchObject({ meta: cutMeta, error: null, loading: false });
     expect(read).not.toHaveBeenCalled();
 
     view.rerender({ meta: cutMeta, read: true });
@@ -117,6 +117,23 @@ describe("useToolPartDetails", () => {
     act(() => view.result.current.retry());
     await waitFor(() => expect(view.result.current.meta.output).toBe("full output"));
     expect(view.result.current.error).toBeNull();
+    view.unmount();
+  });
+
+  test("reports loading only while the row waits for its read", async () => {
+    let resolveRead: ((part: AgentToolPart) => void) | undefined;
+    const read = mock(
+      () =>
+        new Promise<AgentToolPart>((resolve) => {
+          resolveRead = resolve;
+        }),
+    );
+    const view = renderDetails(read, { meta: cutMeta, read: true });
+    await waitFor(() => expect(read).toHaveBeenCalled());
+    expect(view.result.current.loading).toBe(true);
+    resolveRead?.(fullPart);
+    await waitFor(() => expect(view.result.current.meta.output).toBe("full output"));
+    expect(view.result.current.loading).toBe(false);
     view.unmount();
   });
 

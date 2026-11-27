@@ -127,6 +127,7 @@ type TestOdtMcpBridgeServiceInput = Omit<
   Parameters<typeof createOdtMcpBridgeService>[0],
   | "taskService"
   | "taskAssetReadService"
+  | "sessionHtmlPreviews"
   | "browserAgentTools"
   | "browserCallers"
   | "managedCallers"
@@ -136,6 +137,7 @@ type TestOdtMcpBridgeServiceInput = Omit<
   taskService: OdtTaskService;
   taskAssetReadService?: TaskAssetReadService;
   workspaceWorkflows?: Parameters<typeof createOdtMcpBridgeService>[0]["workspaceWorkflows"];
+  sessionHtmlPreviews?: Parameters<typeof createOdtMcpBridgeService>[0]["sessionHtmlPreviews"];
 };
 const createOdtMcpBridgeServiceForTest = (input: TestOdtMcpBridgeServiceInput) =>
   createOdtMcpBridgeService({
@@ -144,6 +146,9 @@ const createOdtMcpBridgeServiceForTest = (input: TestOdtMcpBridgeServiceInput) =
     taskAssetReadService: input.taskAssetReadService ?? {
       read: () => Effect.succeed(null),
       readBatch: () => Effect.succeed({ kind: "missing", assetIds: [] }),
+    },
+    sessionHtmlPreviews: input.sessionHtmlPreviews ?? {
+      publish: () => Effect.die(new Error("Task tools never publish HTML previews.")),
     },
     browserAgentTools: {
       runAgentTool: () => Effect.die(new Error("Task tools never run browser tools.")),

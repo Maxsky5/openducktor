@@ -63,6 +63,21 @@ const distanceFromBottom = (container: HTMLElement): number =>
 const isAtBottom = (container: HTMLElement): boolean =>
   !canScroll(container) || distanceFromBottom(container) < CHAT_SCROLL_EDGE_THRESHOLD_PX;
 
+const hasVisibleEmbeddedIframe = (container: HTMLElement): boolean => {
+  const iframes = container.getElementsByTagName("iframe");
+  if (iframes.length === 0) {
+    return false;
+  }
+  const containerRect = container.getBoundingClientRect();
+  for (const iframe of iframes) {
+    const rect = iframe.getBoundingClientRect();
+    if (rect.height > 0 && rect.bottom > containerRect.top && rect.top < containerRect.bottom) {
+      return true;
+    }
+  }
+  return false;
+};
+
 // An inner scroll container, such as a diff viewer, takes an upward scroll until it reaches its top.
 const hasInnerScrollAbove = (target: EventTarget | null, container: HTMLElement): boolean => {
   for (
@@ -104,6 +119,8 @@ export function useAgentChatScrollController({
   const lastPointerDownTargetRef = useRef<EventTarget | null>(null);
   const lastScrollTopRef = useRef(0);
   const wasScrollableRef = useRef(false);
+  const lastScrollHeightRef = useRef(0);
+  const lastClientHeightRef = useRef(0);
   const edgesRef = useRef<EdgeState>({ nearBottom: true, nearTop: true });
   const [edges, dispatchEdges] = useReducer(
     (_current: EdgeState, next: EdgeState) => next,
@@ -169,6 +186,8 @@ export function useAgentChatScrollController({
     }
     wasScrollableRef.current = scrollable;
     lastScrollTopRef.current = container.scrollTop;
+    lastScrollHeightRef.current = container.scrollHeight;
+    lastClientHeightRef.current = container.clientHeight;
     refreshEdges();
   }, [messagesContainerRef, pinnedRef, refreshEdges, setPinned]);
 
@@ -283,12 +302,23 @@ export function useAgentChatScrollController({
     const handleScroll = (event: Event) => {
       if (event.target !== container) return;
 
-      const hasDraggedUp = isPointerPressedRef.current && hasMovedUpFromBottom();
+      const movedUpFromBottom = hasMovedUpFromBottom();
+      const layoutUnchanged =
+        container.scrollHeight === lastScrollHeightRef.current &&
+        container.clientHeight === lastClientHeightRef.current;
+      // Wheel, trackpad, and touch scrolls over an opaque sandboxed iframe never dispatch DOM
+      // input events on the parent container (nor update :hover reliably across OOPIF boundaries),
+      // so the browser chains the upward scroll directly to the container while layout is steady.
+      const hasVisibleIframeScrollUp =
+        movedUpFromBottom && layoutUnchanged && hasVisibleEmbeddedIframe(container);
+      const hasDraggedUp = isPointerPressedRef.current && movedUpFromBottom;
       const isMovingDown = container.scrollTop > lastScrollTopRef.current;
       lastScrollTopRef.current = container.scrollTop;
+      lastScrollHeightRef.current = container.scrollHeight;
+      lastClientHeightRef.current = container.clientHeight;
 
       if (pinnedRef.current) {
-        if (hasDraggedUp) {
+        if (hasDraggedUp || hasVisibleIframeScrollUp) {
           setPinned(false, "user");
           refreshEdges();
           return;
@@ -302,6 +332,13 @@ export function useAgentChatScrollController({
         return;
       }
       refreshEdges();
+    };
+
+    const handleResize = () => {
+      syncScrollPosition();
+      if (pinnedRef.current && canPinRef.current) {
+        onPinnedResizeRef.current?.();
+      }
     };
 
     setPinned(pinnedRef.current);
@@ -325,12 +362,7 @@ export function useAgentChatScrollController({
     ownerDocument.addEventListener("touchcancel", handleDocumentTouchEnd, { passive: true });
 
     // The viewport shrinks without a scroll event when a panel such as the terminal opens.
-    const resizeObserver = new ResizeObserver(() => {
-      syncScrollPosition();
-      if (pinnedRef.current && canPinRef.current) {
-        onPinnedResizeRef.current?.();
-      }
-    });
+    const resizeObserver = new ResizeObserver(handleResize);
     resizeObserver.observe(container);
     resizeObserver.observe(content);
 

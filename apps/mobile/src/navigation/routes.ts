@@ -114,6 +114,23 @@ export const routes = {
         title,
       },
     }) as const,
+  /**
+   * A published HTML preview of the session screen under it, which keeps its transcript live.
+   * The route names the preview instead of carrying its HTML.
+   */
+  htmlPreview: (
+    identity: AgentSessionIdentity,
+    preview: {
+      partId: string;
+      callId: string;
+      title: string;
+      mode: "preview" | "source";
+    },
+  ) =>
+    ({
+      pathname: "/html-preview",
+      params: { ...toAgentSessionIdentity(identity), ...preview },
+    }) as const,
   /** The Changes view, opened on the scope and the diff of `focus` when given. */
   changes: (owner: WorkOwnerParams, focus?: ChangesFocus) =>
     ({

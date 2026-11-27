@@ -10,6 +10,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { AnswerPartRow, AssistantMessageRow } from "./rows/assistant-message-row";
 import { CompactionRow } from "./rows/compaction-row";
 import { ComputerUseRow } from "./rows/computer-use-row";
+import { HtmlPreviewRow } from "./rows/html-preview-row";
 import { ImageGenerationRow } from "./rows/image-generation-row";
 import { NoticeRow } from "./rows/notice-row";
 import { ReasoningPartRow, ReasoningRow } from "./rows/reasoning-row";
@@ -171,6 +172,8 @@ function MessageRow({
           rowKey={rowKey}
         />
       );
+    case "html_preview":
+      return <HtmlPreviewRow meta={row.meta} preview={row.preview} rowKey={rowKey} />;
     case "subagent":
       return <SubagentRow meta={row.meta} pendingCount={subagentPendingCount} />;
     case "notice":

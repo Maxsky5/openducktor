@@ -52,6 +52,7 @@ export const HOST_READ_COMMAND_NAMES = [
   "runtime_definitions_list",
   "runtime_restart_impact",
   "runtime_status",
+  "session_html_preview_read",
   "system_get_platform",
   "system_list_open_in_tools",
   "task_approval_context_get",

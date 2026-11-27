@@ -5,7 +5,14 @@ import { HostOperationError, type HostOperationErrorAggregate } from "../../effe
 import { parseJson } from "../../effect/json";
 
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
+const HTML_PREVIEW_MAX_BODY_BYTES = 2 * 1024 * 1024;
 const ARTIFACT_MAX_BODY_BYTES = 16 * 1024 * 1024;
+
+const maxBodyBytesForCommand = (command: string): number => {
+  if (command === "odt_set_task_artifact") return ARTIFACT_MAX_BODY_BYTES;
+  if (command === "odt_publish_html") return HTML_PREVIEW_MAX_BODY_BYTES;
+  return DEFAULT_MAX_BODY_BYTES;
+};
 
 const errorMessage = (cause: unknown): string =>
   cause instanceof Error && cause.message.trim() ? cause.message : String(cause);
@@ -15,8 +22,7 @@ export const readMcpBridgeRequestBody = (
   command: string,
 ): Effect.Effect<JSONType, HostOperationErrorAggregate> =>
   Effect.callback<JSONType, HostOperationErrorAggregate>((resume, signal) => {
-    const maxBodyBytes =
-      command === "odt_set_task_artifact" ? ARTIFACT_MAX_BODY_BYTES : DEFAULT_MAX_BODY_BYTES;
+    const maxBodyBytes = maxBodyBytesForCommand(command);
     let body = "";
     let receivedBytes = 0;
     let settled = false;

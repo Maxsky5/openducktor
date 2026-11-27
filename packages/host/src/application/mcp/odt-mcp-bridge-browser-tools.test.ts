@@ -59,6 +59,9 @@ const createBridge = ({
     taskAssetReadService: {
       readBatch: () => Effect.succeed({ kind: "missing", assetIds: [] }),
     },
+    sessionHtmlPreviews: {
+      publish: () => Effect.die(new Error("Browser tools never publish HTML previews.")),
+    },
     taskService: {
       ...createTaskServiceTestDouble({}),
     },

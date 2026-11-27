@@ -22,7 +22,7 @@ export function TranscriptFullViewSheet({
   view: TranscriptFullView | null;
   onClose: () => void;
 }): ReactElement | null {
-  if (!view || view.kind === "tool") return null;
+  if (!view || view.kind === "tool" || view.kind === "html_preview") return null;
   return (
     <InPlaceSheet visible title={view.title} onClose={onClose} scrolls={false}>
       {view.kind === "diff" ? (

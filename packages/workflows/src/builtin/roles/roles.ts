@@ -19,6 +19,9 @@ const taskTools = [
   "odt_update_task",
 ] as const satisfies readonly AgentToolName[];
 
+/** Publishing an HTML preview in the session works the same in every role. */
+const sessionTools = ["odt_publish_html"] as const satisfies readonly AgentToolName[];
+
 const systemPrompt = (role: BuiltinRoleId) => ({
   ...ROLE_SYSTEM_PROMPTS[role],
   ...ROLE_SYSTEM_PROMPT_METADATA[role],
@@ -31,7 +34,7 @@ export const BUILTIN_ROLES: readonly BuiltinAgentRole[] = deepFreeze([
   {
     id: "spec",
     label: "Spec",
-    tools: [...taskTools, ...ODT_BROWSER_TOOL_NAMES],
+    tools: [...taskTools, ...sessionTools, ...ODT_BROWSER_TOOL_NAMES],
     workspaceAccess: "read",
     runtimeScopes: ["workspace"],
     systemPrompt: systemPrompt("spec"),
@@ -40,7 +43,7 @@ export const BUILTIN_ROLES: readonly BuiltinAgentRole[] = deepFreeze([
   {
     id: "planner",
     label: "Planner",
-    tools: [...taskTools, ...ODT_BROWSER_TOOL_NAMES],
+    tools: [...taskTools, ...sessionTools, ...ODT_BROWSER_TOOL_NAMES],
     workspaceAccess: "read",
     runtimeScopes: ["workspace"],
     systemPrompt: systemPrompt("planner"),
@@ -51,6 +54,7 @@ export const BUILTIN_ROLES: readonly BuiltinAgentRole[] = deepFreeze([
     label: "Builder",
     tools: [
       ...taskTools,
+      ...sessionTools,
       "odt_apply_workflow_event",
       "odt_set_pull_request",
       ...ODT_BROWSER_TOOL_NAMES,
@@ -64,7 +68,7 @@ export const BUILTIN_ROLES: readonly BuiltinAgentRole[] = deepFreeze([
   {
     id: "qa",
     label: "QA",
-    tools: [...taskTools, ...ODT_BROWSER_TOOL_NAMES],
+    tools: [...taskTools, ...sessionTools, ...ODT_BROWSER_TOOL_NAMES],
     workspaceAccess: "read",
     runtimeScopes: ["task"],
     systemPrompt: systemPrompt("qa"),

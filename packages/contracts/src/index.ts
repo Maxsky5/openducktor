@@ -181,7 +181,10 @@ export * from "./remote-host-schemas";
 
 export * from "./task-artifact-schemas";
 export * from "./artifact-preview-schemas";
+export * from "./html-preview-policy";
+export * from "./preview-permissions-policy";
 export * from "./odt-artifact-schemas";
+export * from "./odt-html-preview-schemas";
 
 export * from "./session-startup-schemas";
 export * from "./workflow-client-schemas";

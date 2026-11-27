@@ -1228,6 +1228,7 @@ test("keeps preview bootstrap off the work listener and retains origin checks", 
         })
       ).status,
     ).toBe(403);
+    expect((await fetch(`${f.base}/html-preview-bootstrap`)).status).toBe(409);
     expect(invoke).not.toHaveBeenCalled();
   } finally {
     invoke.mockRestore();

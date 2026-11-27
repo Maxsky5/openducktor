@@ -17,6 +17,7 @@ import type { RuntimeSessionOwner } from "../../ports/workspace-session-store-po
 import type { BrowserCallerResolver } from "../browser/browser-caller-resolver";
 import type { ManagedCallerResolver } from "../agent-sessions/managed-caller-resolver";
 import type { BrowserService } from "../browser/browser-service-types";
+import type { SessionHtmlPreviewService } from "../html-previews/session-html-preview-service";
 import type { TaskAssetReadService } from "../task-assets/task-asset-read-service";
 import type { TaskService, TaskServiceError } from "../tasks/task-service";
 import type {
@@ -75,6 +76,7 @@ export type CreateOdtMcpToolContextInput = {
   browserAgentTools: Pick<BrowserService, "runAgentTool">;
   browserCallers: BrowserCallerResolver;
   managedCallers: ManagedCallerResolver;
+  sessionHtmlPreviews: Pick<SessionHtmlPreviewService, "publish">;
   taskAssetReadService: OdtMcpTaskAssetReadService;
   taskService: OdtMcpTaskService;
   workspaceSettingsService: OdtMcpWorkspaceSettingsService;
@@ -86,6 +88,7 @@ export const createOdtMcpToolContext = ({
   browserAgentTools,
   browserCallers,
   managedCallers,
+  sessionHtmlPreviews,
   taskAssetReadService,
   taskService,
   workspaceSettingsService,
@@ -127,6 +130,7 @@ export const createOdtMcpToolContext = ({
     browserAgentTools,
     browserCallers,
     managedCallers,
+    sessionHtmlPreviews,
     taskAssetReadService,
     taskService,
     workspaceSettingsService,

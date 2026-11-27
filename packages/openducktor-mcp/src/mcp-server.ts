@@ -378,6 +378,11 @@ const ODT_TOOL_DEFINITIONS = [
     description:
       "Save the pull request of a task by its number, after you create or update it. The host reads its details from the repository provider.",
   }),
+  defineOdtTool("odt_publish_html", {
+    description:
+      "Render an HTML page inline in this session. Local image paths are inlined. No outer card, border, banner title, or side padding. Content sets height; no vh or min-h-screen. Background matches chat; use var(--foreground), var(--muted-foreground), var(--card), var(--border), var(--primary), var(--radius). Prefer inline CSS/SVG over heavy CDNs; HTTPS assets work. No navigation, popups, or alert().",
+    execute: (store, input, meta) => store.publishHtml(input, meta),
+  }),
   ...ODT_BROWSER_TOOL_NAMES.map(defineBrowserTool),
 ] satisfies readonly OdtToolDefinition[];
 

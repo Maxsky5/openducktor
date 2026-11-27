@@ -1,5 +1,9 @@
 import type { AgentChatToolCallPresentation } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 import type { RuntimeKind } from "@openducktor/contracts";
+import {
+  type HtmlPreviewToolCall,
+  readHtmlPreviewToolCall,
+} from "@openducktor/frontend-core/sessions/messages/html-preview-tool";
 import { resolveInstructionsMessage } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-kind";
 import { AGENT_SESSION_SYSTEM_PROMPT_PREFIX } from "@openducktor/core";
 import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
@@ -36,6 +40,7 @@ export type MessageRowKind =
       operation: ArtifactToolPresentation["operation"];
     }
   | { kind: "tool"; meta: MetaOf<"tool">; displayName: string }
+  | { kind: "html_preview"; meta: MetaOf<"tool">; preview: HtmlPreviewToolCall }
   | { kind: "subagent"; meta: MetaOf<"subagent"> }
   | { kind: "notice"; meta: MetaOf<"session_notice"> }
   | { kind: "user" }
@@ -78,6 +83,8 @@ const resolveMessageRowKind = (
       // A blocked call shows one line and the reason of the policy, whatever its tool.
       if (meta.denial) return { kind: "tool", meta, displayName: presentation.displayName };
       if (meta.toolType === "computer_use") return { kind: "computer_use", meta };
+      const preview = readHtmlPreviewToolCall(meta);
+      if (preview) return { kind: "html_preview", meta, preview };
       if (presentation.kind === "task") {
         return { kind: "task_tool", meta, taskTool: presentation.taskTool };
       }

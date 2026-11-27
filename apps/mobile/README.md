@@ -276,7 +276,7 @@ Run these commands in `apps/mobile`. `bun run ios`, `bun run android`, and `bun 
 | Files and images | `expo-file-system`, `expo-document-picker`, `expo-image-picker`, `expo-image-manipulator`, `expo-image` |
 | Camera | `expo-camera` for the host QR code only |
 | Menus | `ActionMenu` in `src/ui/action-menu.tsx` |
-| Isolated pages | `react-native-webview` |
+| Isolated pages | `react-native-webview` v14. HTML previews authenticate wrapper messages with a per-mount random token instead of a native patch. See [HTML previews](../docs/html-previews.md). |
 | Icons | The Lucide font from `lucide-static`, `react-native-svg` for role icons and runtime marks |
 | Fonts | `@expo-google-fonts/space-grotesk`, `@expo-google-fonts/ibm-plex-mono` |
 | Haptics | `expo-haptics` |

@@ -16,6 +16,7 @@ import {
 import {
   ELECTRON_REMOTE_ACCESS_CHANNEL,
   ELECTRON_ARTIFACT_PREVIEW_URL,
+  ELECTRON_HTML_PREVIEW_URL,
   ELECTRON_HOST_CHANNEL_ENDPOINT_CHANNEL,
   ELECTRON_HOST_SELECT_CHANNEL,
   electronHostChannelEndpointSchema,
@@ -228,6 +229,7 @@ const notifications: OpenDucktorElectronNotificationApi = {
 const electronApi: OpenDucktorElectronApi = {
   getArtifactPreviewEnvironment: async () => ({
     bootstrapUrl: ELECTRON_ARTIFACT_PREVIEW_URL,
+    htmlPreviewBootstrapUrl: ELECTRON_HTML_PREVIEW_URL,
     scriptedHtml: chromiumArtifactPreviewSupport(process.versions.chrome),
   }),
   platform: appPlatformSchema.parse(process.platform),

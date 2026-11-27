@@ -1,7 +1,7 @@
 import {
   agentToolNameSchema,
-  isOdtBrowserToolName,
-  ODT_TASK_READ_TOOL_NAMES,
+  isOdtManagedOnlyToolName,
+  ODT_READ_ONLY_TOOL_NAMES,
   ODT_WORKFLOW_AGENT_TOOL_NAMES,
   type RuntimeDescriptor,
 } from "@openducktor/contracts";
@@ -12,14 +12,14 @@ export const ODT_WORKFLOW_TOOL_NAMES =
 
 type WorkflowToolAliasesByCanonical = RuntimeDescriptor["workflowToolAliasesByCanonical"];
 
-const ODT_WORKFLOW_READ_TOOL_SET = new Set<AgentToolName>(ODT_TASK_READ_TOOL_NAMES);
+const ODT_WORKFLOW_READ_ONLY_TOOL_SET = new Set<string>(ODT_READ_ONLY_TOOL_NAMES);
 
 /**
- * Tools that change task or workflow state. Browser tools act on web pages and never change
- * the task store, so they are not workflow mutations.
+ * Tools that change task or workflow state. Managed session tools (browser and HTML previews)
+ * never mutate task records, so they are not workflow mutations.
  */
 const ODT_WORKFLOW_MUTATION_TOOL_NAMES = ODT_WORKFLOW_TOOL_NAMES.filter(
-  (tool) => !ODT_WORKFLOW_READ_TOOL_SET.has(tool) && !isOdtBrowserToolName(tool),
+  (tool) => !ODT_WORKFLOW_READ_ONLY_TOOL_SET.has(tool) && !isOdtManagedOnlyToolName(tool),
 );
 const ODT_WORKFLOW_MUTATION_TOOL_SET = new Set<AgentToolName>(ODT_WORKFLOW_MUTATION_TOOL_NAMES);
 

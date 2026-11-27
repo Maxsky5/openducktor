@@ -78,6 +78,10 @@ import {
   taskMetadataPayloadSchema,
   taskStopImpactSchema,
   taskUpdatePatchSchema,
+  sessionHtmlPreviewReadRequestSchema,
+  sessionHtmlPreviewReadResultSchema,
+  type SessionHtmlPreviewReadRequest,
+  type SessionHtmlPreviewReadResult,
 } from "@openducktor/contracts";
 import { z } from "zod";
 import type { InvokeFn } from "./invoke-utils";
@@ -152,6 +156,16 @@ export class HostTaskClient {
       "task_artifact_read",
       artifactReadRequest.parse(input),
       artifactReadResultSchema,
+    );
+  }
+
+  sessionHtmlPreviewRead(
+    input: SessionHtmlPreviewReadRequest,
+  ): Promise<SessionHtmlPreviewReadResult> {
+    return this.invokeFn(
+      "session_html_preview_read",
+      sessionHtmlPreviewReadRequestSchema.parse(input),
+      sessionHtmlPreviewReadResultSchema,
     );
   }
 

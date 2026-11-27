@@ -80,6 +80,22 @@ describe("resolveAgentChatRuntimePresentation", () => {
     }
   });
 
+  test("presents a published HTML call as a regular row with a preview display name", () => {
+    const presentation = resolveAgentChatRuntimePresentation({
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      runtimeKind: "opencode",
+    });
+
+    expect(presentation.presentToolCall("openducktor_odt_publish_html")).toEqual({
+      kind: "regular",
+      displayName: "HTML Preview",
+    });
+    expect(presentation.presentToolCall("mcp__openducktor__odt_publish_html")).toEqual({
+      kind: "regular",
+      displayName: "HTML Preview",
+    });
+  });
+
   test("gives the live output of running commands only for a runtime that sends it", () => {
     const supports = (runtimeKind: "codex" | "claude" | "opencode") =>
       resolveAgentChatRuntimePresentation({

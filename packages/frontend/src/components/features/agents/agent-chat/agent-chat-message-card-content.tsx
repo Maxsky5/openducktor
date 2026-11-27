@@ -22,6 +22,8 @@ import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 import { toTranscriptAttachment } from "@openducktor/frontend-core/drafts/agent-chat-attachments";
 import { BrowserToolMessage } from "./agent-chat-browser-tool";
 import { ComputerUseToolMessage } from "./agent-chat-computer-use";
+import { AgentChatHtmlPreview } from "./agent-chat-html-preview";
+import { readHtmlPreviewToolCall } from "@openducktor/frontend-core/sessions/messages/html-preview-tool";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 import { roleLabel } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model";
 import {
@@ -464,6 +466,10 @@ const ToolMessageBody = ({
         timeLabel={timeLabel}
       />
     );
+  }
+  const preview = readHtmlPreviewToolCall(meta);
+  if (preview !== null) {
+    return <AgentChatHtmlPreview preview={preview} />;
   }
   if (!toolCallPresentation) {
     throw new Error(`Tool Call presentation is missing for ${meta.tool}.`);

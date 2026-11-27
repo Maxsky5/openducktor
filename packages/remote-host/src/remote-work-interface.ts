@@ -4,6 +4,7 @@ import {
   type HostCommandInputRecord,
   REMOTE_BASELINE_CAPABILITIES,
   REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY,
+  REMOTE_SESSION_HTML_PREVIEWS_CAPABILITY,
   REMOTE_CONNECTION_HEADER,
   REMOTE_MAX_REPLY_BYTES,
   REMOTE_PROTOCOL_VERSION,
@@ -108,10 +109,11 @@ const readNegotiationBody = async (request: Request): Promise<RemoteConnectionRe
   return { ...legacy.data, clientKind: "browser" };
 };
 
-/** The baseline capabilities and compact session history. */
+/** The baseline capabilities, compact session history, and host-stored HTML previews. */
 const HOST_CAPABILITIES: readonly string[] = [
   ...REMOTE_BASELINE_CAPABILITIES,
   REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY,
+  REMOTE_SESSION_HTML_PREVIEWS_CAPABILITY,
 ];
 
 const WORK_COMMANDS = new Set<string>(HOST_COMMAND_NAMES);

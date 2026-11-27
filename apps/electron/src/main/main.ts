@@ -114,10 +114,15 @@ import {
 import { disableElectronKeychainStorage } from "./electron-storage-policy";
 import { registerElectronTaskAssetProtocol } from "./electron-task-asset-protocol";
 import { registerElectronArtifactPreviewProtocol } from "./electron-artifact-preview-protocol";
+import {
+  configureElectronRendererPermissions,
+  registerElectronHtmlPreviewProtocol,
+} from "./electron-html-preview-protocol";
 import { createMainWindowIpcRegistrar } from "./electron-ipc-admission";
 import {
   ELECTRON_ARTIFACT_PREVIEW_PROTOCOL,
   ELECTRON_HOST_CHANNEL_ENDPOINT_CHANNEL,
+  ELECTRON_HTML_PREVIEW_PROTOCOL,
 } from "../shared/electron-bridge-contract";
 import { resolveElectronWindowChromeOptions } from "./electron-window-chrome";
 import { installApplicationMenu } from "./main-menu";
@@ -143,6 +148,10 @@ const {
 protocol.registerSchemesAsPrivileged([
   {
     scheme: ELECTRON_ARTIFACT_PREVIEW_PROTOCOL,
+    privileges: { standard: true, secure: true, bypassCSP: false, allowServiceWorkers: false },
+  },
+  {
+    scheme: ELECTRON_HTML_PREVIEW_PROTOCOL,
     privileges: { standard: true, secure: true, bypassCSP: false, allowServiceWorkers: false },
   },
   {
@@ -1086,6 +1095,7 @@ const configureElectronReadyRuntimeEffect = ({
         rendererSession,
         resolveElectronLoopbackCorsOrigin(rendererDevUrl),
       );
+      configureElectronRendererPermissions(rendererSession, rendererDevUrl);
       registerElectronLocalAttachmentPreviewProtocol({
         net,
         resolveLocalAttachmentPath: (filePath) =>
@@ -1097,6 +1107,7 @@ const configureElectronReadyRuntimeEffect = ({
         session: rendererSession,
       });
       registerElectronArtifactPreviewProtocol(rendererSession);
+      registerElectronHtmlPreviewProtocol(rendererSession);
       installApplicationMenu({
         isDevelopment,
         appName: app.name || APPLICATION_NAME,

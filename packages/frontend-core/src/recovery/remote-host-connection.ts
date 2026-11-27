@@ -4,6 +4,7 @@ import {
   REMOTE_BASELINE_CAPABILITIES,
   REMOTE_PROTOCOL_VERSION,
   REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY,
+  REMOTE_SESSION_HTML_PREVIEWS_CAPABILITY,
   type AgentSessionLiveAttachInput,
   type HostEventEnvelope,
   type RemoteClientKind,
@@ -66,7 +67,10 @@ const remoteClientHello = (version: string) => ({
   supportedProtocolVersions: [REMOTE_PROTOCOL_VERSION],
   requiredCapabilities: [...REMOTE_BASELINE_CAPABILITIES],
   // Without compact history, the client reads full history, as an older host rejects the request.
-  optionalCapabilities: [REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY],
+  optionalCapabilities: [
+    REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY,
+    REMOTE_SESSION_HTML_PREVIEWS_CAPABILITY,
+  ],
 });
 
 /**
