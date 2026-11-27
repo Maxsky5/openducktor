@@ -242,4 +242,31 @@ describe("AgentChatHtmlPreview", () => {
     const dialog = await screen.findByRole("dialog", { name: "Weekly report" });
     expect(dialog.textContent).toContain("<h1>Ready</h1>");
   });
+
+  test("mounts the bootstrap iframe in parallel with the host read and keeps it once HTML arrives", async () => {
+    let resolveRead: ((value: SessionHtmlPreviewReadResult) => void) | null = null;
+    renderPreview({
+      readPreview: () =>
+        new Promise<SessionHtmlPreviewReadResult>((resolve) => {
+          resolveRead = resolve;
+        }),
+    });
+
+    await waitFor(() => {
+      expect(document.querySelector("iframe")).not.toBeNull();
+    });
+    const prewarmedFrame = document.querySelector("iframe");
+    expect(screen.queryByRole("button", { name: "Open full screen" })).toBeNull();
+
+    await act(async () => {
+      resolveRead?.({
+        previewId: PREVIEW_ID,
+        html: "<h1>Parallel</h1>",
+        byteSize: 17,
+      });
+    });
+
+    await screen.findByRole("button", { name: "Open full screen" });
+    expect(document.querySelector("iframe")).toBe(prewarmedFrame);
+  });
 });

@@ -86,11 +86,9 @@ function HtmlPreviewRowContent({
   if (inView && !hasMounted) {
     setMountedPreviewId(previewId);
   }
-  // Only read stored HTML from the host once the row approaches the viewport. TanStack Query keeps
-  // the immutable preview cached after the first read so reopening or recycling back is instant.
-  const { html, loading, error, retry } = useSessionHtmlPreview(previewId, undefined, {
-    enabled: shouldMount,
-  });
+  // FlashList already virtualizes rows to its draw buffer around the viewport. Start reading the
+  // immutable HTML immediately on mount so it is cached before the WebView mounts on viewport entry.
+  const { html, loading, error, retry } = useSessionHtmlPreview(previewId);
   // Keep initialHeight stable per previewId so height updates never re-render the memoized
   // HtmlPreviewViewer (on Android, re-rendering WebView with an inline HTML source reloads it).
   const initialHeight = useMemo(() => readMobilePreviewHeight(previewId), [previewId]);

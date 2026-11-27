@@ -13,6 +13,10 @@ export type HtmlPreviewScroll = "inline" | "full";
 const webViewMessageSchema = z.discriminatedUnion("type", [
   z.strictObject({
     token: z.string().min(1),
+    type: z.literal("displayed"),
+  }),
+  z.strictObject({
+    token: z.string().min(1),
     type: z.literal("resize"),
     height: z.number().finite().positive(),
   }),
@@ -28,6 +32,7 @@ const webViewMessageSchema = z.discriminatedUnion("type", [
 ]);
 
 export type HtmlPreviewWebViewMessage =
+  | { type: "displayed" }
   | { type: "resize"; height: number }
   | { type: "open-link"; url: string }
   | { type: "failed" };
@@ -51,6 +56,9 @@ export const parseHtmlPreviewWebViewMessage = (
   }
   const parsed = webViewMessageSchema.safeParse(raw);
   if (!parsed.success || parsed.data.token !== expectedToken) return null;
+  if (parsed.data.type === "displayed") {
+    return { type: "displayed" };
+  }
   if (parsed.data.type === "resize") {
     return { type: "resize", height: parsed.data.height };
   }
@@ -154,7 +162,9 @@ iframe{display:block;width:100%;height:100%;border:0}
     controller.setTheme(nextCss);
   };
   controller.setTheme(${scriptJson(themeCss)});
-  controller.render(html);
+  if (controller.render(html)) {
+    postToApp({ type: "displayed" });
+  }
 })();
 </script></body></html>`;
 };

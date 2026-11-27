@@ -71,7 +71,7 @@ Desktop and the browser client use `HtmlPreviewFrame` backed by the `/html-previ
 - `client/_headers` sets the response headers for the static client.
 - Electron serves the bootstrap through the `odt-html-preview` secure protocol. `configureElectronRendererPermissions` fails closed on the renderer session: only the main frame of the trusted app-shell origin can pass permission requests or checks, while subframes, preview origins, `about:`, `blob:`, `data:`, `"null"`, empty URLs, and device permissions fail.
 
-The bootstrap contains no session data. The app sends the page document through a private `MessageChannel` after the bootstrap reports ready. When CSP blocks a `frame-src` navigation, the bootstrap compares `event.documentURI` against `document.URL`, the fragment-stripped URL (`document.URL.split("#", 1)[0]`), and non-HTTP(S) scheme forms (matching Electron's custom protocol). A page that navigates away repeatedly stops at `HTML_PREVIEW_RESTORE_LIMITS` and notifies the app.
+The bootstrap contains no session data and sends a short `Cache-Control` header (`public, max-age=300`) so repeat previews reuse the cached shell. The app transfers a private `MessageChannel` on bootstrap load, sending the page document in the init message when ready or over the channel once the host read finishes. When CSP blocks a `frame-src` navigation, the bootstrap compares `event.documentURI` against `document.URL`, the fragment-stripped URL (`document.URL.split("#", 1)[0]`), and non-HTTP(S) scheme forms (matching Electron's custom protocol). A page that navigates away repeatedly stops at `HTML_PREVIEW_RESTORE_LIMITS` and notifies the app.
 
 ## Mobile
 

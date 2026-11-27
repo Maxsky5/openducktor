@@ -22,7 +22,7 @@
 
 /html-preview-bootstrap
   ! cache-control
-  cache-control: no-store
+  cache-control: public, max-age=300
   ! content-security-policy
   content-security-policy: default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' https: data: blob:; style-src 'unsafe-inline' https: data: blob:; img-src https: data: blob:; font-src https: data:; media-src https: data: blob:; connect-src https:; worker-src blob:; frame-src 'none'; object-src 'none'; base-uri about: https:; form-action 'none'; sandbox allow-scripts allow-forms
   ! content-type

@@ -17,7 +17,7 @@ const headers = {
   "Permissions-Policy": ISOLATED_PREVIEW_PERMISSIONS_POLICY,
   "Referrer-Policy": "no-referrer",
   "X-Content-Type-Options": "nosniff",
-  "Cache-Control": "no-store",
+  "Cache-Control": "public, max-age=300",
 };
 
 const controllerScript = buildHtmlPreviewHostControllerScript({
@@ -69,6 +69,12 @@ window.__odtApplyHtmlPreviewSurface = (surface) => {
       onFail: () => port.postMessage({ type: "failed", generation }),
       getFrameBackground: () => window.__odtHtmlPreviewBackground,
     });
+    const render = (nextHtml) => {
+      if (!controller.render(nextHtml)) return;
+      // The trusted wrapper mounted the page. An external asset can stay pending or fail inside
+      // it, and must not hold back the app's preview start state.
+      port.postMessage({ type: "displayed", generation });
+    };
     const stop = () => { controller.stop(); port.close(); };
     addEventListener("pagehide", stop, { once: true });
     port.onmessage = ({ data }) => {
@@ -81,12 +87,13 @@ window.__odtApplyHtmlPreviewSurface = (surface) => {
         return;
       }
       if (data.type !== "render") return;
-      if (!controller.render(data.html)) return;
-      // The trusted wrapper mounted the page. An external asset can stay pending or fail inside
-      // it, and must not hold back the app's preview start state.
-      port.postMessage({ type: "displayed", generation });
+      render(data.html);
     };
-    port.postMessage({ type: "ready", generation });
+    if (typeof event.data.html === "string") {
+      render(event.data.html);
+    } else {
+      port.postMessage({ type: "ready", generation });
+    }
   };
   addEventListener("message", start);
 })();

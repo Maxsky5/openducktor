@@ -170,10 +170,19 @@ describe("HTML preview wrapper in a document", () => {
     expect(preview.frames()).toHaveLength(0);
     expect(preview.error.hidden).toBe(false);
     expect(preview.error.textContent).toContain("full screen");
-    expect(preview.postedToApp).toEqual([{ token: TEST_TOKEN, type: "failed" }]);
+    expect(preview.postedToApp).toEqual([
+      { token: TEST_TOKEN, type: "displayed" },
+      { token: TEST_TOKEN, type: "failed" },
+    ]);
   });
 
   test("accepts only bridge messages carrying the exact per-mount capability token", () => {
+    expect(
+      parseHtmlPreviewWebViewMessage(
+        JSON.stringify({ token: TEST_TOKEN, type: "displayed" }),
+        TEST_TOKEN,
+      ),
+    ).toEqual({ type: "displayed" });
     expect(
       parseHtmlPreviewWebViewMessage(
         JSON.stringify({ token: TEST_TOKEN, type: "resize", height: 420 }),
@@ -268,7 +277,7 @@ describe("HTML preview wrapper in a document", () => {
         type: HTML_PREVIEW_OPEN_LINK_MESSAGE,
         url: "javascript:alert(1)",
       });
-      expect(preview.postedToApp).toEqual([]);
+      expect(preview.postedToApp).toEqual([{ token: TEST_TOKEN, type: "displayed" }]);
 
       // Valid resize height is clamped to the mobile inline cap; user-activated https links are forwarded with token.
       dispatchFrom(frameWindow, {
@@ -280,6 +289,7 @@ describe("HTML preview wrapper in a document", () => {
         url: "https://example.com/report",
       });
       expect(preview.postedToApp).toEqual([
+        { token: TEST_TOKEN, type: "displayed" },
         { token: TEST_TOKEN, type: "resize", height: HTML_PREVIEW_MOBILE_MAX_INLINE_HEIGHT },
         { token: TEST_TOKEN, type: "open-link", url: "https://example.com/report" },
       ]);

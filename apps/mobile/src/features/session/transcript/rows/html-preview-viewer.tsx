@@ -264,7 +264,12 @@ export const HtmlPreviewViewer = memo(function HtmlPreviewViewer({
       const latest = latestRef.current;
       const message = parseHtmlPreviewWebViewMessage(event.nativeEvent.data, latest.messageToken);
       if (message === null) return;
+      if (message.type === "displayed") {
+        setStarted(true);
+        return;
+      }
       if (message.type === "resize") {
+        setStarted(true);
         if (latest.scroll !== "inline" || !latest.onHeightChange) return;
         const height = governor.accept(message.height);
         if (height !== null) latest.onHeightChange(height);

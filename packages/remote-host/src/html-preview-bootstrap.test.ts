@@ -21,7 +21,7 @@ describe("HTML preview bootstrap", () => {
     expect(response.headers.get("permissions-policy")).toContain("geolocation=()");
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("cache-control")).toBe("public, max-age=300");
   });
 
   test("renders one sandboxed page and restores it after navigation", async () => {
@@ -30,6 +30,7 @@ describe("HTML preview bootstrap", () => {
     expect(html).toContain(`frame.sandbox = "${HTML_PREVIEW_SANDBOX}"`);
     expect(html).toContain("frame.srcdoc = html");
     expect(html).toContain('"odt-html-preview-init"');
+    expect(html).toContain('typeof event.data.html === "string"');
     expect(html).toContain("previous.replaceWith(next)");
     expect(html).toContain('event.effectiveDirective === "frame-src"');
     expect(html).toContain('const wrapperUrl = document.URL.split("#", 1)[0]');

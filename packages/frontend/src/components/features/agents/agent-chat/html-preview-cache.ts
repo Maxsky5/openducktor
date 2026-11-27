@@ -4,7 +4,7 @@ import {
   HTML_PREVIEW_MIN_CONTENT_HEIGHT,
 } from "@openducktor/contracts";
 
-export const INITIAL_FIT_CONTENT_HEIGHT = 320;
+const INITIAL_FIT_CONTENT_HEIGHT = 320;
 const MEASURED_HEIGHT_LIMIT = 200;
 
 // Remembers the last measured height per preview ID so remounting while scrolling never jumps.

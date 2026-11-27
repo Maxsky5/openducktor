@@ -10,6 +10,7 @@ enableReactActEnvironment();
 type FakeMessage = {
   type: string;
   generation?: string;
+  html?: string;
   height?: number;
   css?: string;
   surface?: { appearance: string; background: string };
@@ -145,19 +146,18 @@ describe("HtmlPreviewFrame", () => {
       const init = posted.find(({ message }) => message.type === "odt-html-preview-init");
       const generation = init?.message.generation;
       if (!generation) throw new Error("Missing the preview generation");
+      expect(init.message.html).toBe("<p>Hello</p>");
       const channel = channels[0];
       if (!channel) throw new Error("Missing the preview channel");
 
       await act(async () => {
-        channel.port1.onmessage?.(
-          new MessageEvent("message", { data: { type: "ready", generation } }),
-        );
         channel.port1.onmessage?.(
           new MessageEvent("message", { data: { type: "displayed", generation } }),
         );
       });
 
       expect(frame.style.visibility).toBe("visible");
+      expect(channel.port1.posted).toEqual([]);
       const container = frame.parentElement;
       expect(container?.style.height).toBe("320px");
       commits = 0;
@@ -324,6 +324,66 @@ describe("HtmlPreviewFrame", () => {
       const button = view.getByRole("button", { name: "View source" });
       button.click();
       expect(onViewSource).toHaveBeenCalledTimes(1);
+    } finally {
+      view.unmount();
+      restoreIframe();
+    }
+  });
+
+  test("pre-warms the bootstrap iframe while HTML is null and renders on the same iframe once HTML arrives", async () => {
+    const channels = installTestMessageChannel();
+    const restoreIframe = enableIframeLoading();
+    const posted: Array<{ message: FakeMessage }> = [];
+
+    const baseProps = {
+      name: "Pre-warmed preview",
+      bootstrapUrl: "about:blank",
+      failureMessage: "Failed",
+      fitContent: true,
+      contentKey: "prewarm-key",
+      themeCss: ":root{color-scheme:dark}",
+      bootstrapSurface: { appearance: "dark" as const, background: "rgb(11, 11, 15)" },
+    };
+
+    const view = render(createElement(HtmlPreviewFrame, { ...baseProps, html: null }));
+
+    try {
+      const frame = view.container.querySelector("iframe");
+      if (!frame) throw new Error("Missing pre-warmed iframe");
+      Object.defineProperty(frame, "contentWindow", {
+        configurable: true,
+        value: { postMessage: (message: FakeMessage) => posted.push({ message }) },
+      });
+
+      act(() => {
+        frame.dispatchEvent(new Event("load"));
+      });
+      const init = posted.find(({ message }) => message.type === "odt-html-preview-init");
+      const generation = init?.message.generation;
+      if (!generation) throw new Error("Missing generation");
+      expect(init.message.html).toBeUndefined();
+      const channel = channels[0];
+      if (!channel) throw new Error("Missing channel");
+
+      await act(async () => {
+        channel.port1.onmessage?.(
+          new MessageEvent("message", { data: { type: "ready", generation } }),
+        );
+      });
+      expect(channel.port1.posted).toEqual([]);
+
+      view.rerender(createElement(HtmlPreviewFrame, { ...baseProps, html: "<p>Arrived</p>" }));
+      expect(view.container.querySelector("iframe")).toBe(frame);
+      expect(channel.port1.posted).toEqual([
+        { type: "render", generation, html: "<p>Arrived</p>" },
+      ]);
+
+      await act(async () => {
+        channel.port1.onmessage?.(
+          new MessageEvent("message", { data: { type: "displayed", generation } }),
+        );
+      });
+      expect(frame.style.visibility).toBe("visible");
     } finally {
       view.unmount();
       restoreIframe();
