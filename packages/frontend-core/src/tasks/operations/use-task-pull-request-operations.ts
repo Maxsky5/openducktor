@@ -283,8 +283,10 @@ export function useTaskPullRequestOperations({
                   tracking,
                 ),
             }),
-          (attempt) => {
-            if (removeWorktree) refreshTaskWorktreeAfterOperation(queryClient, feedback, attempt);
+          {
+            onSettled: (attempt) => {
+              if (removeWorktree) refreshTaskWorktreeAfterOperation(queryClient, feedback, attempt);
+            },
           },
         );
       } catch {

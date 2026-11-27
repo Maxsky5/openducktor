@@ -87,8 +87,8 @@ function BackgroundToast({ attempt }: { attempt: BackgroundAttempt }) {
           {attempt.phase === "unconfirmed" ? (
             <p className="text-warning-surface-foreground">{attempt.message}</p>
           ) : null}
-          {attempt.phase !== "running" && attempt.phase !== "failed" && attempt.archiveDraft ? (
-            <CopyDraft attempt={attempt} getArchiveDraft={backgroundOperations.getArchiveDraft} />
+          {attempt.phase !== "running" && attempt.phase !== "failed" ? (
+            <CopyDrafts attempt={attempt} getArchiveDraft={backgroundOperations.getArchiveDraft} />
           ) : null}
         </ToastResizeContent>
       ),
@@ -218,9 +218,7 @@ function BackgroundResults({
             <p className="break-words text-destructive">{showing.message}</p>
           ) : null}
           {progress?.phase === "failed" ? <p>{progress.failure.nextAction}</p> : null}
-          {showing.archiveDraft ? (
-            <CopyDraft attempt={showing} getArchiveDraft={backgroundOperations.getArchiveDraft} />
-          ) : null}
+          <CopyDrafts attempt={showing} getArchiveDraft={backgroundOperations.getArchiveDraft} />
         </div>
         <DialogFooter>
           {canFinish ? (
@@ -241,7 +239,7 @@ function BackgroundResults({
   );
 }
 
-function CopyDraft({
+function CopyDrafts({
   attempt,
   getArchiveDraft,
 }: {
@@ -252,19 +250,29 @@ function CopyDraft({
     successMessage: "Draft copied",
     copyFailedMessage: "Could not copy the draft",
   });
-  const { workspace, target, archiveDraft } = attempt;
-  if (target.kind !== "chat" || !archiveDraft) return null;
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={() => {
-        const draft = getArchiveDraft(workspace.workspaceId, target.sessionId, archiveDraft.fileId);
-        if (draft) void copyToClipboard(draft.contents);
-        else toast.info("This chat has no retained draft for this file");
-      }}
-    >
-      Copy retained draft
-    </Button>
-  );
+  const { workspace, target, archiveDraftFileIds } = attempt;
+  if (target.kind !== "chat" || !archiveDraftFileIds) return null;
+  return archiveDraftFileIds.map((fileId) => {
+    const read = () => getArchiveDraft(workspace.workspaceId, target.sessionId, fileId);
+    const draft = read();
+    if (!draft) return null;
+    return (
+      <Button
+        key={fileId}
+        variant="outline"
+        size="sm"
+        className="max-w-full"
+        onClick={() => {
+          const current = read();
+          if (current) void copyToClipboard(current.contents);
+          else toast.info("This chat has no retained draft for this file");
+        }}
+      >
+        <span className="truncate">
+          Copy retained draft
+          {archiveDraftFileIds.length > 1 ? ` for ${draft.baseline.relativePath}` : ""}
+        </span>
+      </Button>
+    );
+  });
 }

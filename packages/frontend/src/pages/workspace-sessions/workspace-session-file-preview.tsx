@@ -1,5 +1,6 @@
 import type { ArchiveFileDraft } from "@openducktor/frontend-core/operations/background-operation-store";
 import type { WorkspaceSessionRefInput } from "@openducktor/contracts";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { type Ref, useCallback, useImperativeHandle, useLayoutEffect, useRef } from "react";
 import {
   TaskExecutionSelectedFilePreview,
@@ -50,6 +51,7 @@ export function WorkspaceSessionFilePreview({
       isWorktree,
       onSafeToLeave,
       archiveDraftRef,
+      workspaceSession,
     });
   const { rootBranch, worktreeBranch, previewBranch, refreshBranch } = branch;
   useImperativeHandle(
@@ -129,18 +131,28 @@ function useWorkspaceSessionFilePreview({
   isWorktree,
   onSafeToLeave,
   archiveDraftRef,
+  workspaceSession,
 }: {
   initialFile: TaskExecutionSelectedFile | null;
   onSelectionChange: (file: TaskExecutionSelectedFile | null) => void;
   isWorktree: boolean;
   onSafeToLeave: (() => void) | undefined;
   archiveDraftRef: { current: ArchiveFileDraft | null };
+  workspaceSession: WorkspaceSessionRefInput;
 }) {
+  const { backgroundOperations } = useClientConnection();
+  const { workspaceId, sessionId } = workspaceSession;
+  const discardArchiveDraft = useCallback(
+    (draft: ArchiveFileDraft) =>
+      backgroundOperations.replaceArchiveDraft(workspaceId, sessionId, draft),
+    [backgroundOperations, sessionId, workspaceId],
+  );
   const { preview, onDiscard } = useWorkspaceSessionPreview(
     initialFile,
     onSelectionChange,
     isWorktree,
     archiveDraftRef,
+    discardArchiveDraft,
   );
   const canLeaveRef = useRef(true);
   // Discard can finish a file switch too; only a close may release a removed chat.

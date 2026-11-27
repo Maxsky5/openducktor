@@ -286,11 +286,10 @@ export const useTaskExecutionFileEditor = ({
   const queryClient = useQueryClient();
   const mutation = useMutation(workspaceTextFileWriteMutationOptions(queryClient));
   const [state, dispatch] = useReducer(editorStateReducer, INITIAL_EDITOR_STATE);
-  const readRetainedDraft = useRetainedArchiveFileDraft(
+  const { readRetainedDraft, syncArchiveDraft } = useRetainedArchiveFileDraft(
     queryClient,
     workspaceSession,
     archiveDraftRef,
-    state,
   );
   const draftRef = useRef("");
   const saveInFlightRef = useRef(false);
@@ -305,7 +304,8 @@ export const useTaskExecutionFileEditor = ({
 
   useLayoutEffect(() => {
     stateRef.current = state;
-  }, [state]);
+    syncArchiveDraft(state);
+  }, [state, syncArchiveDraft]);
 
   useLayoutEffect(() => {
     branchRef.current = branch;
@@ -366,12 +366,13 @@ export const useTaskExecutionFileEditor = ({
       if (!state.session || state.session.id !== selectedFileId) return;
       draftRef.current = contents;
       const isDirty = contents !== state.session.baseline.contents;
+      syncArchiveDraft({ session: state.session, draftContents: contents, isDirty });
       dispatch({ type: "edit", isDirty, contents });
       if (!saveInFlightRef.current) {
         onLeavePolicyChange(isDirty ? "confirm" : "allow");
       }
     },
-    [onLeavePolicyChange, selectedFileId, state.session],
+    [onLeavePolicyChange, selectedFileId, state.session, syncArchiveDraft],
   );
   const onItemEditChange = useCallback(
     (item: CodeViewItem<undefined>, file: FileContents) => {

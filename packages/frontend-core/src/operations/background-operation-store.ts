@@ -27,16 +27,23 @@ type Origin = {
 
 type Phase = "running" | "succeeded" | "failed" | "unconfirmed";
 
-export type BackgroundAttempt = Origin & {
+export type BackgroundAttempt = Omit<Origin, "archiveDraft"> & {
   id: string;
   phase: Phase;
   progress?: BackgroundOperationSnapshot;
   message?: string;
   failureDismissed?: boolean;
   toastDismissed?: boolean;
+  archiveDraftFileIds?: readonly string[];
 };
 
 export type BackgroundOperationStore = ReturnType<typeof createBackgroundOperationStore>;
+
+type OperationHandlers = {
+  onSettled?: (attempt: BackgroundAttempt) => void;
+  /** Runs for validated snapshots, including terminal evidence after a reply. */
+  onProgress?: (progress: BackgroundOperationSnapshot) => void;
+};
 
 const SUCCESS_DURATION = 10_000;
 const targetKey = ({ workspace, target }: Pick<Origin, "workspace" | "target">) =>
@@ -61,10 +68,10 @@ export const createBackgroundOperationStore = (
   host: HostConnection,
   onSettled?: (attempt: BackgroundAttempt) => void,
 ) => {
-  type Entry = {
+  type Entry = OperationHandlers & {
     attempt: BackgroundAttempt;
+    consentedArchiveDraft?: ArchiveFileDraft;
     hostInstanceId?: string;
-    onSettled?: (attempt: BackgroundAttempt) => void;
   };
   const entries = new Map<string, Entry>();
   const archiveDrafts = new Map<string, ArchiveFileDraft>();
@@ -86,6 +93,17 @@ export const createBackgroundOperationStore = (
     expiry.delete(id);
     publish();
   };
+  const expireSuccess = ({ id, phase, archiveDraftFileIds, toastDismissed }: BackgroundAttempt) => {
+    if (
+      phase === "succeeded" &&
+      (toastDismissed || !archiveDraftFileIds?.length) &&
+      !expiry.has(id)
+    )
+      expiry.set(
+        id,
+        setTimeout(() => remove(id), SUCCESS_DURATION),
+      );
+  };
   const settle = (entry: Entry, phase: Exclude<Phase, "running">, message?: string) => {
     if (disposed || entry.attempt.phase === "failed" || entry.attempt.phase === "succeeded") return;
     const { id } = entry.attempt;
@@ -98,24 +116,21 @@ export const createBackgroundOperationStore = (
       toastDismissed: false,
     };
     if (message !== undefined) entry.attempt.message = message;
-    const { archiveDraft, workspace, target } = attempt;
-    if (phase === "succeeded") {
-      if (archiveDraft && target.kind === "chat") {
-        const key = draftKey(workspace.workspaceId, target.sessionId, archiveDraft.fileId);
-        const retained = archiveDrafts.get(key);
-        if (!retained || retained === archiveDraft) {
-          archiveDrafts.delete(key);
-          delete entry.attempt.archiveDraft;
-        } else {
-          entry.attempt.archiveDraft = retained;
-        }
+    const { archiveDraftFileIds, workspace, target } = attempt;
+    if (target.kind === "chat" && archiveDraftFileIds) {
+      const consented = entry.consentedArchiveDraft;
+      if (phase === "succeeded" && consented) {
+        const key = draftKey(workspace.workspaceId, target.sessionId, consented.fileId);
+        if (archiveDrafts.get(key) === consented) archiveDrafts.delete(key);
       }
-      if (!entry.attempt.archiveDraft)
-        expiry.set(
-          id,
-          setTimeout(() => remove(id), SUCCESS_DURATION),
-        );
+      const retained = archiveDraftFileIds.filter((fileId) =>
+        archiveDrafts.has(draftKey(workspace.workspaceId, target.sessionId, fileId)),
+      );
+      if (retained.length > 0) entry.attempt.archiveDraftFileIds = retained;
+      else delete entry.attempt.archiveDraftFileIds;
     }
+    if (phase !== "unconfirmed") delete entry.consentedArchiveDraft;
+    expireSuccess(entry.attempt);
     publish();
     onSettled?.(entry.attempt);
     entry.onSettled?.(entry.attempt);
@@ -144,6 +159,7 @@ export const createBackgroundOperationStore = (
         progress.phase,
         progress.phase === "failed" ? progress.failure.message : undefined,
       );
+    entry.onProgress?.(progress);
   };
   const subscribeBeforeDispatch = () => {
     subscription ??= host
@@ -164,16 +180,55 @@ export const createBackgroundOperationStore = (
   return {
     getArchiveDraft: (workspaceId: string, sessionId: string, fileId: string) =>
       archiveDrafts.get(draftKey(workspaceId, sessionId, fileId)),
+    /** An unfinished archive can retain a file even when it started with a clean editor. */
     replaceArchiveDraft(
       workspaceId: string,
       sessionId: string,
-      previous: ArchiveFileDraft,
+      previous: ArchiveFileDraft | null,
       next?: ArchiveFileDraft,
     ) {
-      const key = draftKey(workspaceId, sessionId, previous.fileId);
-      if (archiveDrafts.get(key) !== previous) return;
-      if (next) archiveDrafts.set(key, next);
-      else archiveDrafts.delete(key);
+      const fileId = previous?.fileId ?? next?.fileId;
+      if (!fileId || disposed) return;
+      const key = draftKey(workspaceId, sessionId, fileId);
+      const retained = archiveDrafts.get(key);
+      if (retained && retained !== previous) return;
+      if (!next) {
+        if (!archiveDrafts.delete(key)) return;
+        for (const entry of entries.values()) {
+          const { attempt } = entry;
+          const { archiveDraftFileIds } = attempt;
+          if (
+            attempt.workspace.workspaceId !== workspaceId ||
+            attempt.target.kind !== "chat" ||
+            attempt.target.sessionId !== sessionId ||
+            !archiveDraftFileIds
+          )
+            continue;
+          const remaining = archiveDraftFileIds.filter((id) => id !== fileId);
+          if (remaining.length === archiveDraftFileIds.length) continue;
+          entry.attempt = { ...attempt, archiveDraftFileIds: remaining };
+          expireSuccess(entry.attempt);
+        }
+        publish();
+        return;
+      }
+      const pending = [...entries.values()].filter(
+        ({ attempt }) =>
+          (attempt.phase === "running" || attempt.phase === "unconfirmed") &&
+          attempt.workspace.workspaceId === workspaceId &&
+          attempt.target.kind === "chat" &&
+          attempt.target.sessionId === sessionId,
+      );
+      if (!retained && pending.length === 0) return;
+      archiveDrafts.set(key, next);
+      let changed = false;
+      for (const entry of pending) {
+        const fileIds = entry.attempt.archiveDraftFileIds ?? [];
+        if (fileIds.includes(fileId)) continue;
+        entry.attempt = { ...entry.attempt, archiveDraftFileIds: [...fileIds, fileId] };
+        changed = true;
+      }
+      if (changed) publish();
     },
     isRunning: (workspace: WorkspaceRef, target: BackgroundOperationTarget) =>
       running.has(targetKey({ workspace, target })),
@@ -187,27 +242,27 @@ export const createBackgroundOperationStore = (
     async run<T>(
       origin: Origin,
       invoke: (tracking: BackgroundOperationInvocation) => Promise<T>,
-      onSettled?: Entry["onSettled"],
+      handlers?: OperationHandlers,
     ): Promise<T> {
       if (disposed) throw new Error("The connection has closed.");
       const key = targetKey(origin);
       if (running.has(key)) throw new Error("An operation is running for this target.");
       const id = crypto.randomUUID();
       const expectedHostEpoch = host.backgroundOperationHostEpoch?.();
+      const { archiveDraft: consented, ...displayOrigin } = origin;
       const entry: Entry = {
-        attempt: { ...origin, id, phase: "running" },
+        attempt: { ...displayOrigin, id, phase: "running" },
         ...(expectedHostEpoch && { hostInstanceId: expectedHostEpoch }),
-        ...(onSettled && { onSettled }),
+        ...handlers,
       };
-      if (origin.archiveDraft && origin.target.kind === "chat")
+      if (consented && origin.target.kind === "chat") {
+        entry.consentedArchiveDraft = consented;
+        entry.attempt.archiveDraftFileIds = [consented.fileId];
         archiveDrafts.set(
-          draftKey(
-            origin.workspace.workspaceId,
-            origin.target.sessionId,
-            origin.archiveDraft.fileId,
-          ),
-          origin.archiveDraft,
+          draftKey(origin.workspace.workspaceId, origin.target.sessionId, consented.fileId),
+          consented,
         );
+      }
       entries.set(id, entry);
       running.set(key, id);
       publish();
@@ -241,14 +296,17 @@ export const createBackgroundOperationStore = (
     dismissToast(id: string) {
       const entry = entries.get(id);
       if (!entry || entry.attempt.phase === "running") return;
+      const awaitsFinalProgress =
+        entry.onProgress !== undefined && entry.attempt.progress?.phase !== "succeeded";
       if (
-        entry.attempt.phase === "succeeded" ||
+        (entry.attempt.phase === "succeeded" && !awaitsFinalProgress) ||
         (entry.attempt.phase === "failed" && entry.attempt.failureDismissed)
       ) {
         clearTimeout(expiry.get(id));
         remove(id);
       } else {
         entry.attempt = { ...entry.attempt, toastDismissed: true };
+        expireSuccess(entry.attempt);
         publish();
       }
     },

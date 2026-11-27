@@ -84,60 +84,80 @@ test("keeps a lost operation's evidence and accepts only a matching late result"
   }
 });
 
-test("a successful archive discards only the consented file version", async () => {
-  const { backgroundOperations } = createTestClientConnection();
-  const workspace = { workspaceId: "workspace", repoPath: "/repo" };
-  const target = { kind: "chat", sessionId: "chat" } as const;
-  const consented = {
-    fileId: "notes.md",
-    contents: "consented draft",
-    baseline: {
-      kind: "text",
-      rootPath: "/repo",
-      relativePath: "notes.md",
-      contents: "saved",
-      size: 5,
-      mtimeMs: null,
-      revision: "original",
-    },
-    branch: "main",
-  } as const;
-  const newer = { ...consented, contents: "newer draft" };
-  try {
-    const reply = Promise.withResolvers<void>();
-    const run = backgroundOperations.run(
-      { workspace, target, action: "Archive session", archiveDraft: consented },
-      () => reply.promise,
-    );
-    expect(
-      backgroundOperations.getArchiveDraft(
-        workspace.workspaceId,
-        target.sessionId,
-        consented.fileId,
-      ),
-    ).toBe(consented);
-    backgroundOperations.replaceArchiveDraft(
-      workspace.workspaceId,
-      target.sessionId,
-      consented,
-      newer,
-    );
-    reply.resolve();
-    await run;
-    expect(
-      backgroundOperations.getArchiveDraft(
-        workspace.workspaceId,
-        target.sessionId,
-        consented.fileId,
-      ),
-    ).toBe(newer);
-    expect(backgroundOperations.getSnapshot()).toMatchObject([
-      { phase: "succeeded", archiveDraft: newer },
-    ]);
-  } finally {
-    backgroundOperations.dispose();
-  }
-});
+test.each(["no edit", "same file", "another file"] as const)(
+  "a successful archive discards only the consented version with %s",
+  async (edit) => {
+    const { backgroundOperations } = createTestClientConnection();
+    const workspace = { workspaceId: "workspace", repoPath: "/repo" };
+    const target = { kind: "chat", sessionId: "chat" } as const;
+    const consented = {
+      fileId: "notes.md",
+      contents: "consented draft",
+      baseline: {
+        kind: "text",
+        rootPath: "/repo",
+        relativePath: "notes.md",
+        contents: "saved",
+        size: 5,
+        mtimeMs: null,
+        revision: "original",
+      },
+      branch: "main",
+    } as const;
+    const other = edit === "another file";
+    const newer = other
+      ? {
+          ...consented,
+          fileId: "readme.md",
+          baseline: { ...consented.baseline, relativePath: "readme.md" },
+          contents: "newer draft",
+        }
+      : { ...consented, contents: "newer draft" };
+    try {
+      const reply = Promise.withResolvers<void>();
+      const run = backgroundOperations.run(
+        { workspace, target, action: "Archive session", archiveDraft: consented },
+        () => reply.promise,
+      );
+      expect(
+        backgroundOperations.getArchiveDraft(
+          workspace.workspaceId,
+          target.sessionId,
+          consented.fileId,
+        ),
+      ).toBe(consented);
+      if (edit !== "no edit")
+        backgroundOperations.replaceArchiveDraft(
+          workspace.workspaceId,
+          target.sessionId,
+          other ? null : consented,
+          newer,
+        );
+      reply.resolve();
+      await run;
+      expect(
+        backgroundOperations.getArchiveDraft(
+          workspace.workspaceId,
+          target.sessionId,
+          consented.fileId,
+        ),
+      ).toBe(edit === "same file" ? newer : undefined);
+      if (other)
+        expect(
+          backgroundOperations.getArchiveDraft(
+            workspace.workspaceId,
+            target.sessionId,
+            newer.fileId,
+          ),
+        ).toBe(newer);
+      const [attempt] = backgroundOperations.getSnapshot();
+      expect(attempt?.phase).toBe("succeeded");
+      expect(attempt?.archiveDraftFileIds).toEqual(edit === "no edit" ? undefined : [newer.fileId]);
+    } finally {
+      backgroundOperations.dispose();
+    }
+  },
+);
 
 test("shows final steps after a success reply without repeating settlement", async () => {
   type Listener = Parameters<

@@ -48,13 +48,15 @@ export function useTaskResetOperations({
           eventId
             ? hostClient.taskApplyEvent(scope, taskId, eventId, tracking)
             : hostClient.taskReset(scope, taskId, tracking),
-        (attempt) => {
-          refreshTaskWorktreeAfterOperation(queryClient, feedback, attempt);
-          void invalidateTaskStopImpact(queryClient, scope).catch((error) =>
-            feedback.show("error", "Could not refresh task activity", {
-              description: errorMessage(error),
-            }),
-          );
+        {
+          onSettled: (attempt) => {
+            refreshTaskWorktreeAfterOperation(queryClient, feedback, attempt);
+            void invalidateTaskStopImpact(queryClient, scope).catch((error) =>
+              feedback.show("error", "Could not refresh task activity", {
+                description: errorMessage(error),
+              }),
+            );
+          },
         },
       );
       try {

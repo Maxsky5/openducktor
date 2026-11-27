@@ -5,16 +5,19 @@ import { useTaskExecutionFilePreviewController } from "@/components/features/age
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 
+type PendingExit = { discarded: boolean; draft?: ArchiveFileDraft };
+
 export function useWorkspaceSessionPreview(
   selectedFile: TaskExecutionSelectedFile | null,
   onSelectionChange: (selectedFile: TaskExecutionSelectedFile | null) => void,
   isWorktree: boolean,
   archiveDraft?: { readonly current: ArchiveFileDraft | null },
+  discardArchiveDraft?: (draft: ArchiveFileDraft) => void,
 ) {
   const { register } = useWorkspacePreviewTransitionGuard();
   const isActive = useSessionViewActive();
   const preview = useTaskExecutionFilePreviewController(selectedFile);
-  const pendingExitRef = useRef<{ discarded: boolean } | null>(null);
+  const pendingExitRef = useRef<PendingExit | null>(null);
 
   useEffect(
     () =>
@@ -25,13 +28,17 @@ export function useWorkspaceSessionPreview(
                 void apply();
                 return;
               }
-              const pendingExit = { discarded: false };
+              const pendingExit: PendingExit = { discarded: false };
               pendingExitRef.current = pendingExit;
+              const finishExit = () => {
+                if (pendingExit.draft) discardArchiveDraft?.(pendingExit.draft);
+                onSelectionChange(pendingExit.discarded ? null : preview.model.selectedFile);
+              };
               preview.requestContextTransition(
                 () => {
                   if (options?.kind === "archive_chat") {
                     if (pendingExitRef.current === pendingExit) pendingExitRef.current = null;
-                    apply(pendingExit.discarded ? (archiveDraft?.current ?? undefined) : undefined);
+                    apply(pendingExit.draft);
                     // Consent only applies after a confirmed archive. Release the editor now.
                     return Promise.resolve(false);
                   }
@@ -40,10 +47,7 @@ export function useWorkspaceSessionPreview(
                       .then(async () => (await apply()) === true)
                       .then((switched) => {
                         if (pendingExitRef.current === pendingExit) pendingExitRef.current = null;
-                        if (switched)
-                          onSelectionChange(
-                            pendingExit.discarded ? null : preview.model.selectedFile,
-                          );
+                        if (switched) finishExit();
                         return switched;
                       })
                       .catch((error) => {
@@ -52,7 +56,7 @@ export function useWorkspaceSessionPreview(
                       });
                   }
                   if (pendingExitRef.current === pendingExit) pendingExitRef.current = null;
-                  onSelectionChange(pendingExit.discarded ? null : preview.model.selectedFile);
+                  finishExit();
                   apply();
                 },
                 () => {
@@ -67,13 +71,21 @@ export function useWorkspaceSessionPreview(
             },
           )
         : undefined,
-    [archiveDraft, isActive, isWorktree, onSelectionChange, preview, register],
+    [discardArchiveDraft, isActive, isWorktree, onSelectionChange, preview, register],
   );
 
   const onDiscard = useCallback(() => {
-    if (pendingExitRef.current) pendingExitRef.current.discarded = true;
+    if (!preview.model.hasPendingDiscard || preview.model.isApplyingTransition) return;
+    const pendingExit = pendingExitRef.current;
+    const draft = archiveDraft?.current;
+    if (pendingExit) {
+      pendingExit.discarded = true;
+      if (draft) pendingExit.draft = draft;
+    } else if (draft) {
+      discardArchiveDraft?.(draft);
+    }
     preview.model.onDiscard();
-  }, [preview.model]);
+  }, [archiveDraft, discardArchiveDraft, preview.model]);
 
   return { preview, onDiscard };
 }

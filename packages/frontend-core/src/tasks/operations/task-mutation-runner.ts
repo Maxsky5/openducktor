@@ -38,7 +38,10 @@ export function useTaskMutationRunner({
         return backgroundOperations.run(
           { workspace, target: { kind: "task", taskId }, action },
           (tracking) => options.run(workspace.repoPath, tracking),
-          (attempt) => refreshTaskWorktreeAfterOperation(queryClient, feedback, attempt),
+          {
+            onSettled: (attempt) =>
+              refreshTaskWorktreeAfterOperation(queryClient, feedback, attempt),
+          },
         );
       }
       try {
