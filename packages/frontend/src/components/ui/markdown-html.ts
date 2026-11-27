@@ -11,7 +11,18 @@ import { CHECKBOX_CLASS_NAME } from "./checkbox";
 export type MarkdownLocalLinks = {
   handles(href: string): boolean;
   open(href: string, anchor: HTMLAnchorElement): void;
+  /** Detect unambiguous file paths in inline code. */
+  inlineFilePaths?: "posix" | "windows";
+  /** Trusted markup for a local link chip. */
+  chip?: MarkdownLocalLinkChip;
 };
+
+type LocalLinkSource = "citation" | "inline-code";
+type MarkdownLocalLinkChip = (
+  href: string,
+  labelHtml: string,
+  source: LocalLinkSource,
+) => { iconHtml: string; labelHtml: string } | null;
 
 /** How the links of a view open. `text` shows each link as plain text. */
 export type MarkdownLinks = "text" | { open?: (href: string) => void; local?: MarkdownLocalLinks };
@@ -151,16 +162,26 @@ const taskCheckboxHtml = (html: string): string => {
 };
 
 /** Keeps the destination of a local link off its navigation URL. */
-const localLinkHtml = (html: string): string => {
-  if (!html.startsWith(WORDS_LINK)) return html;
-  const href = readTagAttributes(html).get("href") ?? "";
-  if (!href.startsWith(LOCAL_LINK_PREFIX)) return html;
-  const destination = escapeHtml(decodeURIComponent(href.slice(LOCAL_LINK_PREFIX.length)));
-  // A callback keeps a `$&` or `$'` in the destination as text, not as a replacement pattern.
-  return html.replace(
-    /^<a data-markdown="a" href="[^"]*"/,
-    () => `${WORDS_LINK} href="#" ${LOCAL_LINK_ATTRIBUTE}="${destination}" title="${destination}"`,
-  );
+export function renderMarkdownLocalLink(
+  destination: string,
+  labelHtml: string,
+  renderChip: MarkdownLocalLinks["chip"],
+  source: LocalLinkSource,
+  attributes = "",
+): string {
+  const escaped = escapeHtml(destination);
+  const chip = renderChip?.(destination, labelHtml, source);
+  const openTag = `${WORDS_LINK} href="#" ${LOCAL_LINK_ATTRIBUTE}="${escaped}" title="${escaped}"${attributes}`;
+  if (!chip) return `${openTag}>${labelHtml}</a>`;
+  return `${openTag} data-file-link-chip="">${chip.iconHtml}<span>${chip.labelHtml}</span></a>`;
+}
+
+const localLinkHtml = (html: string, local: MarkdownLocalLinks): string => {
+  const tag = /^<a data-markdown="a" href="([^"]*)"([^>]*)>/.exec(html);
+  const href = tag?.[1];
+  if (!href?.startsWith(LOCAL_LINK_PREFIX)) return html;
+  const destination = decodeURIComponent(href.slice(LOCAL_LINK_PREFIX.length));
+  return renderMarkdownLocalLink(destination, innerHtml(html), local.chip, "citation", tag?.[2]);
 };
 
 /** The note under each code block when the highlighter did not load, with the reason. */
@@ -189,7 +210,7 @@ export const createMarkdownHooks = ({
     hooks.pre = (html) => html + note;
   }
   if (links === "text") hooks.a = (html) => `<span>${innerHtml(html)}</span>`;
-  else if (links) hooks.a = localLinkHtml;
+  else if (links) hooks.a = (html) => localLinkHtml(html, links);
   if (images === "label") hooks.img = imageLabelHtml;
   else if (images === "host") hooks.img = hostImageHtml;
   return hooks;

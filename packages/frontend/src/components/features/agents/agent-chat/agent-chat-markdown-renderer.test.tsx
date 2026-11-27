@@ -19,8 +19,14 @@ const chat = (markdown: string, streaming = false): ReactElement => (
 
 type OpenFile = (href: string, trigger: HTMLAnchorElement) => void;
 
-const withFiles = (open: OpenFile, children: ReactNode): ReactElement => (
-  <ChatFileLinkContext value={open}>{children}</ChatFileLinkContext>
+const withFiles = (
+  open: OpenFile,
+  children: ReactNode,
+  relativePathsAreWindows = false,
+): ReactElement => (
+  <ChatFileLinkContext value={{ openFile: open, relativePathsAreWindows }}>
+    {children}
+  </ChatFileLinkContext>
 );
 
 describe("AgentChatMarkdownRenderer", () => {
@@ -31,15 +37,16 @@ describe("AgentChatMarkdownRenderer", () => {
       "canonical spec",
     );
     expect(view.container.querySelectorAll("li")).toHaveLength(2);
+    expect(document.querySelectorAll("[data-file-type-icon-sprite]")).toHaveLength(0);
   });
 
   test("renders a streamed reply as the same reply rendered at once", () => {
     const reply = [
       "## Result",
       "",
-      "- one\n- two\n\n  Continuation.\n- three",
+      "- one\n- `src/tasks/two.ts`\n\n  Continuation.\n- three",
       "",
-      "| File | Change |\n| --- | --- |\n| `a.ts` | **added** |",
+      "| File | Change |\n| --- | --- |\n| `src/a.ts` | **added** |",
       "",
       "```ts\nconst value = 1;\n```",
       "",
@@ -58,6 +65,9 @@ describe("AgentChatMarkdownRenderer", () => {
       elements: Array.from(view.container.querySelectorAll("*"))
         .filter((element) => !element.closest("code"))
         .map((element) => element.tagName),
+      fileLinks: Array.from(view.container.querySelectorAll("a[data-local-link]"), (link) =>
+        link.getAttribute("data-local-link"),
+      ),
       text: view.container.textContent,
     });
     expect(renderedReply(streamed)).toEqual(renderedReply(fresh));
@@ -66,17 +76,26 @@ describe("AgentChatMarkdownRenderer", () => {
   test("keeps one root element while the reply streams", () => {
     const view = render(chat("Plain line", true));
     const root = view.container.firstElementChild;
+    const text = view.getByText("Plain line").firstChild;
 
-    view.rerender(chat("Plain line with **emphasis**", true));
+    view.rerender(chat("Plain line continues", true));
+    expect(view.getByText("Plain line continues").firstChild).toBe(text);
+
+    view.rerender(chat("Plain line continues with **emphasis**", true));
 
     expect(view.container.firstElementChild).toBe(root);
     expect(view.container.querySelector("strong")?.textContent).toBe("emphasis");
   });
 
   test("shows an open code fence as code while the reply streams", () => {
-    const view = render(chat("```ts\nconst value = 1;", true));
+    const prefix = "Read `src/a.ts`.\n\n```text\nfirst line";
+    const view = render(chat(prefix, true));
+    const code = view.container.querySelector("pre code");
+    expect(code?.textContent).toContain("first line");
 
-    expect(view.container.querySelector("pre code")?.textContent).toContain("const value = 1;");
+    view.rerender(chat(`${prefix}\nsecond line`, true));
+    expect(view.container.querySelector("pre code")).toBe(code);
+    expect(code?.textContent).toContain("second line");
   });
 
   test("keeps raw HTML out of the reply", () => {
@@ -132,6 +151,163 @@ describe("AgentChatMarkdownRenderer", () => {
 });
 
 describe("chat file links", () => {
+  test("opens an inline backslash path only when complete in a Windows workspace", () => {
+    const open = mock<OpenFile>(() => {});
+    const path = "src\\main.ts:42";
+    const openSpan = `Read \`${path}`;
+    const closedSpan = `${openSpan}\``;
+    const view = render(withFiles(open, chat(openSpan, true), true));
+    expect(view.queryByRole("link", { name: path })).toBeNull();
+
+    view.rerender(withFiles(open, chat(closedSpan, true), true));
+    const link = view.getByRole("link", { name: path });
+    expect(link.querySelector("svg use")?.getAttribute("href")).toContain("typescript");
+    fireEvent.click(link);
+    expect(open).toHaveBeenCalledWith(path, link);
+
+    view.rerender(withFiles(open, chat(closedSpan, true)));
+    expect(view.queryByRole("link", { name: path })).toBeNull();
+  });
+
+  test("links each inline path at its closing backtick and opens the full destination", () => {
+    const open = mock<OpenFile>(() => {});
+    const path = "apps/api/src/lib/auth.ts:42:3";
+    const prefix = `Intro.\n\n- Open \`${path}`;
+    const reply = (markdown: string, streaming = true) =>
+      withFiles(open, chat(markdown, streaming));
+    const view = render(reply(prefix));
+    const intro = view.getByText("Intro.");
+
+    expect(view.getByText(path).tagName).toBe("CODE");
+    expect(view.queryByRole("link", { name: path })).toBeNull();
+    expect(document.querySelector("[data-file-type-icon-sprite]")).toBeNull();
+
+    const partialSecond = `${prefix}\`\n- Then see \`${path}`;
+    view.rerender(reply(`${prefix}\``));
+    const firstLink = view.getByRole("link", { name: path });
+    expect(firstLink.querySelector("code")?.textContent).toBe(path);
+    const icon = firstLink.querySelector("svg use");
+    expect(icon?.getAttribute("href")).toContain("typescript");
+    expect(document.querySelector("[data-file-type-icon-sprite]")).not.toBeNull();
+    if (icon) fireEvent.click(icon);
+    expect(open).toHaveBeenCalledWith(path, firstLink);
+
+    view.rerender(reply(partialSecond));
+    expect(view.getAllByRole("link", { name: path })).toHaveLength(1);
+    view.rerender(reply(`${partialSecond}\``));
+    const [, secondLink] = view.getAllByRole("link", { name: path });
+    expect(secondLink).toBeDefined();
+    if (secondLink) fireEvent.keyDown(secondLink, { key: "Enter" });
+    expect(open).toHaveBeenLastCalledWith(path, secondLink);
+
+    view.rerender(reply(`${partialSecond}\``, false));
+    expect(view.getAllByRole("link", { name: path })).toHaveLength(2);
+    expect(view.getByText("Intro.")).toBe(intro);
+
+    const citation = render(withFiles(open, chat(`[Auth](${path})`)));
+    expect(citation.getByRole("link", { name: "Auth" }).querySelector("svg use")?.outerHTML).toBe(
+      icon?.outerHTML,
+    );
+  });
+
+  test("keeps ambiguous code and explicit Markdown links as written", () => {
+    const view = render(
+      chat(
+        [
+          "`pnpm test` · `GET /api/auth` · `https://example.org/a.ts` · `/api/v1.json`",
+          "`../outside.ts` · `src/../outside.ts` · `users.read`",
+          "`www.example.org/a.ts` · `./www.example.org/a.ts`",
+          "[`src/auth.ts`](https://example.org/a.ts)",
+          "```text\n`src/method.ts`\n```",
+          "Open `` ./src/auth.ts ``.",
+        ].join("\n\n"),
+      ),
+    );
+
+    expect(view.getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "./www.example.org/a.ts",
+      "src/auth.ts",
+      "./src/auth.ts",
+    ]);
+    expect(view.getByRole("link", { name: "src/auth.ts" }).getAttribute("href")).toBe(
+      "https://example.org/a.ts",
+    );
+    expect(view.container.querySelector("a a")).toBeNull();
+  });
+
+  test("links only the closed occurrences after a late footnote reference", () => {
+    const first = "Read `src/a.ts`.";
+    const view = render(chat(first, true));
+    const definition = `${first}\n\n[^1]: Also see \`src/a.ts\` and \`src/b.ts\`.`;
+    view.rerender(chat(definition, true));
+
+    const current = `${definition}\n\nSee [^1]. Then read \`src/a.ts`;
+    view.rerender(chat(current, true));
+
+    const links = () =>
+      Array.from(view.container.querySelectorAll("a[data-local-link]"), (link) =>
+        link.getAttribute("data-local-link"),
+      );
+    expect(links()).toEqual(["src/a.ts", "src/a.ts", "src/b.ts"]);
+    expect(view.container.querySelector("p:nth-of-type(2) code")?.closest("a")).toBeNull();
+
+    view.rerender(chat(`${current}\``, true));
+    expect(links()).toEqual(["src/a.ts", "src/a.ts", "src/a.ts", "src/b.ts"]);
+    expect(view.container.querySelector("p:nth-of-type(2) code")?.closest("a")).not.toBeNull();
+  });
+
+  test.each(["- `\n  src/a.ts\n  ", "> `\n> src/a.ts\n> "])(
+    "links an indented path only after the closing backtick in %j",
+    (unfinished) => {
+      const view = render(chat(unfinished, true));
+      expect(view.queryByRole("link", { name: "src/a.ts" })).toBeNull();
+      view.rerender(chat(`${unfinished}\``, true));
+      expect(view.getByRole("link", { name: "src/a.ts" }).getAttribute("data-local-link")).toBe(
+        "src/a.ts",
+      );
+    },
+  );
+
+  test.each([
+    {
+      label: "apps/web/src/LandingPage.tsx",
+      path: "/repo/apps/web/src/LandingPage.tsx",
+      visible: "LandingPage.tsx",
+    },
+    {
+      label: "apps/api/__tests__/auth-config.test.ts",
+      path: "apps/api/__tests__/auth-config.test.ts",
+      visible: "auth-config.test.ts",
+    },
+    {
+      label: "`src/auth-config.ts:42`",
+      path: "src/auth-config.ts:42",
+      visible: "auth-config.ts:42",
+    },
+    { label: "**Sign-in** / settings", path: "src/auth-config.ts", visible: "Sign-in / settings" },
+  ])("shows $visible and keeps the full link target", ({ label, path, visible }) => {
+    const open = mock<OpenFile>(() => {});
+    const view = render(withFiles(open, chat(`[${label}](${path})`)));
+    const link = view.getByRole("link", { name: visible });
+
+    expect(link.title).toBe(path);
+    fireEvent.keyDown(link, { key: "Enter" });
+    expect(open).toHaveBeenCalledWith(path, link);
+  });
+
+  test.each([
+    { name: "a file whose name matches an inherited property", path: "src/constructor" },
+    { name: "a long filename", path: `src/${"a".repeat(253)}.ts` },
+  ])("shows the generic icon for $name without changing the destination", ({ path }) => {
+    const open = mock<OpenFile>(() => {});
+    const view = render(withFiles(open, chat(`[file](${path})`)));
+    const link = view.getByRole("link", { name: "file" });
+
+    expect(link.querySelector("svg.lucide-file-text")).not.toBeNull();
+    fireEvent.click(link);
+    expect(open).toHaveBeenCalledWith(path, link);
+  });
+
   test.each([
     "[file](src/a.ts:42)",
     "[`file`](file:///repo/a.ts#L42)",
@@ -160,13 +336,24 @@ describe("chat file links", () => {
 
   test("opens a streamed link only once it is complete", () => {
     const open = mock<OpenFile>(() => {});
-    const view = render(withFiles(open, chat("[file](src/a", true)));
+    const prefix = "[Config](config)\n\n[`file`](src/a";
+    const view = render(withFiles(open, chat(prefix, true)));
 
-    expect(view.queryByRole("link")).toBeNull();
-    view.rerender(withFiles(open, chat("[file](src/a.ts)", true)));
-    fireEvent.click(view.getByRole("link", { name: "file" }));
+    expect(view.getByRole("link", { name: "Config" })).toBeTruthy();
+    expect(view.queryByRole("link", { name: "file" })).toBeNull();
+    expect(document.querySelectorAll("[data-file-type-icon-sprite]")).toHaveLength(0);
+    view.rerender(withFiles(open, chat(`${prefix}%20b.ts:42)`, true)));
+    const link = view.getByRole("link", { name: "file" });
+    const icon = link.querySelector('svg[aria-hidden="true"] use');
 
-    expect(open.mock.calls.at(-1)?.[0]).toBe("src/a.ts");
+    expect(icon?.getAttribute("href")).toBe("#file-tree-builtin-typescript");
+    expect(document.getElementById("file-tree-builtin-typescript")).not.toBeNull();
+    expect(link.querySelector("code")?.textContent).toBe("file");
+    expect(link.title).toBe("src/a%20b.ts:42");
+    fireEvent.click(icon!);
+
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledWith("src/a%20b.ts:42", link);
   });
 
   test("keeps web links on the shell, drops unsafe schemes, and opens file links", () => {
@@ -176,19 +363,26 @@ describe("chat file links", () => {
       withShellPlatform(
         withFiles(
           openFile,
-          chat("[web](https://example.com) [unsafe](javascript:42) [file](a.ts:42) [empty]()"),
+          chat("[web](https://example.com) [unsafe](javascript:42) [file](config) [empty]()"),
         ),
         createShellBridgeFixture({ bridge: { openExternalUrl: openExternal } }),
       ),
     );
 
-    fireEvent.click(view.getByText("web"));
+    const web = view.getByRole("link", { name: "web" });
+    const file = view.getByRole("link", { name: "file" });
+    const empty = view.getByRole("link", { name: "empty" });
+
+    expect(web.querySelector("svg")).toBeNull();
+    expect(file.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect(empty.querySelector("svg")).toBeNull();
+    fireEvent.click(web);
     fireEvent.click(view.getByText("unsafe"));
-    fireEvent.click(view.getByText("file"));
-    fireEvent.click(view.getByText("empty"));
+    fireEvent.click(file);
+    fireEvent.click(empty);
 
     expect(openExternal.mock.calls).toEqual([["https://example.com"]]);
-    expect(openFile.mock.calls.map(([href]) => href)).toEqual(["a.ts:42", ""]);
+    expect(openFile.mock.calls.map(([href]) => href)).toEqual(["config", ""]);
   });
 
   test("says why a file link cannot open without a worktree", () => {

@@ -38,6 +38,7 @@
   /* chat transcript, composer, and user messages */
   --chat-background: var(--muted);
   --chat-surface: var(--card);
+  --transcript-file-link-foreground: oklch(0.455 0.23 264);
   --chat-shadow: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 4px 16px -4px rgb(15 23 42 / 0.1);
   --chat-shadow-focus: 0 1px 3px 0 rgb(15 23 42 / 0.06), 0 8px 20px -8px rgb(15 23 42 / 0.2);
   /* a neutral pulse around a target that the user navigated to */
@@ -218,6 +219,7 @@
   /* A darker transcript lets the chat surface stand out and still look active. */
   --chat-background: var(--sidebar);
   --chat-surface: color-mix(in oklab, var(--foreground) 5%, var(--card));
+  --transcript-file-link-foreground: oklch(0.79 0.14 235);
   --chat-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.25), 0 4px 16px -4px rgb(0 0 0 / 0.35);
   --chat-shadow-focus: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 8px 20px -8px rgb(0 0 0 / 0.6);
   --highlight-pulse: color-mix(in oklab, var(--foreground) 30%, transparent);

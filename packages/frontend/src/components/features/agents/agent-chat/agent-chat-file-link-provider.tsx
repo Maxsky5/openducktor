@@ -7,6 +7,7 @@ import { resolvedPathQueryOptions } from "@openducktor/frontend-core/queries/fil
 import { ChatFileLinkContext, type ChatFileLinkOwner } from "./agent-chat-file-link-context";
 import { canonicalPathQueryOptions } from "@openducktor/frontend-core/queries/git";
 import {
+  isWindowsChatPath,
   parseChatFileLink,
   resolveChatFileLink,
 } from "@openducktor/frontend-core/sessions/messages/chat-file-link";
@@ -113,5 +114,11 @@ export function ChatFileLinkProvider({
       workingDirectory,
     ],
   );
-  return <ChatFileLinkContext value={openFile}>{children}</ChatFileLinkContext>;
+  const directory = workingDirectory ?? repoPath;
+  const relativePathsAreWindows = directory !== null && isWindowsChatPath(directory);
+  const links = useMemo(
+    () => ({ openFile, relativePathsAreWindows }),
+    [openFile, relativePathsAreWindows],
+  );
+  return <ChatFileLinkContext value={links}>{children}</ChatFileLinkContext>;
 }

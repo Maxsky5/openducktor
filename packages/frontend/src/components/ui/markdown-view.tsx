@@ -4,15 +4,16 @@
  * Words leaves to the app: link and diagram clicks, task checkboxes, and images that the host loads.
  */
 import type { TaskAssetRenderContext } from "@openducktor/contracts";
-import type { PluginConfig } from "@pierre/words/html";
-import { Markdown, type ReactiveIslands } from "@pierre/words/react";
+import type { HtmlOptions, PluginConfig } from "@pierre/words/html";
+import { Markdown, type MarkdownProps, type ReactiveIslands } from "@pierre/words/react";
 import type { MouseEvent, ReactElement } from "react";
-import { memo, useMemo, useState } from "react";
+import { memo, useId, useLayoutEffect, useMemo, useState } from "react";
 import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { useShellPlatform } from "@/lib/shell-platform";
 import { cn } from "@/lib/utils";
 import { Dialog } from "./dialog";
 import { useDialogPresence } from "./dialog-presence";
+import { mountFileTypeIconSpriteForLinks } from "./file-type-icons";
 import { mayHaveCodeFence, useCodeHighlighter } from "./markdown-code";
 import {
   createDiagramRenderer,
@@ -31,9 +32,11 @@ import {
   createMarkdownUrlTransform,
   HOST_IMAGE_ISLAND,
   type MarkdownLinks,
+  type MarkdownLocalLinks,
   parseHostImageData,
 } from "./markdown-html";
 import { IslandLink } from "./markdown-island-link";
+import { MarkdownWithInlineFileLinks } from "./markdown-inline-file-view";
 import { closestLink, useMarkdownLinkEvents } from "./markdown-link-events";
 import { MarkdownMermaidDialog } from "./markdown-mermaid-dialog";
 import { MARKDOWN_CLASSES, type MarkdownRendererVariant } from "./markdown-variants";
@@ -98,6 +101,23 @@ function DiagramPreviewDialog({
   );
 }
 
+function useFileLinkSpriteRootId(
+  markdown: string,
+  streaming: boolean,
+  hasLinks: boolean,
+  localLinks: MarkdownLocalLinks | null,
+): string | undefined {
+  const markdownId = useId();
+  const inlineFilePaths = localLinks?.inlineFilePaths;
+  const mayHaveFileLink = hasLinks || (inlineFilePaths && markdown.includes("`"));
+  const rootId = mayHaveFileLink && localLinks?.chip ? markdownId : undefined;
+  // Words commits the link markup in its layout effect. Check it before the browser paints.
+  useLayoutEffect(() => {
+    if (rootId) mountFileTypeIconSpriteForLinks(rootId);
+  }, [rootId, markdown, streaming, inlineFilePaths]);
+  return rootId;
+}
+
 export const MarkdownView = memo(function MarkdownView({
   markdown,
   streaming,
@@ -138,6 +158,7 @@ export const MarkdownView = memo(function MarkdownView({
     [images, resolveTaskAssetSource, taskAssetContext],
   );
   const localLinks = links !== "text" ? (links?.local ?? null) : null;
+  const fileLinkRootId = useFileLinkSpriteRootId(markdown, streaming, hasLinks, localLinks);
   // The URL rule is always on. Words formats in place also with it, but a change of the rule
   // formats all the text again. A label shows any image, also one whose source the browser
   // cannot load.
@@ -202,26 +223,48 @@ export const MarkdownView = memo(function MarkdownView({
     linkEvents.onClick(event);
   };
 
+  const options = useMemo(() => {
+    const next: Omit<HtmlOptions, "islands"> = {
+      math: !lightweight,
+      controls: false,
+      lineNumbers: false,
+      components: hooks,
+      urlTransform,
+    };
+    if (plugins) next.plugins = plugins;
+    return next;
+  }, [hooks, lightweight, plugins, urlTransform]);
+  const contentProps: Pick<MarkdownProps, "id" | "islands" | "className"> & typeof linkEvents = {
+    id: fileLinkRootId,
+    className: cn(MARKDOWN_CLASSES[variant], className),
+    ...linkEvents,
+    onClick: handleClick,
+  };
+  if (islands) contentProps.islands = islands;
+
   return (
     <>
-      <Markdown
-        mode={streaming ? "streaming" : "static"}
-        isAnimating={streaming}
-        math={!lightweight}
-        controls={false}
-        lineNumbers={false}
-        components={hooks}
-        {...(islands ? { islands } : {})}
-        {...(plugins ? { plugins } : {})}
-        urlTransform={urlTransform}
-        className={cn(MARKDOWN_CLASSES[variant], className)}
-        onClick={handleClick}
-        onKeyDown={linkEvents.onKeyDown}
-        onAuxClick={linkEvents.onAuxClick}
-        onContextMenu={linkEvents.onContextMenu}
-      >
-        {markdown}
-      </Markdown>
+      {localLinks?.inlineFilePaths ? (
+        <MarkdownWithInlineFileLinks
+          key={localLinks.inlineFilePaths}
+          {...contentProps}
+          options={options}
+          chip={localLinks.chip}
+          windows={localLinks.inlineFilePaths === "windows"}
+          streaming={streaming}
+        >
+          {markdown}
+        </MarkdownWithInlineFileLinks>
+      ) : (
+        <Markdown
+          {...contentProps}
+          {...options}
+          mode={streaming ? "streaming" : "static"}
+          isAnimating={streaming}
+        >
+          {markdown}
+        </Markdown>
+      )}
       {showsDiagrams ? <ClosesOnViewHide onHide={closePreview} /> : null}
       {previewMounted && preview ? (
         <DiagramPreviewDialog preview={preview} onClose={closePreview} />

@@ -29,6 +29,47 @@
   border-radius: 2px;
 }
 
+.markdown-body a[data-file-link-chip] {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: baseline;
+  gap: 0.25rem;
+  padding: 0.0625rem 0.3125rem;
+  border-radius: 0.3125rem;
+  color: var(--transcript-file-link-foreground);
+  font-size: 0.875em;
+  font-weight: 500;
+  line-height: 1.4;
+  text-decoration: none;
+}
+
+:where(:root:not(.dark)) .markdown-body a[data-file-link-chip] {
+  font-size: 0.9375em;
+  font-weight: 600;
+}
+
+.markdown-body a[data-file-link-chip] > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.markdown-body a[data-file-link-chip] > svg {
+  width: 1em;
+  height: 1em;
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.markdown-body a[data-file-link-chip] code {
+  padding-inline: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+.markdown-body a[data-file-link-chip] :is(strong, em) {
+  color: inherit;
+}
+
 /* A GFM task item shows its checkbox in place of the list bullet. A top-level task list starts at
    the left edge. A nested list keeps the list indent of the prose, so it shows its level. */
 .markdown-body li:has(> [data-markdown-task]) {

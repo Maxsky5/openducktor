@@ -11,7 +11,8 @@ export type ChatFileLinkOwner = {
   | { kind: "workspace"; workingDirectory: string | null; taskId?: never }
 );
 
-export const ChatFileLinkContext = createContext<
-  ((href: string, trigger: HTMLAnchorElement) => void) | null
->(null);
-export const useChatFileLinkAction = () => use(ChatFileLinkContext);
+export const ChatFileLinkContext = createContext<{
+  openFile(href: string, trigger: HTMLAnchorElement): void;
+  relativePathsAreWindows: boolean;
+} | null>(null);
+export const useChatFileLinks = () => use(ChatFileLinkContext);

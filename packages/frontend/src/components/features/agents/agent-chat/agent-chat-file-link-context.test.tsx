@@ -18,6 +18,44 @@ const defaultHost: Partial<HostClient> = {
   filesystemResolvePath: async (path) => path,
 };
 
+test.each([
+  { root: "/repo", relativePath: "src\\Dockerfile", typeIcon: null },
+  { root: "C:/repo", relativePath: "src/Dockerfile", typeIcon: "#file-tree-builtin-docker" },
+])(
+  "uses the file preview path rules for icons under $root",
+  async ({ root, relativePath, typeIcon }) => {
+    const connection = createTestClientConnection({ client: defaultHost });
+    const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
+    const view = render(
+      <ClientConnectionProvider connection={connection}>
+        <ChatFileLinkProvider
+          owner={{
+            kind: "workspace",
+            workspaceId: "workspace-1",
+            repoPath: root,
+            workingDirectory: root,
+            ownerKey: "main",
+            onSelectFile,
+          }}
+        >
+          <AgentChatMarkdownRenderer markdown="[file](src%5CDockerfile)" />
+        </ChatFileLinkProvider>
+      </ClientConnectionProvider>,
+    );
+    try {
+      const link = view.getByRole("link", { name: "file" });
+      if (typeIcon === null) expect(link.querySelector("svg.lucide-file-text")).not.toBeNull();
+      else expect(link.querySelector("svg use")?.getAttribute("href")).toBe(typeIcon);
+
+      await act(async () => fireEvent.click(link));
+      expect(onSelectFile).toHaveBeenCalledWith({ rootPath: root, relativePath }, link);
+    } finally {
+      view.unmount();
+      connection.queryClient.clear();
+    }
+  },
+);
+
 for (const ownerScope of ["task", "missing-task", "workspace"] as const) {
   test(`absolute transcript links open without a working directory: ${ownerScope}`, async () => {
     const worktree = mock(async () => null);

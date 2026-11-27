@@ -1,4 +1,5 @@
 import { createFileTreeIconResolver, getBuiltInSpriteSheet } from "@pierre/trees";
+import { z } from "zod";
 
 // The file tree uses this icon set, so a file shows the same icon in the tree and elsewhere.
 const ICON_SET = "complete";
@@ -79,26 +80,40 @@ const FILE_TYPE_COLORS: ReadonlyMap<string, TreeIconColor> = new Map<string, Tre
 /** The icon of a file type: its symbol in the icon sheet, and its color. */
 export type FileTypeIconSymbol = { href: string; color: string | null };
 
+// The resolver builds each dotted suffix. Bound the lookup for filenames from Markdown.
+const MAX_ICON_FILENAME_LENGTH = 255;
+const fileTypeIconTokenSchema = z.string();
+
 /** The icon of the type of a file, or null when the file tree has none for it. */
 export const resolveFileTypeIcon = (filePath: string): FileTypeIconSymbol | null => {
-  const icon = resolver.resolveIcon("file-tree-icon-file", filePath);
+  const fileName = filePath.slice(filePath.lastIndexOf("/") + 1);
+  if (fileName.length > MAX_ICON_FILENAME_LENGTH) return null;
+  const icon = resolver.resolveIcon("file-tree-icon-file", fileName);
   if (!icon.token || icon.token === "default") return null;
-  const color = FILE_TYPE_COLORS.get(icon.token);
+  const token = fileTypeIconTokenSchema.safeParse(icon.token);
+  if (!token.success) return null;
+  const color = FILE_TYPE_COLORS.get(token.data);
   return { href: `#${icon.name}`, color: color ? TREE_ICON_COLORS[color] : null };
 };
 
-let isSpriteMounted = false;
+let spriteHost: HTMLDivElement | undefined;
 
 /**
  * Adds the icon sheet of the file tree to the page once, so icons of file types can use its
  * symbols. The file tree keeps its own sheet in its shadow root.
  */
 export const mountFileTypeIconSprite = (): void => {
-  if (isSpriteMounted) return;
-  isSpriteMounted = true;
+  if (spriteHost?.isConnected) return;
   const host = document.createElement("div");
   host.dataset.fileTypeIconSprite = "";
   host.style.cssText = "position:absolute;width:0;height:0;overflow:hidden";
   host.innerHTML = getBuiltInSpriteSheet(ICON_SET);
   document.body.append(host);
+  spriteHost = host;
+};
+
+export const mountFileTypeIconSpriteForLinks = (rootId: string): void => {
+  if (spriteHost?.isConnected) return;
+  const icon = document.getElementById(rootId)?.querySelector("[data-file-link-chip] > svg > use");
+  if (icon) mountFileTypeIconSprite();
 };
