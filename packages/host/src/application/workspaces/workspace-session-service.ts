@@ -274,15 +274,15 @@ export const createWorkspaceSessionService = (
             const { ref, session } = yield* recordFor(input);
             if (session.archivedAt !== null) return session;
             yield* planBackgroundSteps(
-              { id: "terminals", label: "Stop chat terminals" },
-              { id: "browser-tabs", label: "Close chat browser tabs" },
+              { id: "terminals", label: "Stop session terminals" },
+              { id: "browser-tabs", label: "Close session browser tabs" },
               ...(input.removeWorktree
                 ? [
                     { id: "worktrees", label: "Remove worktree" },
                     { id: "branches", label: "Delete local branch" },
                   ]
                 : []),
-              { id: "chat-archive", label: "Archive chat" },
+              { id: "chat-archive", label: "Move to Archived sessions" },
             );
             if (dependencies.hasUnresolvedHandoff(ref))
               return yield* new HostValidationError({
@@ -346,17 +346,17 @@ export const createWorkspaceSessionService = (
                     field: "confirmStop",
                   });
                 yield* backgroundStep(
-                  { id: "session", label: "Stop chat activity" },
+                  { id: "session", label: "Stop agent work" },
                   live.stopSession(runtimeRef),
                 );
               }
             }
             yield* backgroundStep(
-              { id: "terminals", label: "Stop chat terminals" },
+              { id: "terminals", label: "Stop session terminals" },
               acquireWorkspaceSessionTerminalCleanup(dependencies.terminalService, input),
             );
             yield* backgroundStep(
-              { id: "browser-tabs", label: "Close chat browser tabs" },
+              { id: "browser-tabs", label: "Close session browser tabs" },
               closeOwnerBrowserTabs(
                 dependencies.browserTabs,
                 [
@@ -396,7 +396,7 @@ export const createWorkspaceSessionService = (
                     : target;
                 const archivedAt = yield* Clock.currentTimeMillis;
                 const archived = yield* backgroundStep(
-                  { id: "chat-archive", label: "Archive chat" },
+                  { id: "chat-archive", label: "Move to Archived sessions" },
                   store.archive({ ...ref, executionTarget, archivedAt }).pipe(
                     Effect.mapError(
                       (cause) =>

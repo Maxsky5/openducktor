@@ -12,6 +12,9 @@ import {
   taskAssetPartialStateError,
 } from "./task-asset-aware-task-store-support";
 
+const deleteTask = { id: "task-delete", label: "Delete task" };
+const deleteAttachments = { id: "attachments", label: "Delete task attachments" };
+
 export const createTaskAssetAwareDelete =
   ({
     assetPersistenceEnabled,
@@ -31,12 +34,12 @@ export const createTaskAssetAwareDelete =
   }): TaskStorePort["deleteTask"] =>
   (input) => {
     if (!assetPersistenceEnabled) {
-      return backgroundStep({ id: "task-delete", label: "Delete task" }, inner.deleteTask(input));
+      return backgroundStep(deleteTask, inner.deleteTask(input));
     }
     const quarantineIds: string[] = [];
     const affectedAssetIds: string[] = [];
     let committed = false;
-    const remove = Effect.gen(function* () {
+    const deleteRecord = Effect.gen(function* () {
       const workspaceId = yield* resolveWorkspaceId(input);
       const { taskId } = input;
       const registered = yield* registry.listAssets({
@@ -46,10 +49,7 @@ export const createTaskAssetAwareDelete =
         scope: "description",
       });
       affectedAssetIds.push(...registered.map((asset) => asset.id));
-      const quarantineId = yield* backgroundStep(
-        { id: "stage-attachments", label: "Prepare attachment cleanup" },
-        filePort.quarantineTaskDirectory({ workspaceId, taskId }),
-      );
+      const quarantineId = yield* filePort.quarantineTaskDirectory({ workspaceId, taskId });
       if (!quarantineId && registered.length > 0) {
         return yield* new TaskAssetError({
           operation: "delete",
@@ -64,18 +64,15 @@ export const createTaskAssetAwareDelete =
       }
       if (quarantineId) {
         quarantineIds.push(quarantineId);
-        yield* planBackgroundSteps({ id: "attachments", label: "Clean up task attachments" });
+        yield* planBackgroundSteps(deleteAttachments);
       }
-      const deleted = yield* backgroundStep(
-        { id: "task-delete", label: "Delete task" },
-        inner.deleteTask(input),
-      );
+      return yield* inner.deleteTask(input);
+    });
+    const remove = Effect.gen(function* () {
+      const deleted = yield* backgroundStep(deleteTask, deleteRecord);
       committed = true;
       for (const quarantineId of quarantineIds) {
-        yield* backgroundStep(
-          { id: "attachments", label: "Clean up task attachments" },
-          filePort.purgeQuarantine(quarantineId),
-        );
+        yield* backgroundStep(deleteAttachments, filePort.purgeQuarantine(quarantineId));
       }
       return deleted;
     });

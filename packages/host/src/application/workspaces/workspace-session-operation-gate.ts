@@ -26,7 +26,7 @@ export const createWorkspaceSessionOperationGate = () => {
           });
         }
         if (!progress)
-          return yield* backgroundGate(gate, key, operation, "Wait for the earlier chat operation");
+          return yield* backgroundGate(gate, key, operation, "Wait for another session action");
         return yield* gate.run(
           key,
           Effect.sync(() => {

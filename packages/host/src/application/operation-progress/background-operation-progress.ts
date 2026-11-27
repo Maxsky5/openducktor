@@ -22,7 +22,7 @@ export const operationFailure = (stage: string, cause: unknown): WorkflowFailure
   stage,
   code: "background_operation_failed",
   message: errorMessage(cause),
-  nextAction: "Review the failed step and check the original target before trying again.",
+  nextAction: "Check what changed before trying again.",
 });
 
 export const createBackgroundOperationProgress = (
@@ -39,26 +39,19 @@ export const createBackgroundOperationProgress = (
   const update = (step: Step & Partial<BackgroundOperationStep>) => {
     const snapshot = progress.current();
     const previous = snapshot.steps.find((item) => item.id === step.id);
-    const request = snapshot.steps.find((item) => item.id === "request");
-    const steps =
-      step.id !== "request" && step.id !== "waiting" && request?.state === "running"
-        ? snapshot.steps.map((item) =>
-            item === request ? { ...item, state: "completed" as const } : item,
-          )
-        : snapshot.steps;
     const next: BackgroundOperationStep = {
       state: "pending",
       details: [],
       ...previous,
       ...step,
     };
-    const ordered = steps.filter((item) => item.id !== step.id);
+    const ordered = snapshot.steps.filter((item) => item.id !== step.id);
     const firstPending = ordered.findIndex((item) => item.state === "pending");
     if ((!previous || previous.state === "pending") && firstPending >= 0) {
       ordered.splice(firstPending, 0, next);
     } else if (previous) {
       ordered.splice(
-        steps.findIndex((item) => item.id === step.id),
+        snapshot.steps.findIndex((item) => item.id === step.id),
         0,
         next,
       );

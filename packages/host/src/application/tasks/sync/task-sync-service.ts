@@ -125,7 +125,7 @@ export const createTaskSyncService = ({
   // Mutations of one repository run in arrival order.
   const mutationGate = createSerialGate();
   const runMutation: TaskSyncService["runMutation"] = (repoPath, mutation) =>
-    backgroundGate(mutationGate, repoPath, mutation, "Wait for the earlier task operation");
+    backgroundGate(mutationGate, repoPath, mutation, "Wait for other task changes");
   const runStatusMutation: TaskSyncService["runStatusMutation"] = (
     workspace,
     operation,

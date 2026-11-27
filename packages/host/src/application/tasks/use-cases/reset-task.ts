@@ -47,10 +47,10 @@ export const createTaskFullResetUseCase = ({
       yield* planBackgroundSteps(
         { id: "terminals", label: "Stop task terminals" },
         { id: "artifacts", label: "Clear task artifacts" },
-        { id: "session-records", label: "Clear linked session records" },
+        { id: "session-records", label: "Remove task session links" },
         { id: "pull-request", label: "Clear pull request link" },
         { id: "direct-merge", label: "Clear merge record" },
-        { id: "delivery", label: "Clear delivery state" },
+        { id: "delivery", label: "Clear merge and push progress" },
         { id: "task-reset", label: "Reset task status" },
       );
       const { repoPath, taskId } = input;
@@ -161,7 +161,7 @@ export const createTaskFullResetUseCase = ({
         taskStoreWriteCompleted = true;
         cleanupProgress.completedSteps.push("cleared task artifacts");
         yield* backgroundStep(
-          { id: "session-records", label: "Clear linked session records" },
+          { id: "session-records", label: "Remove task session links" },
           taskStore.clearAgentSessionsByRoles({ ...taskRef, roles: [...workflowRoles] }),
         );
         cleanupProgress.completedSteps.push("cleared linked agent sessions");

@@ -57,11 +57,11 @@ export const createWorktreeResetEffect = ({
     Effect.gen(function* () {
       yield* planBackgroundSteps(
         { id: "terminals", label: "Stop task terminals" },
-        { id: "session-records", label: "Clear affected session records" },
+        { id: "session-records", label: "Unlink affected sessions" },
         { id: "artifacts", label: "Clear review artifacts" },
         { id: "pull-request", label: "Clear pull request link" },
         { id: "direct-merge", label: "Clear merge record" },
-        { id: "delivery", label: "Clear delivery state" },
+        { id: "delivery", label: "Clear merge and push progress" },
         { id: "task-reset", label: "Reset task status" },
       );
       const { repoPath, taskId } = input;
@@ -143,7 +143,7 @@ export const createWorktreeResetEffect = ({
         });
         if (canonicalTarget) {
           yield* backgroundStep(
-            { id: "restore", label: "Restore canonical worktree" },
+            { id: "restore", label: "Restore main task worktree" },
             dependencies.gitPort.restoreWorktreeToReference(
               canonicalTarget.worktreePath,
               canonicalTarget.restoreReference,
@@ -154,7 +154,7 @@ export const createWorktreeResetEffect = ({
           );
         }
         yield* backgroundStep(
-          { id: "session-records", label: "Clear affected session records" },
+          { id: "session-records", label: "Unlink affected sessions" },
           storeDependencies.clearAgentSessionsByRoles({
             ...input,
             repoPath: effectiveRepoPath,

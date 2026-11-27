@@ -658,7 +658,6 @@ describe("asset-aware task store compensation", () => {
         .pipe(Effect.provideService(CurrentBackgroundOperation, progress)),
     );
     expect(progress.settle(operationFailure("task_delete", purgeError)).steps).toMatchObject([
-      { id: "stage-attachments", state: "completed" },
       { id: "task-delete", state: "completed" },
       { id: "attachments", state: "failed" },
     ]);

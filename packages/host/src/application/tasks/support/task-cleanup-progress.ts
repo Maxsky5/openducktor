@@ -109,7 +109,7 @@ export const clearTaskResetDelivery = (
         );
         progress.completedSteps.push("cleared direct merge metadata");
         yield* backgroundStep(
-          { id: "delivery", label: "Clear delivery state" },
+          { id: "delivery", label: "Clear merge and push progress" },
           completion.discard(scope),
         );
       }),

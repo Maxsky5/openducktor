@@ -32,6 +32,10 @@ import {
   createStartupProgressRecorder,
 } from "../agent-sessions/session-startup-progress";
 import { BrowserServiceError } from "../browser/browser-service-error";
+import {
+  createBackgroundOperationProgress,
+  CurrentBackgroundOperation,
+} from "../operation-progress/background-operation-progress";
 import { TestClock } from "effect/testing";
 import { createRuntimeRegistryPort } from "../runtimes/host-runtime-ports";
 import {
@@ -2764,17 +2768,40 @@ describe("host-owned Workspace Session lifecycle", () => {
       ),
     ).rejects.toThrow("Confirm Stop");
     expect(h.paths.size).toBe(1);
-    const archived = await Effect.runPromise(
-      h.service.archive({
-        ...ref,
-        confirmStop: true,
-        removeWorktree: true,
-        worktreeConfirmation: {
-          workingDirectory: session.executionTarget.workingDirectory,
-          branchName: "odt/my-feature",
-        },
-      }),
+    const progress = createBackgroundOperationProgress(
+      {
+        operationId: crypto.randomUUID(),
+        hostInstanceId: "host",
+        workspace: { workspaceId: ref.workspaceId, repoPath: h.config.repoPath },
+        target: { kind: "chat", sessionId: session.id },
+      },
+      () => {},
     );
+    const archived = await Effect.runPromise(
+      h.service
+        .archive({
+          ...ref,
+          confirmStop: true,
+          removeWorktree: true,
+          worktreeConfirmation: {
+            workingDirectory: session.executionTarget.workingDirectory,
+            branchName: "odt/my-feature",
+          },
+        })
+        .pipe(Effect.provideService(CurrentBackgroundOperation, progress)),
+    );
+    expect(progress.settle().steps).toMatchObject([
+      { label: "Stop agent work", state: "completed" },
+      { label: "Stop session terminals", state: "completed" },
+      { label: "Close session browser tabs", state: "completed" },
+      {
+        label: "Remove worktree",
+        state: "completed",
+        resources: [{ value: session.executionTarget.workingDirectory, state: "removed" }],
+      },
+      { label: "Delete local branch", state: "completed" },
+      { label: "Move to Archived sessions", state: "completed" },
+    ]);
     expect(archived.executionTarget).toMatchObject({
       kind: "local_worktree",
       worktreeState: "removed",

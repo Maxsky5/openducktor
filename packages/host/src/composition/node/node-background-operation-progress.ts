@@ -83,8 +83,6 @@ export const createNodeBackgroundOperationTracker = ({
           );
           running.add(key);
           return yield* Effect.gen(function* () {
-            const request = { id: "request", label: "Check request" };
-            progress.update({ ...request, state: "running" });
             const result = yield* Effect.exit(
               work.pipe(Effect.provideService(CurrentBackgroundOperation, progress)),
             );

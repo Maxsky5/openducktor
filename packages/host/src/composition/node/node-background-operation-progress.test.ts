@@ -82,7 +82,6 @@ test("a tracked command finishes after its caller leaves and preserves evidence 
         yield* Deferred.succeed(proceed, undefined);
         const result = yield* Deferred.await(done);
         expect(result.steps).toMatchObject([
-          { id: "request", state: "completed" },
           {
             ...remove,
             state: "completed",
@@ -91,6 +90,9 @@ test("a tracked command finishes after its caller leaves and preserves evidence 
           { ...branches, state: "failed", failure: { message: failure.message } },
           { ...later, state: "not_run" },
         ]);
+        expect(
+          snapshots.every((snapshot) => snapshot.steps.every((step) => step.id !== "request")),
+        ).toBe(true);
         expect(snapshots.every((snapshot, index) => snapshot.revision === index + 1)).toBe(true);
         expect(backgroundOperationFailureProgress(failure)).toEqual(result);
       }),
@@ -98,5 +100,38 @@ test("a tracked command finishes after its caller leaves and preserves evidence 
   } finally {
     stop();
     await Effect.runPromise(router.dispose());
+  }
+});
+
+test("a refusal before any work reports its reason without a progress step", async () => {
+  const workspace = { workspaceId: "workspace", repoPath: "/repo" };
+  const tracker = createNodeBackgroundOperationTracker({
+    hostInstanceId: "host",
+    settings: { getRepoConfig: () => Effect.succeed(repoConfigFixture(workspace)) },
+    eventBus: undefined,
+  });
+  const failure = new HostOperationError({
+    operation: "archive",
+    message: "The branch changed. Reopen Archive session and confirm the current branch.",
+  });
+  try {
+    const result = await Effect.runPromise(
+      tracker
+        .track(
+          "workspace_session_archive",
+          { workspaceId: workspace.workspaceId, sessionId: "session" },
+          crypto.randomUUID(),
+          Effect.fail(failure),
+        )
+        .pipe(Effect.result),
+    );
+    expect(result).toMatchObject({ _tag: "Failure", failure });
+    expect(backgroundOperationFailureProgress(failure)).toMatchObject({
+      phase: "failed",
+      failure: { message: failure.message },
+      steps: [],
+    });
+  } finally {
+    await Effect.runPromise(tracker.shutdown());
   }
 });

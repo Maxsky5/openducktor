@@ -15,7 +15,7 @@ import type { TaskMutationOperation } from "./task-mutation-operation";
 import type { TaskServiceError } from "./task-service";
 import type { TaskSyncService } from "./sync/task-sync-service";
 
-const publicationStep = { id: "publish", label: "Update workspace views" };
+const publicationStep = { id: "publish", label: "Refresh workspace task list" };
 
 /** Keep the write, card projection, and receipt in one repository mutation gate. */
 export const createMutationPublisher = ({

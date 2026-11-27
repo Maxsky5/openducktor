@@ -1,4 +1,7 @@
-import { backgroundStep } from "../operation-progress/background-operation-progress";
+import {
+  backgroundStep,
+  updateBackgroundOperation,
+} from "../operation-progress/background-operation-progress";
 import type {
   GitTargetBranch,
   RepoConfig,
@@ -108,24 +111,31 @@ export const removeWorkspaceSessionWorktree = (
             worktreePath,
           );
     // An explicit archive retry can finish a previous partial cleanup.
-    if (yield* git.isRegisteredWorktree(repoPath, worktreePath)) {
-      const current = yield* git.getCurrentBranch(worktreePath);
-      if (current.detached || current.name !== target.branchName)
-        return yield* new HostValidationError({
-          field: "branchName",
-          message: "The worktree branch changed. Reopen Archive session to confirm it.",
-        });
+    const registered = yield* git.isRegisteredWorktree(repoPath, worktreePath);
+    if (registered || aliasRemoval) {
       yield* backgroundStep(
         { id: "worktrees", label: "Remove worktree" },
-        git.removeWorktree(repoPath, worktreePath, true),
-        () => ({ resources: [{ kind: "worktree", value: worktreePath, state: "removed" }] }),
+        Effect.gen(function* () {
+          if (registered) {
+            const current = yield* git.getCurrentBranch(worktreePath);
+            if (current.detached || current.name !== target.branchName)
+              return yield* new HostValidationError({
+                field: "branchName",
+                message: "The worktree branch changed. Reopen Archive session to confirm it.",
+              });
+            yield* git.removeWorktree(repoPath, worktreePath, true);
+            yield* updateBackgroundOperation((progress) =>
+              progress.addResource("worktrees", {
+                kind: "worktree",
+                value: worktreePath,
+                state: "removed",
+              }),
+            );
+          }
+          if (aliasRemoval) yield* aliasRemoval.remove;
+        }),
       );
     }
-    if (aliasRemoval)
-      yield* backgroundStep(
-        { id: "worktree-alias", label: "Remove worktree alias" },
-        aliasRemoval.remove,
-      );
     if (yield* git.referenceExists(repoPath, `refs/heads/${target.branchName}`)) {
       yield* backgroundStep(
         { id: "branches", label: "Delete local branch" },
