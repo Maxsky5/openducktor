@@ -23,21 +23,21 @@ export const readModelCatalog = async (
 export const readCatalog = async (
   client: OpenCodeClient,
   directory: string,
-  ready?: Promise<void>,
+  pluginsReady?: Promise<void>,
 ): Promise<AgentRuntimeCatalogRead> => {
-  // An update during the first read can arrive before the client caches the result.
-  // Wait for initial activation before reading any surface of that result.
-  const surface = async <Value>(read: () => Promise<Value>) => {
+  // Wait before every list so an invalidation during the first read cannot leave
+  // pre-activation data in the cache.
+  const readSurface = async <Value>(read: () => Promise<Value>) => {
     try {
-      await ready;
+      await pluginsReady;
       return { status: "available" as const, catalog: await read() };
     } catch (cause) {
       return { status: "failed" as const, cause };
     }
   };
   const [models, slashCommands, subagents, skills] = await Promise.all([
-    surface(() => readModelCatalog(client, directory)),
-    surface(async () => ({
+    readSurface(() => readModelCatalog(client, directory)),
+    readSurface(async () => ({
       commands: [
         ...(await client.command.list({ location: { directory } })).data
           .filter((command) => command.name !== "compact")
@@ -55,7 +55,7 @@ export const readCatalog = async (
         MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
       ],
     })),
-    surface(async () => ({
+    readSurface(async () => ({
       subagents: (await client.agent.list({ location: { directory } })).data
         .filter((agent) => !agent.hidden && agent.mode !== "primary")
         .map((agent) => {
@@ -67,7 +67,7 @@ export const readCatalog = async (
           return entry;
         }),
     })),
-    surface(async () =>
+    readSurface(async () =>
       skillCatalogSchema.parse({
         skills: (await client.skill.list({ location: { directory } })).data.map((skill) => {
           const entry: AgentSkillCatalog["skills"][number] = {
