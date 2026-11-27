@@ -51,7 +51,7 @@ Existing workspaces keep their saved default target branch. A settings file from
 
 ## Workspace session target
 
-The New session dialog has a Target branch field for each work location. It preselects the repository default target branch and marks it in the list. Only Current checkout offers Tracked upstream. A change to New worktree or Existing worktree replaces a Tracked upstream choice with the repository default.
+The draft page of a new workspace session has one Target branch control. It preselects the repository default target branch and marks it in the list. Only Current checkout offers Tracked upstream. A change to New worktree or Existing worktree replaces a Tracked upstream choice with the repository default.
 
 The session saves its target in its record on the host. Every client of the host shows the same target. The target stays after an app reload, a host restart, an archive, and a restore. A later change of the repository default does not change a saved target.
 

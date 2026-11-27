@@ -194,7 +194,7 @@ Goal Writer can fill only the placeholders that work in all prompts. A change ap
 
 The **Naming** section has the prompts of the [Naming model](/settings-reference/#repository-agents-naming-model):
 
-- **Branch name** names the branch of a new task worktree, and of a new workspace session worktree without a name.
+- **Branch name** names the branch of a new task worktree, and of a new workspace session worktree when you leave its branch name empty.
 - **Workspace session title** names a new workspace session from its first message.
 
 A naming prompt can fill only `{{workText}}`. It becomes the first message of the session, or the task title and description. An override must keep `{{workText}}`. OpenDucktor asks for the fields that it reads, so a change to a naming prompt cannot break the answer.

@@ -12,31 +12,58 @@ A workspace session is a session that does not belong to a task. It has no workf
 
 <ProductDemo id="new-session" />
 
-In a collapsed sidebar, select <Action>+</Action>, then <Action>New session</Action>. You can also run <Action>New session</Action> from the [command palette](/command-palette/).
+<Steps>
+<Step>Select the arrow beside <Action>New task</Action>, then <Action>New session</Action>. A draft page opens, and the sidebar shows it with the **Draft** badge.</Step>
+<Step>Under the composer, choose the work location, the target branch, and a custom role if you need one.</Step>
+<Step>Check the model in the composer. It starts with the [**Default model**](/models/#model-choice) of the repository.</Step>
+<Step>Type your first message and send it. The startup steps show in the transcript, then the agent starts.</Step>
+</Steps>
 
-**Runtime and model** starts with the [**Default model**](/models/#model-choice) of the repository. Check the **Profile** at the bottom of the model picker when it shows one.
+To start the session in another workspace, select the workspace name in the heading. You can leave the page while the session starts. A notification shows the steps until the session is ready.
+
+In a collapsed sidebar, select <Action>+</Action>, then <Action>New session</Action>. You can also press the **New session** [shortcut](/keyboard-shortcuts/#default-keys), or run <Action>New session</Action> from the [command palette](/command-palette/).
 
 | Work location | Where the agent works |
 |---|---|
 | **Current checkout** | In your repository folder, on its current branch. The agent changes the files of your checkout. |
-| **New worktree** | In a new folder, on a new branch or an existing branch. Enter a **Worktree name**, or leave it blank when the workspace has a [naming model](#naming-model). Your checkout does not change. |
+| **New worktree** | In a new folder, on a new branch or an existing branch. Your checkout does not change. |
 | **Existing worktree** | In a worktree that you select. Use it to continue work in the worktree of a task or an earlier workspace session. |
 
-The session compares its changes with the **Target branch**.
+For **New worktree**, select the branch button next to the work location:
+
+- **New branch**: the button shows <Action>Auto branch</Action> until you type a **Branch name**. With an empty **Branch name**, your first message names the branch. To name the folder, open <Action>Custom folder name</Action>. Otherwise, OpenDucktor gives the folder a unique name.
+- **Existing branch**: the button shows <Action>Select branch…</Action> until you choose the **Local branch**. Then an empty **Folder name** takes the branch name, with a hyphen in place of each slash or other special character. The name cannot be empty.
+
+The session compares its changes with the target branch. A new draft starts with the work location that you chose last.
+
+A workspace session has no Goal mode. After the first message, send `/goal` and the objective in the composer. See [Set a goal with /goal](/coding-sessions/#goal-command).
+
+If a startup step fails, the card shows **Session failed to start**, the step, and the reason. See [Session failed to start](/troubleshooting/#session-failed-to-start).
+
+### Drafts [#drafts]
+
+A draft keeps your message and your choices until you send it. It stays after a reload, on the device where you wrote it.
+
+When the desktop app or a browser connects to a host on another computer, a reload removes the draft. The phone keeps its drafts on the phone.
+
+OpenDucktor removes a draft 7 days after your last change. A draft that you did not change closes when you leave it.
+
+You can keep more than one draft open. To remove a draft, select <Action>Discard</Action> in its header. If you changed the draft, confirm with <Action>Discard draft</Action>.
 
 ### Name work with a model [#naming-model]
 
 When the workspace has a [Naming model](/settings-reference/#repository-agents-naming-model), the model names the work:
 
 - The title of a new session comes from its first message. Until the model answers, the session shows the first words of the message. A title that you set yourself stays.
-- A new worktree with a blank **Worktree name** and no branch name gets a temporary branch, such as `odt/1a2b3c4d`, and a folder with the same digits. When you send the first message, the model names the branch, for example `fix/oauth-login-redirect`, and the agent starts on that branch. The folder keeps its name.
+- A new worktree with an empty **Branch name** gets its branch name from the model, for example `perf/slow-notebook-search`. The startup step **Generate branch name and session title** shows it.
 - A branch name that you type does not change.
 
-If the model does not answer or fails, the branch comes from the first words of the message, such as `odt/fix-login-redirect-after-oauth`. A failure also shows the error.
+If the model cannot name the branch:
+
+- If the model fails, the branch is the [branch prefix](/settings-reference/#repository-configuration-branch-prefix) and the first words of the message, such as `odt/find-why-search-is-slow-in`. The startup step shows the error as a warning. The card shows **Session ready with a warning**.
+- If the model does not answer in 15 seconds, the branch also comes from the message. No warning shows.
 
 To change how the model names work, edit the [naming prompts](/agent-prompts/#naming).
-
-**New session** has no Goal mode. To give the agent a goal, send `/goal` and the objective in its composer. See [Set a goal with /goal](/coding-sessions/#goal-command).
 
 ## Use a custom role [#custom-roles]
 
@@ -45,7 +72,7 @@ A custom agent role, such as a code reviewer, gives a workspace session its own 
 <Steps>
 <Step>Open **Settings**, then **Custom agent roles**, and select <Action>Add role</Action>.</Step>
 <Step>Enter a **Name** and a **System prompt**, then select <Action>Save settings</Action>.</Step>
-<Step>Start a workspace session, and choose the role in **Custom role** in the **New session** dialog.</Step>
+<Step>On the draft page of a new workspace session, choose the role in the role menu under the composer. It shows **No role** until you choose one.</Step>
 </Steps>
 
 Roles are available in every workspace.

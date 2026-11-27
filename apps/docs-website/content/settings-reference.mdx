@@ -478,6 +478,7 @@ A blank name fails the save with `Workspace name cannot be blank.`
 #### Branch prefix [#repository-configuration-branch-prefix]
 
 - Sets the first part of task branch names, in the form `prefix/task-id-slug`.
+- It also starts the branch of a new workspace session worktree when no naming model names the branch.
 - The default is `odt`. A blank field saves as `odt`.
 - The change applies to new branches.
 
@@ -590,9 +591,9 @@ For the model that each new session uses, see [Which model a session uses](/mode
 #### Naming model [#repository-agents-naming-model]
 
 - Sets the model and the **Effort** of the model that names work in this workspace. It has no **Profile** and no **Speed**.
-- The model writes the title of a new workspace session from its first message. It also names the branch of a new task worktree, and the branch of a new workspace session worktree when you leave **Worktree name** blank. See [Name work with a model](/workspace-sessions/#naming-model).
+- The model writes the title of a new workspace session from its first message. It also names the branch of a new task worktree, and the branch of a new workspace session worktree when you leave **Branch name** empty. See [Name work with a model](/workspace-sessions/#naming-model).
 - An Antigravity naming model saves each naming request as a conversation in your Antigravity history.
-- The default is none. Without a naming model, OpenDucktor makes no naming request: titles come from the first message, task branches come from the task title, and **Worktree name** is required. **Clear** removes the naming model.
+- The default is none. Without a naming model, OpenDucktor makes no naming request. Titles and workspace session branches come from the first message. Task branches come from the task title. **Clear** removes the naming model.
 - One naming request waits at most 15 seconds. After that time, OpenDucktor uses the names that it uses without a naming model.
 
 ### Repository prompts [#repository-prompts]

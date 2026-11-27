@@ -11,7 +11,8 @@ const CAPTIONS = {
   runtimes: "Choose a model of another harness for a role.",
   autopilot: "Autopilot starts the next agent. You answer questions and approve the task.",
   chat: "A workspace session creates the missing tasks, then starts a Builder in the background.",
-  "new-session": "Start a session in a new worktree, then send the first message to the agent.",
+  "new-session":
+    "Choose a new worktree, then send the first message. The naming model names the branch and the session.",
   fork: "Fork a session from an earlier reply into a new worktree, then send another follow-up.",
   "import-session":
     "Import a Claude Code conversation of the repository, then continue it in OpenDucktor.",
