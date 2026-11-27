@@ -37,6 +37,7 @@ import type { DemoRunScript, DemoRunStep } from "./demo-script";
 import {
   type DemoWorkspace,
   type DemoWorld,
+  demoUuid,
   findWorkspace,
   findWorkspaceByRepo,
 } from "./demo-world";
@@ -48,6 +49,7 @@ const CONTEXT_WINDOW = 200_000;
 const QUEUE_STOPPED = "The run stopped. Resume the queue to send the next message.";
 
 type UserMessagePart = Parameters<HostClient["agentSessionMessageSubmit"]>[0]["parts"][number];
+type DemoQueuedMessage = AgentQueuedMessage & { buildScript?: () => DemoRunScript };
 
 export type DemoSessionOwner =
   | { kind: "chat"; record: WorkspaceSession }
@@ -80,7 +82,7 @@ export type DemoSession = {
   pendingApprovals: AgentSessionLivePendingApprovalRequest[];
   pendingQuestions: AgentSessionLivePendingQuestionRequest[];
   /** The queued messages. `pause` holds the reason while the queue waits for the user. */
-  queue: { revision: number; entries: AgentQueuedMessage[]; pause: string | null };
+  queue: { revision: number; entries: DemoQueuedMessage[]; pause: string | null };
   run: Run | null;
   contextTokens: number;
   lastActivityAt: number;
@@ -196,7 +198,7 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
   const queueOf = (session: DemoSession): AgentMessageQueueSnapshot => ({
     target: { ...session.ref, sessionScope: scopeOf(session) },
     revision: session.queue.revision,
-    entries: session.queue.entries,
+    entries: session.queue.entries.map(({ buildScript: _buildScript, ...entry }) => entry),
     pause: session.queue.pause === null ? null : { message: session.queue.pause },
   });
 
@@ -559,9 +561,22 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     classifySystemSlashCommandInvocation([...parts] as AgentUserMessagePart[]);
 
   /** Throws the reason why `deliver` would refuse these parts now. */
-  const checkDeliverable = (session: DemoSession, parts: readonly UserMessagePart[]) => {
-    const invocation = systemCommandOf(parts);
+  const checkDeliverable = (session: DemoSession, entry: DemoQueuedMessage) => {
+    if (entry.buildScript) return;
+    const invocation = systemCommandOf(entry.parts);
     if (invocation.kind === "goal" && invocation.command.kind !== "set") requireGoal(session);
+  };
+
+  const startScriptedMessage = (
+    session: DemoSession,
+    parts: readonly UserMessagePart[],
+    buildScript: () => DemoRunScript,
+    submissionId?: string,
+  ): AcceptedAgentUserMessage => {
+    const script = buildScript();
+    const accepted = acceptUserMessage(session, parts, submissionId);
+    startRun(session, script);
+    return accepted;
   };
 
   /** Sends a message that the session can take now: a system command or a prompt. */
@@ -569,7 +584,9 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     session: DemoSession,
     parts: readonly UserMessagePart[],
     submissionId?: string,
+    buildScript?: () => DemoRunScript,
   ): AcceptedAgentInput => {
+    if (buildScript) return startScriptedMessage(session, parts, buildScript, submissionId);
     const invocation = systemCommandOf(parts);
     if (invocation.kind === "manual_session_compaction") {
       // Compaction summarizes the transcript, so the context gets small again.
@@ -594,6 +611,37 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     return accepted;
   };
 
+  const enqueueIfWaiting = (
+    session: DemoSession,
+    parts: UserMessagePart[],
+    submissionId: string,
+    buildScript?: () => DemoRunScript,
+  ): AgentMessageQueueSnapshot | null => {
+    if (!session.run && session.queue.entries.length === 0 && session.queue.pause === null)
+      return null;
+    const entry: DemoQueuedMessage = {
+      submissionId,
+      parts,
+      queuedAt: clock.nowIso(),
+      state: "queued",
+    };
+    if (buildScript) entry.buildScript = buildScript;
+    session.queue.entries = [...session.queue.entries, entry];
+    publishQueue(session);
+    return queueOf(session);
+  };
+
+  const submitWorkflowInstruction = (
+    session: DemoSession,
+    parts: UserMessagePart[],
+    buildScript: () => DemoRunScript,
+    useQueue: boolean,
+  ): AcceptedAgentUserMessage | undefined => {
+    if (useQueue && enqueueIfWaiting(session, parts, demoUuid(world.nextNumber()), buildScript))
+      return undefined;
+    return startScriptedMessage(session, parts, buildScript);
+  };
+
   /** Continues the turn that Stop cut off, as a runtime resumes an interrupted turn. */
   const continueRun = (session: DemoSession) => {
     if (session.run) throw new Error("This session is already working.");
@@ -616,7 +664,7 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
       const next = session.queue.entries[0];
       if (next?.state !== "queued") return;
       try {
-        checkDeliverable(session, next.parts);
+        checkDeliverable(session, next);
       } catch (error) {
         // The message stays, so the user can edit or remove it.
         const reason = error instanceof Error ? error.message : String(error);
@@ -628,7 +676,7 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
         (entry) => entry.submissionId !== next.submissionId,
       );
       publishQueue(session);
-      deliver(session, next.parts, next.submissionId);
+      deliver(session, next.parts, next.submissionId, next.buildScript);
     }
   };
 
@@ -836,19 +884,8 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
           kind: "accepted",
           acceptedMessage: acceptUserMessage(session, input.parts, input.submissionId),
         };
-      if (session.run || session.queue.entries.length > 0 || session.queue.pause !== null) {
-        session.queue.entries = [
-          ...session.queue.entries,
-          {
-            submissionId: input.submissionId,
-            parts: input.parts,
-            queuedAt: clock.nowIso(),
-            state: "queued",
-          },
-        ];
-        publishQueue(session);
-        return { kind: "queued", queue: queueOf(session) };
-      }
+      const queue = enqueueIfWaiting(session, input.parts, input.submissionId);
+      if (queue) return { kind: "queued", queue };
       return {
         kind: "accepted",
         acceptedMessage: deliver(session, input.parts, input.submissionId),
@@ -875,23 +912,17 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
           entries[at] = { ...entry, state: "editing", editId: `edit-${editNumber++}` };
           break;
         case "save_edit": {
-          const edited = currentEdit(action.editId);
+          const { editId: _editId, ...edited } = currentEdit(action.editId);
           entries[at] = {
-            submissionId: edited.submissionId,
+            ...edited,
             parts: action.parts,
-            queuedAt: edited.queuedAt,
             state: "queued",
           };
           break;
         }
         case "cancel_edit": {
-          const edited = currentEdit(action.editId);
-          entries[at] = {
-            submissionId: edited.submissionId,
-            parts: edited.parts,
-            queuedAt: edited.queuedAt,
-            state: "queued",
-          };
+          const { editId: _editId, ...edited } = currentEdit(action.editId);
+          entries[at] = { ...edited, state: "queued" };
           break;
         }
         case "remove":
@@ -899,14 +930,16 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
           break;
         case "steer":
           if (entry?.state !== "queued") throw new Error("This message already left the queue.");
+          if (session.run && entry.buildScript)
+            throw new Error("This workflow action needs its own turn. Leave it queued.");
           if (session.run && systemCommandOf(entry.parts).kind !== "not_system")
             throw new Error("A slash command cannot join running work.");
-          if (!session.run) checkDeliverable(session, entry.parts);
+          if (!session.run) checkDeliverable(session, entry);
           session.queue.entries = entries.filter((_, index) => index !== at);
           session.queue.pause = null;
           if (session.run) steered = acceptUserMessage(session, entry.parts, entry.submissionId);
           else {
-            const delivered = deliver(session, entry.parts, entry.submissionId);
+            const delivered = deliver(session, entry.parts, entry.submissionId, entry.buildScript);
             // A command that starts no work has no message to show.
             if (delivered.type === "user_message") steered = delivered;
           }
@@ -1020,6 +1053,7 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     continueRun,
     acceptUserMessage,
     deliver,
+    submitWorkflowInstruction,
     copyHistory,
     summaryOf,
     taskRecordOf,

@@ -245,19 +245,11 @@ export function useAgentStudioSessionActions({
   });
 
   const isSessionWorking = sessionState.isSessionWorking;
-  const isSessionInteractionBusy = isSessionWorking || messageDelivery.isSending;
-
   const canPrepareMessageFirstSession = useCallback(
-    (option: SessionCreateOption): boolean => {
-      if (option.disabled || (selectedSessionIdentity !== null && isSessionInteractionBusy)) {
-        return false;
-      }
-      // A draft can choose another runtime before its first Send.
-      return (
-        Boolean(taskId) && isActiveTaskReady && isRoleAvailableForTask(selectedTask, option.role)
-      );
-    },
-    [isActiveTaskReady, isSessionInteractionBusy, selectedSessionIdentity, selectedTask, taskId],
+    // A draft can choose another runtime before its first Send.
+    (option: SessionCreateOption): boolean =>
+      Boolean(taskId) && isActiveTaskReady && isRoleAvailableForTask(selectedTask, option.role),
+    [isActiveTaskReady, selectedTask, taskId],
   );
 
   const { isSubmittingQuestionByRequestId, onSubmitQuestionAnswers } =

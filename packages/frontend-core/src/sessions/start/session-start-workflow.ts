@@ -8,7 +8,6 @@ import { sessionLaunchFailureMessage, type AgentUserMessagePart } from "@openduc
 import type {
   AgentMessageSendOptions,
   AgentMessageSendReceipt,
-  AcceptedAgentMessageSendReceipt,
   AgentSessionIdentity,
 } from "../../types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "../../types/session-slices";
@@ -28,7 +27,7 @@ export type SessionStartWorkflowResult = AgentSessionIdentity & {
    * because the host can have the message.
    */
   retryPostStartMessage?: () => Promise<AgentMessageSendReceipt | null>;
-  postStartMessageReceipt?: AcceptedAgentMessageSendReceipt;
+  postStartMessageReceipt?: Extract<AgentMessageSendReceipt, { outcome: "accepted" | "queued" }>;
 };
 
 export type WorkflowLaunchClient = Pick<HostClient, "agentSessionWorkflowLaunch">;
@@ -93,6 +92,11 @@ export const startSessionWorkflow = async ({
       acceptedMessage: outcome.acceptedMessage,
       postAcceptanceFailure: result.postStartActionError?.message ?? null,
     };
+  else if (
+    outcome.status === "completed" &&
+    outcome.startupProgress?.instruction?.state === "queued"
+  )
+    result.postStartMessageReceipt = { outcome: "queued", recipient: session };
   const unsentInstruction = outcome.unsentInstruction
     ? toAgentUserMessageParts(outcome.unsentInstruction)
     : null;

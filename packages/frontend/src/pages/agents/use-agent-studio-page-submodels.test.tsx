@@ -98,7 +98,6 @@ describe("useAgentStudioHeaderModel", () => {
       launchActionId: "build_implementation_start" as const,
       label: "Prepare Builder session",
       description: "Open a Builder composer without sending a kickoff.",
-      disabled: false,
     };
     const quickAction = {
       kind: "session_start" as const,

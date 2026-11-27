@@ -25,6 +25,7 @@ import type { AgentSessionLiveStateService } from "./agent-session-live-state-se
 import type { TaskSessionOperations } from "./task-session-operations";
 import type { SessionLaunchRuntimePort } from "../../ports/session-launch-runtime-port";
 import type { AgentMessageDeliveryService } from "./agent-message-delivery-service";
+import type { EventPublishingTaskService } from "../tasks/event-publishing-task-service";
 
 export type WorkflowLaunchPreparationDependencies = {
   resolveParts: (
@@ -32,10 +33,8 @@ export type WorkflowLaunchPreparationDependencies = {
   ) => ReturnType<typeof resolveSessionMessageParts>;
   settings: Pick<WorkspaceSettingsService, "getRepoConfig">;
   settingsConfig: Pick<SettingsConfigPort, "readGlobalConfig">;
-  tasks: Pick<
-    TaskService,
-    "agentSessionsList" | "agentSessionUpdateModel" | "applyTaskEvent" | "updateTask"
-  >;
+  tasks: Pick<TaskService, "agentSessionsList" | "agentSessionUpdateModel" | "updateTask"> &
+    Pick<EventPublishingTaskService, "applyTaskEvent">;
   taskReader: Pick<TaskStorePort, "getTask">;
   taskWorkflows: TaskWorkflowResolver;
   worktrees: Pick<TaskWorktreeService, "getTaskWorktree">;

@@ -558,7 +558,7 @@ describe("useAgentStudioSessionActions", () => {
     }
   });
 
-  test("Prepare keeps a draft and first Send creates a fresh Builder with the chosen model", async () => {
+  test("Prepare opens a draft from a running Builder and first Send starts a fresh session", async () => {
     const scheduleQueryUpdate = mock(() => {});
     const selectAgentStudioSelection = mock(() => {});
     const createdSession: AgentSessionIdentity = {
@@ -569,6 +569,8 @@ describe("useAgentStudioSessionActions", () => {
     const startAgentSession = mock(async () => createdSession);
     const sendAgentMessage = mock<HookArgs["sendAgentMessage"]>(async () => null);
     const existingSession = createSession({
+      status: "running",
+      foregroundTurnActive: true,
       sessionAssociation: {
         kind: "workflow",
         workspaceId: "workspace-1",
@@ -607,7 +609,6 @@ describe("useAgentStudioSessionActions", () => {
           launchActionId: "build_after_qa_rejected",
           label: "Prepare Builder session",
           description: "Open a Builder composer without sending a kickoff.",
-          disabled: false,
         });
       });
 
@@ -699,7 +700,6 @@ describe("useAgentStudioSessionActions", () => {
         launchActionId: "build_implementation_start",
         label: "Prepare Builder session",
         description: "Open a Builder composer without sending a kickoff.",
-        disabled: false,
       });
     });
 
@@ -708,11 +708,24 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("quick action opens the modal-backed session start flow", async () => {
+  test("Generate Pull Request opens the session start modal while the Builder runs", async () => {
+    const runningBuilder = createSession({
+      externalSessionId: "builder-1",
+      workingDirectory: "/repo/worktree",
+      status: "running",
+      foregroundTurnActive: true,
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
+    });
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "build",
       launchActionId: "build_implementation_start",
+      selectedSession: selectedSessionFromSession(runningBuilder),
       selectedTask: createTask({
         status: "human_review",
         agentWorkflows: {
@@ -1243,7 +1256,6 @@ describe("useAgentStudioSessionActions", () => {
         role: "spec",
         label: "Spec · Start Spec",
         description: "Create a new spec session from scratch",
-        disabled: false,
       });
     });
 
@@ -1426,7 +1438,6 @@ describe("useAgentStudioSessionActions", () => {
               role: "spec",
               label: "Inspect",
               description: "Inspect task",
-              disabled: false,
             });
         });
         await harness.waitFor((state) => state.sessionStartModal?.selectedModelSelection != null);
@@ -1488,7 +1499,6 @@ describe("useAgentStudioSessionActions", () => {
           role: "spec",
           label: "Spec · Start Spec",
           description: "Create a new spec session from scratch",
-          disabled: false,
         });
       });
 

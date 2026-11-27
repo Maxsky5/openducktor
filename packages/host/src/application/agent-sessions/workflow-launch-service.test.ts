@@ -358,6 +358,176 @@ const reuseRequest = (
   instruction: { kind: "message", parts },
 });
 
+const completeTurn = async (
+  h: Awaited<ReturnType<typeof createLaunchHarness>>,
+  source: Omit<AgentSessionLiveRef, "repoPath">,
+): Promise<void> => {
+  const ref = { repoPath: "/repo", ...source };
+  h.live.get(agentSessionRefKey(ref))!.activity = "idle";
+  h.messageDelivery.observeChanges([
+    {
+      type: "transcript_event",
+      event: {
+        type: "session_idle",
+        sessionRef: ref,
+        externalSessionId: source.externalSessionId,
+        timestamp,
+        turnOutcome: "completed",
+      },
+    },
+  ]);
+  await h.runBackground();
+};
+
+test.each(["pull_request", "build_rebase_conflict_resolution"] as const)(
+  "manual reuse queues %s while the Builder works and delivers it after the turn",
+  async (actionId) => {
+    const h = await createLaunchHarness("opencode");
+    h.enablePullRequests();
+    h.setTaskStatus(actionId === "pull_request" ? "human_review" : "in_progress");
+    const source = h.addTaskSession("builder", { live: true, working: true });
+    const text =
+      actionId === "pull_request" ? "Generate the pull request." : "Resolve the conflict.";
+    const parts = [{ kind: "text" as const, text }];
+    const request = reuseRequest(source, parts);
+    if (actionId === "pull_request") request.instruction = { kind: "kickoff", text };
+    const result = await Effect.runPromise(
+      launchTracked(h, {
+        ...request,
+        startup: { startupAttemptId: "attempt", operationId: "operation" },
+        policy: {
+          kind: "manual",
+          actionId,
+          role: "build",
+          decision: { startMode: "reuse", sourceSession: source },
+        },
+      }),
+    );
+    expect(result).toMatchObject({
+      status: "completed",
+      session: source,
+      startupProgress: { phase: "completed", instruction: { state: "queued" } },
+    });
+    expect(result.acceptedMessage).toBeUndefined();
+    expect(result.unsentInstruction).toBeUndefined();
+    const queued = h.messageDelivery.listQueues("/repo")[0]?.entries;
+    expect(queued).toEqual([
+      expect.objectContaining({
+        state: "queued",
+        parts,
+      }),
+    ]);
+
+    await h.runBackground();
+    const sendsBeforeCompletion = h.sends.length;
+    await completeTurn(h, source);
+    expect(h.sends.slice(sendsBeforeCompletion)).toEqual([
+      expect.objectContaining({
+        externalSessionId: "builder",
+        parts,
+        delivery: "new_turn",
+      }),
+    ]);
+    expect(h.messageDelivery.listQueues("/repo")).toEqual([]);
+  },
+);
+
+test.each([
+  { admission: "admitted", custom: false },
+  { admission: "admitted", custom: true },
+  { admission: "blocked", custom: false },
+  { admission: "canceled", custom: false },
+  { admission: "publication fails", custom: false },
+] as const)(
+  "a working feedback session keeps review state until admission ($admission, custom workflow: $custom)",
+  async ({ admission, custom }) => {
+    const wait = await pausePoint();
+    const reviewStatus = custom ? "approval" : "human_review";
+    const activeStatus = custom ? "writing" : "in_progress";
+    const eventId = custom ? "request-rewrite" : "human-request-changes";
+    const setup: NonNullable<Parameters<typeof createLaunchHarness>[1]> = {
+      beforeMessagePreparation: wait.pause,
+    };
+    if (custom) {
+      setup.taskWorkflows = reviewTaskWorkflows;
+      setup.task = { issueType: "feature", status: reviewStatus };
+    }
+    const h = await createLaunchHarness("opencode", setup);
+    h.setTaskStatus(reviewStatus);
+    if (admission === "publication fails") h.setPublishFailure();
+    const sourceSession = h.addTaskSession("builder", {
+      live: true,
+      working: true,
+      role: custom ? "writer" : "build",
+    });
+    const ref = { repoPath: "/repo", ...sourceSession };
+    const kickoff = "Apply review feedback.";
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const launch = yield* Effect.forkChild(
+          h.service.launch({
+            ...reuseRequest(sourceSession),
+            policy: {
+              kind: "manual",
+              actionId: custom ? "write_feedback" : "build_after_human_request_changes",
+              decision: { startMode: "reuse", sourceSession },
+            },
+            instruction: { kind: "kickoff", text: kickoff, feedback: "Rename the helper." },
+            beforeStartAction: { eventId },
+          }),
+        );
+        yield* Effect.raceFirst(
+          Deferred.await(wait.entered),
+          Fiber.join(launch).pipe(
+            Effect.flatMap((result) =>
+              Effect.die(
+                new Error(`Launch settled before queue admission: ${result.failure?.message}`),
+              ),
+            ),
+          ),
+        );
+        expect(h.getTask().status).toBe(reviewStatus);
+        if (admission === "blocked") {
+          h.live.get(agentSessionRefKey(ref))!.pendingQuestions = [
+            { requestId: "late-blocker", questions: [], blocking: true },
+          ];
+        }
+        if (admission === "canceled") h.service.cancelSessionLaunches(ref);
+        yield* wait.open;
+        return yield* Fiber.join(launch);
+      }).pipe(Effect.ensuring(wait.open)),
+    );
+    expect(h.sends).toEqual([]);
+    expect(result.unsentInstruction).toBeUndefined();
+    if (admission === "admitted" || admission === "publication fails") {
+      expect(result.status).toBe(admission === "admitted" ? "completed" : "failed");
+      if (admission === "publication fails")
+        expect(result.failure?.message).toBe("Ownership publication failed");
+      expect(h.getTask().status).toBe(activeStatus);
+      expect(h.appliedEvents).toEqual([eventId]);
+      expect(h.messageDelivery.listQueues("/repo")[0]?.entries).toEqual([
+        expect.objectContaining({ state: "queued", parts: [{ kind: "text", text: kickoff }] }),
+      ]);
+      if (admission === "admitted") {
+        await completeTurn(h, sourceSession);
+        expect(h.sends).toEqual([
+          expect.objectContaining({
+            externalSessionId: "builder",
+            parts: [{ kind: "text", text: kickoff }],
+          }),
+        ]);
+        expect(h.messageDelivery.listQueues("/repo")).toEqual([]);
+      }
+    } else {
+      expect(result.status).toBe(admission === "blocked" ? "failed" : "canceled");
+      if (admission === "blocked") expect(result.failure?.message).toContain("pending request");
+      expect(h.getTask().status).toBe(reviewStatus);
+      expect(h.appliedEvents).toEqual([]);
+      expect(h.messageDelivery.listQueues("/repo")).toEqual([]);
+    }
+  },
+);
+
 test.each(runtimeKinds)("Autopilot queues a message for a working %s session", async (kind) => {
   const h = await createLaunchHarness(kind);
   h.setTaskStatus("in_progress");
@@ -395,22 +565,9 @@ test.each(runtimeKinds)("Autopilot queues a message for a working %s session", a
 
   const ref = { repoPath: "/repo", ...source };
   const live = h.live.get(agentSessionRefKey(ref))!;
-  live.activity = "idle";
   live.pendingQuestions = [{ requestId: "late-question", questions: [], blocking: false }];
   h.setTaskStatus("blocked");
-  h.messageDelivery.observeChanges([
-    {
-      type: "transcript_event",
-      event: {
-        type: "session_idle",
-        sessionRef: ref,
-        externalSessionId: ref.externalSessionId,
-        timestamp,
-        turnOutcome: "completed",
-      },
-    },
-  ]);
-  await h.runBackground();
+  await completeTurn(h, source);
   expect(h.sends).toHaveLength(2);
   expect(h.sends[1]).toMatchObject({
     ...ref,
@@ -912,6 +1069,28 @@ test("a first send without an answer returns no instruction and asks the user to
   expect(result.unsentInstruction).toBeUndefined();
   expect(result.acceptedMessage).toBeUndefined();
   expect(h.sends).toHaveLength(1);
+});
+
+test("a reused session with unknown delivery keeps a locked queue entry and offers no resend", async () => {
+  const h = await createLaunchHarness();
+  h.setTaskStatus("in_progress");
+  h.setSendFailure("uncertain");
+  const source = h.addTaskSession("builder", { live: true });
+  const result = await Effect.runPromise(
+    launchTracked(h, {
+      ...reuseRequest(source),
+      startup: { startupAttemptId: "attempt", operationId: "operation" },
+    }),
+  );
+  expect(result).toMatchObject({
+    status: "failed",
+    failure: { message: expect.stringContaining("Inspect the session before you send it again.") },
+    startupProgress: { instruction: { state: "unknown" } },
+  });
+  expect(result.unsentInstruction).toBeUndefined();
+  expect(h.messageDelivery.listQueues("/repo")[0]?.entries).toEqual([
+    expect.objectContaining({ state: "acceptance_unknown" }),
+  ]);
 });
 
 test("the first send reaches the runtime adapter with its native admission options", async () => {

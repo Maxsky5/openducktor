@@ -63,7 +63,6 @@ describe("agent-studio-quick-actions", () => {
       selectedTask: task,
       sessionsForTask: [builderSession],
       roleEnabledByTask: buildRoleEnabledMapForTask(task),
-      createSessionDisabled: false,
     };
   };
 
@@ -81,7 +80,6 @@ describe("agent-studio-quick-actions", () => {
       selectedTask: task,
       sessionsForTask: [],
       roleEnabledByTask: buildRoleEnabledMapForTask(task),
-      createSessionDisabled: false,
     });
     expect(
       options.find(
@@ -107,19 +105,6 @@ describe("agent-studio-quick-actions", () => {
         ?.description,
     ).toBe("Start a Spec session that writes the task spec.");
     for (const option of options) expect(option.description).not.toBe(option.label);
-  });
-
-  test("tells why a feedback action waits while a session runs", () => {
-    const options = buildAgentStudioQuickActions({
-      ...buildPrActionArgs(),
-      createSessionDisabled: true,
-    });
-    expect(
-      options.find(
-        (option) =>
-          option.kind === "task_action" && option.taskAction.action === "human_request_changes",
-      ),
-    ).toMatchObject({ disabled: true, disabledReason: "Wait for the current session to finish." });
   });
 
   test("hides unsupported Pull Request generation", () => {
@@ -209,7 +194,6 @@ describe("agent-studio-quick-actions", () => {
       selectedTask: task,
       sessionsForTask,
       roleEnabledByTask: buildRoleEnabledMapForTask(task),
-      createSessionDisabled: false,
     });
 
     expect(options.map((option) => option.launchActionId)).toEqual([
@@ -223,7 +207,6 @@ describe("agent-studio-quick-actions", () => {
         selectedTask: task,
         sessionsForTask,
         roleEnabledByTask: buildRoleEnabledMapForTask(task),
-        createSessionDisabled: false,
       }),
     ).toContainEqual(
       expect.objectContaining({
@@ -253,7 +236,6 @@ describe("agent-studio-quick-actions", () => {
       selectedTask: specReadyTask,
       sessionsForTask: [],
       roleEnabledByTask: buildRoleEnabledMapForTask(specReadyTask),
-      createSessionDisabled: false,
     });
     expect(selectPrimaryAgentStudioQuickAction(specReadyOptions)).toMatchObject({
       launchActionId: "planner_initial",
@@ -265,7 +247,6 @@ describe("agent-studio-quick-actions", () => {
       selectedTask: readyForDevTask,
       sessionsForTask: [],
       roleEnabledByTask: buildRoleEnabledMapForTask(readyForDevTask),
-      createSessionDisabled: false,
     });
     expect(selectPrimaryAgentStudioQuickAction(readyForDevOptions)).toMatchObject({
       launchActionId: "build_implementation_start",
@@ -297,7 +278,6 @@ describe("agent-studio-quick-actions", () => {
       selectedTask: humanReviewTask,
       sessionsForTask: [humanReviewBuilderSession],
       roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTask),
-      createSessionDisabled: false,
       gitProviderContext: createGitProviderContextFixture(),
     });
     expect(selectPrimaryAgentStudioQuickAction(humanReviewOptions)).toMatchObject({
@@ -322,7 +302,6 @@ describe("agent-studio-quick-actions", () => {
         selectedTask: humanReviewTask,
         sessionsForTask: [humanReviewBuilderSession],
         roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTask),
-        createSessionDisabled: false,
         gitProviderContext: createGitProviderContextFixture(),
       }).filter(
         (option) =>
@@ -348,7 +327,6 @@ describe("agent-studio-quick-actions", () => {
         }),
       ],
       roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTaskWithPullRequest),
-      createSessionDisabled: false,
       gitProviderContext: createGitProviderContextFixture(),
     });
 
@@ -358,7 +336,6 @@ describe("agent-studio-quick-actions", () => {
           selectedTask: humanReviewTaskWithPullRequest,
           sessionsForTask: [],
           roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTaskWithPullRequest),
-          createSessionDisabled: false,
           gitProviderContext: createGitProviderContextFixture(),
         }),
       ),
@@ -400,7 +377,6 @@ describe("agent-studio-quick-actions", () => {
       selectedTask: task,
       sessionsForTask: [],
       roleEnabledByTask: buildRoleEnabledMapForTask(task),
-      createSessionDisabled: false,
     });
     expect(selectPrimaryAgentStudioQuickAction(options)).toMatchObject({ role: "build" });
   });
@@ -422,7 +398,6 @@ describe("agent-studio-quick-actions", () => {
       selectedTask: task,
       sessionsForTask: [],
       roleEnabledByTask: buildRoleEnabledMapForTask(task),
-      createSessionDisabled: false,
     });
 
     expect(options.map((option) => option.launchActionId)).toEqual([
@@ -463,17 +438,6 @@ describe("agent-studio-quick-actions", () => {
       expect(selectPrimaryAgentStudioQuickAction(options)?.id).not.toBe("task:human_approve");
     });
 
-    test("keeps Approve Task out of the primary slot while a session is working", () => {
-      const options = buildAgentStudioQuickActions(
-        buildReviewArgs({ createSessionDisabled: true }),
-      );
-
-      expect(selectPrimaryAgentStudioQuickAction(options)).toMatchObject({
-        launchActionId: "pull_request",
-        disabled: true,
-      });
-    });
-
     test("leads with Approve Task in human review without an enabled Git provider", () => {
       const options = buildAgentStudioQuickActions(
         buildReviewArgs({
@@ -500,34 +464,6 @@ describe("agent-studio-quick-actions", () => {
         label: "Close Task",
         mergedTarget: "origin/main",
       });
-    });
-  });
-
-  test("keeps the best primary quick action label when a session disables starting", () => {
-    const task = buildTask({
-      id: "task-1",
-      status: "in_progress",
-      availableActions: ["set_spec", "set_plan"],
-      agentWorkflows: {
-        spec: { required: true, canSkip: false, available: true, completed: true },
-        planner: { required: true, canSkip: false, available: true, completed: true },
-        build: { required: true, canSkip: false, available: true, completed: false },
-        qa: { required: true, canSkip: false, available: false, completed: false },
-      },
-    });
-
-    const options = buildSessionQuickActions({
-      selectedTask: task,
-      sessionsForTask: [],
-      roleEnabledByTask: buildRoleEnabledMapForTask(task),
-      createSessionDisabled: true,
-    });
-
-    expect(selectPrimaryAgentStudioQuickAction(options)).toMatchObject({
-      launchActionId: "build_implementation_start",
-      label: "Start Implementation",
-      disabled: true,
-      disabledReason: "Wait for the current session to finish.",
     });
   });
 
@@ -558,7 +494,6 @@ describe("agent-studio-quick-actions", () => {
         }),
       ],
       roleEnabledByTask: buildRoleEnabledMapForTask(aiReviewTaskWithoutPullRequest),
-      createSessionDisabled: false,
     });
     expect(selectPrimaryAgentStudioQuickAction(aiReviewWithoutPullRequestOptions)).toMatchObject({
       launchActionId: "qa_review",
@@ -585,7 +520,6 @@ describe("agent-studio-quick-actions", () => {
         }),
       ],
       roleEnabledByTask: buildRoleEnabledMapForTask(aiReviewTaskWithPullRequest),
-      createSessionDisabled: false,
     });
     expect(selectPrimaryAgentStudioQuickAction(aiReviewWithPullRequestOptions)).toMatchObject({
       launchActionId: "qa_review",
@@ -598,7 +532,6 @@ describe("agent-studio-quick-actions", () => {
         selectedTask: aiReviewTaskWithPullRequest,
         sessionsForTask: [],
         roleEnabledByTask: buildRoleEnabledMapForTask(aiReviewTaskWithPullRequest),
-        createSessionDisabled: false,
       }),
     ).toContainEqual(
       expect.objectContaining({
@@ -627,7 +560,6 @@ describe("agent-studio-quick-actions", () => {
       selectedTask: qaRejectedTask,
       sessionsForTask: [],
       roleEnabledByTask: buildRoleEnabledMapForTask(qaRejectedTask),
-      createSessionDisabled: false,
     });
     expect(selectPrimaryAgentStudioQuickAction(qaRejectedOptions)).toMatchObject({
       launchActionId: "build_after_qa_rejected",
@@ -652,12 +584,10 @@ describe("agent-studio-quick-actions", () => {
       selectedTask: task,
       sessionsForTask: [],
       roleEnabledByTask,
-      createSessionDisabled: false,
     });
     const gitConflictQuickAction = buildGitConflictQuickAction({
       selectedTask: task,
       roleEnabledByTask,
-      createSessionDisabled: false,
     });
     if (!gitConflictQuickAction) {
       throw new Error("Expected the git conflict quick action for an enabled Builder role.");
@@ -682,32 +612,11 @@ describe("agent-studio-quick-actions", () => {
     expect(primaryQuickAction).toBe(gitConflictQuickAction);
   });
 
-  test("disables git conflict resolution while a session is working", () => {
-    const roleEnabledByTask = { spec: false, planner: false, build: true, qa: false };
-
-    expect(
-      buildGitConflictQuickAction({
-        selectedTask: buildTask({
-          id: "task-1",
-          agentWorkflows: {
-            spec: { required: true, canSkip: false, available: false, completed: true },
-            planner: { required: true, canSkip: false, available: false, completed: true },
-            build: { required: true, canSkip: false, available: true, completed: false },
-            qa: { required: true, canSkip: false, available: false, completed: false },
-          },
-        }),
-        roleEnabledByTask,
-        createSessionDisabled: true,
-      }),
-    ).toMatchObject({
-      disabled: true,
-      disabledReason: "Wait for the current session to finish.",
-    });
+  test("omits the git conflict quick action without a selected task", () => {
     expect(
       buildGitConflictQuickAction({
         selectedTask: null,
-        roleEnabledByTask,
-        createSessionDisabled: false,
+        roleEnabledByTask: { spec: false, planner: false, build: true, qa: false },
       }),
     ).toBeNull();
   });
@@ -732,7 +641,6 @@ describe("agent-studio-quick-actions", () => {
         }),
       ],
       roleEnabledByTask: buildRoleEnabledMapForTask(nonReviewTask),
-      createSessionDisabled: false,
     });
 
     expect(nonReviewOptions.some((option) => option.launchActionId === "pull_request")).toBe(false);
@@ -762,7 +670,6 @@ describe("agent-studio-quick-actions", () => {
         }),
       ],
       roleEnabledByTask: buildRoleEnabledMapForTask(aiReviewTask),
-      createSessionDisabled: false,
     });
 
     expect(aiReviewOptions.some((option) => option.launchActionId === "pull_request")).toBe(false);
@@ -785,7 +692,6 @@ describe("agent-studio-quick-actions", () => {
       selectedTask: humanReviewTask,
       sessionsForTask: [humanReviewBuilderSession],
       roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTask),
-      createSessionDisabled: false,
       gitProviderContext: createGitProviderContextFixture(),
     });
 
@@ -815,7 +721,6 @@ describe("agent-studio-quick-actions", () => {
       selectedTask: task,
       sessionsForTask: [],
       roleEnabledByTask: buildRoleEnabledMapForTask(task),
-      createSessionDisabled: false,
       gitProviderContext: createGitProviderContextFixture(),
     });
 
@@ -837,7 +742,6 @@ describe("agent-studio-quick-actions", () => {
           selectedTask: task,
           sessionsForTask: [],
           roleEnabledByTask: buildRoleEnabledMapForTask(task),
-          createSessionDisabled: false,
           gitProviderContext: createGitProviderContextFixture(),
         }),
       ),
@@ -887,7 +791,6 @@ describe("agent-studio-quick-actions", () => {
         build: false,
         qa: true,
       },
-      createSessionDisabled: false,
     });
 
     expect(options.map((option) => option.launchActionId)).toEqual([
@@ -899,7 +802,6 @@ describe("agent-studio-quick-actions", () => {
       buildGitConflictQuickAction({
         selectedTask: task,
         roleEnabledByTask: { spec: true, planner: true, build: false, qa: true },
-        createSessionDisabled: false,
       }),
     ).toBeNull();
     expect(

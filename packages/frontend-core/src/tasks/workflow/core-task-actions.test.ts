@@ -50,7 +50,6 @@ describe("core task actions", () => {
       selectedTask: task,
       sessionsForTask: [],
       roleEnabledByTask: buildRoleEnabledMapForTask(task),
-      createSessionDisabled: false,
     });
     const review = createTaskCardFixture({
       status: "human_review",
@@ -100,7 +99,6 @@ describe("core task actions", () => {
       selectedTask: task,
       sessionsForTask: [],
       roleEnabledByTask: {},
-      createSessionDisabled: false,
       mergedTarget: "origin/main",
     });
     expect(first).toMatchObject({

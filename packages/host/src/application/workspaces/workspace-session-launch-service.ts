@@ -82,7 +82,6 @@ export const createWorkspaceSessionLaunchService = (deps: WorkspaceSessionLaunch
   };
   return createSessionLaunchService<WorkspaceSessionLaunchRequest, WorkspaceSessionLaunchResult>({
     runtime: deps.live,
-    send: (_request, input, options) => deps.commands.sendUserMessage(input, options),
     initial: (request) =>
       Effect.succeed({
         workspaceId: request.workspaceId,
@@ -307,7 +306,9 @@ export const createWorkspaceSessionLaunchService = (deps: WorkspaceSessionLaunch
           parts,
           delivery: "new_turn",
         };
-        yield* attempt.send(input, request.parts);
+        yield* attempt.send(request.parts, (options) =>
+          deps.commands.sendUserMessage(input, options),
+        );
         attempt.setResultFields({
           record: (yield* recordFor({ workspaceId: request.workspaceId, sessionId: saved.id }))
             .session,

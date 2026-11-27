@@ -27,8 +27,15 @@ export type CreateEventPublishingTaskServiceInput = {
   >;
 };
 
-export type EventPublishingTaskService = Omit<TaskService, keyof ArtifactPublishingMethods> &
+export type EventPublishingTaskService = Omit<
+  TaskService,
+  keyof ArtifactPublishingMethods | "applyTaskEvent"
+> &
   ArtifactPublishingMethods & {
+    applyTaskEvent: (
+      input: Parameters<TaskService["applyTaskEvent"]>[0],
+      onCommitted?: () => void,
+    ) => ReturnType<TaskService["applyTaskEvent"]>;
     applyStartEventDeferredPublication: (
       input: Parameters<TaskService["applyStartEvent"]>[0],
     ) => Effect.Effect<
@@ -281,13 +288,13 @@ export const createEventPublishingTaskService = ({
         changeForTask(input.taskId),
         taskService.updateTask(input),
       ),
-    applyTaskEvent: (input) =>
+    applyTaskEvent: (input, onCommitted) =>
       publishAfterMutation(
         "apply-task-event",
         input,
         changeForTask(input.taskId),
         taskService.applyTaskEvent(input),
-        { artifactChanges: (result) => result.artifactChanges },
+        { artifactChanges: (result) => result.artifactChanges, onCommitted },
       ).pipe(Effect.map(({ task }) => task)),
     applyStartEvent: (input) =>
       publishAfterMutation(

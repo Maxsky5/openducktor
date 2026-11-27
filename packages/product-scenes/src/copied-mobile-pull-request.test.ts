@@ -76,7 +76,6 @@ const quick = await importProduct<{
     selectedTask: TaskCard;
     sessionsForTask: readonly QuickSession[];
     roleEnabledByTask: Record<string, boolean>;
-    createSessionDisabled: boolean;
     gitProviderContext: GitProviderContext;
   }) => { id: string; label: string; disabled: boolean }[];
   buildRoleEnabledMapForTask: (task: TaskCard) => Record<string, boolean>;
@@ -184,7 +183,6 @@ describe("the pull request approval of the mobile app copied in the replicas", (
         },
       ],
       roleEnabledByTask: quick.buildRoleEnabledMapForTask(task),
-      createSessionDisabled: false,
       gitProviderContext: createGitProviderContextFixture(),
     });
     expect(HUMAN_REVIEW_ACTIONS.map(({ id, title }) => ({ id, title }))).toEqual(

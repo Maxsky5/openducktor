@@ -374,9 +374,6 @@ export function useAgentStudioSessionStartFlow({
       if (option.disabled) {
         return;
       }
-      if (isSessionWorking) {
-        return;
-      }
       if (!canStartRole(option.role)) {
         return;
       }
@@ -406,7 +403,7 @@ export function useAgentStudioSessionStartFlow({
 
       void runGatedSessionStartRequest(request);
     },
-    [canStartRole, isSessionWorking, openHumanReviewFeedback, runGatedSessionStartRequest, taskId],
+    [canStartRole, openHumanReviewFeedback, runGatedSessionStartRequest, taskId],
   );
 
   return {

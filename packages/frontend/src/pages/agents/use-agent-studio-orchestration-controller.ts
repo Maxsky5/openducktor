@@ -358,7 +358,6 @@ export function useAgentStudioOrchestrationController({
         sessionsForTask: view.sessionsForTask,
         selectedSession,
         sessionActions: {
-          isSessionWorking,
           onSubmitQuestionAnswers,
           isSubmittingQuestionByRequestId,
           isSubmittingApprovalByRequestId,
@@ -375,7 +374,6 @@ export function useAgentStudioOrchestrationController({
       gitProviderContext,
       gitProviderReadError,
       mergedTarget,
-      isSessionWorking,
       isSubmittingApprovalByRequestId,
       isSubmittingQuestionByRequestId,
       onReplyApproval,

@@ -97,7 +97,6 @@ test("an assigned session workflow action uses the visible header handler and it
     sessionsForTask: [],
     selectedSessionIdentity: null,
     role: null,
-    isSessionWorking: false,
     roleLabelByRole: { build: "Builder", spec: "Spec", planner: "Planner", qa: "QA" },
   });
   const option = workflow.quickActions.find((option) => option.kind === "session_start");

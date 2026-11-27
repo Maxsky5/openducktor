@@ -1,16 +1,13 @@
 import { SessionOperationError } from "../../ports/session-operation-error";
 import type {
-  AcceptedAgentInput,
-  AgentSessionControlSendInput,
   AgentSessionControlSummary,
   AgentSessionLiveRef,
   AgentSessionUserMessagePart,
   SessionLaunchResult,
 } from "@openducktor/contracts";
 import { sessionLaunchFailureMessage } from "@openducktor/core";
-import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Result } from "effect";
 import { errorMessage, type HostError, HostValidationError } from "../../effect/host-errors";
-import type { AgentSessionSendOptions } from "../../ports/agent-session-live-adapter-port";
 import { createSerialGate } from "../../effect/serial-gate";
 import {
   AgentSessionMessageAcceptedError,
@@ -45,7 +42,9 @@ type Attempt<Request, Result extends SessionLaunchResult> = {
    * starts or when the runtime did not get it or rejected it. `uncertain` means that the runtime
    * can have accepted it, for example before a timeout.
    */
-  delivery?: { kind: "unsent"; instruction: AgentSessionUserMessagePart[] } | { kind: "uncertain" };
+  delivery?:
+    | { kind: "unsent"; instruction: AgentSessionUserMessagePart[] | undefined }
+    | { kind: "uncertain" };
   canceled: boolean;
   /**
    * Stop or launch cleanup already asked the runtime to stop the session, so settlement does not.
@@ -65,14 +64,9 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
     SessionLaunchRuntimePort,
     "holdWorkflowLaunch" | "stopSession" | "reportLaunchFailure"
   >;
-  /** A queued instruction has no accepted message yet. */
-  send: (
-    request: Request,
-    input: AgentSessionControlSendInput,
-    options: AgentSessionSendOptions,
-  ) => Effect.Effect<AcceptedAgentInput | undefined, HostError>;
   /** The result before the launch runs. A request that cannot launch fails here. */
   initial: (request: Request) => Effect.Effect<Result, HostValidationError>;
+  unconfirmedDeliveryError?: (request: Request) => HostError | undefined;
   key: (request: Request) => string;
   target?: (request: Request) => AgentSessionLiveRef | undefined;
   run: (context: SessionLaunchContext<Request, Result>) => Effect.Effect<unknown, unknown>;
@@ -127,7 +121,7 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
         attempt.stopped = true;
         return deps.runtime.stopSession(ref);
       }),
-    send: (input, instruction) =>
+    send: (instruction, deliver) =>
       Effect.gen(function* () {
         yield* checkCanceled(attempt);
         yield* updateStartup((progress) => {
@@ -140,15 +134,24 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
         });
         delete attempt.delivery;
         let sent = false;
+        let queueState: "queued" | "acceptance_unknown" | undefined;
         // The send stays interruptible, so shutdown does not wait for a slow runtime.
-        const reply = yield* Effect.result(
-          deps.send(attempt.request, input, {
+        const delivered = yield* Effect.result(
+          deliver({
             assertCurrent: () => assertCurrent(attempt),
             onSent: () => {
               sent = true;
             },
+            onQueued: (state) => {
+              queueState = state;
+            },
           }),
         );
+        const unconfirmedError =
+          delivered._tag === "Success" && queueState === "acceptance_unknown"
+            ? deps.unconfirmedDeliveryError?.(attempt.request)
+            : undefined;
+        const reply = unconfirmedError ? Result.fail(unconfirmedError) : delivered;
         if (reply._tag === "Success") {
           if (reply.success) attempt.result.acceptedMessage = reply.success;
           yield* updateStartup((progress) => {
@@ -177,13 +180,15 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
           attempt.result.acceptedMessage = failure.failure.acceptedMessage;
         else if (failure instanceof AgentSessionCommandAcceptedError)
           attempt.result.acceptedMessage = failure.failure.acceptedCommand;
-        else
+        else if (queueState !== "queued")
           attempt.delivery =
-            !sent || failure instanceof AgentSessionMessageRejectedError
+            queueState !== "acceptance_unknown" &&
+            (!sent || failure instanceof AgentSessionMessageRejectedError)
               ? { kind: "unsent", instruction }
               : { kind: "uncertain" };
         yield* updateStartup((progress) => {
           if (attempt.result.acceptedMessage) progress.instruction({ state: "accepted" });
+          else if (queueState === "queued") progress.instruction({ state: "queued" });
           else if (attempt.delivery?.kind === "unsent") progress.instruction({ state: "not_sent" });
           else progress.instruction({ state: "unknown" });
           progress.step({
@@ -246,7 +251,8 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
         if (
           result.status === "failed" &&
           attempt.ownershipSaved &&
-          attempt.delivery?.kind === "unsent"
+          attempt.delivery?.kind === "unsent" &&
+          attempt.delivery.instruction !== undefined
         )
           result.unsentInstruction = attempt.delivery.instruction;
         // The caller can leave before settlement, so the saved session must show the failure.

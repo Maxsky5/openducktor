@@ -16,7 +16,6 @@ import {
 } from "@openducktor/frontend-core/lib/agent-session-options";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import type { WorkflowStepLiveSession } from "@openducktor/frontend-core/types/agent-workflow";
-import { SESSION_BUSY_REASON } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 
 export type SessionCreateOption = {
   id: string;
@@ -24,8 +23,6 @@ export type SessionCreateOption = {
   launchActionId: SessionLaunchActionId;
   label: string;
   description: string;
-  disabled: boolean;
-  disabledReason?: string;
 };
 
 export type AgentSessionWorkflowSummary = AgentSessionOptionSummary &
@@ -123,23 +120,17 @@ export const buildSessionSelectorGroups = (params: {
 export const buildSessionCreateOptions = (params: {
   task: TaskCard | null;
   roleEnabledByTask: Record<AgentRole, boolean>;
-  createSessionDisabled: boolean;
   roleLabelByRole: Record<AgentRole, string>;
 }): SessionCreateOption[] =>
   Object.keys(params.roleEnabledByTask)
     .filter((role) => params.roleEnabledByTask[role])
     .map((role) => {
       const launchActionId = resolveSessionContinuationLaunchAction(role, params.task);
-      const option: SessionCreateOption = {
+      return {
         id: `${role}:${launchActionId}:message_first`,
         role,
         launchActionId,
         label: `Prepare ${params.roleLabelByRole[role]} session`,
         description: `Open a ${params.roleLabelByRole[role]} composer without sending a kickoff.`,
-        disabled: params.createSessionDisabled,
       };
-      if (params.createSessionDisabled) {
-        option.disabledReason = SESSION_BUSY_REASON;
-      }
-      return option;
     });

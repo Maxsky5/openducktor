@@ -307,6 +307,89 @@ describe("demo backend", () => {
     expect((await taskOf(demo, ready.title)).status).toBe("ai_review");
   });
 
+  test("queues a reused PR launch behind the Builder's current turn and earlier messages", async () => {
+    const demo = openDemo();
+    const { envelopes } = await observeLive(demo);
+    const task = await taskOf(demo, "Open search with a keyboard shortcut");
+    const [records] = await demo.client.agentSessionsListForTasks(FIELDNOTES, [task.id]);
+    const builder = records?.agentSessions.find(({ role }) => role === "build");
+    if (!builder) throw new Error("The sample task has no Builder session.");
+    const sourceSession = {
+      runtimeKind: builder.runtimeKind,
+      workingDirectory: builder.workingDirectory,
+      externalSessionId: builder.externalSessionId,
+    };
+    const target = {
+      repoPath: FIELDNOTES.repoPath,
+      ...sourceSession,
+      sessionScope: {
+        kind: "workflow" as const,
+        workspaceId: FIELDNOTES.workspaceId,
+        taskId: task.id,
+        role: "build",
+      },
+    };
+    const send = (submissionId: string, text: string) =>
+      demo.client.agentSessionMessageSubmit({
+        ...target,
+        submissionId,
+        mode: "default",
+        parts: [{ kind: "text", text }],
+      });
+    const first = "Where is search?";
+    const earlier = "How does ranking work?";
+    const kickoff = "Generate the pull request.";
+    expect((await send("11111111-1111-4111-8111-000000000001", first)).kind).toBe("accepted");
+    expect((await send("11111111-1111-4111-8111-000000000002", earlier)).kind).toBe("queued");
+
+    const launch = await demo.client.agentSessionWorkflowLaunch({
+      ...FIELDNOTES,
+      taskId: task.id,
+      startup: { startupAttemptId: "pr-reuse", operationId: "pr-reuse-operation" },
+      policy: {
+        kind: "manual",
+        actionId: "pull_request",
+        role: "build",
+        decision: { startMode: "reuse", sourceSession },
+      },
+      instruction: { kind: "kickoff", text: kickoff },
+    });
+    expect(launch.acceptedMessage).toBeUndefined();
+    expect(launch.startupProgress?.instruction).toEqual({ state: "queued" });
+    expect((await taskOf(demo, task.title)).pullRequest).toBeUndefined();
+
+    const snapshot = await demo.client.agentSessionLiveAttach({ repoPath: FIELDNOTES.repoPath });
+    const queue = snapshot.messageQueues.find(
+      ({ target }) => target.externalSessionId === builder.externalSessionId,
+    );
+    const pending = queue?.entries.find(({ parts }) =>
+      parts.some((part) => part.kind === "text" && part.text === kickoff),
+    );
+    if (!pending) throw new Error("The PR instruction did not enter the queue.");
+    await expect(
+      demo.client.agentSessionMessageQueueManage({
+        ...target,
+        action: { kind: "steer", submissionId: pending.submissionId },
+      }),
+    ).rejects.toThrow("This workflow action needs its own turn.");
+
+    await demo.advance(45_000);
+
+    const turns = envelopes.flatMap((envelope) => {
+      if (
+        envelope.type !== "transcript_event" ||
+        envelope.event.externalSessionId !== builder.externalSessionId
+      )
+        return [];
+      const event = envelope.event;
+      if (event.type === "user_message") return [event.message];
+      if (event.type === "session_idle") return [event.turnOutcome];
+      return [];
+    });
+    expect(turns).toEqual([first, "completed", earlier, "completed", kickoff, "completed"]);
+    expect((await taskOf(demo, task.title)).pullRequest?.state).toBe("open");
+  });
+
   test("stops a role run without its outcome", async () => {
     const demo = openDemo();
     await observeLive(demo);

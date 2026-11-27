@@ -768,7 +768,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         role: "planner",
         label: "Planner · Start Planner",
         description: "Create a new planner session from scratch",
-        disabled: false,
       });
     });
     await confirmSessionStartModal({
@@ -937,7 +936,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         role: "planner",
         label: "Planner · Start Planner",
         description: "Create a new planner session from scratch",
-        disabled: false,
       });
     });
 
@@ -1012,7 +1010,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         role: "build",
         label: "Builder · Start Implementation",
         description: "Create a new builder session from scratch",
-        disabled: false,
       });
     });
 
@@ -1048,7 +1045,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         role: "planner",
         label: "Planner · Start Planner",
         description: "Create a new planner session from scratch",
-        disabled: false,
       });
     });
 
@@ -1093,7 +1089,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         role: "planner",
         label: "Planner · Start Planner",
         description: "Create a new planner session from scratch",
-        disabled: false,
       });
     });
     await withMockedToast(async ({ toastErrorMock }) => {
@@ -1144,7 +1139,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         role: "planner",
         label: "Planner · New Session",
         description: "Create a fresh planner session",
-        disabled: false,
       });
     });
     await confirmSessionStartModal({
@@ -1245,7 +1239,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         role: "build",
         label: "Builder · Fix QA Rejection",
         description: "Create a new builder session in the existing worktree",
-        disabled: false,
       });
       await Promise.resolve();
       await Promise.resolve();
@@ -1337,7 +1330,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         role: "build",
         label: "Builder · Continue",
         description: "Reuse latest builder session",
-        disabled: false,
       });
     });
     await confirmSessionStartModal({
@@ -1436,7 +1428,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         role: "build",
         label: "Builder · Continue",
         description: "Reuse latest builder session",
-        disabled: false,
       });
     });
     await withMockedToast(async ({ toastErrorMock }) => {
@@ -1500,7 +1491,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         role: "build",
         label: "Builder · Apply Human Changes",
         description: "Create a new builder session after human review",
-        disabled: false,
       });
       await Promise.resolve();
       await Promise.resolve();
@@ -1547,7 +1537,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         role: "build",
         label: "Builder · Apply Human Changes",
         description: "Create a new builder session after human review",
-        disabled: false,
       });
     });
     await Promise.resolve();
@@ -1683,7 +1672,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         role: "build",
         label: "Builder · Apply Human Changes",
         description: "Create a new builder session after human review",
-        disabled: false,
       });
     });
     await harness.waitFor((state) => state.humanReviewFeedbackModal !== null);
@@ -1748,7 +1736,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         role: "build",
         label: "Builder · Apply Human Changes",
         description: "Create a new builder session after human review",
-        disabled: false,
       });
     });
     await harness.waitFor((state) => state.humanReviewFeedbackModal !== null);

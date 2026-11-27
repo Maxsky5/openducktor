@@ -83,13 +83,10 @@ export type AgentStudioQuickActionOption =
   | AgentStudioSessionQuickActionOption
   | AgentStudioTaskQuickActionOption;
 
-export const SESSION_BUSY_REASON = "Wait for the current session to finish.";
-
 type QuickActionParams = {
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
   roleEnabledByTask: Record<AgentRole, boolean>;
-  createSessionDisabled: boolean;
   gitProviderContext?: RepositoryGitProviderContext | undefined;
   gitProviderReadError?: string | null;
   mergedTarget?: string | null;
@@ -114,7 +111,6 @@ export const buildAgentStudioQuickActions = (
       role: launch.role,
       roleLabel: task.taskWorkflow.role(launch.role).label,
     });
-    const reason = params.createSessionDisabled ? SESSION_BUSY_REASON : null;
     const option: AgentStudioSessionQuickActionOption = {
       kind: "session_start",
       id: `quick:${launch.id}`,
@@ -122,13 +118,12 @@ export const buildAgentStudioQuickActions = (
       launchActionId: launch.id,
       label: label ?? launch.label,
       postStartAction: launchSessionCommand(launch),
-      disabled: reason !== null,
+      disabled: false,
       requiresHumanFeedback: launch.context === "human_feedback",
       surface: "studio",
     };
     const description = launch.description ?? actionDescription;
     if (description) option.description = description;
-    if (reason) option.disabledReason = reason;
     if (sources.length && launch.startModes.some((mode) => mode !== "fresh")) {
       option.existingSessionOptions = sources;
       option.initialSourceSession = sources[0]!.sourceSession;
@@ -197,10 +192,9 @@ export const buildAgentStudioQuickActions = (
       taskAction: { kind: "workflow", action: id },
       placement,
       label: taskActionLabel(id, task, { surface: "studio" }),
-      disabled: follows && params.createSessionDisabled,
+      disabled: false,
     };
     if (action.description) option.description = action.description;
-    if (option.disabled) option.disabledReason = SESSION_BUSY_REASON;
     if (follows) following.push(option);
     else if (placement === "leading") leading.push(option);
     else trailing.push(option);
@@ -271,7 +265,6 @@ const buildPullRequestQuickAction = (
   const reason =
     params.gitProviderReadError ??
     pullRequestHealthError(params.gitProviderContext) ??
-    (params.createSessionDisabled ? SESSION_BUSY_REASON : null) ??
     (sources.length ? null : pullRequestSessionRequiredReason(roleLabel));
   const option: AgentStudioSessionQuickActionOption = {
     kind: "session_start",
@@ -297,7 +290,6 @@ const buildPullRequestQuickAction = (
 export const buildGitConflictQuickAction = (params: {
   selectedTask: TaskCard | null;
   roleEnabledByTask: Record<AgentRole, boolean>;
-  createSessionDisabled: boolean;
 }): AgentStudioSessionQuickActionOption | null => {
   const task = params.selectedTask;
   if (!task) return null;
@@ -312,10 +304,9 @@ export const buildGitConflictQuickAction = (params: {
     launchActionId: launch.id,
     label: launch.label,
     postStartAction: "send_message",
-    disabled: params.createSessionDisabled,
+    disabled: false,
   };
   if (launch.description) option.description = launch.description;
-  if (params.createSessionDisabled) option.disabledReason = SESSION_BUSY_REASON;
   return option;
 };
 
@@ -333,7 +324,7 @@ export const withGitConflictQuickAction = (
 
 /**
  * The primary action is the first enabled option. A trailing task action leads only when no other
- * option exists, so a busy session does not move the primary action.
+ * option exists.
  */
 export const selectPrimaryAgentStudioQuickAction = (
   options: AgentStudioQuickActionOption[],
