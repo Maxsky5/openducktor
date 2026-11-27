@@ -234,16 +234,19 @@ export const createDemoLaunches = ({
         : instruction.kind === "kickoff"
           ? [{ kind: "text" as const, text: kickoffText(role, pullRequest, instruction) }]
           : null;
-    let acceptedMessage: ReturnType<DemoSessionEngine["acceptUserMessage"]> | undefined;
-    if (parts) {
-      acceptedMessage = engine.acceptUserMessage(session, parts);
-      const round = (roleRounds.get(`${task.record.id}:${role}`) ?? 0) + 1;
-      roleRounds.set(`${task.record.id}:${role}`, round);
-      engine.startRun(
-        session,
-        roleRun({ workspace, checkout, outcomes }, task, role, { pullRequest, round }),
-      );
-    }
+    const acceptedMessage = parts
+      ? engine.submitWorkflowInstruction(
+          session,
+          parts,
+          () => {
+            const key = `${task.record.id}:${role}`;
+            const round = (roleRounds.get(key) ?? 0) + 1;
+            roleRounds.set(key, round);
+            return roleRun({ workspace, checkout, outcomes }, task, role, { pullRequest, round });
+          },
+          decision.startMode === "reuse" && !request.goal,
+        )
+      : undefined;
 
     const record = engine.taskRecordOf(session);
     const snapshot: StartupSnapshotBody = {
@@ -264,6 +267,7 @@ export const createDemoLaunches = ({
     };
     if (acceptedMessage)
       snapshot.instruction = { state: "accepted", messageId: acceptedMessage.messageId };
+    else if (parts) snapshot.instruction = { state: "queued" };
     const startupProgress = progress(request.startup, snapshot);
     const result: WorkflowLaunchResult = {
       workspaceId: workspace.record.workspaceId,

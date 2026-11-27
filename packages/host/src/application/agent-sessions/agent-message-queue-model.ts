@@ -29,6 +29,7 @@ export type QueueEntry = {
       editId: string;
     }
   | { state: Exclude<AgentQueuedMessageState, "editing">; editId?: undefined }
+  | { state: "reserved"; editId?: undefined }
 );
 
 export type MessageQueue = {
@@ -118,19 +119,21 @@ export const actionError = (message: string) =>
 export const snapshotOf = (queue: MessageQueue): AgentMessageQueueSnapshot => ({
   target: queue.target,
   revision: queue.revision,
-  entries: queue.entries.map((entry): AgentQueuedMessage => {
-    const fields = {
-      submissionId: entry.submissionId,
-      parts: entry.content.parts,
-      queuedAt: entry.queuedAt,
-    };
-    const message: AgentQueuedMessage =
-      entry.state === "editing"
-        ? { ...fields, state: entry.state, editId: entry.editId }
-        : { ...fields, state: entry.state };
-    if (entry.error !== undefined) message.error = entry.error;
-    return message;
-  }),
+  entries: queue.entries
+    .filter((entry) => entry.state !== "reserved")
+    .map((entry): AgentQueuedMessage => {
+      const fields = {
+        submissionId: entry.submissionId,
+        parts: entry.content.parts,
+        queuedAt: entry.queuedAt,
+      };
+      const message: AgentQueuedMessage =
+        entry.state === "editing"
+          ? { ...fields, state: entry.state, editId: entry.editId }
+          : { ...fields, state: entry.state };
+      if (entry.error !== undefined) message.error = entry.error;
+      return message;
+    }),
   pause: queue.pause === null ? null : { message: pauseMessage(queue.pause) },
 });
 
@@ -150,7 +153,9 @@ export const findAcceptedEntry = (
     candidate.state === "acceptance_unknown"
       ? candidate.unknownMessageId === message.messageId ||
         candidate.submissionId === message.submissionId
-      : isQueuedDeliveryStarted(candidate) && candidate.submissionId === message.submissionId,
+      : candidate.state !== "reserved" &&
+        isQueuedDeliveryStarted(candidate) &&
+        candidate.submissionId === message.submissionId,
   );
 
 /** A pause ends with the last entry, because nothing waits. Returns true when it ended one. */
@@ -165,8 +170,10 @@ export const removeEntry = (queue: MessageQueue, entry: QueueEntry): void => {
   endPauseIfEmpty(queue);
 };
 
-const blockedActionMessage = (state: AgentQueuedMessageState): string => {
+const blockedActionMessage = (state: QueueEntry["state"]): string => {
   switch (state) {
+    case "reserved":
+      return "This message is no longer in the queue.";
     case "sending":
     case "steering":
       return "Delivery of this message already started.";
@@ -179,7 +186,9 @@ const blockedActionMessage = (state: AgentQueuedMessageState): string => {
 };
 
 export const findEntry = (queue: MessageQueue | undefined, submissionId: string) => {
-  const entry = queue?.entries.find((candidate) => candidate.submissionId === submissionId);
+  const entry = queue?.entries.find(
+    (candidate) => candidate.state !== "reserved" && candidate.submissionId === submissionId,
+  );
   if (!queue || !entry) {
     return Effect.fail(actionError("This message is no longer in the queue."));
   }
@@ -196,7 +205,7 @@ export const transitionEntry = (
   apply: () => void,
 ): Effect.Effect<void, HostValidationError> =>
   Effect.suspend(() => {
-    if (!allowed.includes(entry.state)) {
+    if (entry.state === "reserved" || !allowed.includes(entry.state)) {
       return Effect.fail(actionError(blockedActionMessage(entry.state)));
     }
     apply();

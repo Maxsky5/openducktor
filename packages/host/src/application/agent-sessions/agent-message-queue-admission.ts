@@ -58,7 +58,7 @@ export const createMessageQueueAdmission = (
       }
 
       // Reserve the entry through the task write. The queue can pause it, but cannot deliver it yet.
-      entry.state = "sending";
+      entry.state = "reserved";
       let committed = false;
       const outcome = yield* Effect.exit(
         queuedCommit(() => {

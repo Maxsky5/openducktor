@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
+import { Deferred, Effect, Fiber } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import {
   acceptedThenFailed,
@@ -14,6 +15,59 @@ import {
 } from "./test-support/agent-message-delivery-harness";
 
 describe("agent message delivery: submit and drain", () => {
+  test.each(["success", "refusal"] as const)(
+    "keeps pending feedback out of snapshots and holds its place until a task write returns %s",
+    async (outcome) => {
+      const h = createHarness();
+      h.upsertSession({ activity: "running" });
+      const entered = Effect.runSync(Deferred.make<void>());
+      const release = Effect.runSync(Deferred.make<void>());
+      const refusal = new HostOperationError({ operation: "test", message: "Event refused." });
+      const feedback = h.service.submit(
+        {
+          ...target,
+          submissionId: "feedback",
+          mode: "default",
+          parts: [{ kind: "text", text: "feedback" }],
+        },
+        undefined,
+        (commit) =>
+          Effect.gen(function* () {
+            yield* Deferred.succeed(entered, undefined);
+            yield* Deferred.await(release);
+            if (outcome === "refusal") return yield* refusal;
+            commit();
+          }),
+      );
+
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const submission = yield* Effect.forkChild(Effect.result(feedback));
+          try {
+            yield* Deferred.await(entered);
+            yield* Effect.promise(() => h.submit("later"));
+            expect(h.queueTexts()).toEqual(["later:queued"]);
+            h.idle();
+            yield* Effect.promise(() => h.runBackground());
+            expect(h.sentTexts()).toEqual([]);
+          } finally {
+            yield* Deferred.succeed(release, undefined);
+          }
+          return yield* Fiber.join(submission);
+        }),
+      );
+
+      expect(result._tag).toBe(outcome === "success" ? "Success" : "Failure");
+      expect(h.queueTexts()).toEqual(
+        outcome === "success" ? ["feedback:queued", "later:queued"] : ["later:queued"],
+      );
+      await h.runBackground();
+      expect(h.sentTexts()).toEqual([
+        outcome === "success" ? "feedback:new_turn" : "later:new_turn",
+      ]);
+    },
+  );
+
   test("drains after an automatic foreground turn while background work stays running", async () => {
     const h = createHarness();
     h.upsertSession({ activity: "running", foregroundTurnActive: true });
