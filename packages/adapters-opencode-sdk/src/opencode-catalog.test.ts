@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentInfo, ModelInfo, ProviderInfo, SkillInfo } from "@opencode/client";
 import { readModelCatalog } from "./opencode-catalog";
+import { prepareFixture } from "./opencode-v2-live.test-support";
 import { createController, nativeClient, ref, response } from "./opencode-v2.test-support";
 
 const nativeCatalog = (variants: ModelInfo["variants"] = []) =>
@@ -117,6 +118,61 @@ describe("OpenCode catalog", () => {
     expect(
       requests.every(({ url }) => url.searchParams.get("location[directory]") === "/repo/worktree"),
     ).toBe(true);
+  });
+
+  test("reads the cold checkout's model and profiles after OpenCode loads its plugins", async () => {
+    const workingDirectory = "/repo/new-worktree";
+    const canonicalDirectory = "/canonical/new-worktree";
+    const data = nativeCatalog();
+    const initialRead = Promise.withResolvers<void>();
+    const coldInventory = Promise.withResolvers<Response>();
+    const updateReceived = Promise.withResolvers<void>();
+    let pluginsLoaded = false;
+    const fixture = prepareFixture(({ url }) => {
+      const path = url.pathname;
+      if (path === "/api/plugin") {
+        if (!pluginsLoaded) {
+          initialRead.resolve();
+          return coldInventory.promise;
+        }
+        updateReceived.resolve();
+        return Response.json({
+          location: { directory: canonicalDirectory },
+          data: [{ id: "opencode.agent", state: { status: "active" } }],
+        });
+      }
+      // Before the fix, the model surface took this empty snapshot during activation.
+      if (path === "/api/model/default") initialRead.resolve();
+      if (!pluginsLoaded && (path === "/api/model" || path === "/api/agent")) return response([]);
+      if (data.has(path)) return response(data.get(path));
+      return undefined;
+    });
+
+    const runtime = await fixture.prepare();
+    try {
+      const catalog = runtime.queries.loadRuntimeCatalog({ ...ref, workingDirectory });
+      await initialRead.promise;
+      pluginsLoaded = true;
+      fixture.channel.push({
+        type: "plugin.updated",
+        id: "plugins-loaded",
+        created: 1,
+        location: { directory: canonicalDirectory },
+        data: {},
+      });
+
+      await updateReceived.promise;
+      coldInventory.resolve(
+        Response.json({ location: { directory: canonicalDirectory }, data: [] }),
+      );
+
+      const models = (await catalog).models;
+      if (models?.status !== "available") throw new Error("Expected the model catalog");
+      expect(models.catalog.profiles?.map(({ id }) => id)).toEqual(["build", "review"]);
+      expect(models.catalog.models.map(({ modelId }) => modelId)).toEqual(["mimo-flash"]);
+    } finally {
+      await runtime.release();
+    }
   });
 
   test("keeps other catalogs available when the model list fails", async () => {

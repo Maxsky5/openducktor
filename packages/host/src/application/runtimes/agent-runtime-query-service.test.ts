@@ -585,6 +585,7 @@ test.each(["history", "child ancestry", "diff", "import inspection"] as const)(
         ensureMcp: async () => {},
         restoreMcp: async () => {},
         awaitGenerationModel: async () => {},
+        awaitCatalogPlugins: async () => {},
         admitted: () => {},
         projectHistory: () => {
           throw new Error("History must use the prepared runtime");

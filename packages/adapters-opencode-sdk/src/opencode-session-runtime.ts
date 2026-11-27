@@ -34,6 +34,7 @@ import {
   type OpenCodeRequestDraft,
 } from "./opencode-client";
 import { createOpenCodeGenerationModels } from "./opencode-generation-model";
+import { createOpenCodeCatalogReadiness } from "./opencode-catalog-readiness";
 import { createOpenCodeMcpBridge } from "./opencode-mcp-bridge";
 import {
   OpencodeSdkAdapter,
@@ -274,6 +275,7 @@ export const createPrepareOpencodeSessionRuntime =
       globalConfigDirectory: options.globalConfigDirectory,
       isClosed,
     });
+    const catalogReadiness = createOpenCodeCatalogReadiness(abort.signal);
     abort.signal.addEventListener("abort", () => {
       mcpBridge.close();
       generationModels.close();
@@ -283,6 +285,7 @@ export const createPrepareOpencodeSessionRuntime =
       ensureMcp: mcpBridge.ensure,
       restoreMcp: mcpBridge.restore,
       awaitGenerationModel: generationModels.awaitModel,
+      awaitCatalogPlugins: (target) => catalogReadiness.awaitPlugins(controller.client, target),
       projectHistory: (sessionID, messages, inbox) =>
         (projectors.get(sessionID) ?? new OpenCodeLiveMessageProjector()).projectHistory(
           messages,
@@ -976,6 +979,8 @@ export const createPrepareOpencodeSessionRuntime =
             mcpBridge.locationShutdown(event.location.directory);
           if (event.type === "model.updated" && event.location)
             generationModels.modelsChanged(event.location.directory);
+          if (event.type === "plugin.updated" && event.location)
+            catalogReadiness.pluginsChanged(event.location.directory);
           if (event.type === "server.connected" && !initialConnected) readyResolve();
           processing = processing
             .then(() => handleEvent(event))
@@ -994,7 +999,7 @@ export const createPrepareOpencodeSessionRuntime =
         readyReject(cause);
         if (abort.signal.aborted) return;
         fail(cause);
-        // The abort ends the waits of the MCP bridge and of generation models at once.
+        // The abort ends waits for the MCP bridge, generation models, and catalogs.
         abort.abort();
       }
     })();

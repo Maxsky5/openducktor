@@ -23,11 +23,15 @@ export const readModelCatalog = async (
 export const readCatalog = async (
   client: OpenCodeClient,
   directory: string,
+  awaitPlugins: () => Promise<void>,
 ): Promise<AgentRuntimeCatalogRead> => {
-  // A location that just started can list only part of what its plugins load. OpenCode then sends
-  // `*.updated` events, and the adapter invalidates the catalog for them.
+  // Session preparation needs the model and profile catalog after initial plugin activation.
+  // The other lists can return partial data and refresh on OpenCode's catalog events.
   const [models, slashCommands, subagents, skills] = await Promise.all([
-    surface(() => readModelCatalog(client, directory)),
+    surface(async () => {
+      await awaitPlugins();
+      return readModelCatalog(client, directory);
+    }),
     surface(async () => ({
       commands: [
         ...(await client.command.list({ location: { directory } })).data
