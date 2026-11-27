@@ -11,7 +11,15 @@ import {
   type BackgroundOperationStore,
 } from "@openducktor/frontend-core/operations/background-operation-store";
 import { useBackgroundAttempts } from "@openducktor/frontend-core/operations/use-background-attempts";
-import { Check, LoaderCircle, OctagonAlert, TriangleAlert } from "lucide-react";
+import {
+  Check,
+  Circle,
+  CircleDashed,
+  LoaderCircle,
+  Minus,
+  OctagonAlert,
+  TriangleAlert,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -30,8 +38,13 @@ import {
   subscribeOpenDialogs,
 } from "@/components/ui/open-dialogs";
 import { ToastResizeContent } from "@/components/ui/toast-resize";
+import { TraceIcon } from "@/components/ui/trace";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { notificationClassNames } from "@/lib/sonner-feedback";
+import { cn } from "@/lib/utils";
+import { STARTUP_TEXT_INSET } from "./constants";
+import { StartupStepCounter } from "./startup-card-parts";
+import "./background-operation-notifications.css";
 
 export type FinishClosingTask = (workspaceId: string, taskId: string) => void;
 
@@ -68,33 +81,55 @@ function BackgroundToast({ attempt }: { attempt: BackgroundAttempt }) {
   );
   useEffect(() => {
     const pending = attempt.phase === "running";
-    toast(`${attempt.action} · ${backgroundOperationStatus[attempt.phase]}`, {
-      id,
-      duration: Infinity,
-      dismissible: !pending,
-      closeButton: !pending,
-      classNames: notificationClassNames,
-      icon: <OperationIcon phase={attempt.phase} />,
-      description: (
-        <ToastResizeContent onResize={setContentHeight} className="flex min-w-0 flex-col gap-1.5">
-          <p className="break-words">{backgroundAttemptOrigin(attempt)}</p>
-          {attempt.progress?.steps.length ? (
-            <div className="max-h-40 overflow-y-auto">
-              <OperationSteps steps={attempt.progress.steps} compact />
+    const steps = attempt.progress?.steps ?? [];
+    const title = `${attempt.action} · ${backgroundOperationStatus[attempt.phase]}`;
+    toast(
+      <div className="flex min-w-0 items-center gap-2">
+        <TraceIcon className="size-5">
+          <OperationIcon phase={attempt.phase} />
+        </TraceIcon>
+        <span className="min-w-0 flex-1 break-words">{title}</span>
+        {pending && steps.length > 0 ? (
+          <StartupStepCounter
+            className="shrink-0"
+            completed={steps.filter((step) => step.state === "completed").length}
+            total={steps.length}
+          />
+        ) : null}
+      </div>,
+      {
+        id,
+        duration: Infinity,
+        dismissible: !pending,
+        closeButton: !pending,
+        className: "background-operation-toast",
+        classNames: notificationClassNames,
+        icon: null,
+        description: (
+          <ToastResizeContent onResize={setContentHeight} className="flex min-w-0 flex-col gap-2">
+            <div className={cn("flex min-w-0 flex-col gap-1", STARTUP_TEXT_INSET)}>
+              <p className="break-words">{backgroundAttemptOrigin(attempt)}</p>
+              {pending && steps.length === 0 ? <p>Waiting for the host…</p> : null}
+              {attempt.phase === "unconfirmed" ? (
+                <p className="text-warning-surface-foreground">{attempt.message}</p>
+              ) : null}
             </div>
-          ) : pending ? (
-            <p>Waiting for the host…</p>
-          ) : null}
-          {attempt.phase === "unconfirmed" ? (
-            <p className="text-warning-surface-foreground">{attempt.message}</p>
-          ) : null}
-          {attempt.phase !== "running" && attempt.phase !== "failed" ? (
-            <CopyDrafts attempt={attempt} getArchiveDraft={backgroundOperations.getArchiveDraft} />
-          ) : null}
-        </ToastResizeContent>
-      ),
-      onDismiss: () => backgroundOperations.dismissToast(attempt.id),
-    });
+            {steps.length > 0 ? (
+              <div className="max-h-52 overflow-y-auto">
+                <OperationSteps steps={steps} compact />
+              </div>
+            ) : null}
+            {!pending ? (
+              <CopyDrafts
+                attempt={attempt}
+                getArchiveDraft={backgroundOperations.getArchiveDraft}
+              />
+            ) : null}
+          </ToastResizeContent>
+        ),
+        onDismiss: () => backgroundOperations.dismissToast(attempt.id),
+      },
+    );
   }, [attempt, backgroundOperations, contentHeight, id]);
   return null;
 }
@@ -119,6 +154,21 @@ function OperationIcon({ phase }: Pick<BackgroundAttempt, "phase">) {
   }
 }
 
+const stepIcons = {
+  pending: { Icon: Circle, color: "text-muted-foreground" },
+  waiting: { Icon: CircleDashed, color: "text-warning-surface-foreground" },
+  running: {
+    Icon: LoaderCircle,
+    color: "bg-info-surface text-info-surface-foreground motion-safe:[&_svg]:animate-spin",
+  },
+  completed: { Icon: Check, color: "bg-success-surface text-success-icon" },
+  failed: {
+    Icon: OctagonAlert,
+    color: "bg-destructive-surface text-destructive-surface-foreground",
+  },
+  not_run: { Icon: Minus, color: "text-muted-foreground" },
+} satisfies Record<BackgroundOperationStep["state"], { Icon: typeof Circle; color: string }>;
+
 function OperationSteps({
   steps,
   compact,
@@ -127,27 +177,48 @@ function OperationSteps({
   compact?: boolean;
 }) {
   return (
-    <ol className="space-y-1.5">
-      {steps.map((step) => (
-        <li key={step.id} className="min-w-0 break-words">
-          <span className="font-medium">{step.label}</span>
-          <span className="text-muted-foreground"> · {backgroundStepStatus[step.state]}</span>
-          {!compact ? (
-            <>
-              {step.details.map((detail) => (
-                <p key={detail}>{detail}</p>
-              ))}
-              {step.resources?.map((resource) => (
-                <p key={`${resource.kind}:${resource.value}`} className="text-muted-foreground">
-                  {resource.state === "removed" ? "Removed " : ""}
-                  {resource.value}
-                </p>
-              ))}
-              {step.failure ? <p className="text-destructive">{step.failure.message}</p> : null}
-            </>
-          ) : null}
-        </li>
-      ))}
+    <ol className="space-y-2">
+      {steps.map((step) => {
+        const { Icon, color } = stepIcons[step.state];
+        return (
+          <li key={step.id} className="min-w-0 break-words">
+            <div className="flex min-w-0 items-start gap-2">
+              <TraceIcon className={cn("size-5 rounded-full", color)}>
+                <Icon className="size-3.5" />
+              </TraceIcon>
+              <span
+                className={cn(
+                  "min-w-0 flex-1 font-medium",
+                  step.state === "pending" || step.state === "not_run"
+                    ? "text-muted-foreground"
+                    : "text-foreground",
+                )}
+              >
+                {step.label}
+              </span>
+              <span className="shrink-0 text-muted-foreground">
+                {backgroundStepStatus[step.state]}
+              </span>
+            </div>
+            {!compact ? (
+              <div className={STARTUP_TEXT_INSET}>
+                {step.details.map((detail) => (
+                  <p key={detail}>{detail}</p>
+                ))}
+                {step.resources?.map((resource) => (
+                  <p key={`${resource.kind}:${resource.value}`} className="text-muted-foreground">
+                    {resource.state === "removed" ? "Removed " : ""}
+                    {resource.value}
+                  </p>
+                ))}
+                {step.failure ? (
+                  <p className="text-destructive-surface-foreground">{step.failure.message}</p>
+                ) : null}
+              </div>
+            ) : null}
+          </li>
+        );
+      })}
     </ol>
   );
 }
@@ -193,6 +264,8 @@ function BackgroundResults({
       }}
     >
       <DialogContent
+        overlayClassName="z-[76]"
+        positionerClassName="z-[76]"
         onCloseAutoFocus={(event) => {
           returnFocusOnClose(() => returnTarget.current)(event);
           backgroundOperations.dismissFailure(id);
@@ -210,12 +283,12 @@ function BackgroundResults({
         <div className="space-y-3 text-sm">
           {steps.length ? <OperationSteps steps={steps} /> : null}
           {showing.message && !steps.some((step) => step.failure?.message === showing.message) ? (
-            <p className="break-words text-destructive">{showing.message}</p>
+            <p className="break-words text-destructive-surface-foreground">{showing.message}</p>
           ) : null}
           {progress?.phase === "failed" ? <p>{progress.failure.nextAction}</p> : null}
           <CopyDrafts attempt={showing} getArchiveDraft={backgroundOperations.getArchiveDraft} />
         </div>
-        <DialogFooter>
+        <DialogFooter className={canFinish ? undefined : "justify-end"}>
           {canFinish ? (
             <Button
               variant="outline"

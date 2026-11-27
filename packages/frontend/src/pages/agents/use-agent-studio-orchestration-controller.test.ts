@@ -325,6 +325,7 @@ const createControllerArgs = (
       },
     },
     taskExecutionFilePreview: {
+      hasUnsavedChanges: false,
       model: {
         selectedFile: null,
         previewSessionKey: 0,

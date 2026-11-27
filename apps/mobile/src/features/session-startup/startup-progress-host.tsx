@@ -6,6 +6,7 @@ import {
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useStartupAttempts } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 import {
+  type PropsWithChildren,
   type ReactElement,
   useEffect,
   useLayoutEffect,
@@ -142,16 +143,18 @@ function StartupStack(): ReactElement | null {
           {/* Keep native output pages attached while the user's manual starts update card heights. */}
           {/* react-doctor-disable-next-line react-doctor/rn-no-scrollview-mapped-list */}
           {visible.map((attempt) => (
-            <StartupCard
-              key={attempt.id}
-              attemptId={attempt.id}
-              detailsMaxHeight={maxHeight * 0.45}
-            />
+            <ProgressCard key={attempt.id} attemptId={attempt.id}>
+              <StartupTrace
+                attemptId={attempt.id}
+                presentation="notification"
+                detailsMaxHeight={maxHeight * 0.45}
+              />
+            </ProgressCard>
           ))}
           {operations.map((attempt) => (
-            <View key={attempt.id} style={styles.card}>
+            <ProgressCard key={attempt.id} attemptId={attempt.id}>
               <BackgroundOperationCard attempt={attempt} />
-            </View>
+            </ProgressCard>
           ))}
         </ScrollView>
       </View>
@@ -159,13 +162,10 @@ function StartupStack(): ReactElement | null {
   );
 }
 
-function StartupCard({
+function ProgressCard({
   attemptId,
-  detailsMaxHeight,
-}: {
-  attemptId: string;
-  detailsMaxHeight: number;
-}): ReactElement {
+  children,
+}: PropsWithChildren<{ attemptId: string }>): ReactElement {
   const { notificationPresented } = useStartupPresentationActions();
   const reducedMotion = useReducedMotion();
   const [firstPresentation] = useState(() => !notificationPresented.has(attemptId));
@@ -196,11 +196,7 @@ function StartupCard({
             hasHeight.current = true;
           }}
         >
-          <StartupTrace
-            attemptId={attemptId}
-            presentation="notification"
-            detailsMaxHeight={detailsMaxHeight}
-          />
+          {children}
         </View>
       </Animated.View>
     </Animated.View>

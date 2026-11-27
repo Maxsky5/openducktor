@@ -83,15 +83,13 @@ export function TaskDetailsView({
     [taskId, workspaceId],
   );
   const { resolution, retry } = useTaskOwnerResolution(ownerRef);
-  // A Delete that the user confirmed here keeps its task on screen until the screen leaves, also
-  // when the task stream removes the task before the host replies. The confirmation then closes in
-  // place, and the screen leaves once, without a Task Not Found state.
+  // Keep the task on screen until Delete settles, even if the task stream removes it first.
   const [deleting, setDeleting] = useState<ResolvedTaskOwner | null>(null);
   const theme = useAppTheme();
   const grouped = theme.colors.groupedBackground;
   const card = theme.desktop.card;
   const stateOptions = useMemo(
-    () => ({ ...detailsHeaderOptions(card, grouped), title: taskId }),
+    () => ({ ...detailsHeaderOptions(card, grouped), title: taskId, headerRight: () => null }),
     [card, grouped, taskId],
   );
   const content = (owner: ResolvedTaskOwner) => (
@@ -101,7 +99,7 @@ export function TaskDetailsView({
       embedded={embedded}
       confirmClose={confirmClose}
       onDeleteStarted={() => setDeleting(owner)}
-      onDeleteFailed={() => setDeleting(null)}
+      onDeleteSettled={() => setDeleting(null)}
     />
   );
   if (resolution.status !== "ready" && deleting) return content(deleting);
@@ -134,7 +132,7 @@ function TaskDetailsContent({
   embedded,
   confirmClose,
   onDeleteStarted,
-  onDeleteFailed,
+  onDeleteSettled,
 }: {
   workspace: WorkspaceRecord;
   task: TaskCard;
@@ -142,8 +140,8 @@ function TaskDetailsContent({
   confirmClose: boolean;
   /** The user confirmed Delete, and it runs. */
   onDeleteStarted: () => void;
-  /** The Delete failed, and its confirmation closed. */
-  onDeleteFailed: () => void;
+  /** Delete settled and its confirmation closed. */
+  onDeleteSettled: () => void;
 }): ReactElement {
   const router = useRouter();
   const theme = useAppTheme();
@@ -217,7 +215,7 @@ function TaskDetailsContent({
     unlinking,
     embedded,
     onDeleteStarted,
-    onDeleteFailed,
+    onDeleteSettled,
   });
   const detecting = detectingPullRequestTaskIds.has(task.id);
   // As on desktop, Detect PR also waits for a completed Builder.

@@ -51,7 +51,7 @@ export function useTaskDetailsActions({
   unlinking,
   embedded,
   onDeleteStarted,
-  onDeleteFailed,
+  onDeleteSettled,
 }: {
   workspace: WorkspaceRecord;
   task: TaskCard;
@@ -65,7 +65,7 @@ export function useTaskDetailsActions({
   unlinking: boolean;
   embedded: boolean;
   onDeleteStarted: () => void;
-  onDeleteFailed: () => void;
+  onDeleteSettled: () => void;
 }): TaskDetailsActionsView {
   const navigation = useNavigation();
   const { unlinkPullRequest, removeTaskWorktree } = useRequiredContext(
@@ -86,11 +86,12 @@ export function useTaskDetailsActions({
         if (request.action === "delete") onDeleteStarted();
       },
       onSucceeded: (request) => {
-        if (request.action === "delete" && !embedded && navigation.isFocused())
-          closeScreen(navigation);
+        if (request.action !== "delete") return;
+        onDeleteSettled();
+        if (!embedded && navigation.isFocused()) closeScreen(navigation);
       },
       onFailed: (request) => {
-        if (request.action === "delete") onDeleteFailed();
+        if (request.action === "delete") onDeleteSettled();
       },
     },
   });

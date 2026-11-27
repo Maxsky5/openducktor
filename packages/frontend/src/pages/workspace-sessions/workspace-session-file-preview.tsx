@@ -97,7 +97,7 @@ export function WorkspaceSessionFilePreview({
           </Button>
         </div>
       ) : null}
-      {worktreeBranch.data ? (
+      {worktreeBranch.data || preview.hasUnsavedChanges ? (
         <div className="min-h-0 flex-1">{filePreview}</div>
       ) : !worktreeBranch.isError ? (
         <p role="status" className="p-3 text-sm">

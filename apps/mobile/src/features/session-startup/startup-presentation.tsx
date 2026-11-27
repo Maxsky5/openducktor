@@ -30,7 +30,7 @@ const pruneRecord = <Value,>(
 
 /** Details and reading positions stay with the attempt when its progress changes windows. */
 export function StartupPresentationProvider({ children }: PropsWithChildren): ReactElement {
-  const { startupAttempts } = useClientConnection();
+  const { startupAttempts, backgroundOperations } = useClientConnection();
   const [expanded, setExpanded] = useState<Record<string, ReadonlySet<string>>>({});
   const [inlineProgressOverride, setInlineProgressOverride] = useState<Record<string, boolean>>({});
   // Each attempt keeps its positions here until it ends. The containers keep their identity.
@@ -42,7 +42,10 @@ export function StartupPresentationProvider({ children }: PropsWithChildren): Re
   }));
   useEffect(() => {
     const prune = () => {
-      const retained = new Set(startupAttempts.getSnapshot().map((attempt) => attempt.id));
+      const retained = new Set([
+        ...startupAttempts.getSnapshot().map((attempt) => attempt.id),
+        ...backgroundOperations.getSnapshot().map((attempt) => attempt.id),
+      ]);
       for (const store of [
         stores.scroll,
         stores.notificationPresented,
@@ -55,8 +58,13 @@ export function StartupPresentationProvider({ children }: PropsWithChildren): Re
       setInlineProgressOverride((current) => pruneRecord(current, retained));
     };
     prune();
-    return startupAttempts.subscribe(prune);
-  }, [startupAttempts, stores]);
+    const stopStartup = startupAttempts.subscribe(prune);
+    const stopOperations = backgroundOperations.subscribe(prune);
+    return () => {
+      stopStartup();
+      stopOperations();
+    };
+  }, [startupAttempts, backgroundOperations, stores]);
   const toggle = useCallback((attemptId: string, stepId: string) => {
     setExpanded((current) => {
       const next = new Set(current[attemptId]);

@@ -131,7 +131,7 @@ for (const isWorktree of [false, true]) {
   });
 }
 
-test("ordinary discard clears only the open file's retained archive draft", async () => {
+test("archive recovery preserves other drafts and can retry when the worktree is gone", async () => {
   const workspace = { workspaceId: "workspace", repoPath: "/repo" };
   const sessionId = "chat";
   const branchName = "chat-branch";
@@ -146,9 +146,13 @@ test("ordinary discard clears only the open file's retained archive draft", asyn
     revision: "original",
   });
   const failArchives: Array<(cause: Error) => void> = [];
+  let worktreeRemoved = false;
   const connection = createTestClientConnection({
     client: {
-      gitGetCurrentBranch: async () => ({ name: branchName, detached: false }),
+      gitGetCurrentBranch: async () => {
+        if (worktreeRemoved) throw new Error("The worktree is gone.");
+        return { name: branchName, detached: false };
+      },
       filesystemReadTextFile: async ({ rootPath, relativePath }) =>
         read({ rootPath, relativePath }),
       workspaceSessionArchive: () =>
@@ -287,6 +291,18 @@ test("ordinary discard clears only the open file's retained archive draft", asyn
         retainedOther.fileId,
       ),
     ).toBe(retainedOther);
+
+    worktreeRemoved = true;
+    await act(async () => {
+      await connection.queryClient.resetQueries({
+        queryKey: worktreeBranchQueryOptions(workspace.repoPath, file.rootPath).queryKey,
+      });
+    });
+    await view.findByText(/The worktree is gone/);
+    fireEvent.click(view.getByRole("button", { name: "Archive session" }));
+    await act(async () => discard());
+    expect(failArchives).toHaveLength(1);
+    await act(async () => fail());
   } finally {
     view.unmount();
     await connection.dispose();

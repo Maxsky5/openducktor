@@ -11,7 +11,7 @@ import {
 } from "@openducktor/frontend-core/test-support/workspace-session-fixtures";
 import { useArchiveWorkspaceSession } from "@openducktor/frontend-core/workspace-sessions/use-archive-workspace-session";
 import { HostChannelRequestError, hostChannelInvokeError } from "@openducktor/host-client/channel";
-import { act, fireEvent, render } from "@testing-library/react";
+import { act, fireEvent, render, waitForElementToBeRemoved, within } from "@testing-library/react";
 import { useRef } from "react";
 import { Toaster } from "sonner";
 import { BackgroundOperationNotifications } from "./background-operation-notifications";
@@ -155,7 +155,14 @@ test.each(["success", "partial failure"] as const)(
       });
       view.rerender(app(false));
       expect(view.queryByRole("textbox", { name: "File contents" })).toBeNull();
-      const copy = await view.findByRole(
+      if (outcome === "partial failure") {
+        const result = await view.findByRole("dialog", { name: "Archive session failed" });
+        const closed = waitForElementToBeRemoved(result);
+        fireEvent.click(within(result).getByRole("button", { name: "Done" }));
+        await closed;
+      }
+      const notifications = await view.findByRole("region", { name: /^Notifications/ });
+      const copy = await within(notifications).findByRole(
         "button",
         { name: "Copy retained draft" },
         { timeout: 600 },
