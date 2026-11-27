@@ -5,7 +5,7 @@ import type {
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useHostConnectionState } from "@openducktor/frontend-core/connection/use-host-connection-state";
-import { isConnectionFailure } from "@openducktor/frontend-core/lib/command-outcome";
+import { isHostUnreachableError } from "@openducktor/host-client";
 import { applyWorkspaceAgentStudioStateAction } from "./agent-studio-state-writer";
 
 export function useAgentStudioWorkspaceStateSave({
@@ -39,8 +39,9 @@ export function useAgentStudioWorkspaceStateSave({
           if (lastSaveRef.current !== request) {
             return;
           }
-          // The connection indicator explains a lost host. The save runs again after the reconnect.
-          if (isConnectionFailure(cause)) {
+          // The connection indicator explains a lost host. The save runs again after the reconnect,
+          // so only a save that did not reach the host waits. A refusal shows its error.
+          if (isHostUnreachableError(cause)) {
             lastSaveRef.current = null;
             return;
           }

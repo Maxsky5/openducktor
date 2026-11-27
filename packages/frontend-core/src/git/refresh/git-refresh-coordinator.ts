@@ -1,4 +1,3 @@
-import { HostUnreachableError } from "@openducktor/host-client";
 import { CancelledError } from "@tanstack/react-query";
 import { isConnectionFailure } from "../../lib/command-outcome";
 import { errorMessage } from "../../lib/errors";
@@ -174,11 +173,10 @@ export class GitRefreshCoordinator {
     };
     this.#manualRuns.set(key, run);
     this.#notify();
-    // A user action fails at once while the host is away, so no host work runs later.
-    const refresh = this.#hostConnected
-      ? withFiles("hard", () => this.#runManual(view, run))
-      : Promise.reject(new HostUnreachableError(new Error("The host connection is lost.")));
-    run.promise = this.#settleManual(run, refresh);
+    run.promise = this.#settleManual(
+      run,
+      withFiles("hard", () => this.#runManual(view, run)),
+    );
     return run.promise;
   }
 
@@ -319,9 +317,6 @@ export class GitRefreshCoordinator {
     const readLocal = (): Promise<void> =>
       fetches || !earlyLocal ? steps.readLocal() : earlyLocal();
     let checkFailure: { error: unknown } | null = null;
-    // A manual Refresh whose reads waited for a reconnect does not send its fetch after it.
-    if (run.manual && run.manual.reconnects !== this.#reconnects)
-      throw new HostUnreachableError(new Error("The host connection was lost during the Refresh."));
     if (steps.comparison) {
       try {
         await this.#fetch(steps.comparison, mode);

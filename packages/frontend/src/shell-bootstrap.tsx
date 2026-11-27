@@ -2,7 +2,7 @@ import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
-import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
+import { loadSettingsSnapshotFromQuery } from "@openducktor/frontend-core/queries/workspace";
 import { App } from "./App";
 import { AppCrashShell } from "./components/errors/app-crash-shell";
 import { applyThemeToDocument } from "./components/layout/theme-dom";
@@ -165,13 +165,7 @@ export async function bootstrapOpenDucktorShell(
   if (target.kind === "local") saveDrafts = () => connection.saveDrafts();
   const loadTheme = async () => {
     try {
-      // The app renders after this read, and only the app can show a lost host. So the read fails
-      // at once instead of waiting for the reconnect.
-      const snapshot = await queryClient.fetchQuery({
-        ...settingsSnapshotQueryOptions(),
-        networkMode: "always",
-        retry: false,
-      });
+      const snapshot = await loadSettingsSnapshotFromQuery(queryClient);
       applyThemeToDocument(resolveThemePreference(snapshot.theme, readSystemAppearance()));
     } catch (cause) {
       if (!(cause instanceof RemoteConnectionError && isRemotePairingFailure(cause.failure.code)))

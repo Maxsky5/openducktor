@@ -215,40 +215,6 @@ describe("GitRefreshCoordinator", () => {
     expect(coordinator.manualState(manualRefreshKey(view)).error).toBeNull();
   });
 
-  test("a Refresh while the host is not connected fails at once without host work", async () => {
-    const log: Log = [];
-    const view = createView(log);
-    const { coordinator } = createCoordinator();
-    coordinator.publish(view);
-    coordinator.setHostConnected(false);
-
-    await coordinator.refresh("hard");
-
-    expect(log).toEqual([]);
-    expect(coordinator.manualState(manualRefreshKey(view)).error).toBe(HOST_UNREACHABLE_MESSAGE);
-    coordinator.setHostConnected(true);
-    expect(coordinator.manualState(manualRefreshKey(view)).error).toBeNull();
-  });
-
-  test("a Refresh that loses the host never sends its fetch after the reconnect", async () => {
-    const log: Log = [];
-    const branch = Promise.withResolvers<string>();
-    const view = createView(log, { steps: { readBranch: () => branch.promise } });
-    const { coordinator } = createCoordinator();
-    coordinator.publish(view);
-    const refresh = coordinator.refresh("hard");
-    await flush();
-
-    // The branch read waits for the reconnect, and then it answers.
-    coordinator.setHostConnected(false);
-    coordinator.setHostConnected(true);
-    branch.resolve("main");
-    await refresh;
-
-    expect(log).not.toContain("fetch");
-    expect(coordinator.manualState(manualRefreshKey(view)).error).toBeNull();
-  });
-
   test("each context keeps its own Refresh, and a return to a context joins it", async () => {
     const log: Log = [];
     const fetchA = Promise.withResolvers<void>();

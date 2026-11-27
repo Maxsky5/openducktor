@@ -10,6 +10,7 @@ import {
 } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { createHostConnectionStore } from "@openducktor/frontend-core/connection/host-connection-state";
 import { HostUnreachableError } from "@openducktor/host-client";
+import { RemoteRefusalError } from "@openducktor/host-client/remote";
 import { useSessionNavigationRecovery } from "@openducktor/frontend-core/sessions/navigation/use-session-navigation-recovery";
 import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
 import { createHookHarness as createSharedHookHarness } from "./agent-studio-test-utils";
@@ -188,6 +189,36 @@ describe("useAgentStudioWorkspaceStateSave", () => {
     await harness.waitFor(() => workspaceReplaceAgentStudioState.mock.calls.length === 2);
     expect(workspaceReplaceAgentStudioState).toHaveBeenLastCalledWith("repo-a", nextState);
     expect(harness.getLatest().saveError).toBeNull();
+    await harness.unmount();
+  });
+
+  test("shows a refused save while the host stays connected", async () => {
+    const loadedState = { openTaskIds: ["task-1"] };
+    const nextState = { openTaskIds: ["task-1", "task-2"] };
+    const refusal = new RemoteRefusalError({
+      code: "unavailable",
+      message: "The host refused the request.",
+      nextAction: "Retry.",
+    });
+    const workspaceReplaceAgentStudioState = mock(
+      async (_workspaceId: string, _state: WorkspaceAgentStudioState): Promise<RepoConfig> => {
+        throw refusal;
+      },
+    );
+    const harness = createSharedHookHarness(
+      useAgentStudioWorkspaceStateSave,
+      { workspaceId: "repo-a", loadedState, state: loadedState, enabled: true },
+      {
+        connection: createTestClientConnection({
+          client: asApplyHost(workspaceReplaceAgentStudioState),
+        }),
+      },
+    );
+
+    await harness.mount();
+    await harness.update({ workspaceId: "repo-a", loadedState, state: nextState, enabled: true });
+    await harness.waitFor((state) => state.saveError !== null);
+    expect(harness.getLatest().saveError).toBe(refusal);
     await harness.unmount();
   });
 

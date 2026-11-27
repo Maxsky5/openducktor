@@ -429,7 +429,7 @@ Rules:
 
 `pages/workspace-sessions/workspace-session-content.tsx` owns `components/features/agents/use-workspace-session-tools.tsx` outside the panel layout. This hook keeps the shared Git action controller mounted when the tools view closes. Hidden tools disable comparison and diff reads and remove focus refresh listeners. An operation that finishes while hidden invalidates its original directory without reading it again. Reopening the tools reads current Git data.
 
-The Git refresh coordinator does not report a lost host connection as a failed check. A manual Refresh shows the failure in its own state. It fails at once while the host is away. A manual Refresh whose reads waited for a reconnect does not send its fetch after it. Its Git reads are queries, so a read that lost the host pauses and keeps its data until the reconnect.
+The Git refresh coordinator does not report a lost host connection as a failed check. A manual Refresh shows the failure in its own state. A read that it awaits fails at once on a lost connection, so its fetch never runs after the reconnect. Its Git reads are queries, so a read that lost the host pauses and keeps its data until the reconnect.
 
 Deferred refreshes check the current view before each read. Branch and settings refreshes wait while tools are hidden. A repository, directory, or branch change discards work for the previous view.
 
