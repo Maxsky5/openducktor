@@ -29,6 +29,7 @@ import {
 import { isJobNotice } from "./opencode-job-projection";
 import {
   openCodeStepStartedAt,
+  openCodeTurnGenerationRates,
   type OpenCodeTurnRateEvidence,
 } from "./opencode-turn-generation-rate";
 import { isShellNotice } from "./opencode-shell-projection";
@@ -41,7 +42,10 @@ export class OpenCodeLiveMessageProjector {
   private readonly settledText = new Set<string>();
   private readonly settledInput = new Set<string>();
   private readonly retractedIds = new Set<string>();
-  private unmarkedExecutionEnds = new Set<string>();
+  private readonly unmarkedExecutionEnds = new Set<string>();
+  private pendingRateSteps = new Set<string>();
+  private copiedRatePrefix: string | undefined;
+  private generationRates: ReadonlyMap<string, number> = new Map();
   // Older servers keep time.created when they restart a step with the same ID.
   private readonly legacyRestarts = new Map<string, number>();
   /** The permission prompts of running calls, by call ID. */
@@ -102,10 +106,8 @@ export class OpenCodeLiveMessageProjector {
     }
     const waiting = new Map(inbox.map((item) => [item.id, item] as const));
     for (const item of this.inbox.values()) waiting.set(item.id, item);
-    const context = messageProjectionContext(merged, waiting.values(), {
-      messages: history,
-      ...rateEvidence,
-    });
+    const rates = openCodeTurnGenerationRates(history, rateEvidence ?? {});
+    const context = messageProjectionContext(merged, waiting.values(), rates);
     const completions = new Map(context.completions);
     for (const [callID, completion] of this.projectionContext.completions) {
       const saved = completions.get(callID);
@@ -140,8 +142,10 @@ export class OpenCodeLiveMessageProjector {
    * Replace the baseline and keep unsaved live updates on matching messages.
    * Return removed message IDs so the caller can drop stale transcript rows.
    */
-  seed(messages: SessionMessageInfo[], unmarkedExecutionEnds?: ReadonlySet<string>): string[] {
-    this.unmarkedExecutionEnds = new Set(unmarkedExecutionEnds);
+  seed(messages: SessionMessageInfo[], pendingRateSteps?: Iterable<string>): string[] {
+    this.unmarkedExecutionEnds.clear();
+    this.pendingRateSteps = new Set(pendingRateSteps);
+    this.copiedRatePrefix = undefined;
     const previous = new Map(this.messages);
     const settledText = new Set(this.settledText);
     const settledInput = new Set(this.settledInput);
@@ -151,11 +155,13 @@ export class OpenCodeLiveMessageProjector {
     for (const snapshot of messages) {
       this.retractedIds.delete(snapshot.id);
       const live = previous.get(snapshot.id);
-      const message = keepLiveMessage(
-        keepLiveStepTiming(structuredClone(snapshot), live, this.legacyRestarts.get(snapshot.id)),
+      const timed = keepLiveStepTiming(
+        structuredClone(snapshot),
         live,
-        settledInput,
+        this.legacyRestarts.get(snapshot.id),
       );
+      if (timed === live) this.pendingRateSteps.delete(snapshot.id);
+      const message = keepLiveMessage(timed, live, settledInput);
       this.messages.set(message.id, message);
       if (message.type !== "assistant") continue;
       let textOrdinal = 0;
@@ -200,8 +206,29 @@ export class OpenCodeLiveMessageProjector {
         }
       }
     }
-    this.updateProjectionContext();
+    this.refreshTurnProjection();
     return [...previous.keys()].filter((id) => !this.messages.has(id));
+  }
+
+  applyRateEvidence(sessionID: string, evidence: OpenCodeTurnRateEvidence): AgentEvent[] {
+    const previousRates = this.generationRates;
+    for (const id of evidence.unmarkedExecutionEnds)
+      if (this.pendingRateSteps.has(id)) this.unmarkedExecutionEnds.add(id);
+    this.pendingRateSteps.clear();
+    this.copiedRatePrefix = evidence.copiedPrefix;
+    this.refreshTurnProjection();
+    const updates: AgentEvent[] = [];
+    for (const [id, rate] of this.generationRates) {
+      if (rate === previousRates.get(id)) continue;
+      const message = this.messages.get(id);
+      if (message)
+        updates.push(
+          ...messageEvents(sessionID, message, this.projectionContext, this.settledInput).filter(
+            (event) => event.type === "assistant_message",
+          ),
+        );
+    }
+    return updates;
   }
   snapshotEvents(sessionID: string): AgentEvent[] {
     return [...this.messages.values()].flatMap((message) =>
@@ -282,6 +309,7 @@ export class OpenCodeLiveMessageProjector {
           return [];
         const supersededRate = this.projectionContext.generationRates.has(message.id);
         this.unmarkedExecutionEnds.delete(message.id);
+        this.pendingRateSteps.delete(message.id);
         existing.agent = message.agent;
         existing.model = message.model;
         if (event.data.started === undefined) {
@@ -293,7 +321,7 @@ export class OpenCodeLiveMessageProjector {
         delete existing.error;
         delete existing.finish;
         delete existing.tokens;
-        this.updateProjectionContext();
+        this.refreshTurnProjection();
         const updates = messageEvents(
           sessionID,
           existing,
@@ -464,12 +492,9 @@ export class OpenCodeLiveMessageProjector {
             this.settledInput,
           );
       }
-      if (
-        event.type === "session.tool.success" ||
-        event.type === "session.tool.failed" ||
-        event.type === "session.step.ended" ||
-        event.type === "session.step.failed"
-      )
+      if (event.type === "session.step.ended" || event.type === "session.step.failed")
+        this.refreshTurnProjection();
+      else if (event.type === "session.tool.success" || event.type === "session.tool.failed")
         this.updateProjectionContext();
       return messageEvents(sessionID, message, this.projectionContext, this.settledInput);
     }
@@ -677,9 +702,10 @@ export class OpenCodeLiveMessageProjector {
           this.messages.delete(id);
           this.legacyRestarts.delete(id);
           this.unmarkedExecutionEnds.delete(id);
+          this.pendingRateSteps.delete(id);
           this.retractedIds.add(id);
         }
-        this.updateProjectionContext();
+        this.refreshTurnProjection();
         return [{ ...base, type: "transcript_retracted", messageIds: removed }];
       }
     }
@@ -693,12 +719,19 @@ export class OpenCodeLiveMessageProjector {
 
   private createProjectionContext(messages: Iterable<SessionMessageInfo>) {
     return {
-      ...messageProjectionContext(messages, this.inbox.values(), {
-        legacy: this.legacyTurnBoundaries,
-        unmarkedExecutionEnds: this.unmarkedExecutionEnds,
-      }),
+      ...messageProjectionContext(messages, this.inbox.values(), this.generationRates),
       denials: this.denials,
     };
+  }
+
+  private refreshTurnProjection(): void {
+    this.generationRates = openCodeTurnGenerationRates([...this.messages.values()], {
+      legacy: this.legacyTurnBoundaries,
+      unmarkedExecutionEnds: this.unmarkedExecutionEnds,
+      pendingSteps: this.pendingRateSteps,
+      copiedPrefix: this.copiedRatePrefix,
+    });
+    this.updateProjectionContext();
   }
 
   /**
@@ -793,7 +826,8 @@ export class OpenCodeLiveMessageProjector {
   private recordMessage(sessionID: string, message: SessionMessageInfo): AgentEvent[] {
     const completedReplies = this.projectionContext.completedReplies;
     this.messages.set(message.id, message);
-    if (message.type === "synthetic" || message.type === "idle") this.updateProjectionContext();
+    if (message.type === "idle") this.refreshTurnProjection();
+    else if (message.type === "synthetic") this.updateProjectionContext();
     const events = messageEvents(sessionID, message, this.projectionContext, this.settledInput);
     if (message.type === "idle" && message.outcome === "succeeded") {
       for (const id of this.projectionContext.completedReplies) {

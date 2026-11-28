@@ -78,7 +78,7 @@ import {
   checkReplyForkBoundary,
 } from "./opencode-reply-fork";
 import {
-  readOpenCodeHistoryRateEvidence,
+  readOpenCodeRateEvidence,
   type OpenCodeTurnRateEvidence,
 } from "./opencode-turn-generation-rate";
 import { readOpenCodeTranscript } from "./opencode-session-transcript";
@@ -949,7 +949,7 @@ export class OpencodeSdkAdapter {
         readOpenCodeTranscript(this.client, detail),
         this.client.session.inbox.list({ sessionID: detail.id }),
       ]);
-      const evidence = await readOpenCodeHistoryRateEvidence(this.client, detail.id, messages, () =>
+      const evidence = await readOpenCodeRateEvidence(this.client, detail, messages, () =>
         readOpenCodeTranscript(this.client, detail),
       );
       const history = this.hooks.projectHistory(

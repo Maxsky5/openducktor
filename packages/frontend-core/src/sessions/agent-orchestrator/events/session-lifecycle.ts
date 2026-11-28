@@ -112,25 +112,34 @@ const resolveFinalAssistantSnapshot = ({
 export const handleAssistantMessage = (
   context: Pick<SessionLifecycleEventContext, "session" | "store" | "turn">,
   event: AssistantMessageEvent,
+  provenance?: SessionTranscriptEventProvenance,
 ): void => {
+  const baseline = provenance === "baseline";
   context.store.updateSession(context.session.identity, (current) => {
-    const settledMessages = settleDanglingTodoToolMessages(current, event.timestamp);
+    const settledMessages = baseline
+      ? current.messages
+      : settleDanglingTodoToolMessages(current, event.timestamp);
     const settledOwner = {
       externalSessionId: current.externalSessionId,
       messages: settledMessages,
     };
-    const durationMs =
-      event.durationMs ??
-      context.turn.resolveTurnDurationMs(
+    let durationMs = event.durationMs;
+    if (durationMs === undefined && !baseline) {
+      durationMs = context.turn.resolveTurnDurationMs(
         context.session.key,
         context.session.identity.externalSessionId,
         event.timestamp,
         settledMessages,
       );
+    }
     const shouldPreserveContextUsage =
+      !baseline &&
       nextContextUsageWasEstablishedForMessage(context, event.messageId) &&
       current.contextUsage !== null;
-    const model = event.model ?? context.turn.turnMetadata.readModel(context.session.key) ?? null;
+    const trackedModel = baseline
+      ? undefined
+      : context.turn.turnMetadata.readModel(context.session.key);
+    const model = event.model ?? trackedModel ?? null;
     const nextSnapshot = resolveFinalAssistantSnapshot({
       current,
       durationMs,
@@ -196,7 +205,7 @@ export const handleAssistantMessage = (
         : upsertSessionMessage(settledOwner, assistantMessage),
     };
   });
-  if (context.session.identity.runtimeKind !== "claude") {
+  if (!baseline && context.session.identity.runtimeKind !== "claude") {
     context.turn.clearTurnDuration(context.session.key, event.timestamp);
     clearTurnTracking(context);
   }

@@ -29,9 +29,9 @@ import {
   type AgentUserMessageOrigin,
 } from "@openducktor/contracts";
 import {
+  completedOpenCodeReplies,
   isStoppedOpenCodeReply,
   openCodeTurnGenerationRates,
-  type OpenCodeTurnRateOptions,
 } from "./opencode-turn-generation-rate";
 import { readOpenCodeGoalKickoffObjective } from "./opencode-goals";
 import { jobContext, updateJobTool, type JobContext } from "./opencode-job-projection";
@@ -330,19 +330,6 @@ export type OpenCodeMessageProjectionContext = {
   readonly denials?: ReadonlyMap<string, AgentToolDenial>;
 };
 
-export const completedOpenCodeReplies = (messages: Iterable<SessionMessageInfo>): Set<string> => {
-  const completed = new Set<string>();
-  let finalReply: string | undefined;
-  for (const message of messages) {
-    if (message.type === "assistant")
-      finalReply = isStoppedOpenCodeReply(message) ? message.id : undefined;
-    if (message.type !== "idle") continue;
-    if (message.outcome === "succeeded" && finalReply) completed.add(finalReply);
-    finalReply = undefined;
-  }
-  return completed;
-};
-
 /** The idle records of failed turns whose reply already shows the error. */
 const shownFailures = (messages: Iterable<SessionMessageInfo>): Set<string> => {
   const shown = new Set<string>();
@@ -403,22 +390,15 @@ const waitingNotices = (inbox: Iterable<SessionInboxInfo>): SessionMessageSynthe
 export const messageProjectionContext = (
   messages: Iterable<SessionMessageInfo>,
   inbox: Iterable<SessionInboxInfo> = [],
-  rateOptions: OpenCodeTurnRateOptions & { messages?: readonly SessionMessageInfo[] } = {},
+  rates?: ReadonlyMap<string, number>,
 ): OpenCodeMessageProjectionContext => {
   const retained = [...messages];
   const results = [...retained, ...waitingNotices(inbox)];
-  const completedReplies = completedOpenCodeReplies(retained);
-  const rateMessages = rateOptions.messages ?? retained;
-  const generationRates = openCodeTurnGenerationRates(
-    rateMessages,
-    rateOptions.messages ? completedOpenCodeReplies(rateMessages) : completedReplies,
-    rateOptions,
-  );
   return {
     completions: subagentCompletions(results),
     durations: nativeTurnDurations(retained),
-    completedReplies,
-    generationRates,
+    completedReplies: completedOpenCodeReplies(retained),
+    generationRates: rates ?? openCodeTurnGenerationRates(retained, {}),
     shells: shellContext(results),
     jobs: jobContext(results),
     shownFailures: shownFailures(retained),
@@ -942,16 +922,16 @@ export const messageEvents = (
 export const readMessages = async (
   client: OpenCodeClient,
   sessionID: string,
+  signal?: AbortSignal,
 ): Promise<SessionMessageInfo[]> => {
   const messages: SessionMessageInfo[] = [];
   const seen = new Set<string>();
   let cursor: string | undefined;
   do {
-    const page = await client.message.list({
-      sessionID,
-      limit: 100,
-      ...(cursor ? { cursor } : { order: "asc" }),
-    });
+    const page = await client.message.list(
+      { sessionID, limit: 100, ...(cursor ? { cursor } : { order: "asc" }) },
+      signal ? { signal } : undefined,
+    );
     messages.push(...page.data);
     cursor = page.cursor.next ?? undefined;
     if (cursor && seen.has(cursor))

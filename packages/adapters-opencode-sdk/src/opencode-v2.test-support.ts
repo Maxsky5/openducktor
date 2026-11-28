@@ -67,12 +67,17 @@ export const nativeClient = (
                 )
                 .parse(JSON.parse(z.string().parse(init.body)))
             : {};
-        return handle({
+        const requestSignal =
+          signal && init?.signal
+            ? AbortSignal.any([signal, init.signal])
+            : (init?.signal ?? signal);
+        const request: NativeRequest = {
           url,
           method: init?.method ?? "GET",
           body,
-          ...(signal ? { signal } : init?.signal ? { signal: init.signal } : {}),
-        });
+        };
+        if (requestSignal) request.signal = requestSignal;
+        return handle(request);
       },
       { preconnect: () => {} },
     ),

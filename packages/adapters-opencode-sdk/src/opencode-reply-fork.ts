@@ -2,7 +2,8 @@ import type { OpenCodeClient, SessionInfo } from "@opencode/client";
 import type { SessionRef } from "@openducktor/core";
 import { operationError } from "./opencode-client";
 import { isOpenCodeUserTurn } from "./opencode-interrupted-turn";
-import { completedOpenCodeReplies, readMessages } from "./opencode-message-projection";
+import { readMessages } from "./opencode-message-projection";
+import { completedOpenCodeReplies } from "./opencode-turn-generation-rate";
 
 export const readReplyForkBoundary = async (
   client: OpenCodeClient,

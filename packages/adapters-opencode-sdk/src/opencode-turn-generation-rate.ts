@@ -1,5 +1,6 @@
 import type {
   OpenCodeClient,
+  SessionInfo,
   SessionMessageAssistant,
   SessionMessageInfo,
   SessionStepStarted,
@@ -17,11 +18,27 @@ export const isStoppedOpenCodeReply = (
   !message.error &&
   message.time.completed !== undefined;
 
+export const completedOpenCodeReplies = (
+  messages: Iterable<SessionMessageInfo>,
+  executionEnds?: ReadonlySet<string>,
+): Set<string> => {
+  const completed = new Set<string>();
+  let finalReply: string | undefined;
+  for (const message of messages) {
+    if (message.type === "assistant")
+      finalReply = isStoppedOpenCodeReply(message) ? message.id : undefined;
+    if (message.type === "idle") {
+      if (message.outcome === "succeeded" && finalReply) completed.add(finalReply);
+      finalReply = undefined;
+    } else if (executionEnds?.has(message.id)) finalReply = undefined;
+  }
+  return completed;
+};
+
 const measureTurn = (
   messages: readonly SessionMessageInfo[],
   replyIndex: number,
-  legacy: boolean,
-  unmarkedExecutionEnds?: ReadonlySet<string>,
+  { legacy, unmarkedExecutionEnds, pendingSteps }: OpenCodeTurnRateOptions,
 ): number | undefined => {
   // SessionTurn.tokensPerSecond starts after the first input in a marked turn
   // and after the nearest input in legacy history.
@@ -42,6 +59,7 @@ const measureTurn = (
   for (let index = boundaryIndex + 1; index <= replyIndex; index++) {
     const message = messages[index]!;
     if (message.type !== "assistant") continue;
+    if (pendingSteps?.has(message.id)) return;
     const streamStart = message.time.firstToken ?? message.time.created;
     const streamEnd = message.time.streamed;
     if (!Number.isFinite(streamStart) || streamEnd === undefined || !Number.isFinite(streamEnd))
@@ -57,84 +75,100 @@ const measureTurn = (
 export type OpenCodeTurnRateEvidence = {
   unmarkedExecutionEnds: ReadonlySet<string>;
   unmarkedSuccesses: ReadonlySet<string>;
+  copiedPrefix?: string | undefined;
 };
 
-export type OpenCodeTurnRateOptions = Partial<OpenCodeTurnRateEvidence> & { legacy?: boolean };
+type OpenCodeTurnRateOptions = Partial<OpenCodeTurnRateEvidence> & {
+  legacy?: boolean;
+  pendingSteps?: ReadonlySet<string>;
+};
 
 export const openCodeTurnGenerationRates = (
   messages: readonly SessionMessageInfo[],
-  completedReplies: ReadonlySet<string>,
-  { legacy = false, unmarkedExecutionEnds, unmarkedSuccesses }: OpenCodeTurnRateOptions,
+  options: OpenCodeTurnRateOptions,
 ): Map<string, number> => {
+  const { copiedPrefix } = options;
+  const copiedEnd =
+    copiedPrefix && messages.findLast((message) => message.id.startsWith(copiedPrefix));
+  const turnOptions = copiedEnd
+    ? {
+        ...options,
+        unmarkedExecutionEnds: new Set([...(options.unmarkedExecutionEnds ?? []), copiedEnd.id]),
+      }
+    : options;
+  const completedReplies = completedOpenCodeReplies(messages, turnOptions.unmarkedExecutionEnds);
   const rates = new Map<string, number>();
   for (const [index, message] of messages.entries()) {
-    let rate: number | undefined;
-    if (completedReplies.has(message.id))
-      rate = measureTurn(messages, index, legacy, unmarkedExecutionEnds);
-    if (unmarkedSuccesses?.has(message.id))
-      rate = measureTurn(messages, index, true, unmarkedExecutionEnds) ?? rate;
+    const unmarked = options.unmarkedSuccesses?.has(message.id);
+    if (!unmarked && !completedReplies.has(message.id)) continue;
+    const rate = measureTurn(
+      messages,
+      index,
+      unmarked ? { ...turnOptions, legacy: true } : turnOptions,
+    );
     if (rate !== undefined) rates.set(message.id, rate);
   }
   return rates;
 };
 
-/** Some saved turns predate idle records, even in a session that now has them. */
-const unmarkedReplies = (messages: readonly SessionMessageInfo[], includeOpenTail: boolean) => {
+type RateSession = Pick<SessionInfo, "id" | "fork">;
+
+const isPossibleCopiedStep = (session: RateSession, id: string): boolean =>
+  session.fork !== undefined && /^msg_.+_\d+$/.test(id);
+
+export const openCodeTurnRateCandidates = (
+  session: RateSession,
+  messages: readonly SessionMessageInfo[],
+  observing = false,
+): Map<string, SessionMessageAssistant> => {
   const candidates = new Map<string, SessionMessageAssistant>();
   const firstIdle = messages.findIndex((message) => message.type === "idle");
   const lastIdle = messages.findLastIndex((message) => message.type === "idle");
-  let previousAssistant: SessionMessageAssistant | undefined;
+  const lastPrefixStep = messages.findLastIndex(
+    (message, index) => message.type === "assistant" && (firstIdle < 0 || index < firstIdle),
+  );
   for (const [index, message] of messages.entries()) {
-    if (index === firstIdle && previousAssistant) candidates.delete(previousAssistant.id);
     if (message.type !== "assistant") continue;
-    previousAssistant = message;
-    if (
-      (firstIdle < 0 || index < firstIdle || (includeOpenTail && index > lastIdle)) &&
-      isStoppedOpenCodeReply(message) &&
-      measureTurn(messages, index, true) !== undefined
-    )
+    // The last step before the first idle may belong to an earlier, markerless execution.
+    const stoppedWithStream =
+      isStoppedOpenCodeReply(message) && message.time.streamed !== undefined;
+    const possibleLegacyEnd =
+      message.time.firstToken === undefined &&
+      (index < lastPrefixStep ||
+        (index === lastPrefixStep && (firstIdle < 0 ? observing : stoppedWithStream)));
+    const stoppedInOpenTail = !observing && index > lastIdle && stoppedWithStream;
+    if (possibleLegacyEnd || stoppedInOpenTail || isPossibleCopiedStep(session, message.id))
       candidates.set(message.id, message);
   }
   return candidates;
 };
 
-// First-token timing was added after idle records. A step without it in the prefix may belong
-// to an older execution. Its terminal event still bounds the next turn, even without stream timing.
-const possibleLegacyExecutionEnds = (
-  messages: readonly SessionMessageInfo[],
-  includeOpenTail: boolean,
-) => {
-  const candidates = new Map<string, SessionMessageAssistant>();
-  let lastAssistant: string | undefined;
-  let hasIdle = false;
-  for (const message of messages) {
-    if (message.type === "idle") {
-      hasIdle = true;
-      break;
-    }
-    if (message.type !== "assistant") continue;
-    lastAssistant = message.id;
-    if (message.time.firstToken === undefined) candidates.set(message.id, message);
-  }
-  // The final step already has a stored boundary, or has no later step to bound in history.
-  if ((hasIdle || !includeOpenTail) && lastAssistant !== undefined)
-    candidates.delete(lastAssistant);
-  return candidates;
-};
-
-const readUnmarkedOpenCodeExecutions = async (
+const readRateLog = async (
   client: OpenCodeClient,
-  sessionID: string,
+  session: RateSession,
   candidates: ReadonlyMap<string, SessionMessageAssistant>,
+  signal?: AbortSignal,
 ) => {
-  const executions = new Map<string, "stopped" | "ended">();
-  if (candidates.size === 0) return executions;
+  const executions = new Map<string, { idleId: string; stopped: boolean }>();
+  let copiedPrefix: string | undefined;
 
   let step:
     | { id: string; completedAt: number | undefined; matchesStoppedReply: boolean }
     | undefined;
-  for await (const event of client.experimental.session.log({ sessionID, follow: false })) {
+  for await (const event of client.experimental.session.log(
+    { sessionID: session.id, follow: false },
+    signal ? { signal } : undefined,
+  )) {
     switch (event.type) {
+      case "session.forked":
+        if (
+          session.fork &&
+          event.data.parentID === session.fork.sessionID &&
+          event.data.boundary.type === session.fork.boundary.type &&
+          event.data.boundary.messageID === session.fork.boundary.messageID
+        )
+          copiedPrefix = event.id.replace(/^evt_/, "msg_") + "_";
+        break;
       case "session.step.started": {
         const id = event.data.assistantMessageID;
         executions.delete(id);
@@ -165,77 +199,63 @@ const readUnmarkedOpenCodeExecutions = async (
         if (event.type === "session.execution.interrupted" && event.data.reason === "shutdown")
           break;
         if (step)
-          executions.set(
-            step.id,
-            event.type === "session.execution.succeeded" && step.matchesStoppedReply
-              ? "stopped"
-              : "ended",
-          );
+          executions.set(step.id, {
+            idleId: event.id.replace(/^evt_/, "msg_"),
+            stopped: event.type === "session.execution.succeeded" && step.matchesStoppedReply,
+          });
         step = undefined;
         break;
       case "session.revert.committed":
         step = undefined;
         break;
       case "log.synced":
-        return executions;
+        return { executions, copiedPrefix };
     }
   }
   throw new Error("OpenCode ended the session log before its sync marker. Retry reading history.");
 };
 
-export const readOpenCodeLegacyExecutionEnds = async (
+export const readOpenCodeRateEvidence = async (
   client: OpenCodeClient,
-  sessionID: string,
-  messages: readonly SessionMessageInfo[],
-): Promise<ReadonlySet<string>> =>
-  new Set(
-    (
-      await readUnmarkedOpenCodeExecutions(
-        client,
-        sessionID,
-        possibleLegacyExecutionEnds(messages, true),
-      )
-    ).keys(),
-  );
-
-export const readOpenCodeHistoryRateEvidence = async (
-  client: OpenCodeClient,
-  sessionID: string,
+  session: RateSession,
   messages: SessionMessageInfo[],
   readMessages: () => Promise<SessionMessageInfo[]>,
+  candidates = openCodeTurnRateCandidates(session, messages),
+  signal?: AbortSignal,
 ): Promise<{ messages: SessionMessageInfo[]; rates: OpenCodeTurnRateEvidence }> => {
-  const measurableReplies = unmarkedReplies(messages, true);
-  const candidates = new Map([
-    ...possibleLegacyExecutionEnds(messages, false),
-    ...measurableReplies,
-  ]);
-  const executions = await readUnmarkedOpenCodeExecutions(client, sessionID, candidates);
   const unmarkedExecutionEnds = new Set<string>();
   const unmarkedSuccesses = new Set<string>();
-  const rates = { unmarkedExecutionEnds, unmarkedSuccesses };
-  if (executions.size === 0) return { messages, rates };
+  const rates: OpenCodeTurnRateEvidence = { unmarkedExecutionEnds, unmarkedSuccesses };
+  if (candidates.size === 0) return { messages, rates };
+
+  const { executions, copiedPrefix } = await readRateLog(client, session, candidates, signal);
+  if (!copiedPrefix && [...candidates.keys()].some((id) => isPossibleCopiedStep(session, id)))
+    throw new Error(
+      "OpenCode did not confirm the copied history boundary. Retry reading the conversation.",
+    );
+  if (copiedPrefix) rates.copiedPrefix = copiedPrefix;
 
   const afterLastIdle = messages.findLastIndex((message) => message.type === "idle") + 1;
   const successInOpenTail = messages
     .slice(afterLastIdle)
-    .some(
-      (message) => executions.get(message.id) === "stopped" && measurableReplies.has(message.id),
-    );
+    .some((message) => executions.get(message.id)?.stopped);
 
-  // OpenCode commits the idle record with the durable event. Read after the log when a
-  // success falls in the open tail, where the first read could have missed that commit.
+  // The terminal event and its idle record commit together on servers that store the marker.
   const settled = successInOpenTail ? await readMessages() : messages;
-  const legacyEnds = possibleLegacyExecutionEnds(settled, false);
-  const legacyReplies = unmarkedReplies(settled, false);
-  for (const [id, outcome] of executions) {
-    const saved = legacyEnds.get(id) ?? legacyReplies.get(id);
-    const original = candidates.get(id);
-    if (!saved || !original || saved.time.created !== original.time.created) continue;
+  const idleIds = new Set<string>();
+  for (const message of settled) if (message.type === "idle") idleIds.add(message.id);
+
+  for (const saved of settled) {
+    if (saved.type !== "assistant") continue;
+    const execution = executions.get(saved.id);
+    const original = candidates.get(saved.id);
+    if (!execution || !original || saved.time.created !== original.time.created) continue;
+    if (idleIds.has(execution.idleId)) continue;
     const sameCompletion = saved.time.completed === original.time.completed;
-    // OpenCode may complete an interrupted row when it starts the next step.
-    if (legacyEnds.has(id) && (sameCompletion || original.time.completed === undefined))
-      unmarkedExecutionEnds.add(id);
-    if (outcome === "stopped" && sameCompletion && legacyReplies.has(id)) unmarkedSuccesses.add(id);
+    // Starting a new step can fill the completion time of a previously interrupted row.
+    if (sameCompletion || original.time.completed === undefined)
+      unmarkedExecutionEnds.add(saved.id);
+    if (execution.stopped && sameCompletion) unmarkedSuccesses.add(saved.id);
   }
   return { messages: settled, rates };
 };
