@@ -426,6 +426,67 @@ describe("createSessionHtmlPreviewService", () => {
     expect(missingImageErr.message).toContain(missingPng);
   });
 
+  test("rewrites local image URLs according to HTML, CSS, and file URL syntax", async () => {
+    const { tempRoot } = await createHarness({
+      kind: "workspace",
+      runtimeKind: "opencode",
+      externalSessionId: "chat-1",
+      sessionId: "chat-1",
+      archived: false,
+    });
+    const port = createNodeHtmlPreviewFilePort({ blockedRoots: [] });
+    await writeFile(path.join(tempRoot, "chart.png"), ONE_PIXEL_PNG);
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><view id="detail" viewBox="0 0 5 5"/></svg>';
+    await writeFile(path.join(tempRoot, "icon.svg"), svg);
+    const png = `data:image/png;base64,${ONE_PIXEL_PNG.toString("base64")}`;
+    const svgUri = `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+    const inline = (html: string) =>
+      Effect.runPromise(inlineLocalHtmlPreviewImages(html, [tempRoot], port, tempRoot));
+    const cssText = '.example::after{content:"url(missing.png) url(chart.png)"}';
+    expect(await inline(`<style>${cssText}.pic{background:url(chart.png)}</style>`)).toBe(
+      `<style>${cssText}.pic{background:url(${png})}</style>`,
+    );
+    expect(await inline('<img style="background:url(&quot;chart.png&quot;)">')).toBe(
+      `<img style="background:url(&quot;${png}&quot;)">`,
+    );
+    expect(await inline('<img srcset="chart.png&#44; ./chart.png">')).toBe(
+      `<img srcset="${png}&#44; ${png}">`,
+    );
+    const https = '<img src="https&colon;//example.com/chart.png">';
+    expect(await inline(https)).toBe(https);
+    expect(
+      await inline(
+        '<img src="chart%2Epng" srcset="chart%2Epng" style="background:url(chart%2Epng)">',
+      ),
+    ).toBe(`<img src="${png}" srcset="${png}" style="background:url(${png})">`);
+    expect(await inline('<img src="icon.svg#detail">')).toBe(`<img src="${svgUri}#detail">`);
+  });
+
+  test("charges the bytes of the original image reference at the stored size limit", async () => {
+    const { tempRoot } = await createHarness({
+      kind: "workspace",
+      runtimeKind: "opencode",
+      externalSessionId: "chat-1",
+      sessionId: "chat-1",
+      archived: false,
+    });
+    const port = createNodeHtmlPreviewFilePort({ blockedRoots: [] });
+    await writeFile(path.join(tempRoot, "chart.png"), ONE_PIXEL_PNG);
+    const encoded = `<img src="data:image/png;base64,${ONE_PIXEL_PNG.toString("base64")}">`;
+    const padding = " ".repeat(ODT_HTML_PREVIEW_MAX_STORED_BYTES - Buffer.byteLength(encoded));
+    const inline = (html: string) => inlineLocalHtmlPreviewImages(html, [tempRoot], port, tempRoot);
+    for (const source of ["chart.png", " chart.png "]) {
+      const result = await Effect.runPromise(inline(`<img src="${source}">${padding}`));
+      expect(Buffer.byteLength(result)).toBe(ODT_HTML_PREVIEW_MAX_STORED_BYTES);
+      expect(result.startsWith(encoded)).toBe(true);
+    }
+    const oversized = await Effect.runPromise(
+      Effect.flip(inline(`<img src=" chart.png ">${padding} `)),
+    );
+    expect(oversized.message).toContain("exceed");
+  });
+
   test("short-circuits before reading remaining images once the 25 MiB stored size budget is exceeded", async () => {
     const readPaths: string[] = [];
     const chunkSize = 8 * 1024 * 1024;
@@ -436,7 +497,7 @@ describe("createSessionHtmlPreviewService", () => {
       ...createNodeHtmlPreviewFilePort({ blockedRoots: [] }),
       readLocalImage: (filePath) => {
         readPaths.push(filePath);
-        return Effect.succeed({ kind: "ok", bytes: pngChunk, size: chunkSize, extension: ".png" });
+        return Effect.succeed({ kind: "ok", bytes: pngChunk, size: chunkSize });
       },
     };
 

@@ -4,7 +4,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { ODT_HTML_PREVIEW_MAX_STORED_BYTES } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
-import type { HtmlPreviewFilePort } from "../../ports/html-preview-file-port";
+import type {
+  HtmlPreviewFilePort,
+  LocalPreviewImageReference,
+} from "../../ports/html-preview-file-port";
 import { isPathWithinRoot, readRegularFileNoFollow } from "./html-preview-fs";
 
 const HTML_FILE_EXTENSION = /\.html?$/i;
@@ -15,17 +18,34 @@ const HTML_MARKUP_START =
 const isNetworkPath = (candidate: string): boolean =>
   candidate.startsWith("\\\\") || candidate.startsWith("//");
 
-const normalizeReferencePath = (reference: string, baseDir?: string): string | null => {
+const resolveLocalImage = (
+  reference: string,
+  relative: boolean,
+  baseDir?: string,
+): LocalPreviewImageReference | null => {
+  if (!relative && !/^file:\/\//i.test(reference)) {
+    const filePath = /^[a-z]:/i.test(reference) ? reference.replaceAll("\\\\", "\\") : reference;
+    return { filePath, extension: path.extname(filePath).toLowerCase(), fragment: "" };
+  }
+
   try {
-    if (baseDir !== undefined) {
-      const directory = baseDir.endsWith(path.sep) ? baseDir : baseDir + path.sep;
-      return fileURLToPath(new URL(reference, pathToFileURL(directory)));
-    }
-    if (/^file:\/\//i.test(reference)) return fileURLToPath(reference);
+    const directory =
+      baseDir === undefined
+        ? "file:///"
+        : pathToFileURL(baseDir.endsWith(path.sep) ? baseDir : baseDir + path.sep);
+    const url = new URL(reference, directory);
+    // Classify a relative URL without a base directory without assigning it a host path.
+    const filePath = relative && baseDir === undefined ? undefined : fileURLToPath(url);
+    const pathname = filePath ?? decodeURIComponent(url.pathname);
+    // Escape delimiters that would end an HTML attribute, srcset candidate, or CSS URL.
+    const fragment = url.hash.replace(
+      /[\s"'\x60<>=&\\(),]/g,
+      (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+    );
+    return { filePath, extension: path.extname(pathname).toLowerCase(), fragment };
   } catch {
     return null;
   }
-  return /^[a-z]:/i.test(reference) ? reference.replaceAll("\\\\", "\\") : reference;
 };
 
 const formatMib = (bytes: number): string => `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
@@ -199,10 +219,10 @@ export const createNodeHtmlPreviewFilePort = ({
       if (!entry.isDirectory()) return yield* invalidDirectory;
     }),
 
-  readLocalImage: (reference, allowedRoots, maxBytes, baseDir) =>
+  resolveLocalImage,
+
+  readLocalImage: (filePath, allowedRoots, maxBytes) =>
     Effect.gen(function* () {
-      const filePath = normalizeReferencePath(reference, baseDir);
-      if (!filePath) return { kind: "invalid" as const };
       const policy = yield* resolvePathRootPolicy(allowedRoots, blockedRoots);
       const rootCheck = yield* checkPathRootAccess(filePath, policy);
       if (rootCheck === "blocked") return { kind: "blocked" as const };
@@ -219,7 +239,6 @@ export const createNodeHtmlPreviewFilePort = ({
         kind: "ok" as const,
         bytes: opened.bytes,
         size: opened.size,
-        extension: path.extname(filePath).toLowerCase(),
       };
     }),
 });

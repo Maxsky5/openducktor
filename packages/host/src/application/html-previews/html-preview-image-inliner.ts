@@ -1,5 +1,4 @@
 import {
-  imagePreviewMime,
   ODT_HTML_PREVIEW_MAX_IMAGE_BYTES,
   ODT_HTML_PREVIEW_MAX_STORED_BYTES,
   odtHtmlPreviewByteSize,
@@ -8,52 +7,14 @@ import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type { HtmlPreviewFilePort } from "../../ports/html-preview-file-port";
 import {
-  CSS_COMMENT,
-  HTML_START_TAG,
-  HTML_STYLE_ELEMENT,
-  maskHtmlNonMarkup,
-  scanStartTagAttributes,
-} from "./html-preview-validation";
+  type LocalImageReference,
+  scanLocalImageReferences,
+} from "./html-preview-image-references";
 
-const IMAGE_EXTENSIONS = "png|jpg|jpeg|gif|webp|avif|svg|bmp|ico";
-const htmlPreviewImageMime = (extension: string): string | undefined =>
-  extension.toLowerCase() === ".avif" ? "image/avif" : imagePreviewMime(extension);
-const IMAGE_URL_CANDIDATE = new RegExp(
-  String.raw`^(?:file://)?(?:/(?!/)|[a-z]:[\\/]).{0,2048}\.(?:${IMAGE_EXTENSIONS})$`,
-  "i",
-);
-const RELATIVE_IMAGE_CANDIDATE = new RegExp(
-  String.raw`^[^?#]*\.(?:${IMAGE_EXTENSIONS})(?:[?#].*)?$`,
-  "i",
-);
-const CSS_URL = /url\(\s*(?:"([^"\r\n]*)"|'([^'\r\n]*)'|([^)\s"']+))\s*\)/dgi;
-const IMAGE_TARGET_ATTRS = new Set(["src", "poster", "srcset", "style"]);
-const SCHEME_ROOT_OR_FRAGMENT = /^(?:[a-z][a-z\d+.-]*:|[/#])/i;
 const utf8Decoder = new TextDecoder("utf-8");
 
 const isExplicitLocalPath = (reference: string): boolean =>
   /^file:\/\//i.test(reference) || /^[a-z]:[\\/]/i.test(reference);
-
-const NAMED_HTML_ENTITIES = new Map<string, string>([
-  ["amp", "&"],
-  ["lt", "<"],
-  ["gt", ">"],
-  ["quot", '"'],
-  ["apos", "'"],
-]);
-
-const decodeHtmlEntities = (value: string): string => {
-  if (!value.includes("&")) return value;
-  return value.replaceAll(/&(?:#x([0-9a-f]+)|#([0-9]+)|([a-z]+));/gi, (match, hex, dec, named) => {
-    if (named !== undefined) {
-      return NAMED_HTML_ENTITIES.get(String(named).toLowerCase()) ?? match;
-    }
-    const codePoint = hex !== undefined ? Number.parseInt(hex, 16) : Number.parseInt(dec, 10);
-    if (!Number.isInteger(codePoint) || codePoint <= 0 || codePoint > 0x10ffff) return match;
-    if (codePoint >= 0xd800 && codePoint <= 0xdfff) return match;
-    return String.fromCodePoint(codePoint);
-  });
-};
 
 const formatMib = (bytes: number): string => `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
 
@@ -137,113 +98,9 @@ const isImageBytes = (bytes: Uint8Array, ext: string): boolean => {
   return isPng || isJpeg || isGif || isIco || isBmp || isWebp || isAvif;
 };
 
-type LocalImageRef = { start: number; end: number; path: string; relative: boolean };
-type LocalImageUses = { count: number; relative: boolean };
-
-const collectImageReference = (
-  refs: LocalImageRef[],
-  start: number,
-  end: number,
-  value: string,
-  imageSource = false,
-): void => {
-  const path = value.trim();
-  const relative = path !== "" && !SCHEME_ROOT_OR_FRAGMENT.test(path);
-  if (
-    IMAGE_URL_CANDIDATE.test(path) ||
-    (relative && (imageSource || RELATIVE_IMAGE_CANDIDATE.test(path)))
-  ) {
-    refs.push({ start, end, path, relative });
-  }
-};
-
-const collectCssUrls = (
-  html: string,
-  segment: string,
-  baseOffset: number,
-  refs: LocalImageRef[],
-  decodeEntities: boolean,
-): void => {
-  const withoutComments = segment.replaceAll(CSS_COMMENT, (match) => " ".repeat(match.length));
-  for (const match of withoutComments.matchAll(CSS_URL)) {
-    const span = match.indices?.[1] ?? match.indices?.[2] ?? match.indices?.[3];
-    if (!span) continue;
-    const start = baseOffset + span[0];
-    const end = baseOffset + span[1];
-    const rawValue = html.slice(start, end);
-    const decoded = decodeEntities ? decodeHtmlEntities(rawValue) : rawValue;
-    collectImageReference(refs, start, end, decoded);
-  }
-};
-
-const collectSrcsetUrls = (
-  html: string,
-  segment: string,
-  baseOffset: number,
-  refs: LocalImageRef[],
-): void => {
-  const urls = /[^,\s]\S*/g;
-  for (let match = urls.exec(segment); match; match = urls.exec(segment)) {
-    const token = match[0];
-    // A URL can contain commas, including the separator inside a data URL.
-    const url = token.replace(/,+$/, "");
-    const start = baseOffset + match.index;
-    collectImageReference(refs, start, start + url.length, decodeHtmlEntities(url));
-    if (url.length !== token.length) continue;
-    const comma = segment.indexOf(",", urls.lastIndex);
-    if (comma === -1) break;
-    urls.lastIndex = comma + 1;
-  }
-};
-
-/**
- * Scans only real image-bearing HTML attributes (`src`, `poster`, `srcset`, `style`) and `<style>`
- * CSS `url(...)` values outside comments, scripts, textareas, and templates.
- */
-const scanImageReferences = (html: string): LocalImageRef[] => {
-  const masked = maskHtmlNonMarkup(html);
-  const refs: LocalImageRef[] = [];
-  let hasHttpsBase: boolean | undefined;
-
-  for (const styleMatch of masked.matchAll(HTML_STYLE_ELEMENT)) {
-    const bodySpan = styleMatch.indices?.[1];
-    if (bodySpan) {
-      collectCssUrls(html, masked.slice(bodySpan[0], bodySpan[1]), bodySpan[0], refs, false);
-    }
-  }
-
-  const tagsOnly = masked.replaceAll(HTML_STYLE_ELEMENT, (match) => " ".repeat(match.length));
-  for (const tagMatch of tagsOnly.matchAll(HTML_START_TAG)) {
-    const tagSpan = tagMatch.indices?.[0];
-    if (!tagSpan) continue;
-    const tag = tagMatch[0];
-    const attributes = scanStartTagAttributes(tag, tagSpan[0]);
-    if (hasHttpsBase === undefined && /^<base[\s>]/i.test(tag)) {
-      const href = attributes.find(({ name }) => name === "href");
-      if (href) hasHttpsBase = URL.parse(decodeHtmlEntities(href.value))?.protocol === "https:";
-    }
-    const imageTag = /^<img[\s>]/i.test(tag);
-    for (const attribute of attributes) {
-      if (!IMAGE_TARGET_ATTRS.has(attribute.name)) continue;
-      const rawValue = html.slice(attribute.valueStart, attribute.valueEnd);
-      if (attribute.name === "style") {
-        collectCssUrls(html, rawValue, attribute.valueStart, refs, true);
-      } else if (attribute.name === "srcset") {
-        collectSrcsetUrls(html, rawValue, attribute.valueStart, refs);
-      } else {
-        collectImageReference(
-          refs,
-          attribute.valueStart,
-          attribute.valueEnd,
-          decodeHtmlEntities(rawValue),
-          imageTag && attribute.name === "src",
-        );
-      }
-    }
-  }
-
-  refs.sort((left, right) => left.start - right.start);
-  return hasHttpsBase ? refs.filter((ref) => !ref.relative) : refs;
+type LocalImageUses = Pick<LocalImageReference, "file" | "relative"> & {
+  count: number;
+  replacedBytes: number;
 };
 
 type PreparedLocalImage =
@@ -265,14 +122,19 @@ export const inlineLocalHtmlPreviewImages = (
   baseDir?: string,
 ): Effect.Effect<string, HostValidationError> =>
   Effect.gen(function* () {
-    const refs = scanImageReferences(html);
+    const refs = scanLocalImageReferences(html, filePort.resolveLocalImage, baseDir);
     if (refs.length === 0) return html;
 
     const images = new Map<string, LocalImageUses>();
-    for (const { path, relative } of refs) {
-      const image = images.get(path);
-      if (image) image.count += 1;
-      else images.set(path, { count: 1, relative });
+    for (const { start, end, reference, relative, file } of refs) {
+      const replacedBytes = odtHtmlPreviewByteSize(html.slice(start, end));
+      const image = images.get(reference);
+      if (image) {
+        image.count += 1;
+        image.replacedBytes += replacedBytes;
+      } else {
+        images.set(reference, { count: 1, relative, file, replacedBytes });
+      }
     }
 
     if (baseDir === undefined) {
@@ -292,23 +154,22 @@ export const inlineLocalHtmlPreviewImages = (
         message: `Inlining local images would exceed the ${formatMib(ODT_HTML_PREVIEW_MAX_STORED_BYTES)} preview size limit. Resize or compress the images and retry.`,
       });
 
-    const prepareOne = ([refPath, { count, relative }]: [string, LocalImageUses]): Effect.Effect<
-      PreparedLocalImage,
-      HostValidationError
-    > =>
+    const prepareOne = ([refPath, { count, file, relative, replacedBytes }]: [
+      string,
+      LocalImageUses,
+    ]): Effect.Effect<PreparedLocalImage, HostValidationError> =>
       Effect.gen(function* () {
         if (projectedBytes > ODT_HTML_PREVIEW_MAX_STORED_BYTES) {
           return yield* sizeLimitExceeded();
         }
 
-        if (relative && !RELATIVE_IMAGE_CANDIDATE.test(refPath)) {
+        if (!file) {
           return { kind: "invalid", refPath };
         }
         const opened = yield* filePort.readLocalImage(
-          refPath,
+          file.filePath,
           allowedRoots,
           ODT_HTML_PREVIEW_MAX_IMAGE_BYTES,
-          relative ? baseDir : undefined,
         );
         // An absolute slash path outside the allowed roots can be a root-relative HTTPS URL.
         if (opened.kind === "outside_allowed" && !relative && !isExplicitLocalPath(refPath)) {
@@ -324,17 +185,17 @@ export const inlineLocalHtmlPreviewImages = (
           return { kind: "invalid", refPath };
         }
 
-        if (!isImageBytes(opened.bytes, opened.extension)) {
+        if (!isImageBytes(opened.bytes, file.extension)) {
           return yield* new HostValidationError({
             field: "html",
             message: `Local image '${refPath}' does not match a valid image format.`,
           });
         }
 
-        const mimeType = htmlPreviewImageMime(opened.extension) ?? "application/octet-stream";
-        const deltaBytes =
-          count *
-          (encodedDataUriByteLength(mimeType, opened.size) - odtHtmlPreviewByteSize(refPath));
+        const { mimeType, fragment } = file;
+        const replacementBytes =
+          encodedDataUriByteLength(mimeType, opened.size) + odtHtmlPreviewByteSize(fragment);
+        const deltaBytes = count * replacementBytes - replacedBytes;
         projectedBytes += deltaBytes;
         if (projectedBytes > ODT_HTML_PREVIEW_MAX_STORED_BYTES) {
           return yield* sizeLimitExceeded();
@@ -343,7 +204,7 @@ export const inlineLocalHtmlPreviewImages = (
         return {
           kind: "ok",
           refPath,
-          dataUri: `data:${mimeType};base64,${bytesToBase64(opened.bytes)}`,
+          dataUri: `data:${mimeType};base64,${bytesToBase64(opened.bytes)}${fragment}`,
         };
       });
 
@@ -374,7 +235,7 @@ export const inlineLocalHtmlPreviewImages = (
     const chunks: string[] = [];
     let cursor = 0;
     for (const ref of refs) {
-      const replacement = dataUris.get(ref.path);
+      const replacement = dataUris.get(ref.reference);
       if (replacement === undefined) continue;
       chunks.push(html.slice(cursor, ref.start), replacement);
       cursor = ref.end;

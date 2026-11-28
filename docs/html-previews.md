@@ -22,6 +22,8 @@ The host resolves relative local image paths from the directory of the file pass
 
 The host masks comments, `<script>`, `<textarea>`, and `<template>` blocks before scanning HTML start-tag attributes (`src`, `poster`, `srcset`, `style`) and CSS `url(...)` values. It checks magic bytes against supported image formats (PNG, JPEG, GIF, WEBP, AVIF, BMP, ICO, and SVG with an `<svg` root). It rejects symlinks, hardlinks, spoofed images, missing local files under allowed roots, and blocked paths. It leaves root-relative web URLs untouched and inlines each valid local image up to 10 MiB as a `data:` URI. The host tracks the projected UTF-8 byte budget while inlining and rejects documents over 25 MiB before reading or encoding additional files.
 
+The host decodes HTML character references before it parses image URLs. It preserves CSS text and keeps URL fragment selectors on embedded SVG images.
+
 The host rejects pages that use viewport height CSS units (`vh`, `dvh`, `svh`, `lvh`) in `<style>` or `style` attributes, or Tailwind viewport-height classes such as `min-h-screen` or `h-dvh`. The scan masks comments, `<script>`, `<template>`, and raw-text elements and steps over quoted attribute values so prose and code examples do not trigger false failures. The error names the offending unit or class and tells the agent to let content set the height or use fixed pixel heights.
 
 Only sessions that OpenDucktor starts receive `odt_publish_html`. Clients without `ODT_ALLOWED_TOOLS` do not get it. Removing a workspace deletes its `session-html-previews/<workspaceId>` directory alongside its task assets.
