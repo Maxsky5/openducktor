@@ -125,7 +125,7 @@ test.each([
     rate: 42.1,
   },
   {
-    name: "first turn in a fork with incomplete timing in a copied call",
+    name: "first turn in a fork whose copied call lacks timing and whose fork event is absent",
     legacy: false,
     earlierLegacy: "fork prefix",
     missingEnd: false,
@@ -212,9 +212,10 @@ test.each([
             boundary: { type: "through" as const, messageID: "msg_parent_reply" },
           }
         : undefined;
+    const copiedPrefix = "msg_0123456789abABCDEFGHIJKLMN_";
     if (earlierLegacy) {
       const earlier: SessionMessageAssistant = {
-        id: fork ? "msg_native_fork_2" : "msg_legacy_reply",
+        id: fork ? `${copiedPrefix}2` : "msg_legacy_reply",
         type: "assistant",
         agent: "build",
         model,
@@ -224,7 +225,7 @@ test.each([
       if (earlierLegacy === "measurable") earlier.time.streamed = -1_000;
       history.push(
         {
-          id: fork ? "msg_native_fork_1" : "msg_legacy_prompt",
+          id: fork ? `${copiedPrefix}1` : "msg_legacy_prompt",
           type: "user",
           text: "Earlier input",
           time: { created: -3_500 },
@@ -241,10 +242,6 @@ test.each([
       if (!fork) events.push(started);
       if (fork) {
         earlier.time.completed = -500;
-        events.push({
-          ...native("session.forked", -100, { parentID: fork.sessionID, boundary: fork.boundary }),
-          id: "evt_native_fork",
-        });
       } else if (earlierLegacy === "interrupted retry") {
         earlier.content = [];
         interruptedStep = earlier;
@@ -320,6 +317,7 @@ test.each([
         { ...ref, sessionScope: { kind: "repository", workspaceId: "workspace-1" } },
       ]);
       expect(baseline.failures).toEqual([]);
+      if (fork) expect(logReads).toBe(0);
       await runtime.startForwarding((signal) => {
         if (signal.type === "fault" || signal.type === "session_fault")
           reject(new Error(signal.message));

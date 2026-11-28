@@ -142,10 +142,14 @@ export class OpenCodeLiveMessageProjector {
    * Replace the baseline and keep unsaved live updates on matching messages.
    * Return removed message IDs so the caller can drop stale transcript rows.
    */
-  seed(messages: SessionMessageInfo[], pendingRateSteps?: Iterable<string>): string[] {
+  seed(
+    messages: SessionMessageInfo[],
+    pendingRateSteps?: Iterable<string>,
+    copiedRatePrefix?: string,
+  ): string[] {
     this.unmarkedExecutionEnds.clear();
     this.pendingRateSteps = new Set(pendingRateSteps);
-    this.copiedRatePrefix = undefined;
+    this.copiedRatePrefix = copiedRatePrefix;
     const previous = new Map(this.messages);
     const settledText = new Set(this.settledText);
     const settledInput = new Set(this.settledInput);
@@ -215,7 +219,6 @@ export class OpenCodeLiveMessageProjector {
     for (const id of evidence.unmarkedExecutionEnds)
       if (this.pendingRateSteps.has(id)) this.unmarkedExecutionEnds.add(id);
     this.pendingRateSteps.clear();
-    this.copiedRatePrefix = evidence.copiedPrefix;
     this.refreshTurnProjection();
     const updates: AgentEvent[] = [];
     for (const [id, rate] of this.generationRates) {

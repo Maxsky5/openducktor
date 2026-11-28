@@ -64,6 +64,7 @@ import {
 } from "./opencode-message-projection";
 import { OpenCodeLiveMessageProjector } from "./opencode-live-message-projector";
 import {
+  openCodeCopiedPrefix,
   openCodeTurnRateCandidates,
   readOpenCodeRateEvidence,
 } from "./opencode-turn-generation-rate";
@@ -446,13 +447,15 @@ export const createPrepareOpencodeSessionRuntime =
           );
         const { detail } = binding;
         const projector = projectors.get(detail.id)!;
-        const rateCandidates =
-          !legacyTurnBoundaries || detail.fork
-            ? openCodeTurnRateCandidates(detail, messages, true)
-            : undefined;
+        const copiedPrefix = openCodeCopiedPrefix(detail, messages);
+        const rateCandidates = legacyTurnBoundaries
+          ? undefined
+          : openCodeTurnRateCandidates(messages, copiedPrefix, true);
         cancelRateRead(detail.id);
         // Delivery events contain only IDs, so retained payloads must survive snapshot reads.
-        const retractedIds = new Set(projector.seed(messages, rateCandidates?.keys()));
+        const retractedIds = new Set(
+          projector.seed(messages, rateCandidates?.keys(), copiedPrefix),
+        );
         // A prompt raised before this read has no live ask event.
         for (const request of approvals)
           if (request.source?.type === "tool")

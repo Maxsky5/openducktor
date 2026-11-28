@@ -89,7 +89,7 @@ export const openCodeTurnGenerationRates = (
 ): Map<string, number> => {
   const { copiedPrefix } = options;
   const copiedEnd =
-    copiedPrefix && messages.findLast((message) => message.id.startsWith(copiedPrefix));
+    copiedPrefix && messages.findLast((message) => isCopiedMessage(message.id, copiedPrefix));
   const turnOptions = copiedEnd
     ? {
         ...options,
@@ -113,12 +113,25 @@ export const openCodeTurnGenerationRates = (
 
 type RateSession = Pick<SessionInfo, "id" | "fork">;
 
-const isPossibleCopiedStep = (session: RateSession, id: string): boolean =>
-  session.fork !== undefined && /^msg_.+_\d+$/.test(id);
+const isCopiedMessage = (id: string, prefix: string): boolean =>
+  id.startsWith(prefix) && /^\d+$/.test(id.slice(prefix.length));
 
-export const openCodeTurnRateCandidates = (
+export const openCodeCopiedPrefix = (
   session: RateSession,
   messages: readonly SessionMessageInfo[],
+): string | undefined => {
+  if (!session.fork) return;
+  // The fork's saved rows use its native event ID followed by the source row's sequence.
+  // The rows and fork metadata can remain after the originating event is gone.
+  for (const { id } of messages) {
+    const prefix = /^(msg_[0-9a-f]{12}[0-9A-Za-z]{14}_)\d+$/.exec(id)?.[1];
+    if (prefix) return prefix;
+  }
+};
+
+export const openCodeTurnRateCandidates = (
+  messages: readonly SessionMessageInfo[],
+  copiedPrefix: string | undefined,
   observing = false,
 ): Map<string, SessionMessageAssistant> => {
   const candidates = new Map<string, SessionMessageAssistant>();
@@ -128,7 +141,8 @@ export const openCodeTurnRateCandidates = (
     (message, index) => message.type === "assistant" && (firstIdle < 0 || index < firstIdle),
   );
   for (const [index, message] of messages.entries()) {
-    if (message.type !== "assistant") continue;
+    if (message.type !== "assistant" || (copiedPrefix && isCopiedMessage(message.id, copiedPrefix)))
+      continue;
     // The last step before the first idle may belong to an earlier, markerless execution.
     const stoppedWithStream =
       isStoppedOpenCodeReply(message) && message.time.streamed !== undefined;
@@ -137,38 +151,27 @@ export const openCodeTurnRateCandidates = (
       (index < lastPrefixStep ||
         (index === lastPrefixStep && (firstIdle < 0 ? observing : stoppedWithStream)));
     const stoppedInOpenTail = !observing && index > lastIdle && stoppedWithStream;
-    if (possibleLegacyEnd || stoppedInOpenTail || isPossibleCopiedStep(session, message.id))
-      candidates.set(message.id, message);
+    if (possibleLegacyEnd || stoppedInOpenTail) candidates.set(message.id, message);
   }
   return candidates;
 };
 
 const readRateLog = async (
   client: OpenCodeClient,
-  session: RateSession,
+  sessionID: string,
   candidates: ReadonlyMap<string, SessionMessageAssistant>,
   signal?: AbortSignal,
 ) => {
   const executions = new Map<string, { idleId: string; stopped: boolean }>();
-  let copiedPrefix: string | undefined;
 
   let step:
     | { id: string; completedAt: number | undefined; matchesStoppedReply: boolean }
     | undefined;
   for await (const event of client.experimental.session.log(
-    { sessionID: session.id, follow: false },
+    { sessionID, follow: false },
     signal ? { signal } : undefined,
   )) {
     switch (event.type) {
-      case "session.forked":
-        if (
-          session.fork &&
-          event.data.parentID === session.fork.sessionID &&
-          event.data.boundary.type === session.fork.boundary.type &&
-          event.data.boundary.messageID === session.fork.boundary.messageID
-        )
-          copiedPrefix = event.id.replace(/^evt_/, "msg_") + "_";
-        break;
       case "session.step.started": {
         const id = event.data.assistantMessageID;
         executions.delete(id);
@@ -209,7 +212,7 @@ const readRateLog = async (
         step = undefined;
         break;
       case "log.synced":
-        return { executions, copiedPrefix };
+        return executions;
     }
   }
   throw new Error("OpenCode ended the session log before its sync marker. Retry reading history.");
@@ -220,20 +223,17 @@ export const readOpenCodeRateEvidence = async (
   session: RateSession,
   messages: SessionMessageInfo[],
   readMessages: () => Promise<SessionMessageInfo[]>,
-  candidates = openCodeTurnRateCandidates(session, messages),
+  requestedCandidates?: ReadonlyMap<string, SessionMessageAssistant>,
   signal?: AbortSignal,
 ): Promise<{ messages: SessionMessageInfo[]; rates: OpenCodeTurnRateEvidence }> => {
   const unmarkedExecutionEnds = new Set<string>();
   const unmarkedSuccesses = new Set<string>();
-  const rates: OpenCodeTurnRateEvidence = { unmarkedExecutionEnds, unmarkedSuccesses };
+  const copiedPrefix = openCodeCopiedPrefix(session, messages);
+  const rates = { unmarkedExecutionEnds, unmarkedSuccesses, copiedPrefix };
+  const candidates = requestedCandidates ?? openCodeTurnRateCandidates(messages, copiedPrefix);
   if (candidates.size === 0) return { messages, rates };
 
-  const { executions, copiedPrefix } = await readRateLog(client, session, candidates, signal);
-  if (!copiedPrefix && [...candidates.keys()].some((id) => isPossibleCopiedStep(session, id)))
-    throw new Error(
-      "OpenCode did not confirm the copied history boundary. Retry reading the conversation.",
-    );
-  if (copiedPrefix) rates.copiedPrefix = copiedPrefix;
+  const executions = await readRateLog(client, session.id, candidates, signal);
 
   const afterLastIdle = messages.findLastIndex((message) => message.type === "idle") + 1;
   const successInOpenTail = messages
