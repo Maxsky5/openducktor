@@ -1,6 +1,6 @@
 import type { ArchiveFileDraft } from "@openducktor/frontend-core/operations/background-operation-store";
 import { workspaceSessionTitle } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
-import { useBackgroundAttempts } from "@openducktor/frontend-core/operations/use-background-attempts";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { BrowserTabOwner, WorkspaceSession } from "@openducktor/contracts";
 import { useBrowserPanelModel } from "@/features/browser";
 import {
@@ -12,6 +12,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import type { SetURLSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
@@ -144,38 +145,38 @@ export function WorkspaceSessions({
     cancelPending,
     workspace.workspaceId,
   );
-  const archiveAttempts = useBackgroundAttempts();
-  const appliedArchive = useRef<string | null>(null);
+  const { backgroundOperations } = useClientConnection();
+  const archiveSessionId = sessionId === undefined ? visibleSelectedId : sessionId;
+  const hasCompletedArchive = () =>
+    archiveSessionId !== null &&
+    backgroundOperations.hasCompletedArchive(workspace, archiveSessionId);
+  const archiveCompleted = useSyncExternalStore(
+    backgroundOperations.subscribe,
+    hasCompletedArchive,
+    hasCompletedArchive,
+  );
   useEffect(() => {
     if (
       !isActive ||
-      !visibleSelectedId ||
-      (sessionId && sessionId !== visibleSelectedId) ||
       isDraftMode ||
-      effectiveSessions.some((record) => record.id === visibleSelectedId)
+      !archiveCompleted ||
+      archiveSessionId === null ||
+      effectiveSessions.some((record) => record.id === archiveSessionId)
     )
       return;
-    const completed = archiveAttempts.find(
-      (attempt) =>
-        attempt.phase === "succeeded" &&
-        attempt.workspace.workspaceId === workspace.workspaceId &&
-        attempt.target.kind === "chat" &&
-        attempt.target.sessionId === visibleSelectedId,
-    );
-    if (!completed || completed.id === appliedArchive.current) return;
-    appliedArchive.current = completed.id;
+    if (!backgroundOperations.consumeCompletedArchive(workspace, archiveSessionId)) return;
     cancelPending();
     completeArchive(effectiveSessions[0]?.id ?? null);
   }, [
-    archiveAttempts,
+    archiveCompleted,
+    archiveSessionId,
+    backgroundOperations,
     cancelPending,
     completeArchive,
     effectiveSessions,
     isActive,
     isDraftMode,
-    sessionId,
-    visibleSelectedId,
-    workspace.workspaceId,
+    workspace,
   ]);
   const resolvedSelected = useVisibleSessionRecord(
     workspace.workspaceId,

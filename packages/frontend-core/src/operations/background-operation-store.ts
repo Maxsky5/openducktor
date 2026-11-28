@@ -90,6 +90,8 @@ export const createBackgroundOperationStore = (
     hostInstanceId?: string;
   };
   const entries = new Map<string, Entry>();
+  // Navigation can return to an archived chat after its toast has gone.
+  const completedArchives = new Set<string>();
   const archiveDrafts = new Map<string, ArchiveFileDraft>();
   const draftKey = (workspaceId: string, sessionId: string, fileId: string) =>
     JSON.stringify([workspaceId, sessionId, fileId]);
@@ -147,6 +149,7 @@ export const createBackgroundOperationStore = (
     };
     if (message !== undefined) entry.attempt.message = message;
     const { archiveDraftFileIds, workspace, target } = attempt;
+    if (target.kind === "chat" && phase === "succeeded") completedArchives.add(key);
     if (target.kind === "chat" && archiveDraftFileIds) {
       const consented = entry.consentedArchiveDraft;
       if (phase === "succeeded" && consented) {
@@ -280,6 +283,15 @@ export const createBackgroundOperationStore = (
     },
     isRunning: (workspace: WorkspaceIdentity, target: BackgroundOperationTarget) =>
       running.has(targetKey({ workspace, target })),
+    hasCompletedArchive(workspace: WorkspaceIdentity, sessionId: string) {
+      return completedArchives.has(targetKey({ workspace, target: { kind: "chat", sessionId } }));
+    },
+    consumeCompletedArchive(workspace: WorkspaceIdentity, sessionId: string) {
+      if (!completedArchives.delete(targetKey({ workspace, target: { kind: "chat", sessionId } })))
+        return false;
+      publish();
+      return true;
+    },
     getSnapshot: () => snapshot,
     subscribe(listener: () => void) {
       listeners.add(listener);
@@ -295,6 +307,7 @@ export const createBackgroundOperationStore = (
       const refusal = admissionError(origin.workspace, origin.target);
       if (refusal) throw new Error(refusal);
       const key = targetKey(origin);
+      if (origin.target.kind === "chat") completedArchives.delete(key);
       const id = crypto.randomUUID();
       const expectedHostEpoch = host.backgroundOperationHostEpoch?.();
       const { archiveDraft: consented, ...displayOrigin } = origin;
@@ -368,6 +381,7 @@ export const createBackgroundOperationStore = (
       for (const timer of expiry.values()) clearTimeout(timer);
       expiry.clear();
       entries.clear();
+      completedArchives.clear();
       archiveDrafts.clear();
       running.clear();
       publish();

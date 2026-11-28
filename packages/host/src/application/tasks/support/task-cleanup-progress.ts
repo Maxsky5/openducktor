@@ -21,7 +21,7 @@ export const createTaskCleanupProgressState = (): TaskCleanupProgressState => ({
   completedSteps: [],
 });
 
-export const recordStoppedAgentSessionCount = (
+const recordStoppedAgentSessionCount = (
   progress: TaskCleanupProgressState,
   stoppedSessionCount: number,
 ): void => {

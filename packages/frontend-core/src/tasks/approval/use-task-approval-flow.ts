@@ -92,7 +92,7 @@ export function useTaskApprovalFlow({
   showGitProviderContextLoadFailure,
 }: UseTaskApprovalFlowArgs): UseTaskApprovalFlowResult {
   const host = useHostClient();
-  const { feedback } = useClientConnection();
+  const { backgroundOperations, feedback } = useClientConnection();
   const queryClient = useQueryClient();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
@@ -336,8 +336,17 @@ export function useTaskApprovalFlow({
       submissionRoute.kind === "close_task"
     ) {
       if (removeWorktree === null) return;
+      const { taskId } = submissionRoute.approval;
+      const refusal = backgroundOperations.admissionError(submissionWorkspace, {
+        kind: "task",
+        taskId,
+      });
+      if (refusal) {
+        dispatch({ type: "set_error", errorMessage: refusal });
+        return;
+      }
       const continuation = continuationRef.current;
-      const result = closeTask(submissionRoute.approval.taskId, { removeWorktree });
+      const result = closeTask(taskId, { removeWorktree });
       reset();
       void result
         .then(async (committed) => {
@@ -429,6 +438,7 @@ export function useTaskApprovalFlow({
       }
     });
   }, [
+    backgroundOperations,
     feedback,
     host,
     closeTask,
@@ -480,7 +490,7 @@ export function useTaskApprovalFlow({
     const submissionWorkspace = approvalState.workspaceIdentity;
     const submissionVersion = approvalRequestVersionRef.current;
     void submitFlight.start(async () => {
-      dispatch({ type: "clear_error" });
+      dispatch({ type: "set_error", errorMessage: null });
       dispatch({ type: "start_submitting" });
       try {
         const result = await completeDirectMergeApproval({
@@ -542,7 +552,7 @@ export function useTaskApprovalFlow({
     worktreeResetLabel: openTask ? (availableWorktreeResetAction(openTask)?.label ?? null) : null,
     removeWorktree,
     onRemoveWorktreeChange: (nextRemoveWorktree: boolean) => {
-      dispatch({ type: "clear_error" });
+      dispatch({ type: "set_error", errorMessage: null });
       closeChoice.onRemoveWorktreeChange(nextRemoveWorktree);
     },
     gitProviderContext,

@@ -11,6 +11,7 @@ import { CommandPaletteTestContext } from "@/test-utils/command-palette-test-con
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type {
   TerminalSummary,
+  BackgroundOperationProgressEvent,
   WorkspaceSession,
   WorkspaceSessionArchiveInput,
 } from "@openducktor/contracts";
@@ -38,7 +39,11 @@ import {
   createMemoryClientStorage,
 } from "@openducktor/frontend-core/platform/client-storage";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
-import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import type { HostConnection } from "@openducktor/frontend-core/connection/host-connection";
+import {
+  createTestClientConnection,
+  createTestHostConnection,
+} from "@openducktor/frontend-core/test-support/test-client-connection";
 import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
   ActiveWorkspaceContext,
@@ -464,7 +469,12 @@ function renderSessions(
   workspaceId: string = crypto.randomUUID(),
   queryControls: ReactNode = null,
   previewControls: ReactNode = null,
-  options: { workspaces?: ActiveWorkspace[]; viaSessionsPage?: boolean; strictMode?: boolean } = {},
+  options: {
+    workspaces?: ActiveWorkspace[];
+    viaSessionsPage?: boolean;
+    strictMode?: boolean;
+    subscribeProgress?: HostConnection["subscribeBackgroundOperationProgress"];
+  } = {},
 ) {
   const workspace = options.workspaces?.find((entry) => entry.workspaceId === workspaceId) ?? {
     workspaceId,
@@ -485,7 +495,15 @@ function renderSessions(
       }),
     );
   }
-  const connection = createTestClientConnection({ client: hostClient, storage: hostStorage });
+  const connection = createTestClientConnection({
+    host: createTestHostConnection({
+      client: hostClient,
+      ...(options.subscribeProgress && {
+        subscribeBackgroundOperationProgress: options.subscribeProgress,
+      }),
+    }),
+    storage: hostStorage,
+  });
   const view = render(
     <MemoryRouter
       initialEntries={Array.isArray(initialEntry) ? initialEntry : [initialEntry]}
@@ -745,21 +763,22 @@ test.each(["Archive session", "Rename session", "Session actions"] as const)(
   5_000,
 );
 
-test("an archive started before Back updates its workspace while the next workspace is pending", async () => {
+test("returning after background archive and toast dismissal leaves the archived chat", async () => {
   const first = { workspaceId: crypto.randomUUID(), workspaceName: "A", repoPath: "/A" };
   const other = { workspaceId: crypto.randomUUID(), workspaceName: "B", repoPath: "/B" };
   const workspaces = [first, other];
   const chatList = Promise.withResolvers<WorkspaceSession[]>();
   const archived = Promise.withResolvers<WorkspaceSession>();
   const requests: WorkspaceSessionArchiveInput[] = [];
+  let publishProgress: ((event: BackgroundOperationProgressEvent) => void) | undefined;
+  let firstActive = [sessionRecord("First")];
   let cache: QueryClient | null = null;
   function CaptureCache() {
     cache = useQueryClient();
     return null;
   }
   const hostClient = createChatTerminalClient(
-    async (workspaceId) =>
-      workspaceId === other.workspaceId ? chatList.promise : [sessionRecord("First")],
+    async (workspaceId) => (workspaceId === other.workspaceId ? chatList.promise : firstActive),
     {
       workspaceSessionArchive: async (input) => {
         requests.push(input);
@@ -775,7 +794,14 @@ test("an archive started before Back updates its workspace while the next worksp
     first.workspaceId,
     <CaptureCache />,
     null,
-    { workspaces, viaSessionsPage: true },
+    {
+      workspaces,
+      viaSessionsPage: true,
+      subscribeProgress: async (publish) => {
+        publishProgress = publish;
+        return () => {};
+      },
+    },
   );
   try {
     await view.findByRole("heading", { name: "First" });
@@ -784,15 +810,30 @@ test("an archive started before Back updates its workspace while the next worksp
     expect(requests).toHaveLength(0);
     fireEvent.click(await view.findByRole("button", { name: "Archive session" }));
     await waitFor(() => expect(view.queryByRole("dialog", { name: "Archive session" })).toBeNull());
-    expect(view.backgroundOperations.getSnapshot()).toMatchObject([{ phase: "running" }]);
+    const [attempt] = view.backgroundOperations.getSnapshot();
+    if (!attempt) throw new Error("Expected a pending archive");
+    expect(attempt.phase).toBe("running");
     expect(requests).toHaveLength(1);
     expect(requests[0]?.workspaceId).toBe(first.workspaceId);
     fireEvent.click(back);
     await view.findByText("Loading sessions…");
     expect(view.queryByRole("dialog")).toBeNull();
     await act(async () => {
+      firstActive = [];
       archived.resolve({ ...sessionRecord("First"), archivedAt: 2000 });
       await archived.promise;
+      publishProgress?.({
+        channel: "openducktor://background-operation-progress",
+        payload: {
+          operationId: attempt.id,
+          hostInstanceId: "host",
+          revision: 1,
+          workspace: attempt.workspace,
+          target: attempt.target,
+          phase: "succeeded",
+          steps: [],
+        },
+      });
     });
     await waitFor(() =>
       expect(
@@ -804,6 +845,16 @@ test("an archive started before Back updates its workspace while the next worksp
     expect(view.getByTestId("session-url").textContent).toBe(otherUrl);
     expect(view.getByText("Loading sessions…")).toBeTruthy();
     expect(requests).toHaveLength(1);
+    await act(async () => view.backgroundOperations.dismissToast(attempt.id));
+    expect(view.backgroundOperations.getSnapshot()).toEqual([]);
+
+    fireEvent.click(view.getByRole("button", { name: "Forward" }));
+    await view.findByText("No active sessions.");
+    await waitFor(() =>
+      expect(view.getByTestId("session-url").textContent).toBe(
+        `/sessions?workspace=${first.workspaceId}&kind=workspace`,
+      ),
+    );
   } finally {
     view.unmount();
     chatList.resolve([]);
@@ -1478,11 +1529,13 @@ test("a bare URL restores the saved chat after loading, and an explicit link ove
   }
 }, 5_000);
 
-test("keeps a missing session URL as unavailable and clears it after the final archive", async () => {
+test("keeps an unknown URL and clears a known archive after the clean chat leaves first", async () => {
+  const archived = { ...sessionRecord("First"), archivedAt: 2000 };
+  const archiveReply = Promise.withResolvers<WorkspaceSession>();
   const hostClient: Partial<HostClient> = {
     workspaceSessionListActive: async () => [sessionRecord("First")],
     workspaceGetSettingsSnapshot: () => new Promise(() => {}),
-    workspaceSessionArchive: async () => ({ ...sessionRecord("First"), archivedAt: 2000 }),
+    workspaceSessionArchive: () => archiveReply.promise,
   };
   const view = await act(async () =>
     renderSessions(hostClient, undefined, "/chats?session=Missing&keep=value"),
@@ -1500,12 +1553,19 @@ test("keeps a missing session URL as unavailable and clears it after the final a
     await openArchive(view, "First");
     const archive = await view.findByRole("button", { name: "Archive session" });
     await act(async () => fireEvent.click(archive));
+    await act(async () =>
+      updateWorkspaceSessionQueries(view.queryClient, view.workspaceId, archived),
+    );
+    await view.findByText("This session is unavailable", {}, { timeout: 800 });
+    expect(view.getByTestId("session-url").textContent).toBe("/chats?session=First&keep=value");
+    await act(async () => archiveReply.resolve(archived));
     await view.findByText("No active sessions.", {}, { timeout: 800 });
     await waitFor(
       () => expect(view.getByTestId("session-url").textContent).toBe("/chats?keep=value"),
       { timeout: 800 },
     );
   } finally {
+    archiveReply.resolve(archived);
     view.unmount();
   }
 }, 5_000);

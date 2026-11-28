@@ -103,6 +103,7 @@ export function useTaskResetFlow({
   closeTaskDetails,
 }: UseTaskResetFlowArgs) {
   const [request, setRequest] = useState<ResetFlowRequest | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const { feedback, backgroundOperations } = useClientConnection();
   const isCurrent = useSessionStartContext(
     workspaceIdentity ? JSON.stringify(workspaceIdentity) : null,
@@ -171,6 +172,7 @@ export function useTaskResetFlow({
         closeDetailsAfterReset: options?.closeDetailsAfterReset ?? false,
       };
       if (options?.onCommitted) nextRequest.onCommitted = options.onCommitted;
+      setErrorMessage(null);
       setRequest(nextRequest);
       return true;
     },
@@ -178,13 +180,12 @@ export function useTaskResetFlow({
   );
 
   const confirmReset = useCallback((): void => {
-    if (
-      !task ||
-      !request ||
-      submitted.current === request ||
-      !isWorkspaceCurrent ||
-      backgroundOperations.isRunning(request, { kind: "task", taskId: task.id })
-    ) {
+    if (!task || !request || submitted.current === request || !isWorkspaceCurrent) {
+      return;
+    }
+    const refusal = backgroundOperations.admissionError(request, { kind: "task", taskId: task.id });
+    if (refusal) {
+      setErrorMessage(refusal);
       return;
     }
 
@@ -243,7 +244,7 @@ export function useTaskResetFlow({
       terminalCount,
       worktreeOwners,
       impactError,
-      errorMessage: null,
+      errorMessage,
       errorOutcomeUnknown: false,
       onOpenChange: (nextOpen) => {
         if (!nextOpen) {

@@ -11,7 +11,7 @@ import {
 } from "@openducktor/frontend-core/operations/background-operation-store";
 import { useBackgroundAttempts } from "@openducktor/frontend-core/operations/use-background-attempts";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useStore } from "zustand";
@@ -96,9 +96,7 @@ export function BackgroundOperationResults() {
   const router = useRouter();
   const [showing, setShowing] = useState<BackgroundAttempt>();
   const [closing, setClosing] = useState<"dismiss" | "finish">();
-  useEffect(() => {
-    if (!showing && !covered && next) setShowing(next);
-  }, [covered, next, showing]);
+  if (!showing && !covered && next) setShowing(next);
   if (!showing) return null;
   const { id, target, workspace, progress } = showing;
   const steps = progress?.steps ?? [];
