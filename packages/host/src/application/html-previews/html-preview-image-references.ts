@@ -10,6 +10,7 @@ import {
 } from "./html-preview-validation";
 
 const ABSOLUTE_PATH = /^(?:file:\/\/)?(?:\/(?!\/)|[a-z]:[\\/]).{0,2048}$/i;
+const WINDOWS_DRIVE_PATH = /^[a-z]:[\\/]/i;
 const SCHEME_ROOT_OR_FRAGMENT = /^(?:[a-z][a-z\d+.-]*:|[/#])/i;
 const UNRESOLVED_IMAGE_SUFFIX = /\.(?:png|jpe?g|gif|webp|avif|svg|bmp|ico)(?:[?#].*)?$/i;
 const IMAGE_ATTRIBUTES = new Set(["src", "poster", "srcset", "style"]);
@@ -67,6 +68,13 @@ const decodeAttributeWithOffsets = (source: string): DecodedAttribute => {
 };
 
 const scanCssUrls = (css: string, collect: (span: SourceSpan) => void): void => {
+  const collectUrl = (span: SourceSpan): void => {
+    // A native Windows path can contain backslashes that CSS treats as escape characters.
+    const raw = css.slice(span.start, span.end);
+    const value =
+      WINDOWS_DRIVE_PATH.test(raw) && !WINDOWS_DRIVE_PATH.test(span.value) ? raw : span.value;
+    collect({ ...span, value });
+  };
   const lexer = tokenizer({ css });
   let quotedUrl: SourceSpan | null | undefined;
   for (let token = lexer.nextToken(); token[0] !== TokenType.EOF; token = lexer.nextToken()) {
@@ -77,13 +85,13 @@ const scanCssUrls = (css: string, collect: (span: SourceSpan) => void): void => 
       quotedUrl = { start: start + 1, end: token[3], value: token[4].value };
       continue;
     }
-    if (quotedUrl && token[0] === TokenType.CloseParen) collect(quotedUrl);
+    if (quotedUrl && token[0] === TokenType.CloseParen) collectUrl(quotedUrl);
     quotedUrl = undefined;
 
     if (token[0] === TokenType.URL && raw.endsWith(")")) {
       const bodyOffset = raw.indexOf("(") + 1;
       const body = raw.slice(bodyOffset, -1);
-      collect({
+      collectUrl({
         start: start + bodyOffset + body.length - body.trimStart().length,
         end: start + bodyOffset + body.trimEnd().length,
         value: token[4].value,

@@ -126,8 +126,11 @@ export const inlineLocalHtmlPreviewImages = (
     if (refs.length === 0) return html;
 
     const images = new Map<string, LocalImageUses>();
+    // Count the unchanged HTML first. Each image can then only add bytes to the preview.
+    let projectedBytes = odtHtmlPreviewByteSize(html);
     for (const { start, end, reference, relative, file } of refs) {
       const replacedBytes = odtHtmlPreviewByteSize(html.slice(start, end));
+      projectedBytes -= replacedBytes;
       const image = images.get(reference);
       if (image) {
         image.count += 1;
@@ -147,7 +150,6 @@ export const inlineLocalHtmlPreviewImages = (
       }
     }
 
-    let projectedBytes = odtHtmlPreviewByteSize(html);
     const sizeLimitExceeded = (): HostValidationError =>
       new HostValidationError({
         field: "html",
@@ -173,6 +175,10 @@ export const inlineLocalHtmlPreviewImages = (
         );
         // An absolute slash path outside the allowed roots can be a root-relative HTTPS URL.
         if (opened.kind === "outside_allowed" && !relative && !isExplicitLocalPath(refPath)) {
+          projectedBytes += replacedBytes;
+          if (projectedBytes > ODT_HTML_PREVIEW_MAX_STORED_BYTES) {
+            return yield* sizeLimitExceeded();
+          }
           return { kind: "skip" };
         }
         if (opened.kind === "too_large") {
@@ -195,8 +201,7 @@ export const inlineLocalHtmlPreviewImages = (
         const { mimeType, fragment } = file;
         const replacementBytes =
           encodedDataUriByteLength(mimeType, opened.size) + odtHtmlPreviewByteSize(fragment);
-        const deltaBytes = count * replacementBytes - replacedBytes;
-        projectedBytes += deltaBytes;
+        projectedBytes += count * replacementBytes;
         if (projectedBytes > ODT_HTML_PREVIEW_MAX_STORED_BYTES) {
           return yield* sizeLimitExceeded();
         }

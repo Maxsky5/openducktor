@@ -476,8 +476,15 @@ describe("createSessionHtmlPreviewService", () => {
       sessionId: "chat-1",
       archived: false,
     });
-    const port = createNodeHtmlPreviewFilePort({ blockedRoots: [] });
-    await writeFile(path.join(tempRoot, "chart.png"), ONE_PIXEL_PNG);
+    const port: HtmlPreviewFilePort = {
+      ...createNodeHtmlPreviewFilePort({ blockedRoots: [] }),
+      readLocalImage: (filePath) =>
+        Effect.succeed(
+          filePath === "/assets/logo.png"
+            ? { kind: "outside_allowed" }
+            : { kind: "ok", bytes: ONE_PIXEL_PNG, size: ONE_PIXEL_PNG.byteLength },
+        ),
+    };
     const encoded = `<img src="data:image/png;base64,${ONE_PIXEL_PNG.toString("base64")}">`;
     const padding = " ".repeat(ODT_HTML_PREVIEW_MAX_STORED_BYTES - Buffer.byteLength(encoded));
     const inline = (html: string) => inlineLocalHtmlPreviewImages(html, [tempRoot], port, tempRoot);
@@ -486,8 +493,18 @@ describe("createSessionHtmlPreviewService", () => {
       expect(Buffer.byteLength(result)).toBe(ODT_HTML_PREVIEW_MAX_STORED_BYTES);
       expect(result.startsWith(encoded)).toBe(true);
     }
+    const comparison = `<img src="chart.png"><img src="${" ".repeat(1024)}comparison.png">`;
+    const comparisonPadding = " ".repeat(
+      ODT_HTML_PREVIEW_MAX_STORED_BYTES - comparison.length - 50,
+    );
+    const fitted = await Effect.runPromise(inline(comparison + comparisonPadding));
+    expect(Buffer.byteLength(fitted)).toBe(2 * encoded.length + comparisonPadding.length);
+    expect(fitted.startsWith(encoded + encoded)).toBe(true);
+    const rootRelative = '<img src="/assets/logo.png">';
     const oversized = await Effect.runPromise(
-      Effect.flip(inline(`<img src=" chart.png ">${padding} `)),
+      Effect.flip(
+        inline(`<img src=" chart.png ">${padding.slice(rootRelative.length - 1)}${rootRelative}`),
+      ),
     );
     expect(oversized.message).toContain("exceed");
   });
