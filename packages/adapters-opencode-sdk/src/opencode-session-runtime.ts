@@ -34,6 +34,8 @@ import {
   type OpenCodeRequestDraft,
 } from "./opencode-client";
 import { createOpenCodeGenerationModels } from "./opencode-generation-model";
+import { createOpenCodeCatalogReadiness } from "./opencode-catalog-readiness";
+import { readCatalog } from "./opencode-catalog";
 import { createOpenCodeMcpBridge } from "./opencode-mcp-bridge";
 import {
   OpencodeSdkAdapter,
@@ -327,6 +329,7 @@ export const createPrepareOpencodeSessionRuntime =
     abort.signal.addEventListener("abort", () => controller.close(), { once: true });
     if (abort.signal.aborted) controller.close();
     const client = controller.client;
+    const catalogReadiness = createOpenCodeCatalogReadiness(client, abort.signal);
     const info = await nativeRequest(runtimeIdentity, "verify the V2 server", () =>
       client.server.info(),
     );
@@ -976,6 +979,8 @@ export const createPrepareOpencodeSessionRuntime =
             mcpBridge.locationShutdown(event.location.directory);
           if (event.type === "model.updated" && event.location)
             generationModels.modelsChanged(event.location.directory);
+          if (event.type === "plugin.updated" && event.location)
+            catalogReadiness.pluginsChanged(event.location.directory);
           if (event.type === "server.connected" && !initialConnected) readyResolve();
           processing = processing
             .then(() => handleEvent(event))
@@ -994,7 +999,7 @@ export const createPrepareOpencodeSessionRuntime =
         readyReject(cause);
         if (abort.signal.aborted) return;
         fail(cause);
-        // The abort ends the waits of the MCP bridge and of generation models at once.
+        // The abort ends waits for the MCP bridge, generation models, and catalogs.
         abort.abort();
       }
     })();
@@ -1362,7 +1367,8 @@ export const createPrepareOpencodeSessionRuntime =
     return {
       connection,
       queries: {
-        loadRuntimeCatalog: controller.loadRuntimeCatalog.bind(controller),
+        loadRuntimeCatalog: (target) =>
+          readCatalog(client, target.workingDirectory, catalogReadiness.awaitPlugins(target)),
         searchFiles: controller.searchFiles.bind(controller),
         loadSessionHistory: controller.loadSessionHistory.bind(controller),
         loadSessionTodos: controller.loadSessionTodos.bind(controller),

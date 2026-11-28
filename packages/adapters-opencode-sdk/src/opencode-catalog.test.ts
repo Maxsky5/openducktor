@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentInfo, ModelInfo, ProviderInfo, SkillInfo } from "@opencode/client";
 import { readModelCatalog } from "./opencode-catalog";
-import { createController, nativeClient, ref, response } from "./opencode-v2.test-support";
+import { prepareFixture, readPreparedCatalogFixture } from "./opencode-v2-live.test-support";
+import { nativeClient, ref, response } from "./opencode-v2.test-support";
 
 const nativeCatalog = (variants: ModelInfo["variants"] = []) =>
   new Map(
@@ -57,24 +58,22 @@ const nativeCatalog = (variants: ModelInfo["variants"] = []) =>
   );
 
 describe("OpenCode catalog", () => {
-  test("reads every catalog at once, because no OpenCode list waits for plugins", async () => {
+  test("reads catalog surfaces in parallel", async () => {
     const data = nativeCatalog();
     const lists = ["/api/model", "/api/command", "/api/agent", "/api/skill"];
     const listed = new Set<string>();
     const allListed = Promise.withResolvers<void>();
-    const { controller, requests } = createController(async ({ url }) => {
-      const path = url.pathname;
-      listed.add(path);
-      if (lists.every((list) => listed.has(list))) allListed.resolve();
-      if (path === "/api/model") await allListed.promise;
-      if (!data.has(path)) throw new Error(`Unexpected catalog request ${path}`);
-      return response(data.get(path));
-    });
-
-    const catalog = await controller.loadRuntimeCatalog({
-      ...ref,
-      workingDirectory: "/repo/worktree",
-    });
+    const { catalog, requests } = await readPreparedCatalogFixture(
+      { ...ref, workingDirectory: "/repo/worktree" },
+      async ({ url }) => {
+        const path = url.pathname;
+        listed.add(path);
+        if (lists.every((list) => listed.has(list))) allListed.resolve();
+        if (path === "/api/model") await allListed.promise;
+        if (!data.has(path)) throw new Error(`Unexpected catalog request ${path}`);
+        return response(data.get(path));
+      },
+    );
 
     expect(catalog.models).toMatchObject({
       status: "available",
@@ -113,21 +112,114 @@ describe("OpenCode catalog", () => {
         ],
       },
     });
-    expect(requests.filter(({ url }) => url.pathname === "/api/model")).toHaveLength(1);
+    const catalogRequests = requests.filter(({ url }) => url.pathname !== "/api/info");
+    expect(catalogRequests[0]?.url.pathname).toBe("/api/plugin");
+    expect(catalogRequests.filter(({ url }) => url.pathname === "/api/plugin")).toHaveLength(1);
+    expect(catalogRequests.filter(({ url }) => url.pathname === "/api/model")).toHaveLength(1);
     expect(
-      requests.every(({ url }) => url.searchParams.get("location[directory]") === "/repo/worktree"),
+      catalogRequests.every(
+        ({ url }) => url.searchParams.get("location[directory]") === "/repo/worktree",
+      ),
     ).toBe(true);
+  });
+
+  test("includes the cold checkout's plugin catalogs in the first response", async () => {
+    const workingDirectory = "/repo/new-worktree";
+    const canonicalDirectory = "/canonical/new-worktree";
+    const data = nativeCatalog();
+    const initialRead = Promise.withResolvers<void>();
+    const coldInventory = Promise.withResolvers<Response>();
+    const invalidated = Promise.withResolvers<void>();
+    let pluginsLoaded = false;
+    const fixture = prepareFixture(({ url }) => {
+      const path = url.pathname;
+      if (path === "/api/plugin") {
+        if (!pluginsLoaded) {
+          initialRead.resolve();
+          return coldInventory.promise;
+        }
+        return Response.json({
+          location: { directory: canonicalDirectory },
+          data: [{ id: "opencode.agent", state: { status: "active" } }],
+        });
+      }
+      if (data.has(path)) return response(pluginsLoaded ? data.get(path) : []);
+      return undefined;
+    });
+
+    const runtime = await fixture.prepare();
+    try {
+      await runtime.startForwarding((signal) => {
+        if (signal.type === "catalog_invalidated" && signal.workingDirectory === canonicalDirectory)
+          invalidated.resolve();
+      });
+      const catalog = runtime.queries.loadRuntimeCatalog({ ...ref, workingDirectory });
+      await initialRead.promise;
+      pluginsLoaded = true;
+      fixture.channel.push({
+        type: "plugin.updated",
+        id: "plugins-loaded",
+        created: 1,
+        location: { directory: canonicalDirectory },
+        data: {},
+      });
+
+      await invalidated.promise;
+      coldInventory.resolve(
+        Response.json({ location: { directory: canonicalDirectory }, data: [] }),
+      );
+
+      const { models, slashCommands, subagents, skills } = await catalog;
+      if (models?.status !== "available") throw new Error("Expected the model catalog");
+      expect(models.catalog.profiles?.map(({ id }) => id)).toEqual(["build", "review"]);
+      expect(models.catalog.models.map(({ modelId }) => modelId)).toEqual(["mimo-flash"]);
+      expect(
+        slashCommands?.status === "available" &&
+          slashCommands.catalog.commands.map(({ trigger }) => trigger),
+      ).toEqual(["inspect", "compact"]);
+      expect(
+        subagents?.status === "available" && subagents.catalog.subagents.map(({ id }) => id),
+      ).toEqual(["review"]);
+      expect(skills?.status === "available" && skills.catalog.skills.map(({ id }) => id)).toEqual([
+        "native.review",
+      ]);
+    } finally {
+      await runtime.release();
+    }
+  });
+
+  test("reports plugin readiness failure for all catalog surfaces", async () => {
+    const data = nativeCatalog();
+    const fixture = prepareFixture(({ url }) => {
+      if (url.pathname === "/api/plugin")
+        return Response.json({ message: "Plugin inventory unavailable" }, { status: 503 });
+      if (data.has(url.pathname)) return response(data.get(url.pathname));
+      return undefined;
+    });
+
+    const runtime = await fixture.prepare();
+    try {
+      const { models, slashCommands, subagents, skills } =
+        await runtime.queries.loadRuntimeCatalog(ref);
+
+      for (const surface of [models, slashCommands, subagents, skills]) {
+        expect(surface).toMatchObject({
+          status: "failed",
+          cause: expect.any(Error),
+        });
+      }
+    } finally {
+      await runtime.release();
+    }
   });
 
   test("keeps other catalogs available when the model list fails", async () => {
     const data = nativeCatalog();
-    const { controller } = createController(({ url }) => {
+    const { catalog } = await readPreparedCatalogFixture(ref, ({ url }) => {
       if (url.pathname === "/api/model")
         return Response.json({ message: "Model list failed" }, { status: 503 });
       return response(data.get(url.pathname));
     });
-
-    const catalog = await controller.loadRuntimeCatalog(ref);
 
     expect(catalog.models?.status).toBe("failed");
     expect(catalog.slashCommands?.status).toBe("available");
@@ -137,13 +229,11 @@ describe("OpenCode catalog", () => {
 
   test("keeps other catalogs available when provider metadata fails", async () => {
     const data = nativeCatalog();
-    const { controller } = createController(({ url }) => {
+    const { catalog } = await readPreparedCatalogFixture(ref, ({ url }) => {
       if (url.pathname === "/api/provider")
         return Response.json({ message: "Provider metadata failed" }, { status: 503 });
       return response(data.get(url.pathname));
     });
-
-    const catalog = await controller.loadRuntimeCatalog(ref);
 
     expect(catalog.models?.status).toBe("failed");
     expect(catalog.slashCommands?.status).toBe("available");
