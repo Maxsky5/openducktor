@@ -35,7 +35,7 @@ const htmlPreviewPathSchema = z
   .trim()
   .min(1, "path must not be blank.")
   .max(4096, "path must be at most 4096 characters.")
-  .describe("Absolute .html/.htm path in workspace or temp dir. Omit html.");
+  .describe("Absolute .html/.htm path. Relative images resolve from its directory.");
 
 /**
  * Published HTML for the transcript. The host validates, inlines referenced local images, and
@@ -53,9 +53,16 @@ export const OdtPublishHtmlInputSchema = z
         (value) => odtHtmlPreviewByteSize(value) <= ODT_HTML_PREVIEW_MAX_BYTES,
         `html must be at most ${ODT_HTML_PREVIEW_MAX_BYTES} bytes of UTF-8.`,
       )
-      .describe("Inline HTML (max 512 KiB). Omit path.")
+      .describe("Inline HTML (512 KiB max). Use absolute image paths or baseDir.")
       .optional(),
     path: htmlPreviewPathSchema.optional(),
+    baseDir: z
+      .string()
+      .trim()
+      .min(1, "baseDir must not be blank.")
+      .max(4096, "baseDir must be at most 4096 characters.")
+      .describe("Absolute directory for relative images in inline html.")
+      .optional(),
   })
   .superRefine((input, ctx) => {
     const hasHtml = input.html !== undefined;
@@ -65,6 +72,13 @@ export const OdtPublishHtmlInputSchema = z
         code: "custom",
         path: hasHtml ? ["path"] : ["html"],
         message: "Provide exactly one of html or path.",
+      });
+    }
+    if (input.baseDir !== undefined && !hasHtml) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["baseDir"],
+        message: "Use baseDir only with inline html.",
       });
     }
   });

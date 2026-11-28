@@ -1,6 +1,6 @@
-import { realpath } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { ODT_HTML_PREVIEW_MAX_STORED_BYTES } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
@@ -8,13 +8,22 @@ import type { HtmlPreviewFilePort } from "../../ports/html-preview-file-port";
 import { isPathWithinRoot, readRegularFileNoFollow } from "./html-preview-fs";
 
 const HTML_FILE_EXTENSION = /\.html?$/i;
-// Judge bytes, not filenames alone: a renamed secret or .env does not start like an HTML document.
-const HTML_DOCUMENT_START = /^\s*<(?:!doctype\s+html|html)[\s>]/i;
+const HTML_LEADING_COMMENTS = /^\s*(?:<!--[\s\S]*?-->\s*)*/;
+const HTML_MARKUP_START =
+  /^<(?:!doctype\s+html(?:\s[^>]*)?>|[a-z][a-z\d:-]*(?=[\s/>])(?:[^"'<>]|"[^"]*"|'[^']*')*>)/i;
 
 const isNetworkPath = (candidate: string): boolean =>
   candidate.startsWith("\\\\") || candidate.startsWith("//");
 
-const normalizeReferencePath = (reference: string): string | null => {
+const normalizeReferencePath = (reference: string, baseDir?: string): string | null => {
+  if (baseDir !== undefined) {
+    try {
+      const directory = baseDir.endsWith(path.sep) ? baseDir : baseDir + path.sep;
+      return fileURLToPath(new URL(reference, pathToFileURL(directory)));
+    } catch {
+      return null;
+    }
+  }
   if (/^file:\/\//i.test(reference)) {
     try {
       return fileURLToPath(reference);
@@ -120,7 +129,7 @@ export const createNodeHtmlPreviewFilePort = ({
       ) {
         return yield* new HostValidationError({
           field: "path",
-          message: `'${filePath}' is not a readable HTML document. Pass an absolute path to a regular .html file that starts with <!doctype html> or <html>, or pass html instead.`,
+          message: `'${filePath}' is not a readable HTML file. Pass an absolute path to a regular .html or .htm file, or use inline html.`,
         });
       }
 
@@ -169,18 +178,36 @@ export const createNodeHtmlPreviewFilePort = ({
       }
 
       const html = opened.bytes.toString("utf8");
-      if (!HTML_DOCUMENT_START.test(html)) {
+      const markup = html.replace(HTML_LEADING_COMMENTS, "");
+      if (!HTML_MARKUP_START.test(markup)) {
         return yield* new HostValidationError({
           field: "path",
-          message: `'${filePath}' is not an HTML document. Start the file with <!doctype html> or <html>, or pass html instead.`,
+          message: `'${filePath}' is not an HTML document or fragment. Start the file with HTML markup, or use inline html.`,
         });
       }
-      return html;
+      return { html, baseDir: path.dirname(filePath) };
     }),
 
-  readLocalImage: (reference, allowedRoots, maxBytes) =>
+  validateImageBaseDir: (baseDir, allowedRoots) =>
     Effect.gen(function* () {
-      const filePath = normalizeReferencePath(reference);
+      const invalidDirectory = new HostValidationError({
+        field: "baseDir",
+        message:
+          "baseDir must be an absolute path to a directory in the workspace, worktree, or temporary directory.",
+      });
+      const policy = yield* resolvePathRootPolicy(allowedRoots, blockedRoots);
+      const access = yield* checkPathRootAccess(baseDir, policy);
+      if (access !== "ok") return yield* invalidDirectory;
+      const entry = yield* Effect.tryPromise({
+        try: () => stat(baseDir),
+        catch: () => invalidDirectory,
+      });
+      if (!entry.isDirectory()) return yield* invalidDirectory;
+    }),
+
+  readLocalImage: (reference, allowedRoots, maxBytes, baseDir) =>
+    Effect.gen(function* () {
+      const filePath = normalizeReferencePath(reference, baseDir);
       if (!filePath) return { kind: "invalid" as const };
       const policy = yield* resolvePathRootPolicy(allowedRoots, blockedRoots);
       const rootCheck = yield* checkPathRootAccess(filePath, policy);

@@ -39,7 +39,7 @@ type SessionHtmlPreviewPublishError =
 type SessionHtmlPreviewReadError = SessionHtmlPreviewStoreReadError | WorkspaceSettingsError;
 
 type SessionHtmlPreviewSource =
-  | { readonly kind: "html"; readonly html: string }
+  | { readonly kind: "html"; readonly html: string; readonly baseDir?: string | undefined }
   | { readonly kind: "path"; readonly path: string };
 
 export type SessionHtmlPreviewService = {
@@ -81,10 +81,11 @@ export const createSessionHtmlPreviewService = ({
         ? settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)
         : settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId);
       const allowedRoots = [repoConfig.repoPath, worktreeBase, tempDir];
-      const rawHtml =
-        source.kind === "path"
-          ? yield* filePort.readHtmlFile(source.path, allowedRoots)
-          : source.html;
+      const { html: rawHtml, baseDir } =
+        source.kind === "path" ? yield* filePort.readHtmlFile(source.path, allowedRoots) : source;
+      if (source.kind === "html" && baseDir !== undefined) {
+        yield* filePort.validateImageBaseDir(baseDir, allowedRoots);
+      }
 
       const viewportHeight = findHtmlPreviewViewportHeight(rawHtml);
       if (viewportHeight !== undefined) {
@@ -94,7 +95,12 @@ export const createSessionHtmlPreviewService = ({
         });
       }
 
-      const inlinedHtml = yield* inlineLocalHtmlPreviewImages(rawHtml, allowedRoots, filePort);
+      const inlinedHtml = yield* inlineLocalHtmlPreviewImages(
+        rawHtml,
+        allowedRoots,
+        filePort,
+        baseDir,
+      );
       const byteSize = odtHtmlPreviewByteSize(inlinedHtml);
       if (byteSize <= 0 || byteSize > ODT_HTML_PREVIEW_MAX_STORED_BYTES) {
         return yield* new HostValidationError({

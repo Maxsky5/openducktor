@@ -167,38 +167,74 @@ describe("createSessionHtmlPreviewService", () => {
     expect(loaded.html).toContain(`const untouched = "${pngPath}";`);
   });
 
-  test.each(["html", "path"] as const)(
-    "rejects relative image paths in a %s preview",
-    async (kind) => {
-      const { service, tempRoot } = await createHarness({
+  test.each(["file document", "file fragment", "inline fragment"] as const)(
+    "embeds relative images from %s input",
+    async (input) => {
+      const { service, repoDir, tempRoot } = await createHarness({
         kind: "workspace",
         runtimeKind: "opencode",
         externalSessionId: "chat-1",
         sessionId: "chat-1",
         archived: false,
       });
-      const html =
-        '<!doctype html><!-- <base href="https://example.com/"> --><img src="before.png"><img src="./after.png">';
+      const fragment =
+        '<!-- <base href="https://example.com/"> --><style>.picture{background:url(before.png)}</style><img class="picture" src="before.png" srcset="data:image/svg+xml,%3Csvg%3Edecoy.png 1x, ./after%20sample.png 2x"><img src="./after%20sample.png">';
+      const html = input === "file document" ? `<!doctype html>${fragment}` : fragment;
       const htmlPath = path.join(tempRoot, "compare.html");
       await writeFile(htmlPath, html);
       await writeFile(path.join(tempRoot, "before.png"), ONE_PIXEL_PNG);
-      await writeFile(path.join(tempRoot, "after.png"), ONE_PIXEL_PNG);
+      await writeFile(path.join(tempRoot, "after sample.png"), ONE_PIXEL_PNG);
 
-      const error = await Effect.runPromise(
+      const { htmlPreview } = await Effect.runPromise(
+        service.publish({
+          workspaceId: "ws-1",
+          caller: { runtime: "opencode", runtimeSessionId: "chat-1" },
+          title: "Comparison",
+          source:
+            input === "inline fragment"
+              ? { kind: "html", html, baseDir: tempRoot }
+              : { kind: "path", path: htmlPath },
+        }),
+      );
+      const loaded = await Effect.runPromise(
+        service.read({ workspaceId: "ws-1", repoPath: repoDir, previewId: htmlPreview.previewId }),
+      );
+      const png = `data:image/png;base64,${ONE_PIXEL_PNG.toString("base64")}`;
+      expect(loaded.html).toContain(`background:url(${png})`);
+      expect(loaded.html).toContain(`srcset="data:image/svg+xml,%3Csvg%3Edecoy.png 1x, ${png} 2x"`);
+      expect(loaded.html.split(`src="${png}"`)).toHaveLength(3);
+    },
+  );
+
+  test("reports missing base directories and rejects relative image paths outside allowed roots", async () => {
+    const { service, tempRoot, outsideDir } = await createHarness({
+      kind: "workspace",
+      runtimeKind: "opencode",
+      externalSessionId: "chat-1",
+      sessionId: "chat-1",
+      archived: false,
+    });
+    const publish = (html: string, baseDir?: string) =>
+      Effect.runPromise(
         Effect.flip(
           service.publish({
             workspaceId: "ws-1",
             caller: { runtime: "opencode", runtimeSessionId: "chat-1" },
             title: "Comparison",
-            source: kind === "path" ? { kind, path: htmlPath } : { kind, html },
+            source: { kind: "html", html, baseDir },
           }),
         ),
       );
-      expect(error._tag).toBe("HostValidationError");
-      expect(error.message).toContain("before.png, ./after.png");
-      expect(error.message).toContain("absolute paths");
-    },
-  );
+    await writeFile(path.join(outsideDir, "outside.png"), ONE_PIXEL_PNG);
+    const withoutBase = await publish('<img src="before.png">');
+    expect(withoutBase.message).toContain("before.png");
+    expect(withoutBase.message).toContain("baseDir");
+    const escaped = await publish('<img src="../outside/outside.png">', tempRoot);
+    expect(escaped.message).toContain("../outside/outside.png");
+    expect(escaped.message).toContain("Could not inline");
+    const outsideBase = await publish('<img src="outside.png">', outsideDir);
+    expect(outsideBase).toMatchObject({ _tag: "HostValidationError", field: "baseDir" });
+  });
 
   test("keeps static image URLs that resolve against an HTTPS base", async () => {
     const { service, repoDir } = await createHarness({
@@ -397,7 +433,7 @@ describe("createSessionHtmlPreviewService", () => {
     ONE_PIXEL_PNG.copy(pngChunk, 0);
 
     const stubPort: HtmlPreviewFilePort = {
-      readHtmlFile: () => Effect.succeed(""),
+      ...createNodeHtmlPreviewFilePort({ blockedRoots: [] }),
       readLocalImage: (filePath) => {
         readPaths.push(filePath);
         return Effect.succeed({ kind: "ok", bytes: pngChunk, size: chunkSize, extension: ".png" });

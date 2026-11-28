@@ -211,7 +211,7 @@ const executePublishHtml: OdtMcpMutationHandler = (context, body) =>
     const source =
       parsed.path !== undefined
         ? ({ kind: "path", path: parsed.path } as const)
-        : ({ kind: "html", html: parsed.html ?? "" } as const);
+        : ({ kind: "html", html: parsed.html ?? "", baseDir: parsed.baseDir } as const);
     const published = yield* context.sessionHtmlPreviews.publish({
       workspaceId: parsed.workspaceId,
       caller,

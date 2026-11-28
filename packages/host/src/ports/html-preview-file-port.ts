@@ -13,10 +13,15 @@ export type HtmlPreviewFilePort = {
   readHtmlFile(
     filePath: string,
     allowedRoots: readonly string[],
-  ): Effect.Effect<string, HostValidationError>;
+  ): Effect.Effect<{ html: string; baseDir: string }, HostValidationError>;
+  validateImageBaseDir(
+    baseDir: string,
+    allowedRoots: readonly string[],
+  ): Effect.Effect<void, HostValidationError>;
   readLocalImage(
     reference: string,
     allowedRoots: readonly string[],
     maxBytes: number,
+    baseDir?: string,
   ): Effect.Effect<ReadLocalPreviewImageResult>;
 };

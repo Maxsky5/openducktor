@@ -22,6 +22,10 @@ const IMAGE_URL_CANDIDATE = new RegExp(
   String.raw`^(?:file://)?(?:/(?!/)|[a-z]:[\\/]).{0,2048}\.(?:${IMAGE_EXTENSIONS})$`,
   "i",
 );
+const RELATIVE_IMAGE_CANDIDATE = new RegExp(
+  String.raw`^[^?#]*\.(?:${IMAGE_EXTENSIONS})(?:[?#].*)?$`,
+  "i",
+);
 const CSS_URL = /url\(\s*(?:"([^"\r\n]*)"|'([^'\r\n]*)'|([^)\s"']+))\s*\)/dgi;
 const IMAGE_TARGET_ATTRS = new Set(["src", "poster", "srcset", "style"]);
 const SCHEME_ROOT_OR_FRAGMENT = /^(?:[a-z][a-z\d+.-]*:|[/#])/i;
@@ -133,7 +137,24 @@ const isImageBytes = (bytes: Uint8Array, ext: string): boolean => {
   return isPng || isJpeg || isGif || isIco || isBmp || isWebp || isAvif;
 };
 
-type LocalImageRef = { start: number; end: number; path: string };
+type LocalImageRef = { start: number; end: number; path: string; relative: boolean };
+
+const collectImageReference = (
+  refs: LocalImageRef[],
+  start: number,
+  end: number,
+  value: string,
+  imageSource = false,
+): void => {
+  const path = value.trim();
+  const relative = path !== "" && !SCHEME_ROOT_OR_FRAGMENT.test(path);
+  if (
+    IMAGE_URL_CANDIDATE.test(path) ||
+    (relative && (imageSource || RELATIVE_IMAGE_CANDIDATE.test(path)))
+  ) {
+    refs.push({ start, end, path, relative });
+  }
+};
 
 const collectCssUrls = (
   html: string,
@@ -150,9 +171,7 @@ const collectCssUrls = (
     const end = baseOffset + span[1];
     const rawValue = html.slice(start, end);
     const decoded = decodeEntities ? decodeHtmlEntities(rawValue) : rawValue;
-    if (IMAGE_URL_CANDIDATE.test(decoded)) {
-      refs.push({ start, end, path: decoded });
-    }
+    collectImageReference(refs, start, end, decoded);
   }
 };
 
@@ -162,18 +181,17 @@ const collectSrcsetUrls = (
   baseOffset: number,
   refs: LocalImageRef[],
 ): void => {
-  let cursor = 0;
-  for (const part of segment.split(",")) {
-    const trimmedLeading = part.length - part.trimStart().length;
-    const body = part.trimStart();
-    const urlEnd = body.search(/\s/);
-    const rawUrl = urlEnd === -1 ? body : body.slice(0, urlEnd);
-    const decoded = decodeHtmlEntities(rawUrl);
-    if (decoded.length > 0 && IMAGE_URL_CANDIDATE.test(decoded)) {
-      const start = baseOffset + cursor + trimmedLeading;
-      refs.push({ start, end: start + rawUrl.length, path: decoded });
+  const urls = /[^,\s]\S*/g;
+  for (let match = urls.exec(segment); match; match = urls.exec(segment)) {
+    const token = match[0];
+    const url = token.replace(/,+$/, "");
+    const start = baseOffset + match.index;
+    collectImageReference(refs, start, start + url.length, decodeHtmlEntities(url));
+    if (url.length === token.length) {
+      const comma = segment.indexOf(",", urls.lastIndex);
+      if (comma === -1) break;
+      urls.lastIndex = comma + 1;
     }
-    cursor += part.length + 1;
   }
 };
 
@@ -184,7 +202,6 @@ const collectSrcsetUrls = (
 const scanImageReferences = (html: string) => {
   const masked = maskHtmlNonMarkup(html);
   const refs: LocalImageRef[] = [];
-  const relativeSources = new Set<string>();
   let hasHttpsBase: boolean | undefined;
 
   for (const styleMatch of masked.matchAll(HTML_STYLE_ELEMENT)) {
@@ -204,11 +221,7 @@ const scanImageReferences = (html: string) => {
       const href = attributes.find(({ name }) => name === "href");
       if (href) hasHttpsBase = URL.parse(decodeHtmlEntities(href.value))?.protocol === "https:";
     }
-    if (/^<img[\s>]/i.test(tag)) {
-      const src = attributes.find(({ name }) => name === "src");
-      const url = src ? decodeHtmlEntities(src.value).trim() : "";
-      if (url && !SCHEME_ROOT_OR_FRAGMENT.test(url)) relativeSources.add(url);
-    }
+    const imageTag = /^<img[\s>]/i.test(tag);
     for (const attribute of attributes) {
       if (!IMAGE_TARGET_ATTRS.has(attribute.name)) continue;
       const rawValue = html.slice(attribute.valueStart, attribute.valueEnd);
@@ -217,16 +230,19 @@ const scanImageReferences = (html: string) => {
       } else if (attribute.name === "srcset") {
         collectSrcsetUrls(html, rawValue, attribute.valueStart, refs);
       } else {
-        const decoded = decodeHtmlEntities(rawValue);
-        if (IMAGE_URL_CANDIDATE.test(decoded)) {
-          refs.push({ start: attribute.valueStart, end: attribute.valueEnd, path: decoded });
-        }
+        collectImageReference(
+          refs,
+          attribute.valueStart,
+          attribute.valueEnd,
+          decodeHtmlEntities(rawValue),
+          imageTag && attribute.name === "src",
+        );
       }
     }
   }
 
   refs.sort((left, right) => left.start - right.start);
-  return { refs, relativeSources, hasHttpsBase };
+  return hasHttpsBase ? refs.filter((ref) => !ref.relative) : refs;
 };
 
 type PreparedLocalImage =
@@ -245,14 +261,18 @@ export const inlineLocalHtmlPreviewImages = (
   html: string,
   allowedRoots: readonly string[],
   filePort: HtmlPreviewFilePort,
+  baseDir?: string,
 ): Effect.Effect<string, HostValidationError> =>
   Effect.gen(function* () {
-    const { refs, relativeSources, hasHttpsBase } = scanImageReferences(html);
-    if (!hasHttpsBase && relativeSources.size > 0) {
-      return yield* new HostValidationError({
-        field: "html",
-        message: `Relative image paths: ${[...relativeSources].join(", ")}. Use absolute paths in the workspace, worktree, or temporary directory, or use data: URIs or HTTPS URLs.`,
-      });
+    const refs = scanImageReferences(html);
+    if (baseDir === undefined) {
+      const relativePaths = new Set(refs.filter((ref) => ref.relative).map((ref) => ref.path));
+      if (relativePaths.size > 0) {
+        return yield* new HostValidationError({
+          field: "html",
+          message: `Relative image paths: ${[...relativePaths].join(", ")}. Set baseDir to their directory, or use absolute paths, data URIs, or HTTPS URLs.`,
+        });
+      }
     }
     if (refs.length === 0) return html;
 
@@ -274,10 +294,15 @@ export const inlineLocalHtmlPreviewImages = (
           return yield* sizeLimitExceeded();
         }
 
+        const relative = !SCHEME_ROOT_OR_FRAGMENT.test(refPath);
+        if (relative && !RELATIVE_IMAGE_CANDIDATE.test(refPath)) {
+          return { kind: "invalid", refPath };
+        }
         const opened = yield* filePort.readLocalImage(
           refPath,
           allowedRoots,
           ODT_HTML_PREVIEW_MAX_IMAGE_BYTES,
+          relative ? baseDir : undefined,
         );
         if (opened.kind === "blocked") {
           return { kind: "invalid", refPath };
@@ -285,7 +310,9 @@ export const inlineLocalHtmlPreviewImages = (
         if (opened.kind === "outside_allowed") {
           // Leave root-relative web URLs (such as `/favicon.ico` or `/logo.png`) untouched; only
           // fail explicit local `file://` or Windows drive paths that escape the allowed roots.
-          return isExplicitLocalPath(refPath) ? { kind: "invalid", refPath } : { kind: "skip" };
+          return relative || isExplicitLocalPath(refPath)
+            ? { kind: "invalid", refPath }
+            : { kind: "skip" };
         }
         if (opened.kind === "too_large") {
           return yield* new HostValidationError({
