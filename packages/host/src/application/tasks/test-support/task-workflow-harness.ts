@@ -203,7 +203,7 @@ const createTaskServiceInput = (input: TaskServiceTestInput): CreateTaskServiceI
       ({
         acquireTaskCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
       } satisfies NonNullable<CreateTaskServiceInput["terminalService"]>),
-    browserTabs: rest.browserTabs ?? { closeOwnerTabs: () => Effect.void },
+    browserTabs: rest.browserTabs ?? { closeOwnerTabs: () => Effect.succeed(false) },
     worktreeActions: rest.worktreeActions ?? createBuildWorktreeActions([]),
     toolDiscovery: resolvedToolDiscovery,
     taskStore: atomicTaskStore ?? createTaskStorePort(taskStore!),
@@ -788,6 +788,7 @@ const createDirectMergeGitPort = ({
     restoreWorktreeToReference(workingDirectory, reference) {
       return Effect.sync(() => {
         calls.push({ type: "restoreWorktree", workingDirectory, reference });
+        return true;
       });
     },
     commitsAheadBehind(workingDir, targetBranch) {

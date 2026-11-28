@@ -48,7 +48,7 @@ const createHookHarness = (
   const wrapper = ({ children }: PropsWithChildren): ReactElement => (
     <ClientConnectionProvider connection={connection}>{children}</ClientConnectionProvider>
   );
-  return createSharedHookHarness(useTaskResetFlow, initialProps, { wrapper });
+  return { ...createSharedHookHarness(useTaskResetFlow, initialProps, { wrapper }), connection };
 };
 
 describe("useTaskResetFlow", () => {
@@ -154,6 +154,43 @@ describe("useTaskResetFlow", () => {
     }
   });
 
+  test("keeps a reopened confirmation with a wait message until the running reset ends", async () => {
+    const pendingReset = Promise.withResolvers<ReturnType<typeof createWireTaskCardFixture>>();
+    const resetTaskImplementation = mock((taskId: string) =>
+      harness.connection.backgroundOperations.run(
+        { workspace: workspaceA, target: { kind: "task", taskId }, action: "Reset implementation" },
+        () => pendingReset.promise,
+      ),
+    );
+    const harness = createHookHarness(createArgs({ resetTaskImplementation }));
+
+    try {
+      await harness.mount();
+      await harness.run((model) => {
+        model.openResetImplementation("task-1", "reset-implementation");
+      });
+      await harness.run((model) => model.resetImplementationModal?.onConfirm());
+      expect(harness.getLatest().resetImplementationModal).toBeNull();
+      await harness.run((model) => {
+        model.openResetImplementation("task-1", "reset-implementation");
+      });
+      await harness.run((model) => model.resetImplementationModal?.onConfirm());
+      expect(harness.getLatest().resetImplementationModal?.errorMessage).toContain(
+        "Wait for it to finish.",
+      );
+      expect(resetTaskImplementation).toHaveBeenCalledTimes(1);
+
+      pendingReset.resolve(createWireTaskCardFixture({ id: "task-1" }));
+      await resetTaskImplementation.mock.results[0]?.value;
+      await harness.run((model) => model.resetImplementationModal?.onConfirm());
+      expect(harness.getLatest().resetImplementationModal).toBeNull();
+      expect(resetTaskImplementation).toHaveBeenCalledTimes(2);
+    } finally {
+      pendingReset.resolve(createWireTaskCardFixture({ id: "task-1" }));
+      await harness.unmount();
+    }
+  });
+
   test("keeps the modal when the workspace identity does not change", async () => {
     const args = createArgs();
     const harness = createHookHarness(args);
@@ -229,7 +266,7 @@ describe("useTaskResetFlow", () => {
     }
   });
 
-  test("marks a reset whose result the connection lost", async () => {
+  test("closes confirmation when a submitted reset loses its reply", async () => {
     const resetTaskImplementation = mock(async () => {
       throw new RemoteConnectionError({
         code: "outcome_unknown",
@@ -247,12 +284,8 @@ describe("useTaskResetFlow", () => {
       await harness.run((model) => {
         model.resetImplementationModal?.onConfirm();
       });
-      await waitFor(() => {
-        expect(harness.getLatest().resetImplementationModal?.errorOutcomeUnknown).toBe(true);
-      });
-      expect(harness.getLatest().resetImplementationModal?.errorMessage).toBe(
-        "The result of task_reset_implementation was lost. Read current host state to check the outcome.",
-      );
+      expect(harness.getLatest().resetImplementationModal).toBeNull();
+      expect(resetTaskImplementation).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
     }

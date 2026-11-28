@@ -1,5 +1,8 @@
+import type { ArchiveFileDraft } from "@openducktor/frontend-core/operations/background-operation-store";
+import { useRetainedArchiveFileDraft } from "./file-preview/use-retained-archive-file-draft";
 import type {
   WorkspaceFileScope,
+  WorkspaceSessionRefInput,
   WorkspaceTextFileReadResult,
   WorkspaceTextFileWriteInput,
   WorkspaceTextFileWriteFailure,
@@ -47,7 +50,13 @@ type EditorState = {
 
 type EditorAction =
   | { type: "reset" }
-  | { type: "seed"; id: string; branch: string | null; result: TextFileResult }
+  | {
+      type: "seed";
+      id: string;
+      branch: string | null;
+      result: TextFileResult;
+      draft: ArchiveFileDraft | undefined;
+    }
   | { type: "adopt_clean_result"; branch: string | null; result: TextFileResult }
   | { type: "edit"; isDirty: boolean; contents: string }
   | { type: "save_started" }
@@ -103,12 +112,23 @@ const editorStateReducer = (state: EditorState, action: EditorAction): EditorSta
     case "seed":
       return {
         ...INITIAL_EDITOR_STATE,
-        draftContents: action.result.contents,
+        draftContents: action.draft?.contents ?? action.result.contents,
+        isDirty: action.draft !== undefined,
+        saveFailure:
+          action.draft && action.draft.baseline.revision !== action.result.revision
+            ? {
+                code: "stale_revision",
+                message:
+                  "The file changed while this draft was open. Review the current file before saving.",
+              }
+            : null,
         session: {
           id: action.id,
-          branch: action.branch,
-          baseline: action.result,
-          source: action.result,
+          branch: action.draft ? action.draft.branch : action.branch,
+          baseline: action.draft?.baseline ?? action.result,
+          source: action.draft
+            ? { ...action.draft.baseline, contents: action.draft.contents }
+            : action.result,
           version: 0,
         },
       };
@@ -222,6 +242,23 @@ const workspaceWriteFailure = (cause: unknown): WorkspaceTextFileWriteFailure | 
   return cause.failure.workspaceTextFileWriteFailure;
 };
 
+const editorSaveStatus = (state: EditorState, branch: string | null, requireBranch: boolean) => {
+  const branchUnavailable = requireBranch && branch === null;
+  const hasBranchConflict =
+    state.isDirty && (state.session?.branch !== branch || branchUnavailable);
+  const hasStaleConflict = state.saveFailure?.code === "stale_revision" || hasBranchConflict;
+  const canReviewConflict = hasStaleConflict && !branchUnavailable;
+  let saveError = state.saveFailure?.message ?? null;
+  if (branchUnavailable && state.isDirty) {
+    saveError = "Could not verify the current branch. Retry the branch read before saving.";
+  } else if (!saveError && hasBranchConflict) {
+    saveError =
+      "This draft has not been checked for the current branch. Review the file before saving.";
+  }
+
+  return { hasStaleConflict, canReviewConflict, saveError };
+};
+
 type UseTaskExecutionFileEditorInput = {
   selectedFile: TaskExecutionSelectedFile | null;
   readyResult: TextFileResult | null;
@@ -229,6 +266,8 @@ type UseTaskExecutionFileEditorInput = {
   requireBranch: boolean;
   /** Sent with each read and save of the file. */
   scope: WorkspaceFileScope | undefined;
+  workspaceSession?: WorkspaceSessionRefInput | undefined;
+  archiveDraftRef?: { current: ArchiveFileDraft | null } | undefined;
   onFileSaved(): void;
   onLeavePolicyChange(policy: TaskExecutionFilePreviewLeavePolicy): void;
 };
@@ -239,12 +278,19 @@ export const useTaskExecutionFileEditor = ({
   branch,
   requireBranch,
   scope,
+  workspaceSession,
+  archiveDraftRef,
   onFileSaved,
   onLeavePolicyChange,
 }: UseTaskExecutionFileEditorInput) => {
   const queryClient = useQueryClient();
   const mutation = useMutation(workspaceTextFileWriteMutationOptions(queryClient));
   const [state, dispatch] = useReducer(editorStateReducer, INITIAL_EDITOR_STATE);
+  const { readRetainedDraft, syncArchiveDraft } = useRetainedArchiveFileDraft(
+    queryClient,
+    workspaceSession,
+    archiveDraftRef,
+  );
   const draftRef = useRef("");
   const saveInFlightRef = useRef(false);
   const stateRef = useRef(state);
@@ -258,7 +304,8 @@ export const useTaskExecutionFileEditor = ({
 
   useLayoutEffect(() => {
     stateRef.current = state;
-  }, [state]);
+    syncArchiveDraft(state);
+  }, [state, syncArchiveDraft]);
 
   useLayoutEffect(() => {
     branchRef.current = branch;
@@ -280,8 +327,10 @@ export const useTaskExecutionFileEditor = ({
     }
     if (!readyResult) return;
     if (!state.session) {
-      draftRef.current = readyResult.contents;
-      dispatch({ type: "seed", id, branch, result: readyResult });
+      const draft = readRetainedDraft(id);
+      draftRef.current = draft?.contents ?? readyResult.contents;
+      dispatch({ type: "seed", id, branch, result: readyResult, draft });
+      if (draft) onLeavePolicyChange("confirm");
       return;
     }
     if (state.isDirty || state.isSaving || saveInFlightRef.current) {
@@ -295,7 +344,16 @@ export const useTaskExecutionFileEditor = ({
     }
     draftRef.current = readyResult.contents;
     dispatch({ type: "adopt_clean_result", branch, result: readyResult });
-  }, [branch, readyResult, selectedFile, state.isDirty, state.isSaving, state.session]);
+  }, [
+    branch,
+    onLeavePolicyChange,
+    readyResult,
+    selectedFile,
+    readRetainedDraft,
+    state.isDirty,
+    state.isSaving,
+    state.session,
+  ]);
 
   useLayoutEffect(() => {
     if (state.conflictReview && state.conflictReview.branch !== branch) {
@@ -308,12 +366,13 @@ export const useTaskExecutionFileEditor = ({
       if (!state.session || state.session.id !== selectedFileId) return;
       draftRef.current = contents;
       const isDirty = contents !== state.session.baseline.contents;
+      syncArchiveDraft({ session: state.session, draftContents: contents, isDirty });
       dispatch({ type: "edit", isDirty, contents });
       if (!saveInFlightRef.current) {
         onLeavePolicyChange(isDirty ? "confirm" : "allow");
       }
     },
-    [onLeavePolicyChange, selectedFileId, state.session],
+    [onLeavePolicyChange, selectedFileId, state.session, syncArchiveDraft],
   );
   const onItemEditChange = useCallback(
     (item: CodeViewItem<undefined>, file: FileContents) => {
@@ -322,19 +381,11 @@ export const useTaskExecutionFileEditor = ({
     [onContentsChange, state.session],
   );
 
-  const branchUnavailable = requireBranch && branch === null;
-  const hasBranchConflict =
-    state.isDirty && (state.session?.branch !== branch || branchUnavailable);
-  const hasStaleConflict = state.saveFailure?.code === "stale_revision" || hasBranchConflict;
-  const canReviewConflict = hasStaleConflict && !branchUnavailable;
-  let saveError = state.saveFailure?.message ?? null;
-  if (branchUnavailable && state.isDirty) {
-    saveError = "Could not verify the current branch. Retry the branch read before saving.";
-  } else if (!saveError && hasBranchConflict) {
-    saveError =
-      "This draft has not been checked for the current branch. Review the file before saving.";
-  }
-
+  const { hasStaleConflict, canReviewConflict, saveError } = editorSaveStatus(
+    state,
+    branch,
+    requireBranch,
+  );
   const save = useCallback(async (): Promise<void> => {
     const session = state.session;
     if (

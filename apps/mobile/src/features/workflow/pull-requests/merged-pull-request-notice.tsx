@@ -51,6 +51,7 @@ export function MergedPullRequestNotice({ taskId }: { taskId?: string }): ReactE
       visible={confirmation.open && shown?.taskId === confirmation.link.taskId}
       link={confirmation.link}
       linking={linking}
+      errorMessage={shown?.taskId === confirmation.link.taskId ? shown.errorMessage : undefined}
       onCancel={() => setConfirmation({ ...confirmation, open: false })}
       onConfirm={(options) => {
         void linkMergedPullRequest(options);

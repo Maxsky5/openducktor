@@ -1,3 +1,5 @@
+import { createTestClientConnection } from "../../test-support/test-client-connection";
+import { HostChannelRequestError, hostChannelInvokeError } from "@openducktor/host-client/channel";
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
 import type { PullRequest, TaskPullRequestDetectResult } from "@openducktor/contracts";
@@ -67,6 +69,7 @@ type OperationsHarnessOptions = {
 
 const createOperationsHarness = (options: OperationsHarnessOptions = {}) => {
   const queryClient = createClientQueryClient();
+  const { backgroundOperations } = createTestClientConnection({ queryClient });
   const queryKey = pullRequestReviewQueryKeys.context({
     workspaceId: "workspace-1",
     repoPath: "/repo",
@@ -77,8 +80,12 @@ const createOperationsHarness = (options: OperationsHarnessOptions = {}) => {
   const refreshTaskData = mock(async () => {});
   const notification = createNotificationPort();
   const pullRequestHostPort = options.pullRequestHostPort ?? createPullRequestHostPort();
-  const runTaskMutation =
-    options.runTaskMutation ?? ((mutationOptions) => mutationOptions.run("/repo"));
+  const runTaskMutation: TaskMutationRunner["runTaskMutation"] =
+    options.runTaskMutation ??
+    ((mutationOptions) =>
+      mutationOptions.background
+        ? mutationOptions.run({ operationId: "operation-1" })
+        : mutationOptions.run("/repo"));
   const cleanupEvents: string[] = [];
   const taskChatDraftCleanup: TaskPullRequestChatDraftCleanupPort =
     options.taskChatDraftCleanup ?? {
@@ -116,6 +123,7 @@ const createOperationsHarness = (options: OperationsHarnessOptions = {}) => {
 
   return {
     notification,
+    backgroundOperations,
     pullRequestHostPort,
     queryClient,
     queryKey,
@@ -410,6 +418,7 @@ describe("useTaskPullRequestOperations", () => {
         "task-1",
         pullRequest,
         true,
+        { operationId: expect.any(String) },
       );
       expect(operationEvents).toEqual([
         "injected cleanup started",
@@ -425,8 +434,10 @@ describe("useTaskPullRequestOperations", () => {
   test("restores unlink progress after a workspace round trip and invalidates CI review data", async () => {
     const unlinkResult = Promise.withResolvers<{ ok: boolean }>();
     const taskPullRequestUnlink = mock(() => unlinkResult.promise);
-    const runTaskMutation: TaskMutationRunner["runTaskMutation"] = (options) =>
-      options.run("/repo");
+    const runTaskMutation: TaskMutationRunner["runTaskMutation"] = async (options) => {
+      if (options.background) throw new Error("Unexpected background unlink");
+      return options.run("/repo");
+    };
     const testHarness = createOperationsHarness({
       pullRequestHostPort: createPullRequestHostPort({ taskPullRequestUnlink }),
       runTaskMutation,
@@ -642,7 +653,7 @@ describe("useTaskPullRequestOperations", () => {
     }
   });
 
-  test("keeps the shown merged confirmation when another task finishes detection", async () => {
+  test("offers the next merged confirmation while the submitted link is running", async () => {
     const firstDetection = Promise.withResolvers<TaskPullRequestDetectResult>();
     const secondDetection = Promise.withResolvers<TaskPullRequestDetectResult>();
     const linkResult = Promise.withResolvers<ReturnType<typeof createTaskCardFixture>>();
@@ -675,7 +686,7 @@ describe("useTaskPullRequestOperations", () => {
         firstDetection.resolve({ outcome: "merged", pullRequest });
         await firstPromise;
       });
-      expect(testHarness.getLatest().pendingMergedPullRequest?.taskId).toBe("task-2");
+      expect(testHarness.getLatest().pendingMergedPullRequest?.taskId).toBe("task-1");
       expect(testHarness.getLatest().linkingMergedPullRequestTaskId).toBe("task-2");
       await testHarness.harness.run(async () => {
         linkResult.resolve(createTaskCardFixture({ id: "task-2", pullRequest }));
@@ -689,12 +700,57 @@ describe("useTaskPullRequestOperations", () => {
     }
   });
 
+  test("keeps the merged pull request confirmation when another action runs for its task", async () => {
+    const link = mock(async () => createTaskCardFixture({ id: "task-1", pullRequest }));
+    const state = createOperationsHarness({
+      pullRequestHostPort: createPullRequestHostPort({
+        taskPullRequestDetect: async () => ({ outcome: "merged", pullRequest }),
+        taskPullRequestLinkMerged: link,
+      }),
+    });
+    const pendingReset = Promise.withResolvers<void>();
+    await state.harness.mount();
+
+    try {
+      await state.harness.run((model) => model.syncPullRequests("task-1"));
+      const reset = state.backgroundOperations.run(
+        {
+          workspace: { workspaceId: "workspace-1", repoPath: "/repo" },
+          target: { kind: "task", taskId: "task-1" },
+          action: "Reset task",
+        },
+        () => pendingReset.promise,
+      );
+
+      await state.harness.run((model) => model.linkMergedPullRequest({ removeWorktree: false }));
+      expect(state.getLatest().pendingMergedPullRequest).toMatchObject({
+        taskId: "task-1",
+        errorMessage: expect.stringContaining("Wait for it to finish."),
+      });
+      expect(link).not.toHaveBeenCalled();
+
+      pendingReset.resolve();
+      await reset;
+      await state.harness.run((model) => model.linkMergedPullRequest({ removeWorktree: false }));
+      expect(link).toHaveBeenCalledTimes(1);
+      expect(state.getLatest().pendingMergedPullRequest).toBeNull();
+    } finally {
+      pendingReset.resolve();
+      await state.harness.unmount();
+    }
+  });
+
   test("reports link failures and clears the linking state", async () => {
     const testHarness = createOperationsHarness({
       pullRequestHostPort: createPullRequestHostPort({
         taskPullRequestDetect: async () => ({ outcome: "merged", pullRequest }),
         taskPullRequestLinkMerged: async () => {
-          throw new Error("Merge cleanup failed");
+          throw hostChannelInvokeError(
+            new HostChannelRequestError({
+              kind: "host",
+              response: { message: "Merge cleanup failed" },
+            }),
+          );
         },
       }),
     });
@@ -707,12 +763,10 @@ describe("useTaskPullRequestOperations", () => {
       );
 
       expect(testHarness.getLatest().linkingMergedPullRequestTaskId).toBeNull();
-      expect(testHarness.notification.events).toContainEqual({
-        level: "error",
-        title: "Failed to link merged pull request",
-        description: "task-1 (/repo): Merge cleanup failed",
-      });
-      expect(testHarness.getLatest().pendingMergedPullRequest?.taskId).toBe("task-1");
+      expect(testHarness.backgroundOperations.getSnapshot()).toMatchObject([
+        { phase: "failed", message: "Merge cleanup failed" },
+      ]);
+      expect(testHarness.getLatest().pendingMergedPullRequest).toBeNull();
     } finally {
       await testHarness.harness.unmount();
     }
@@ -722,6 +776,7 @@ describe("useTaskPullRequestOperations", () => {
     const unlinkFailure = new Error("GitHub is unavailable");
     const mutationFailureTitle = createRef<string>();
     const runTaskMutation: TaskMutationRunner["runTaskMutation"] = async (options) => {
+      if (options.background) throw new Error("Unexpected background unlink");
       mutationFailureTitle.current = options.failureTitle;
       await options.run("/repo");
       throw unlinkFailure;
@@ -746,7 +801,7 @@ describe("useTaskPullRequestOperations", () => {
     }
   });
 
-  test("keeps cancel and duplicate confirmation disabled across a workspace round trip during linking", async () => {
+  test("consumes consent and prevents a duplicate across a workspace round trip during linking", async () => {
     const linkResult = Promise.withResolvers<ReturnType<typeof createTaskCardFixture>>();
     const otherLinkResult = Promise.withResolvers<ReturnType<typeof createTaskCardFixture>>();
     const taskPullRequestLinkMerged = mock((scope: { workspaceId: string; repoPath: string }) =>
@@ -776,7 +831,7 @@ describe("useTaskPullRequestOperations", () => {
         testHarness.getLatest().cancelLinkMergedPullRequest();
       });
 
-      expect(testHarness.getLatest().pendingMergedPullRequest).not.toBeNull();
+      expect(testHarness.getLatest().pendingMergedPullRequest).toBeNull();
       await testHarness.harness.update({ activeRepoPath: "/other-repo" });
       expect(testHarness.getLatest().linkingMergedPullRequestTaskId).toBeNull();
       expect(testHarness.getLatest().pendingMergedPullRequest).toBeNull();
@@ -791,7 +846,7 @@ describe("useTaskPullRequestOperations", () => {
         testHarness.getLatest().cancelLinkMergedPullRequest();
         void testHarness.getLatest().linkMergedPullRequest({ removeWorktree: true });
       });
-      expect(testHarness.getLatest().pendingMergedPullRequest?.taskId).toBe("task-1");
+      expect(testHarness.getLatest().pendingMergedPullRequest).toBeNull();
       expect(taskPullRequestLinkMerged).toHaveBeenCalledTimes(2);
       expect(cleanupInputs).toEqual([
         { repoPath: "/repo", workspaceId: "workspace-1" },
@@ -808,7 +863,7 @@ describe("useTaskPullRequestOperations", () => {
       );
       expect(testHarness.getLatest().linkingMergedPullRequestTaskId).toBe("task-1");
       await testHarness.harness.run(() => testHarness.getLatest().cancelLinkMergedPullRequest());
-      expect(testHarness.getLatest().pendingMergedPullRequest?.taskId).toBe("task-1");
+      expect(testHarness.getLatest().pendingMergedPullRequest).toBeNull();
       await testHarness.harness.run(async () => {
         otherLinkResult.resolve(createTaskCardFixture({ id: "task-1", pullRequest }));
         await otherLinkPromise;

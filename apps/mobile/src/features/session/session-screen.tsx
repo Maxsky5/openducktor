@@ -1,4 +1,8 @@
-import type { AgentSessionAssociation, WorkspaceRecord } from "@openducktor/contracts";
+import type {
+  AgentSessionAssociation,
+  WorkspaceRecord,
+  WorkspaceSession,
+} from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { runtimeReadinessTargetForRuntime } from "@openducktor/frontend-core/lib/runtime-readiness";
@@ -13,8 +17,8 @@ import { useClientConnection } from "@openducktor/frontend-core/connection/clien
 import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { useQuery } from "@tanstack/react-query";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
-import { type ReactElement, useCallback, useEffect, useMemo } from "react";
-import { switchedSessionParams } from "@/navigation/routes";
+import { type ReactElement, useCallback, useEffect, useMemo, useRef } from "react";
+import { routes, switchedSessionParams } from "@/navigation/routes";
 import {
   projectAcceptedWorkspaceChat,
   subscribeHandoffCommit,
@@ -194,6 +198,31 @@ const useResolvedWorkOwner = (
   }, [identity, ownerKind, ownerTaskId, workspaceId]);
 };
 
+function useArchiveSessionExit(
+  workspaceId: string,
+  chat: WorkspaceSession | null,
+  readOnly: boolean,
+): void {
+  const router = useRouter();
+  const chatId = chat?.id ?? null;
+  const archivedAt = chat?.archivedAt ?? null;
+  const lastActiveChat = useRef<{ workspaceId: string; chatId: string } | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      if (!chatId || readOnly) return;
+      if (archivedAt === null) {
+        lastActiveChat.current = { workspaceId, chatId };
+      } else if (
+        lastActiveChat.current?.workspaceId === workspaceId &&
+        lastActiveChat.current.chatId === chatId
+      ) {
+        lastActiveChat.current = null;
+        router.replace(routes.sessions());
+      }
+    }, [archivedAt, chatId, readOnly, router, workspaceId]),
+  );
+}
+
 function SessionTargetResolver({
   route,
   workspace,
@@ -216,6 +245,11 @@ function SessionTargetResolver({
   });
   const workOwner = useResolvedWorkOwner(resolution, workspace.workspaceId, identity);
   const owner = resolution.status === "ready" ? resolution.owner : null;
+  useArchiveSessionExit(
+    workspace.workspaceId,
+    owner?.kind === "chat" ? owner.record : null,
+    readOnly,
+  );
   const taskHandoff = useTaskRuntimeHandoff(
     owner?.kind === "task" ? { ...chatRef, taskId: owner.taskId, role: owner.role } : null,
     identity,

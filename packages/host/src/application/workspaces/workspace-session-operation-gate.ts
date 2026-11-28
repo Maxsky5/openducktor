@@ -1,3 +1,4 @@
+import { backgroundGate } from "../operation-progress/background-operation-progress";
 import type { WorkspaceSessionRefInput } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createSerialGate } from "../../effect/serial-gate";
@@ -24,6 +25,8 @@ export const createWorkspaceSessionOperationGate = () => {
             state: "waiting",
           });
         }
+        if (!progress)
+          return yield* backgroundGate(gate, key, operation, "Wait for another session action");
         return yield* gate.run(
           key,
           Effect.sync(() => {

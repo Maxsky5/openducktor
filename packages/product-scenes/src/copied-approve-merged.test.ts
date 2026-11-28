@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { CLOSE_TASK_DIALOG_TEXT, mergedStatusText } from "./replicas/tasks/CloseTaskDialog";
 import {
   BOARD,
-  CLOSED_FEEDBACK,
   MERGED_CARD,
   MERGED_TIP,
   TARGET,
@@ -60,8 +59,7 @@ const { describeTaskMergeStatus } = await importProduct<{
 const { canonicalTargetBranch } = await importProduct<{
   canonicalTargetBranch: (target: TargetBranch) => string;
 }>("packages/frontend-core/src/lib/target-branch.ts");
-// The card, the dialog, and the close have some words in their markup, so the test reads them as
-// text.
+// Read the words in the card and dialog markup.
 const markup = (
   await Promise.all([
     readProduct("packages/frontend/src/components/features/kanban/kanban-task-card.tsx"),
@@ -71,7 +69,6 @@ const markup = (
     readProduct(
       "packages/frontend/src/components/features/task-details/task-close-confirm-content.tsx",
     ),
-    readProduct("packages/frontend-core/src/tasks/operations/use-task-mutation-commands.ts"),
   ])
 ).join("\n");
 
@@ -131,12 +128,5 @@ describe("the close of a merged task copied from the app", () => {
     for (const words of [text.noUncommittedChanges, text.worktreeDetails, text.cancel])
       expect(markup).toContain(words);
     expect(markup).toContain(`>${text.afterClosing}<`);
-  });
-
-  test("the close shows the success toast of the app", () => {
-    expect(markup).toContain(`successTitle: "${CLOSED_FEEDBACK.title}"`);
-    expect(markup).toContain(
-      `\`${CLOSED_FEEDBACK.description.replace(TASK_IDENTITY.id, "${taskId}")}\``,
-    );
   });
 });

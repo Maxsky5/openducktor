@@ -187,6 +187,7 @@ export * from "./odt-artifact-schemas";
 export * from "./odt-html-preview-schemas";
 
 export * from "./session-startup-schemas";
+export * from "./background-operation-schemas";
 export * from "./workflow-client-schemas";
 
 export * from "./keyboard-shortcut-schemas";

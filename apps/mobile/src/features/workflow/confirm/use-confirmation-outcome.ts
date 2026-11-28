@@ -1,63 +1,78 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
-/** What the screen that asked for a confirmation hears about its confirmed action. */
 export type ConfirmationOutcomeListener<Request> = {
-  /** The user confirmed the action, and it runs. `onSucceeded` or `onFailed` follows. */
   onStarted?: ((request: Request) => void) | undefined;
-  /**
-   * The action succeeded. It reports after the confirmation closed, so a screen that leaves does
-   * not leave in the same frame. A confirmation that unmounted before the success reports it at
-   * once.
-   */
   onSucceeded?: ((request: Request) => void) | undefined;
-  /** The action failed, and the user closed the confirmation. */
   onFailed?: ((request: Request) => void) | undefined;
 };
 
 export type ConfirmationOutcome<Request> = {
   started: (request: Request) => void;
   succeeded: (request: Request) => void;
-  /** The confirmation of `requestId` closed, after a cancel, a failure, or a success. */
+  failed: (request: Request) => void;
   closed: (requestId: number) => void;
 };
 
-/**
- * Reports the outcome of each confirmed action once, after its confirmation closed. A confirmation
- * that closes without a confirmed action reports nothing.
- */
+/** Waits for both native dismissal and the command result before reporting to a screen. */
 export function useConfirmationOutcome<Request extends { id: number }>(
   listener: ConfirmationOutcomeListener<Request>,
 ): ConfirmationOutcome<Request> {
   const latest = useRef(listener);
   useEffect(() => {
     latest.current = listener;
-  });
-  const mounted = useRef(false);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
+  }, [listener]);
+  const runs = useRef(
+    new Map<
+      number,
+      {
+        request: Request;
+        closed: boolean;
+        outcome?: "succeeded" | "failed";
+      }
+    >(),
+  );
+  useEffect(
+    () => () => {
+      runs.current.clear();
+    },
+    [],
+  );
+  const finish = useCallback((id: number) => {
+    const run = runs.current.get(id);
+    if (!run?.closed || !run.outcome) return;
+    runs.current.delete(id);
+    if (run.outcome === "succeeded") latest.current.onSucceeded?.(run.request);
+    else latest.current.onFailed?.(run.request);
   }, []);
-  const run = useRef<{ request: Request; succeeded: boolean } | null>(null);
   const started = useCallback((request: Request) => {
-    run.current = { request, succeeded: false };
+    runs.current.set(request.id, { request, closed: false });
     latest.current.onStarted?.(request);
   }, []);
-  const succeeded = useCallback((request: Request) => {
-    if (mounted.current) {
-      run.current = { request, succeeded: true };
-      return;
-    }
-    run.current = null;
-    latest.current.onSucceeded?.(request);
-  }, []);
-  const closed = useCallback((requestId: number) => {
-    const finished = run.current;
-    if (finished?.request.id !== requestId) return;
-    run.current = null;
-    if (finished.succeeded) latest.current.onSucceeded?.(finished.request);
-    else latest.current.onFailed?.(finished.request);
-  }, []);
-  return useMemo(() => ({ started, succeeded, closed }), [closed, started, succeeded]);
+  const settle = useCallback(
+    (request: Request, outcome: "succeeded" | "failed") => {
+      const run = runs.current.get(request.id);
+      if (!run) return;
+      run.outcome = outcome;
+      finish(request.id);
+    },
+    [finish],
+  );
+  const closed = useCallback(
+    (id: number) => {
+      const run = runs.current.get(id);
+      if (!run) return;
+      run.closed = true;
+      finish(id);
+    },
+    [finish],
+  );
+  return useMemo(
+    () => ({
+      started,
+      succeeded: (request) => settle(request, "succeeded"),
+      failed: (request) => settle(request, "failed"),
+      closed,
+    }),
+    [closed, settle, started],
+  );
 }

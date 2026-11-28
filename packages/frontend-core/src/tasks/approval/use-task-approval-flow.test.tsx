@@ -227,7 +227,7 @@ const mountApprovalHarness = async (
     ),
   });
   await harness.mount();
-  return harness;
+  return { ...harness, connection };
 };
 
 const waitForTaskApprovalModalLoaded = async (): Promise<void> => {
@@ -1099,7 +1099,7 @@ describe("useTaskApprovalFlow", () => {
     });
   });
 
-  test("opens with Close Task selected for a merged task branch and closes with the cleanup choice", async () => {
+  test("keeps Close Task open while another action runs and closes with the cleanup choice after it finishes", async () => {
     const continuation = Promise.withResolvers<void>();
     const onCommitted = mock(() => continuation.promise);
     taskApprovalContextGetMock.mockResolvedValueOnce(createReadyTaskApprovalContextResult());
@@ -1116,23 +1116,7 @@ describe("useTaskApprovalFlow", () => {
       ],
     });
 
-    const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow(
-        createUseTaskApprovalFlowArgs({
-          activeWorkspace: {
-            workspaceId: "workspace-repo",
-            workspaceName: "Repo",
-            repoPath: "/repo",
-          },
-          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-          requestPullRequestGeneration: async () => undefined,
-          closeTask: closeTaskMock,
-        }),
-      );
-      return null;
-    };
-
-    const harness = await mountApprovalHarness(Harness);
+    const harness = await mountApprovalFlow(() => createUseTaskApprovalFlowArgs({}));
 
     await act(async () => {
       latestHarnessValue?.openTaskApproval("TASK-1", { onCommitted });
@@ -1144,6 +1128,23 @@ describe("useTaskApprovalFlow", () => {
     await act(async () => {
       expectApprovalModal().onRemoveWorktreeChange(false);
     });
+
+    const resetTask = Promise.withResolvers<void>();
+    const runningReset = harness.connection.backgroundOperations.run(
+      {
+        workspace: { workspaceId: "workspace-repo", repoPath: "/repo" },
+        target: { kind: "task", taskId: "TASK-1" },
+        action: "Reset task",
+      },
+      () => resetTask.promise,
+    );
+    await act(async () => expectApprovalModal().onConfirm());
+    expect(expectApprovalModal().errorMessage).toContain("Wait for it to finish.");
+    expect(closeTaskMock).not.toHaveBeenCalled();
+    expect(onCommitted).not.toHaveBeenCalled();
+
+    resetTask.resolve();
+    await runningReset;
     await act(async () => {
       expectApprovalModal().onConfirm();
       await Promise.resolve();
@@ -1152,7 +1153,7 @@ describe("useTaskApprovalFlow", () => {
     expect(closeTaskMock).toHaveBeenCalledWith("TASK-1", { removeWorktree: false });
     expect(taskDirectMergeMock).not.toHaveBeenCalled();
     expect(onCommitted).toHaveBeenCalledTimes(1);
-    expect(expectApprovalModal().isSubmitting).toBe(true);
+    await waitForTaskApprovalModalClosed();
     await act(async () => continuation.resolve());
     await waitForTaskApprovalModalClosed();
 
@@ -1212,7 +1213,7 @@ describe("useTaskApprovalFlow", () => {
     });
   });
 
-  test("keeps the recovery modal open when completion fails from missing-builder-worktree recovery", async () => {
+  test("dismisses the recovery modal when submitting a close that later fails", async () => {
     taskApprovalContextGetMock.mockResolvedValueOnce(createMissingWorktreeApprovalContextResult());
     closeTaskMock.mockImplementationOnce(async () => {
       throw new Error("Task is no longer reviewable");
@@ -1247,12 +1248,7 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
 
-    expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("missing_worktree");
-    expect(latestHarnessValue?.taskApprovalModal?.isSubmitting).toBe(false);
-    expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBe(
-      "Task is no longer reviewable",
-    );
-    // The close shows its own failure toast, so the modal adds none.
+    await waitForTaskApprovalModalClosed();
     expect(toastErrorMock).not.toHaveBeenCalledWith("Approval failed", expect.anything());
 
     await act(async () => {

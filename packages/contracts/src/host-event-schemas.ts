@@ -1,3 +1,4 @@
+import { backgroundOperationProgressEventSchema } from "./background-operation-schemas";
 import { z } from "zod";
 import { sessionStartupProgressEventSchema } from "./session-startup-schemas";
 import {
@@ -14,6 +15,7 @@ import { workspaceSessionSchema } from "./workspace-session-schemas";
 
 export const HOST_EVENT_CHANNELS = [
   "openducktor://session-startup-progress",
+  "openducktor://background-operation-progress",
   "openducktor://run-event",
   "openducktor://agent-session-live-event",
   "openducktor://workspace-session-updated",
@@ -30,6 +32,7 @@ export type HostEventChannel = (typeof HOST_EVENT_CHANNELS)[number];
 
 export const hostEventEnvelopeSchema = z.discriminatedUnion("channel", [
   sessionStartupProgressEventSchema,
+  backgroundOperationProgressEventSchema,
   z.strictObject({
     channel: z.literal("openducktor://browser-event"),
     payload: browserHostEventSchema,
@@ -105,6 +108,7 @@ export type HostEventPayload<Channel extends HostEventChannel> =
 
 export const BROWSER_EVENT_STREAM_NAME = "browser";
 export const STARTUP_EVENT_STREAM_NAME = "startup";
+export const BACKGROUND_OPERATION_EVENT_STREAM_NAME = "background-operation";
 /** Usage progress has its own replay buffer, so a long first read cannot evict other events. */
 export const USAGE_EVENT_STREAM_NAME = "usage";
 
@@ -146,6 +150,8 @@ export const hostEventStreamEventName = (envelope: HostEventEnvelope): string =>
       return liveSessionStreamEventName(agentSessionLiveEnvelopeRepoPath(envelope.payload));
     case "openducktor://browser-event":
       return BROWSER_EVENT_STREAM_NAME;
+    case "openducktor://background-operation-progress":
+      return BACKGROUND_OPERATION_EVENT_STREAM_NAME;
     case "openducktor://session-startup-progress":
       return STARTUP_EVENT_STREAM_NAME;
     case "openducktor://usage-index-progress":

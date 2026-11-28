@@ -1,14 +1,12 @@
+import { useSessionStartContext } from "../../sessions/start/use-session-start-context";
 import type { TaskCard as WireTaskCard } from "@openducktor/contracts";
 import type { OnTaskCommitted } from "./task-workflow-continuation";
 import {
   type ResolvedTaskCard as TaskCard,
   taskWaitsForMergePublication,
 } from "@openducktor/workflows";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useClientConnection } from "../../connection/client-connection-react";
-import { isOutcomeUnknown } from "../../lib/command-outcome";
-import { errorMessage } from "../../lib/errors";
-import { useSingleFlight } from "../../lib/use-single-flight";
 import { useTaskStopImpact } from "../../queries/use-task-stop-impact";
 import {
   type TaskWorktreeOwnersRead,
@@ -105,14 +103,12 @@ export function useTaskResetFlow({
   closeTaskDetails,
 }: UseTaskResetFlowArgs) {
   const [request, setRequest] = useState<ResetFlowRequest | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  // One reset at a time, so a double tap resets the task once.
-  const resetFlight = useSingleFlight();
-  const { feedback } = useClientConnection();
-  const [modalError, setModalError] = useState<{
-    message: string;
-    outcomeUnknown: boolean;
-  } | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const { feedback, backgroundOperations } = useClientConnection();
+  const isCurrent = useSessionStartContext(
+    workspaceIdentity ? JSON.stringify(workspaceIdentity) : null,
+  );
+  const submitted = useRef<ResetFlowRequest | null>(null);
 
   const isWorkspaceCurrent =
     request !== null &&
@@ -154,13 +150,9 @@ export function useTaskResetFlow({
     isLoadingImpact,
   } = useTaskCleanupImpact(openTaskId ? [openTaskId] : [], open);
 
-  const closeModal = useCallback((): void => {
-    if (isSubmitting) {
-      return;
-    }
+  const closeModal = useCallback(() => {
     setRequest(null);
-    setModalError(null);
-  }, [isSubmitting]);
+  }, []);
 
   const openResetImplementation = useCallback(
     (nextTaskId: string, eventId: string, options?: ResetImplementationOptions): boolean => {
@@ -172,7 +164,6 @@ export function useTaskResetFlow({
         return false;
       }
 
-      setModalError(null);
       const nextRequest: ResetFlowRequest = {
         taskId: nextTaskId,
         eventId,
@@ -181,6 +172,7 @@ export function useTaskResetFlow({
         closeDetailsAfterReset: options?.closeDetailsAfterReset ?? false,
       };
       if (options?.onCommitted) nextRequest.onCommitted = options.onCommitted;
+      setErrorMessage(null);
       setRequest(nextRequest);
       return true;
     },
@@ -188,27 +180,35 @@ export function useTaskResetFlow({
   );
 
   const confirmReset = useCallback((): void => {
-    if (!task || !request || !isWorkspaceCurrent) {
+    if (!task || !request || submitted.current === request || !isWorkspaceCurrent) {
+      return;
+    }
+    const refusal = backgroundOperations.admissionError(request, { kind: "task", taskId: task.id });
+    if (refusal) {
+      setErrorMessage(refusal);
       return;
     }
 
-    void resetFlight.start(async () => {
-      setIsSubmitting(true);
-      setModalError(null);
-      try {
-        const committed = await resetTaskImplementation(task.id, request.eventId);
+    submitted.current = request;
+    const result = resetTaskImplementation(task.id, request.eventId);
+    setRequest(null);
+    void result
+      .then(async (committed) => {
         await request.onCommitted?.(committed);
-        setRequest(null);
-        if (request.closeDetailsAfterReset) {
-          closeTaskDetails(task.id);
-        }
-      } catch (error: unknown) {
-        setModalError({ message: errorMessage(error), outcomeUnknown: isOutcomeUnknown(error) });
-      } finally {
-        setIsSubmitting(false);
-      }
-    });
-  }, [closeTaskDetails, isWorkspaceCurrent, request, resetFlight, resetTaskImplementation, task]);
+        if (request.closeDetailsAfterReset && isCurrent()) closeTaskDetails(task.id);
+      })
+      .catch(() => {
+        // The background operation reports the command outcome.
+      });
+  }, [
+    backgroundOperations,
+    closeTaskDetails,
+    isCurrent,
+    isWorkspaceCurrent,
+    request,
+    resetTaskImplementation,
+    task,
+  ]);
 
   if (!task) {
     return {
@@ -233,7 +233,7 @@ export function useTaskResetFlow({
       targetStatusLabel: request ? deriveRollbackLabel(task, request.eventId) : "",
       worktreeRoleLabels: resetRoleLabels(task, request?.eventId),
       dropsLocalMerge: taskWaitsForMergePublication(task),
-      isSubmitting,
+      isSubmitting: false,
       activeSessionCount,
       activeSessionCountError: stopImpactError,
       isLoadingImpact: isLoadingImpact || isLoadingStopImpact || worktreeOwners.isLoading,
@@ -244,8 +244,8 @@ export function useTaskResetFlow({
       terminalCount,
       worktreeOwners,
       impactError,
-      errorMessage: modalError?.message ?? null,
-      errorOutcomeUnknown: modalError?.outcomeUnknown ?? false,
+      errorMessage,
+      errorOutcomeUnknown: false,
       onOpenChange: (nextOpen) => {
         if (!nextOpen) {
           closeModal();

@@ -475,19 +475,20 @@ describe("TaskDetailsSheet", () => {
     }
   });
 
-  test("keeps close dialog open and surfaces close failures", async () => {
+  test("closes the confirmation without closing task details when the submitted close fails", async () => {
     const { useTaskDetailsSheetViewModel } =
       await import("@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model");
     const task = createTaskCardFixture({ id: "TASK-2", title: "Task 2" });
     const onCloseTask = mock(async () => {
       throw new Error("close failed");
     });
+    const onOpenChange = mock(() => {});
     const taskCleanupImpactHookMock = createTaskCleanupImpactHookMock();
 
     const harness = createViewModelHarness(useTaskDetailsSheetViewModel, {
       task,
       open: true,
-      onOpenChange: () => {},
+      onOpenChange,
       runAction: createTaskWorkflowActionsFixture().runAction,
       onResetTask: undefined,
       onCloseTask,
@@ -502,8 +503,9 @@ describe("TaskDetailsSheet", () => {
       await waitForCloseDefault(harness);
       await harness.run((viewModel) => viewModel.closeConfirm.dialog.onConfirm());
 
-      expect(harness.getLatest().closeConfirm.dialog.open).toBe(true);
-      expect(harness.getLatest().closeConfirm.dialog.operation.error).toBe("close failed");
+      expect(harness.getLatest().closeConfirm.dialog.open).toBe(false);
+      expect(onCloseTask).toHaveBeenCalledTimes(1);
+      expect(onOpenChange).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }

@@ -3,6 +3,13 @@ import { BROWSER_TAB_LIMIT } from "@openducktor/contracts";
 import { Deferred, Effect, Exit } from "effect";
 import { BrowserEngineError } from "../../ports/browser-engine-port";
 import {
+  backgroundStep,
+  createBackgroundOperationProgress,
+  CurrentBackgroundOperation,
+  operationFailure,
+} from "../operation-progress/background-operation-progress";
+import { closeOwnerBrowserTabs } from "./browser-owner-cleanup";
+import {
   createBrowserServiceHarness,
   waitUntil,
   sessionOwner,
@@ -810,10 +817,62 @@ describe("browser service popups and engine events", () => {
     await run(harness.service.openTab({ owner: taskOwner, tabId: tabId(1), address: null }));
     await run(harness.service.openTab({ owner: sessionOwner, tabId: tabId(2), address: null }));
 
-    await run(harness.service.closeOwnerTabs(taskOwner));
+    expect(await run(harness.service.closeOwnerTabs(taskOwner))).toBe(true);
+    expect(await run(harness.service.closeOwnerTabs(taskOwner))).toBe(false);
 
     expect(harness.engine.closed).toEqual([tabId(1)]);
     expect((await run(harness.service.listTabs())).map((tab) => tab.tabId)).toEqual([tabId(2)]);
+  });
+
+  test("keeps a closed opener in the progress result when its popup cannot close", async () => {
+    const harness = createBrowserServiceHarness({
+      engine: {
+        closeTab: (id) =>
+          id === tabId(2)
+            ? Effect.fail(
+                new BrowserEngineError({
+                  code: "unsupported",
+                  operation: "close",
+                  message: "The popup could not close.",
+                  tabId: id,
+                }),
+              )
+            : Effect.void,
+      },
+    });
+    const { service, engine } = harness;
+    await run(service.openTab({ owner: taskOwner, tabId: tabId(1), address: null }));
+    engine.emit({
+      type: "popup_opened",
+      openerTabId: tabId(1),
+      tabId: tabId(2),
+      url: "https://example.com/",
+      surface: "popup_window",
+      keepsOpener: true,
+    });
+    const progress = createBackgroundOperationProgress(
+      {
+        operationId: crypto.randomUUID(),
+        hostInstanceId: "host",
+        workspace: { workspaceId: taskOwner.workspaceId, repoPath: "/repo" },
+        target: { kind: "task", taskId: taskOwner.taskId },
+      },
+      () => {},
+    );
+    const error = await failure(
+      backgroundStep(
+        { id: "browser-tabs", label: "Close task browser tabs" },
+        closeOwnerBrowserTabs(service, [taskOwner], "task_delete"),
+      ).pipe(Effect.provideService(CurrentBackgroundOperation, progress)),
+    );
+    expect(progress.settle(operationFailure("task_delete", error)).steps).toMatchObject([
+      {
+        state: "failed",
+        details: ["Closed 1 browser tab."],
+        failure: { message: expect.stringContaining("The popup could not close.") },
+      },
+    ]);
+    expect((await run(service.listTabs())).map((tab) => tab.tabId)).toEqual([tabId(2)]);
   });
 });
 

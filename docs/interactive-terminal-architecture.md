@@ -180,7 +180,7 @@ Task close, delete, reset, and merged-worktree cleanup take a terminal cleanup l
 
 A fresh list from the same host also removes tabs that the viewport marked as lost before it received the terminal list. Tabs lost because the host restarted stay visible.
 
-Workspace Session archive checks for an active runtime turn first and asks for Stop consent when needed. It stops an active turn, takes a lease for that workspace and session pair, waits for pending starts, and stops only that session's terminals before worktree removal. A terminal stop failure leaves the terminal owned by the host and prevents worktree removal. New terminals for that session fail during archive.
+Workspace Session archive checks for an active runtime turn first and asks for Stop consent when needed. It stops an active turn, takes a lease for that workspace and session pair, waits for pending starts, and stops only that session's terminals before worktree removal. A terminal stop failure leaves the terminal owned by the host and prevents worktree removal. New terminals for that session fail during archive. After final consent, the dialog closes and a toast shows progress. A failed archive shows its cleanup results and keeps any consented file edit for recovery.
 
 Host shutdown stops admission, stops all PTYs and process trees, then continues host cleanup. An exited session can stay in memory for bounded replay until time or count limits remove it.
 

@@ -25,7 +25,7 @@ export const createTaskCompletionState = (
   return {
     discard: (scope: TaskCompletionScope) =>
       Effect.gen(function* () {
-        states.delete(scopeKey(scope));
+        const discarded = states.delete(scopeKey(scope));
         if (publish)
           yield* publish({
             ...scope,
@@ -33,6 +33,7 @@ export const createTaskCompletionState = (
             confirmedDestinations: [],
             uncertainDestinations: [],
           });
+        return discarded;
       }),
     ensure: (scope: TaskCompletionScope) => {
       const key = scopeKey(scope);

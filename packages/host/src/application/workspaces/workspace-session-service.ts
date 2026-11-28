@@ -1,4 +1,8 @@
 import {
+  planBackgroundSteps,
+  backgroundStep,
+} from "../operation-progress/background-operation-progress";
+import {
   createWorkspaceSessionFork,
   type WorkspaceSessionForkDependencies,
 } from "./workspace-session-fork";
@@ -269,6 +273,17 @@ export const createWorkspaceSessionService = (
           Effect.gen(function* () {
             const { ref, session } = yield* recordFor(input);
             if (session.archivedAt !== null) return session;
+            yield* planBackgroundSteps(
+              { id: "terminals", label: "Stop session terminals" },
+              { id: "browser-tabs", label: "Close session browser tabs" },
+              ...(input.removeWorktree
+                ? [
+                    { id: "worktrees", label: "Remove worktree" },
+                    { id: "branches", label: "Delete local branch" },
+                  ]
+                : []),
+              { id: "chat-archive", label: "Move to Archived sessions" },
+            );
             if (dependencies.hasUnresolvedHandoff(ref))
               return yield* new HostValidationError({
                 field: "handoff",
@@ -330,20 +345,32 @@ export const createWorkspaceSessionService = (
                     message: "This Workspace Session is running. Confirm Stop before archiving it.",
                     field: "confirmStop",
                   });
-                yield* live.stopSession(runtimeRef);
+                yield* backgroundStep(
+                  { id: "session", label: "Stop agent work" },
+                  live.stopSession(runtimeRef),
+                );
               }
             }
-            yield* acquireWorkspaceSessionTerminalCleanup(dependencies.terminalService, input);
-            yield* closeOwnerBrowserTabs(
-              dependencies.browserTabs,
-              [
-                {
-                  kind: "workspace_session",
-                  workspaceId: input.workspaceId,
-                  sessionId: input.sessionId,
-                },
-              ],
-              "workspaceSession.archive.browser_tabs",
+            yield* backgroundStep(
+              { id: "terminals", label: "Stop session terminals" },
+              acquireWorkspaceSessionTerminalCleanup(dependencies.terminalService, input),
+              ({ closedTerminalIds }) =>
+                closedTerminalIds.length > 0 && { details: closedTerminalIds },
+            );
+            yield* backgroundStep(
+              { id: "browser-tabs", label: "Close session browser tabs" },
+              closeOwnerBrowserTabs(
+                dependencies.browserTabs,
+                [
+                  {
+                    kind: "workspace_session",
+                    workspaceId: input.workspaceId,
+                    sessionId: input.sessionId,
+                  },
+                ],
+                "workspaceSession.archive.browser_tabs",
+              ),
+              (closed) => closed && {},
             );
             return yield* Effect.uninterruptible(
               Effect.gen(function* () {
@@ -370,9 +397,10 @@ export const createWorkspaceSessionService = (
                         worktreePath,
                       )
                     : target;
-                const archived = yield* store
-                  .archive({ ...ref, executionTarget, archivedAt: yield* Clock.currentTimeMillis })
-                  .pipe(
+                const archivedAt = yield* Clock.currentTimeMillis;
+                const archived = yield* backgroundStep(
+                  { id: "chat-archive", label: "Move to Archived sessions" },
+                  store.archive({ ...ref, executionTarget, archivedAt }).pipe(
                     Effect.mapError(
                       (cause) =>
                         new HostOperationError({
@@ -382,7 +410,8 @@ export const createWorkspaceSessionService = (
                           cause,
                         }),
                     ),
-                  );
+                  ),
+                );
                 return archived;
               }),
             );

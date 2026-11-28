@@ -1,3 +1,6 @@
+import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
+import { BackgroundOperationNotifications } from "@/features/session-startup/background-operation-notifications";
+import { HostChannelRequestError, hostChannelInvokeError } from "@openducktor/host-client/channel";
 import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { createAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import {
@@ -8,6 +11,7 @@ import { CommandPaletteTestContext } from "@/test-utils/command-palette-test-con
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type {
   TerminalSummary,
+  BackgroundOperationProgressEvent,
   WorkspaceSession,
   WorkspaceSessionArchiveInput,
 } from "@openducktor/contracts";
@@ -35,7 +39,11 @@ import {
   createMemoryClientStorage,
 } from "@openducktor/frontend-core/platform/client-storage";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
-import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import type { HostConnection } from "@openducktor/frontend-core/connection/host-connection";
+import {
+  createTestClientConnection,
+  createTestHostConnection,
+} from "@openducktor/frontend-core/test-support/test-client-connection";
 import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
   ActiveWorkspaceContext,
@@ -136,7 +144,7 @@ describe("Worktree archive actions", () => {
     { entry: "primary", removeWorktree: true },
     { entry: "menu", removeWorktree: false },
   ] as const)(
-    "worktree archive from $entry waits for the host with removal=$removeWorktree",
+    "worktree archive from $entry runs after closing the dialog with removal=$removeWorktree",
     async ({ entry, removeWorktree }) => {
       const worktree = worktreeRecord("Second");
       const requests: WorkspaceSessionArchiveInput[] = [];
@@ -186,11 +194,16 @@ describe("Worktree archive actions", () => {
             branchName: "feature/second",
           };
         await waitFor(() => expect(requests).toEqual([expectedRequest]), { timeout: 800 });
-        const pending = within(view.getByRole("dialog", { name: "Archive session" }));
-        expect(pending.getByRole("button", { name: "Archiving…" })).toHaveProperty(
-          "disabled",
-          true,
+        await waitFor(() =>
+          expect(view.queryByRole("dialog", { name: "Archive session" })).toBeNull(),
         );
+        expect(view.backgroundOperations.getSnapshot()).toMatchObject([
+          {
+            phase: "running",
+            workspace: { workspaceId: view.workspaceId },
+            target: { kind: "chat", sessionId: "Second" },
+          },
+        ]);
         expect(trigger).toHaveProperty("disabled", true);
 
         await act(async () => completion.resolve(archived));
@@ -456,7 +469,12 @@ function renderSessions(
   workspaceId: string = crypto.randomUUID(),
   queryControls: ReactNode = null,
   previewControls: ReactNode = null,
-  options: { workspaces?: ActiveWorkspace[]; viaSessionsPage?: boolean; strictMode?: boolean } = {},
+  options: {
+    workspaces?: ActiveWorkspace[];
+    viaSessionsPage?: boolean;
+    strictMode?: boolean;
+    subscribeProgress?: HostConnection["subscribeBackgroundOperationProgress"];
+  } = {},
 ) {
   const workspace = options.workspaces?.find((entry) => entry.workspaceId === workspaceId) ?? {
     workspaceId,
@@ -477,7 +495,15 @@ function renderSessions(
       }),
     );
   }
-  const connection = createTestClientConnection({ client: hostClient, storage: hostStorage });
+  const connection = createTestClientConnection({
+    host: createTestHostConnection({
+      client: hostClient,
+      ...(options.subscribeProgress && {
+        subscribeBackgroundOperationProgress: options.subscribeProgress,
+      }),
+    }),
+    storage: hostStorage,
+  });
   const view = render(
     <MemoryRouter
       initialEntries={Array.isArray(initialEntry) ? initialEntry : [initialEntry]}
@@ -488,6 +514,7 @@ function renderSessions(
       <QueryProvider connection={connection}>
         <ThemeProvider>
           {queryControls}
+          <BackgroundOperationNotifications />
           <TestWorkspaceScope initial={workspace} workspaces={options.workspaces}>
             <AgentSessionReadModelStateContext
               value={{
@@ -534,7 +561,12 @@ function renderSessions(
     </MemoryRouter>,
     options.strictMode ? { wrapper: StrictMode } : undefined,
   );
-  return { ...view, workspaceId, queryClient: connection.queryClient };
+  return {
+    ...view,
+    workspaceId,
+    queryClient: connection.queryClient,
+    backgroundOperations: connection.backgroundOperations,
+  };
 }
 
 async function renderLoadedSessionRoute(
@@ -731,21 +763,22 @@ test.each(["Archive session", "Rename session", "Session actions"] as const)(
   5_000,
 );
 
-test("an archive started before Back updates its workspace while the next workspace is pending", async () => {
+test("returning after background archive and toast dismissal leaves the archived chat", async () => {
   const first = { workspaceId: crypto.randomUUID(), workspaceName: "A", repoPath: "/A" };
   const other = { workspaceId: crypto.randomUUID(), workspaceName: "B", repoPath: "/B" };
   const workspaces = [first, other];
   const chatList = Promise.withResolvers<WorkspaceSession[]>();
   const archived = Promise.withResolvers<WorkspaceSession>();
   const requests: WorkspaceSessionArchiveInput[] = [];
+  let publishProgress: ((event: BackgroundOperationProgressEvent) => void) | undefined;
+  let firstActive = [sessionRecord("First")];
   let cache: QueryClient | null = null;
   function CaptureCache() {
     cache = useQueryClient();
     return null;
   }
   const hostClient = createChatTerminalClient(
-    async (workspaceId) =>
-      workspaceId === other.workspaceId ? chatList.promise : [sessionRecord("First")],
+    async (workspaceId) => (workspaceId === other.workspaceId ? chatList.promise : firstActive),
     {
       workspaceSessionArchive: async (input) => {
         requests.push(input);
@@ -761,7 +794,14 @@ test("an archive started before Back updates its workspace while the next worksp
     first.workspaceId,
     <CaptureCache />,
     null,
-    { workspaces, viaSessionsPage: true },
+    {
+      workspaces,
+      viaSessionsPage: true,
+      subscribeProgress: async (publish) => {
+        publishProgress = publish;
+        return () => {};
+      },
+    },
   );
   try {
     await view.findByRole("heading", { name: "First" });
@@ -769,21 +809,31 @@ test("an archive started before Back updates its workspace while the next worksp
     await openArchive(view, "First", "primary");
     expect(requests).toHaveLength(0);
     fireEvent.click(await view.findByRole("button", { name: "Archive session" }));
-    const pending = await view.findByRole("button", { name: "Archiving…" });
-    expect(pending.hasAttribute("disabled")).toBe(true);
-    expect(view.getByRole("button", { name: "Cancel" }).hasAttribute("disabled")).toBe(true);
-    expect(
-      view.getByRole("button", { name: "Session actions", hidden: true }).hasAttribute("disabled"),
-    ).toBe(true);
-    fireEvent.click(pending);
+    await waitFor(() => expect(view.queryByRole("dialog", { name: "Archive session" })).toBeNull());
+    const [attempt] = view.backgroundOperations.getSnapshot();
+    if (!attempt) throw new Error("Expected a pending archive");
+    expect(attempt.phase).toBe("running");
     expect(requests).toHaveLength(1);
     expect(requests[0]?.workspaceId).toBe(first.workspaceId);
     fireEvent.click(back);
     await view.findByText("Loading sessions…");
     expect(view.queryByRole("dialog")).toBeNull();
     await act(async () => {
+      firstActive = [];
       archived.resolve({ ...sessionRecord("First"), archivedAt: 2000 });
       await archived.promise;
+      publishProgress?.({
+        channel: "openducktor://background-operation-progress",
+        payload: {
+          operationId: attempt.id,
+          hostInstanceId: "host",
+          revision: 1,
+          workspace: attempt.workspace,
+          target: attempt.target,
+          phase: "succeeded",
+          steps: [],
+        },
+      });
     });
     await waitFor(() =>
       expect(
@@ -795,6 +845,16 @@ test("an archive started before Back updates its workspace while the next worksp
     expect(view.getByTestId("session-url").textContent).toBe(otherUrl);
     expect(view.getByText("Loading sessions…")).toBeTruthy();
     expect(requests).toHaveLength(1);
+    await act(async () => view.backgroundOperations.dismissToast(attempt.id));
+    expect(view.backgroundOperations.getSnapshot()).toEqual([]);
+
+    fireEvent.click(view.getByRole("button", { name: "Forward" }));
+    await view.findByText("No active sessions.");
+    await waitFor(() =>
+      expect(view.getByTestId("session-url").textContent).toBe(
+        `/sessions?workspace=${first.workspaceId}&kind=workspace`,
+      ),
+    );
   } finally {
     view.unmount();
     chatList.resolve([]);
@@ -1469,11 +1529,13 @@ test("a bare URL restores the saved chat after loading, and an explicit link ove
   }
 }, 5_000);
 
-test("keeps a missing session URL as unavailable and clears it after the final archive", async () => {
+test("keeps an unknown URL and clears a known archive after the clean chat leaves first", async () => {
+  const archived = { ...sessionRecord("First"), archivedAt: 2000 };
+  const archiveReply = Promise.withResolvers<WorkspaceSession>();
   const hostClient: Partial<HostClient> = {
     workspaceSessionListActive: async () => [sessionRecord("First")],
     workspaceGetSettingsSnapshot: () => new Promise(() => {}),
-    workspaceSessionArchive: async () => ({ ...sessionRecord("First"), archivedAt: 2000 }),
+    workspaceSessionArchive: () => archiveReply.promise,
   };
   const view = await act(async () =>
     renderSessions(hostClient, undefined, "/chats?session=Missing&keep=value"),
@@ -1491,12 +1553,19 @@ test("keeps a missing session URL as unavailable and clears it after the final a
     await openArchive(view, "First");
     const archive = await view.findByRole("button", { name: "Archive session" });
     await act(async () => fireEvent.click(archive));
+    await act(async () =>
+      updateWorkspaceSessionQueries(view.queryClient, view.workspaceId, archived),
+    );
+    await view.findByText("This session is unavailable", {}, { timeout: 800 });
+    expect(view.getByTestId("session-url").textContent).toBe("/chats?session=First&keep=value");
+    await act(async () => archiveReply.resolve(archived));
     await view.findByText("No active sessions.", {}, { timeout: 800 });
     await waitFor(
       () => expect(view.getByTestId("session-url").textContent).toBe("/chats?keep=value"),
       { timeout: 800 },
     );
   } finally {
+    archiveReply.resolve(archived);
     view.unmount();
   }
 }, 5_000);
@@ -1504,7 +1573,7 @@ test("keeps a missing session URL as unavailable and clears it after the final a
 describe("Archive commands", () => {
   setupTestingLibraryFakeTimers();
 
-  test("a failed Stop keeps the chat and clears its error before the next archive", async () => {
+  test("a failed Stop shows a result for the original chat and allows a new archive", async () => {
     const worktree = worktreeRecord("Second");
     const requests: WorkspaceSessionArchiveInput[] = [];
     const hostClient: Partial<HostClient> = {
@@ -1519,7 +1588,13 @@ describe("Archive commands", () => {
       }),
       workspaceSessionArchive: async (input) => {
         requests.push(input);
-        if (input.sessionId === "First") throw new Error("Stop failed: runtime disconnected");
+        if (input.sessionId === "First")
+          throw hostChannelInvokeError(
+            new HostChannelRequestError({
+              kind: "host",
+              response: { message: "Stop failed: runtime disconnected" },
+            }),
+          );
         return { ...worktree, archivedAt: 2000 };
       },
     };
@@ -1532,10 +1607,11 @@ describe("Archive commands", () => {
       });
       expect(requests).toHaveLength(0);
       await act(async () => fireEvent.click(firstSubmit));
-      await firstDialog.findByText("Stop failed: runtime disconnected", {}, { timeout: 800 });
-      expect(firstSubmit.disabled).toBe(false);
+      const failure = await view.findByRole("dialog", { name: "Archive session failed" });
+      expect(within(failure).getByText("Stop failed: runtime disconnected")).toBeTruthy();
       expect(view.getByRole("heading", { name: "First", level: 2, hidden: true })).toBeTruthy();
-      await act(async () => fireEvent.click(firstDialog.getByRole("button", { name: "Cancel" })));
+      await act(async () => fireEvent.click(within(failure).getByRole("button", { name: "Done" })));
+      await waitFor(() => expect(failure.isConnected).toBe(false));
       await openArchive(view, "Second");
       const secondDialog = within(view.getByRole("dialog", { name: "Archive session" }));
       expect(secondDialog.queryByRole("alert")).toBeNull();
@@ -1577,6 +1653,98 @@ describe("Archive commands", () => {
     }
   }, 5_000);
 
+  test("copies the newest retained draft after worktree removal and a later archive failure", async () => {
+    const view = renderSessions({ workspaceSessionListActive: async () => [] });
+    const copied: string[] = [];
+    const restoreClipboard = replaceNavigatorClipboard(async (text) => {
+      copied.push(text);
+    });
+    const consented = {
+      fileId: "notes.md",
+      contents: "consented text",
+      branch: "chat",
+      baseline: {
+        kind: "text",
+        rootPath: "/worktrees/chat",
+        relativePath: "notes.md",
+        contents: "",
+        size: 0,
+        mtimeMs: null,
+        revision: "original",
+      },
+    } as const;
+    const newer = { ...consented, contents: "edited while archiving" };
+    const workspace = { workspaceId: view.workspaceId, repoPath: "/repo" };
+    const target = { kind: "chat", sessionId: "chat" } as const;
+    const started = Promise.withResolvers<string>();
+    const reply = Promise.withResolvers<void>();
+    try {
+      await act(async () => {
+        const result = view.backgroundOperations
+          .run(
+            { workspace, target, action: "Archive session", archiveDraft: consented },
+            ({ operationId }) => {
+              started.resolve(operationId);
+              return reply.promise;
+            },
+          )
+          .catch(() => {});
+        const operationId = await started.promise;
+        view.backgroundOperations.replaceArchiveDraft(
+          workspace.workspaceId,
+          target.sessionId,
+          consented,
+          newer,
+        );
+        const failure = {
+          stage: "branches",
+          code: "cleanup_failed",
+          message: "Branch deletion failed.",
+          nextAction: "Check the local branch.",
+        };
+        reply.reject(
+          hostChannelInvokeError(
+            new HostChannelRequestError({
+              kind: "host",
+              response: {
+                message: failure.message,
+                operationProgress: {
+                  phase: "failed",
+                  revision: 4,
+                  operationId,
+                  hostInstanceId: "host",
+                  workspace,
+                  target,
+                  failure,
+                  steps: [
+                    {
+                      id: "worktree",
+                      label: "Remove worktree",
+                      state: "completed",
+                      details: [],
+                      resources: [{ kind: "worktree", value: "/worktrees/chat", state: "removed" }],
+                    },
+                  ],
+                },
+              },
+            }),
+          ),
+        );
+        await result;
+      });
+      const result = within(await view.findByRole("dialog", { name: "Archive session failed" }));
+      expect(result.getByText("Removed /worktrees/chat")).toBeTruthy();
+      await act(async () =>
+        fireEvent.click(result.getByRole("button", { name: "Copy retained draft" })),
+      );
+      expect(copied).toEqual(["edited while archiving"]);
+    } finally {
+      view.unmount();
+      view.backgroundOperations.dispose();
+      restoreClipboard();
+    }
+  });
+
   test("failed selected-chat archive keeps the dirty draft", async () => {
     let rejectArchive!: (reason: Error) => void;
     const hostClient: Partial<HostClient> = {
@@ -1604,7 +1772,16 @@ describe("Archive commands", () => {
       fireEvent.click(view.getByRole("button", { name: "Discard draft" }));
       await waitFor(() => expect(rejectArchive).toBeDefined());
       expect(view.getByTestId("draft").textContent).toBe("draft.ts");
-      await act(async () => rejectArchive(new Error("Archive failed")));
+      await act(async () =>
+        rejectArchive(
+          hostChannelInvokeError(
+            new HostChannelRequestError({
+              kind: "host",
+              response: { message: "Archive failed" },
+            }),
+          ),
+        ),
+      );
       await view.findByText("Archive failed", {}, { timeout: 800 });
       expect(view.getByTestId("draft").textContent).toBe("draft.ts");
     } finally {

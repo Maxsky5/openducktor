@@ -1,3 +1,4 @@
+import { backgroundStep } from "../../operation-progress/background-operation-progress";
 import { loadTaskSessions } from "../support/task-sessions";
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { Effect } from "effect";
@@ -8,8 +9,10 @@ import { requireDependencies } from "../support/required-task-dependencies";
 import { requireTaskDeleteDependencies } from "../support/task-cleanup-dependencies";
 import {
   appendTaskCleanupProgress,
+  clearTaskResetDelivery,
   createTaskCleanupProgressState,
-  recordStoppedAgentSessionCount,
+  planTaskResetSteps,
+  stopTaskSessionsWithProgress,
 } from "../support/task-cleanup-progress";
 import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
 import {
@@ -23,7 +26,6 @@ import { requireNoUnpublishedDirectMerge } from "../support/direct-merge-block";
 import { coreTaskTransition, decideCoreTaskAction } from "../support/task-workflow-events";
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { TaskService, TaskServiceUseCaseInput } from "../task-service";
-
 export const createTaskFullResetUseCase = ({
   gitPort,
   taskStore,
@@ -104,24 +106,23 @@ export const createTaskFullResetUseCase = ({
       );
       const cleanupProgress = createTaskCleanupProgressState();
       if (hasWorkflowSessions && activityGuard) {
-        const { stoppedSessionCount } = yield* activityGuard.cleanupTaskSessions({
-          workspaceId: input.workspaceId,
-          repoPath: effectiveRepoPath,
-          taskSessions: [
-            {
-              taskId,
-              sessions: currentSessions,
-            },
-          ],
-        });
-        recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
+        yield* stopTaskSessionsWithProgress(
+          cleanupProgress,
+          activityGuard.cleanupTaskSessions({
+            workspaceId: input.workspaceId,
+            repoPath: effectiveRepoPath,
+            taskSessions: [{ taskId, sessions: currentSessions }],
+          }),
+        );
       }
-
       let taskStoreWriteCompleted = false;
       const artifactIds = (yield* taskStore.listArtifacts(input)).map(
         (artifact) => artifact.artifactId,
       );
-
+      yield* planTaskResetSteps(current, [
+        artifactIds.length > 0 && { id: "artifacts", label: "Clear task artifacts" },
+        hasWorkflowSessions && { id: "session-records", label: "Remove task session links" },
+      ]);
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({
           beforeWorktreeRemoval: {
@@ -141,25 +142,36 @@ export const createTaskFullResetUseCase = ({
           worktreeFiles,
           worktreePaths: checkedWorktreePaths,
         });
-        yield* taskStore.clearTaskArtifacts(taskRef);
-        taskStoreWriteCompleted = true;
-        cleanupProgress.completedSteps.push("cleared task artifacts");
-        yield* taskStore.clearAgentSessionsByRoles({ ...taskRef, roles: [...workflowRoles] });
-        cleanupProgress.completedSteps.push("cleared linked agent sessions");
-        yield* taskStore.setPullRequest({ ...taskRef, pullRequest: null });
-        yield* Effect.uninterruptible(
-          Effect.gen(function* () {
-            yield* taskStore.setDirectMerge({ ...taskRef, directMerge: null });
-            cleanupProgress.completedSteps.push("cleared linked delivery metadata");
-            yield* completionState.discard(taskRef);
-          }),
+        yield* backgroundStep(
+          { id: "artifacts", label: "Clear task artifacts" },
+          taskStore.clearTaskArtifacts(taskRef),
+          () => artifactIds.length > 0 && {},
         );
-        const updated = yield* taskStore.transitionTask({
-          ...taskRef,
-          decide: coreTaskTransition(taskWorkflows, "reset"),
-        });
-        const task = enrichTask(workflow, updated);
-        return { task, removedArtifactIds: artifactIds };
+        taskStoreWriteCompleted = true;
+        if (artifactIds.length > 0) cleanupProgress.completedSteps.push("cleared task artifacts");
+        yield* backgroundStep(
+          { id: "session-records", label: "Remove task session links" },
+          taskStore.clearAgentSessionsByRoles({ ...taskRef, roles: [...workflowRoles] }),
+          () => hasWorkflowSessions && {},
+        );
+        if (hasWorkflowSessions)
+          cleanupProgress.completedSteps.push("cleared linked agent sessions");
+        yield* clearTaskResetDelivery(
+          taskStore,
+          completionState,
+          taskRef,
+          current,
+          cleanupProgress,
+        );
+        const updated = yield* backgroundStep(
+          { id: "task-reset", label: "Reset task status" },
+          taskStore.transitionTask({
+            ...taskRef,
+            decide: coreTaskTransition(taskWorkflows, "reset"),
+          }),
+          (updated) => updated.status !== current.status && {},
+        );
+        return { task: enrichTask(workflow, updated), removedArtifactIds: artifactIds };
       }).pipe(
         Effect.catch((error) => {
           const decoratedFailure = appendTaskCleanupProgress(error, {

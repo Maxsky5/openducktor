@@ -589,6 +589,7 @@ const registerModuleMocks = (): void => {
       selection: selectionState,
       selectAgentStudioSelection: mock(() => {}),
       taskExecutionFilePreview: {
+        hasUnsavedChanges: false,
         model: {
           selectedFile: null,
           previewSessionKey: 0,

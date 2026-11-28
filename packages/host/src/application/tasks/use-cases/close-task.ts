@@ -1,3 +1,4 @@
+import { planBackgroundSteps } from "../../operation-progress/background-operation-progress";
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { Effect } from "effect";
 import { HostDependencyError } from "../../../effect/host-errors";
@@ -9,7 +10,7 @@ import {
 import {
   appendTaskCleanupProgress,
   createTaskCleanupProgressState,
-  recordStoppedAgentSessionCount,
+  stopTaskSessionsWithProgress,
 } from "../support/task-cleanup-progress";
 import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
 import { runTaskLocalCleanup } from "../support/task-cleanup-support";
@@ -37,6 +38,10 @@ export const createTaskCloseUseCase = ({
   closeTask(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, removeWorktree } = input;
+      yield* planBackgroundSteps(
+        { id: "terminals", label: "Stop task terminals" },
+        { id: "task-close", label: "Close task" },
+      );
       const current = yield* taskStore.getTask(input);
       const workflow = taskWorkflows.forTask(current);
       const decision = yield* Effect.fromResult(decideCoreTaskAction("close", current));
@@ -101,17 +106,19 @@ export const createTaskCloseUseCase = ({
           ? yield* collectCleanupTargets
           : { worktreePaths: noRemovedWorktrees, branchNames: [] };
         if (hasWorkflowSessions && taskActivityGuard) {
-          const { stoppedSessionCount } = yield* taskActivityGuard.cleanupTaskSessions({
-            workspaceId: input.workspaceId,
-            repoPath: effectiveRepoPath,
-            taskSessions: [
-              {
-                taskId,
-                sessions: currentSessions,
-              },
-            ],
-          });
-          recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
+          yield* stopTaskSessionsWithProgress(
+            cleanupProgress,
+            taskActivityGuard.cleanupTaskSessions({
+              workspaceId: input.workspaceId,
+              repoPath: effectiveRepoPath,
+              taskSessions: [
+                {
+                  taskId,
+                  sessions: currentSessions,
+                },
+              ],
+            }),
+          );
         }
         yield* runTaskLocalCleanup({
           beforeWorktreeRemoval: {

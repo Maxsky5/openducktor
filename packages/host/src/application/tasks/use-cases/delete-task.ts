@@ -1,3 +1,4 @@
+import { planBackgroundSteps } from "../../operation-progress/background-operation-progress";
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { Effect } from "effect";
 import { collectRelatedTaskBranches } from "../support/task-branch-tips";
@@ -8,7 +9,7 @@ import { requireTaskDeleteDependencies } from "../support/task-cleanup-dependenc
 import {
   appendTaskCleanupProgress,
   createTaskCleanupProgressState,
-  recordStoppedAgentSessionCount,
+  stopTaskSessionsWithProgress,
 } from "../support/task-cleanup-progress";
 import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
 import {
@@ -38,6 +39,11 @@ export const createTaskDeleteUseCase = ({
 }: TaskServiceUseCaseInput): Pick<TaskServiceWithMutationProgress, "deleteTask"> => ({
   deleteTask(input) {
     return Effect.gen(function* () {
+      yield* planBackgroundSteps(
+        { id: "terminals", label: "Stop task terminals" },
+        { id: "browser-tabs", label: "Close task browser tabs" },
+        { id: "task-delete", label: "Delete task" },
+      );
       const { repoPath, taskId } = input;
       const dependencies = yield* requireDependencies(() =>
         requireTaskDeleteDependencies(gitPort, settingsConfig, workspaceSettingsService),
@@ -104,12 +110,14 @@ export const createTaskDeleteUseCase = ({
       );
       const cleanupProgress = createTaskCleanupProgressState();
       if (hasWorkflowSessions && activityGuard) {
-        const { stoppedSessionCount } = yield* activityGuard.cleanupTaskSessions({
-          workspaceId: input.workspaceId,
-          repoPath: effectiveRepoPath,
-          taskSessions: targetTaskSessions,
-        });
-        recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
+        yield* stopTaskSessionsWithProgress(
+          cleanupProgress,
+          activityGuard.cleanupTaskSessions({
+            workspaceId: input.workspaceId,
+            repoPath: effectiveRepoPath,
+            taskSessions: targetTaskSessions,
+          }),
+        );
       }
       let durableDeleteCommitted = false;
       return yield* Effect.gen(function* () {

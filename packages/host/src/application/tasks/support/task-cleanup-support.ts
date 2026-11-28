@@ -1,3 +1,9 @@
+import {
+  addBackgroundStepDetail,
+  backgroundStep,
+  updateBackgroundOperation,
+} from "../../operation-progress/background-operation-progress";
+import { reportPartialTerminalCleanup } from "../../terminals/terminal-cleanup-progress";
 import type { TaskWorkflow } from "@openducktor/workflows";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -258,11 +264,17 @@ export const runTaskRuntimeCleanup = ({
   terminalService: TaskTerminalCleanupPort;
 }) =>
   Effect.gen(function* () {
-    const terminalResult = yield* terminalService.acquireTaskCleanup({
-      workspaceId,
-      repoPath,
-      taskIds,
-    });
+    const terminalResult = yield* backgroundStep(
+      { id: "terminals", label: "Stop task terminals" },
+      terminalService
+        .acquireTaskCleanup({
+          workspaceId,
+          repoPath,
+          taskIds,
+        })
+        .pipe(Effect.tapError(reportPartialTerminalCleanup)),
+      ({ closedTerminalIds }) => closedTerminalIds.length > 0 && { details: closedTerminalIds },
+    );
     if (terminalResult.closedTerminalIds.length > 0)
       progress.completedSteps.push(
         `terminated task terminals: ${terminalResult.closedTerminalIds.join(", ")}`,
@@ -305,12 +317,16 @@ export const runTaskBrowserTabCleanup = ({
         message: "The browser service is required for task_delete.",
       });
     }
-    yield* closeOwnerBrowserTabs(
-      browserTabs,
-      taskIds.map((taskId) => ({ kind: "task", workspaceId, taskId })),
-      "task_delete.browser_tabs",
+    const closedTabs = yield* backgroundStep(
+      { id: "browser-tabs", label: "Close task browser tabs" },
+      closeOwnerBrowserTabs(
+        browserTabs,
+        taskIds.map((taskId) => ({ kind: "task", workspaceId, taskId })),
+        "task_delete.browser_tabs",
+      ),
+      (closed) => closed && {},
     );
-    progress.completedSteps.push("closed task browser tabs");
+    if (closedTabs) progress.completedSteps.push("closed task browser tabs");
   });
 
 /**
@@ -332,7 +348,7 @@ export const removeTaskWorktree = (
     if (yield* dependencies.settingsConfig.pathExists(worktreePath)) {
       yield* runBeforeWorktreeRemovalScript(dependencies.beforeWorktreeRemoval, worktreePath);
     }
-    yield* removeWorktreeAndFilesystemPath(dependencies, input);
+    return yield* removeWorktreeAndFilesystemPath(dependencies, input);
   });
 
 export const runTaskLocalCleanup = ({
@@ -387,6 +403,16 @@ export const runTaskLocalCleanup = ({
         ? yield* requireTaskCleanupWorktreeFiles(worktreeFiles, worktreeCleanupOperation)
         : null;
 
+    yield* updateBackgroundOperation((operation) =>
+      operation.plan(
+        [
+          { id: "terminals", label: "Stop task terminals" },
+          ...(cleanupFiles ? [{ id: "worktrees", label: "Remove worktrees" }] : []),
+          ...(branchNames.length > 0 ? [{ id: "branches", label: "Delete local branches" }] : []),
+        ],
+        "terminals",
+      ),
+    );
     yield* runTaskRuntimeCleanup({
       workspaceId,
       progress,
@@ -396,39 +422,79 @@ export const runTaskLocalCleanup = ({
     });
 
     if (cleanupFiles) {
-      for (const worktreePath of worktreePaths) {
-        yield* removeTaskWorktree(
-          {
-            beforeWorktreeRemoval,
-            gitPort,
-            settingsConfig,
-            worktreeFiles: cleanupFiles,
-          },
-          {
-            repoPath,
-            worktreePath,
-            force: forceWorktreeRemoval,
-            managedWorktreeBasePath,
-            missingOutsideManagedRootPathPolicy: "skip",
-          },
-        );
-        progress.removedWorktrees.push(worktreePath);
-      }
+      yield* backgroundStep(
+        { id: "worktrees", label: "Remove worktrees" },
+        Effect.gen(function* () {
+          for (const worktreePath of worktreePaths) {
+            let removedByGit = false;
+            const removed = yield* removeTaskWorktree(
+              {
+                beforeWorktreeRemoval,
+                gitPort,
+                settingsConfig,
+                worktreeFiles: cleanupFiles,
+              },
+              {
+                repoPath,
+                worktreePath,
+                force: forceWorktreeRemoval,
+                managedWorktreeBasePath,
+                missingOutsideManagedRootPathPolicy: "skip",
+                onGitRemoved: () => {
+                  removedByGit = true;
+                },
+              },
+            ).pipe(
+              Effect.tapError(() =>
+                removedByGit
+                  ? addBackgroundStepDetail(
+                      "worktrees",
+                      `Git removed the worktree at ${worktreePath}. Filesystem cleanup did not finish.`,
+                    )
+                  : Effect.void,
+              ),
+            );
+            if (!removed) continue;
+            progress.removedWorktrees.push(worktreePath);
+            yield* updateBackgroundOperation((operation) =>
+              operation.addResource("worktrees", {
+                kind: "worktree",
+                value: worktreePath,
+                state: "removed",
+              }),
+            );
+          }
+        }),
+        () => progress.removedWorktrees.length > 0 && {},
+      );
     }
 
-    for (const [index, branchName] of branchNames.entries()) {
-      // The task worktrees are gone, so a retry cannot find a branch that only the worktree
-      // checkout tied to the task. The error names each branch that stays.
-      yield* gitPort.deleteLocalBranch(repoPath, branchName, true, onBranchDeleting).pipe(
-        Effect.mapError((cause) => {
-          const remaining = branchNames.slice(index).join(" ");
-          return new HostOperationError({
-            operation: "task.cleanup.delete_branch",
-            message: `${errorMessage(cause)} OpenDucktor removed the task worktrees, so a retry may not find the branches ${remaining}. Delete them with git branch -D ${remaining}.`,
-            cause,
-          });
+    if (branchNames.length > 0)
+      yield* backgroundStep(
+        { id: "branches", label: "Delete local branches" },
+        Effect.gen(function* () {
+          for (const [index, branchName] of branchNames.entries()) {
+            // The task worktrees are gone, so a retry cannot find a branch that only the worktree
+            // checkout tied to the task. The error names each branch that stays.
+            yield* gitPort.deleteLocalBranch(repoPath, branchName, true, onBranchDeleting).pipe(
+              Effect.mapError((cause) => {
+                const remaining = branchNames.slice(index).join(" ");
+                return new HostOperationError({
+                  operation: "task.cleanup.delete_branch",
+                  message: `${errorMessage(cause)} OpenDucktor removed the task worktrees, so a retry may not find the branches ${remaining}. Delete them with git branch -D ${remaining}.`,
+                  cause,
+                });
+              }),
+            );
+            progress.deletedBranches.push(branchName);
+            yield* updateBackgroundOperation((operation) =>
+              operation.addResource("branches", {
+                kind: "branch",
+                value: branchName,
+                state: "removed",
+              }),
+            );
+          }
         }),
       );
-      progress.deletedBranches.push(branchName);
-    }
   });

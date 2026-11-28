@@ -62,7 +62,7 @@ export type TaskApprovalFlowAction =
   | { type: "close" }
   | { type: "start_submitting" }
   | { type: "return_to_editable"; errorMessage: string | null; errorOutcomeUnknown: boolean }
-  | { type: "clear_error" }
+  | { type: "set_error"; errorMessage: string | null }
   | { type: "set_mode"; mode: TaskApprovalMode }
   | { type: "set_merge_method"; mergeMethod: TaskApprovalMergeMethod }
   | {
@@ -188,9 +188,9 @@ export function taskApprovalFlowReducer(
             errorOutcomeUnknown: action.errorOutcomeUnknown,
           }
         : state;
-    case "clear_error":
+    case "set_error":
       return state.kind === "open"
-        ? { ...state, errorMessage: null, errorOutcomeUnknown: false }
+        ? { ...state, errorMessage: action.errorMessage, errorOutcomeUnknown: false }
         : state;
     case "set_mode":
       return state.kind === "open"

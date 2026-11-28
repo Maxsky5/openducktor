@@ -84,7 +84,7 @@ import {
   type SessionHtmlPreviewReadResult,
 } from "@openducktor/contracts";
 import { z } from "zod";
-import type { InvokeFn } from "./invoke-utils";
+import type { BackgroundOperationInvocation, InvokeFn } from "./invoke-utils";
 import {
   arrayResultSchema,
   booleanResultSchema,
@@ -319,24 +319,43 @@ export class HostTaskClient {
     );
   }
 
-  async taskDelete(scope: WorkspaceRef, taskId: string): Promise<{ ok: boolean }> {
+  async taskDelete(
+    scope: WorkspaceRef,
+    taskId: string,
+    tracking?: BackgroundOperationInvocation,
+  ): Promise<{ ok: boolean }> {
     return this.invokeFn(
       "task_delete",
-      { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
-      okResultSchema("task_delete"),
-    );
-  }
-
-  async taskClose(scope: WorkspaceRef, taskId: string, removeWorktree: boolean): Promise<TaskCard> {
-    return this.invokeFn(
-      "task_close",
-      taskCloseInputSchema.parse({
+      {
         workspaceId: scope.workspaceId,
         repoPath: scope.repoPath,
         taskId,
-        removeWorktree,
-      }),
+        ...(tracking && { operationId: tracking.operationId }),
+      },
+      okResultSchema("task_delete"),
+      tracking,
+    );
+  }
+
+  async taskClose(
+    scope: WorkspaceRef,
+    taskId: string,
+    removeWorktree: boolean,
+    tracking?: BackgroundOperationInvocation,
+  ): Promise<TaskCard> {
+    return this.invokeFn(
+      "task_close",
+      {
+        ...taskCloseInputSchema.parse({
+          workspaceId: scope.workspaceId,
+          repoPath: scope.repoPath,
+          taskId,
+          removeWorktree,
+        }),
+        ...(tracking && { operationId: tracking.operationId }),
+      },
       taskCardSchema,
+      tracking,
     );
   }
 
@@ -357,11 +376,21 @@ export class HostTaskClient {
   }
 
   /** Removes the worktree and local branches of a closed task. */
-  async taskWorktreeRemove(scope: WorkspaceRef, taskId: string): Promise<void> {
+  async taskWorktreeRemove(
+    scope: WorkspaceRef,
+    taskId: string,
+    tracking?: BackgroundOperationInvocation,
+  ): Promise<void> {
     await this.invokeFn(
       "task_worktree_remove",
-      { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
+      {
+        workspaceId: scope.workspaceId,
+        repoPath: scope.repoPath,
+        taskId,
+        ...(tracking && { operationId: tracking.operationId }),
+      },
       voidResultSchema,
+      tracking,
     );
   }
 
@@ -382,20 +411,42 @@ export class HostTaskClient {
     );
   }
 
-  async taskReset(scope: WorkspaceRef, taskId: string): Promise<TaskCard> {
+  async taskReset(
+    scope: WorkspaceRef,
+    taskId: string,
+    tracking?: BackgroundOperationInvocation,
+  ): Promise<TaskCard> {
     return this.invokeFn(
       "task_reset",
-      { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
+      {
+        workspaceId: scope.workspaceId,
+        repoPath: scope.repoPath,
+        taskId,
+        ...(tracking && { operationId: tracking.operationId }),
+      },
       taskCardSchema,
+      tracking,
     );
   }
 
   /** Applies a workflow event. The host runs its host effects in order, then commits the event. */
-  async taskApplyEvent(scope: WorkspaceRef, taskId: string, eventId: string): Promise<TaskCard> {
+  async taskApplyEvent(
+    scope: WorkspaceRef,
+    taskId: string,
+    eventId: string,
+    tracking?: BackgroundOperationInvocation,
+  ): Promise<TaskCard> {
     return this.invokeFn(
       "task_apply_event",
-      { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId, eventId },
+      {
+        workspaceId: scope.workspaceId,
+        repoPath: scope.repoPath,
+        taskId,
+        eventId,
+        ...(tracking && { operationId: tracking.operationId }),
+      },
       taskCardSchema,
+      tracking,
     );
   }
 

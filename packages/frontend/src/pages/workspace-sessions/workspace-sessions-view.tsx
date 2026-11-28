@@ -1,3 +1,6 @@
+import type { ArchiveFileDraft } from "@openducktor/frontend-core/operations/background-operation-store";
+import { workspaceSessionTitle } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { BrowserTabOwner, WorkspaceSession } from "@openducktor/contracts";
 import { useBrowserPanelModel } from "@/features/browser";
 import {
@@ -9,6 +12,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import type { SetURLSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
@@ -141,6 +145,39 @@ export function WorkspaceSessions({
     cancelPending,
     workspace.workspaceId,
   );
+  const { backgroundOperations } = useClientConnection();
+  const archiveSessionId = sessionId === undefined ? visibleSelectedId : sessionId;
+  const hasCompletedArchive = () =>
+    archiveSessionId !== null &&
+    backgroundOperations.hasCompletedArchive(workspace, archiveSessionId);
+  const archiveCompleted = useSyncExternalStore(
+    backgroundOperations.subscribe,
+    hasCompletedArchive,
+    hasCompletedArchive,
+  );
+  useEffect(() => {
+    if (
+      !isActive ||
+      isDraftMode ||
+      !archiveCompleted ||
+      archiveSessionId === null ||
+      effectiveSessions.some((record) => record.id === archiveSessionId)
+    )
+      return;
+    if (!backgroundOperations.consumeCompletedArchive(workspace, archiveSessionId)) return;
+    cancelPending();
+    completeArchive(effectiveSessions[0]?.id ?? null);
+  }, [
+    archiveCompleted,
+    archiveSessionId,
+    backgroundOperations,
+    cancelPending,
+    completeArchive,
+    effectiveSessions,
+    isActive,
+    isDraftMode,
+    workspace,
+  ]);
   const resolvedSelected = useVisibleSessionRecord(
     workspace.workspaceId,
     effectiveSessions,
@@ -224,10 +261,7 @@ export function WorkspaceSessions({
   const { archive, archiveTarget, setArchiveTarget, beginArchive } = useWorkspaceSessionArchive({
     workspace,
     isActive,
-    mounted,
     selectedId,
-    sessions,
-    completeArchive,
     guardWorkspaceChange,
   });
   const handleCreate = useCallback(() => {
@@ -248,7 +282,6 @@ export function WorkspaceSessions({
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
       <WorkspaceSessionReadModelNotice />
       <WorkspaceSessionRecordsRefreshNotice error={recordsError} onRetry={retryRecords} />
-      {archiveTarget === null && <WorkspaceSessionArchiveError error={archive.error} />}
       {isDraftMode ? (
         matchingDraft ? (
           <WorkspaceSessionDraftView
@@ -282,7 +315,6 @@ export function WorkspaceSessions({
               onArchive: (onCloseAutoFocus) => {
                 if (!selected) return;
                 archiveCloseAutoFocusRef.current = onCloseAutoFocus;
-                archive.reset();
                 setArchiveTarget(selected);
               },
               isArchiving: archive.isPending,
@@ -304,12 +336,10 @@ export function WorkspaceSessions({
             workspace={workspace}
             archiveTarget={archiveTarget}
             archivePending={archive.isPending}
-            archiveError={archive.error}
             onArchiveCloseAutoFocus={(event) => archiveCloseAutoFocusRef.current?.(event)}
             onArchive={beginArchive}
             onArchiveClose={() => {
               setArchiveTarget(null);
-              archive.reset();
             }}
           />
         </WhileSessionViewShown>
@@ -505,30 +535,15 @@ function useSelectedFiles(workspaceId: string, selectedId: string | null) {
   return { selectedFile, onSelectedFileChange };
 }
 
-function WorkspaceSessionArchiveError({ error }: { error: Error | null }): ReactElement | null {
-  if (!error) return null;
-  return (
-    <p role="alert" className="p-3 text-sm text-destructive">
-      {errorMessage(error)}
-    </p>
-  );
-}
-
 function useWorkspaceSessionArchive({
   workspace,
   isActive,
-  mounted,
   selectedId,
-  sessions,
-  completeArchive,
   guardWorkspaceChange,
 }: {
   workspace: ActiveWorkspace;
   isActive: boolean;
-  mounted: ReturnType<typeof useMountedRef>;
   selectedId: string | null;
-  sessions: WorkspaceSession[];
-  completeArchive: ReturnType<typeof useVisibleSessionId>["completeArchive"];
   guardWorkspaceChange: ReturnType<typeof useWorkspacePreviewTransitionGuard>["run"];
 }) {
   const [archiveScope, setArchiveScope] = useState<{
@@ -545,36 +560,36 @@ function useWorkspaceSessionArchive({
   }
   const setArchiveTarget = (target: WorkspaceSession | null) =>
     setArchiveScope({ workspaceId: workspace.workspaceId, target });
-  const archive = useArchiveWorkspaceSession((record, input) => {
-    if (input.workspaceId !== workspace.workspaceId) return;
-    if (mounted.current && selectedId === record.id)
-      completeArchive(sessions.find((entry) => entry.id !== record.id)?.id ?? null);
-    if (mounted.current) setArchiveTarget(null);
-  });
-  const resetArchive = archive.reset;
-  useEffect(() => resetArchive(), [resetArchive, workspace.workspaceId]);
+  const archive = useArchiveWorkspaceSession(
+    workspace.workspaceId,
+    archiveTarget?.id ?? selectedId,
+  );
   const beginArchive = (
     sessionId: string,
     removeWorktree: boolean,
     worktreeConfirmation?: { workingDirectory: string; branchName: string },
   ) => {
-    const apply = async () => {
-      try {
-        await archive.mutateAsync({
+    const apply = (draft?: ArchiveFileDraft) => {
+      archive.submit(
+        {
           workspaceId: workspace.workspaceId,
           repoPath: workspace.repoPath,
           sessionId,
           confirmStop: true,
           removeWorktree,
           worktreeConfirmation,
-        });
-        return true;
-      } catch {
-        return false;
-      }
+        },
+        {
+          workspaceLabel: workspace.workspaceName,
+          targetLabel: archiveTarget ? workspaceSessionTitle(archiveTarget) : sessionId,
+        },
+        draft,
+      );
+      setArchiveTarget(null);
     };
-    if (sessionId === selectedId) guardWorkspaceChange(apply, undefined, { waitForSuccess: true });
-    else void apply();
+    if (sessionId === selectedId)
+      guardWorkspaceChange(apply, undefined, { waitForSuccess: true, kind: "archive_chat" });
+    else apply();
   };
   return { archive, archiveTarget, setArchiveTarget, beginArchive };
 }
@@ -583,7 +598,6 @@ function WorkspaceSessionDialogs({
   workspace,
   archiveTarget,
   archivePending,
-  archiveError,
   onArchiveCloseAutoFocus,
   onArchive,
   onArchiveClose,
@@ -591,7 +605,6 @@ function WorkspaceSessionDialogs({
   workspace: ActiveWorkspace;
   archiveTarget: WorkspaceSession | null;
   archivePending: boolean;
-  archiveError: Error | null;
   onArchiveCloseAutoFocus: (event: Event) => void;
   onArchive: (
     sessionId: string,
@@ -616,7 +629,6 @@ function WorkspaceSessionDialogs({
       workspaceId={workspace.workspaceId}
       record={closingTarget}
       isArchiving={archivePending}
-      error={archiveError}
       onArchive={(removeWorktree, confirmation) =>
         onArchive(closingTarget.id, removeWorktree, confirmation)
       }

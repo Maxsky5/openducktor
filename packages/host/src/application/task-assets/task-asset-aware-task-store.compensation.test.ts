@@ -1,3 +1,8 @@
+import {
+  createBackgroundOperationProgress,
+  operationFailure,
+  CurrentBackgroundOperation,
+} from "../operation-progress/background-operation-progress";
 import { BUILTIN_TASK_ASSIGNMENT } from "../tasks/task-workflows";
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
@@ -635,12 +640,27 @@ describe("asset-aware task store compensation", () => {
       },
       resolveWorkspaceId: () => Effect.succeed("fairnest"),
     });
-    const purgeError = await captureTaskAssetError(
-      purgeStore.deleteTask({
-        ...purgeHarness.scope,
-        taskId: purgeOwned.task.id,
-      }),
+    const progress = createBackgroundOperationProgress(
+      {
+        operationId: crypto.randomUUID(),
+        hostInstanceId: "host",
+        workspace: purgeHarness.scope,
+        target: { kind: "task", taskId: purgeOwned.task.id },
+      },
+      () => {},
     );
+    const purgeError = await captureTaskAssetError(
+      purgeStore
+        .deleteTask({
+          ...purgeHarness.scope,
+          taskId: purgeOwned.task.id,
+        })
+        .pipe(Effect.provideService(CurrentBackgroundOperation, progress)),
+    );
+    expect(progress.settle(operationFailure("task_delete", purgeError)).steps).toMatchObject([
+      { id: "task-delete", state: "completed" },
+      { id: "attachments", state: "failed" },
+    ]);
     expect(purgeError.durableState).toBe("committed_cleanup_pending");
     expect(purgeError.assetIds).toEqual([purgeOwned.staged.assetId]);
 

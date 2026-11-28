@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactElement } from "react";
+import { useBackgroundAttempts } from "@openducktor/frontend-core/operations/use-background-attempts";
 import { useStartupAttempts } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 import { Toaster } from "@/components/ui/sonner";
 import { useToasterBottomInset } from "@/components/ui/toaster-inset";
@@ -30,7 +31,10 @@ const startupToasterStyle = (bottomOffset: number): CSSProperties => {
  */
 export function AppToaster(): ReactElement {
   const attempts = useStartupAttempts();
-  const startupVisible = attempts.some((attempt) => attempt.presentation === "notification");
+  const operations = useBackgroundAttempts();
+  const progressVisible =
+    attempts.some((attempt) => attempt.presentation === "notification") ||
+    operations.some((attempt) => !attempt.toastDismissed);
   const bottomOffset = EDGE_OFFSET + useToasterBottomInset();
   const offset = {
     top: EDGE_OFFSET,
@@ -42,8 +46,8 @@ export function AppToaster(): ReactElement {
     <Toaster
       offset={offset}
       mobileOffset={offset}
-      visibleToasts={startupVisible ? Infinity : 5}
-      style={startupVisible ? startupToasterStyle(bottomOffset) : toasterStyle}
+      visibleToasts={progressVisible ? Infinity : 5}
+      style={progressVisible ? startupToasterStyle(bottomOffset) : toasterStyle}
       className="overscroll-contain [&>[data-sonner-toast]]:pointer-events-auto"
     />
   );

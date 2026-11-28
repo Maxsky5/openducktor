@@ -1,3 +1,4 @@
+import { backgroundStep } from "../../operation-progress/background-operation-progress";
 import { mapTaskMutationProgressErrors } from "../task-error-mapping";
 import { loadTaskSessions } from "../support/task-sessions";
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
@@ -21,7 +22,11 @@ import {
   createTaskMutationProgressFailure,
   TaskMutationProgressFailure,
 } from "../task-mutation-progress-failure";
-import { createTaskCleanupProgressState } from "../support/task-cleanup-progress";
+import {
+  clearTaskResetDelivery,
+  createTaskCleanupProgressState,
+  planTaskResetSteps,
+} from "../support/task-cleanup-progress";
 import type { TaskServiceUseCaseInput } from "../task-service";
 import type { HostEffectHandler } from "./host-effect-registry";
 
@@ -58,6 +63,16 @@ export const createWorktreeResetEffect = ({
       const current = yield* taskStore.getTask(input);
       const workflow = taskWorkflows.forTask(current);
       const currentSessions = yield* loadTaskSessions(taskStore, input);
+      const hasAffectedSessions = currentSessions.some((session) =>
+        effect.clearsSessionsOf.includes(session.role),
+      );
+      const hasReviewArtifacts = workflow.reviewArtifactCodes.some(
+        (code) => current.artifactSummary[code]?.present,
+      );
+      yield* planTaskResetSteps(current, [
+        hasAffectedSessions && { id: "session-records", label: "Unlink affected sessions" },
+        hasReviewArtifacts && { id: "artifacts", label: "Clear review artifacts" },
+      ]);
       const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
       const {
@@ -126,45 +141,50 @@ export const createWorktreeResetEffect = ({
           worktreePaths: removedWorktreePaths,
         });
         if (canonicalTarget) {
-          yield* dependencies.gitPort.restoreWorktreeToReference(
-            canonicalTarget.worktreePath,
-            canonicalTarget.restoreReference,
+          const restored = yield* backgroundStep(
+            { id: "restore", label: "Restore main task worktree" },
+            dependencies.gitPort.restoreWorktreeToReference(
+              canonicalTarget.worktreePath,
+              canonicalTarget.restoreReference,
+            ),
+            (changed) => changed && {},
           );
-          cleanupProgress.completedSteps.push(
-            `Restored canonical worktree ${canonicalWorktree} to ${canonicalTarget.restoreReference}.`,
-          );
+          if (restored)
+            cleanupProgress.completedSteps.push(
+              `Restored canonical worktree ${canonicalWorktree} to ${canonicalTarget.restoreReference}.`,
+            );
         }
-        yield* storeDependencies.clearAgentSessionsByRoles({
-          ...input,
-          repoPath: effectiveRepoPath,
-          roles: [...effect.clearsSessionsOf],
-        });
+        yield* backgroundStep(
+          { id: "session-records", label: "Unlink affected sessions" },
+          storeDependencies.clearAgentSessionsByRoles({
+            ...input,
+            repoPath: effectiveRepoPath,
+            roles: [...effect.clearsSessionsOf],
+          }),
+          () => hasAffectedSessions && {},
+        );
         taskStoreWriteCompleted = true;
-        cleanupProgress.completedSteps.push("Cleared the session records of the reset roles.");
-        yield* storeDependencies.clearWorkflowArtifacts({
-          ...input,
-          repoPath: effectiveRepoPath,
-          codes: workflow.reviewArtifactCodes,
-        });
+        if (hasAffectedSessions)
+          cleanupProgress.completedSteps.push("Cleared the session records of the reset roles.");
+        yield* backgroundStep(
+          { id: "artifacts", label: "Clear review artifacts" },
+          storeDependencies.clearWorkflowArtifacts({
+            ...input,
+            repoPath: effectiveRepoPath,
+            codes: workflow.reviewArtifactCodes,
+          }),
+          () => hasReviewArtifacts && {},
+        );
         for (const code of workflow.reviewArtifactCodes)
           artifactChanges.push(workflowArtifactChange(taskId, code, true));
-        cleanupProgress.completedSteps.push("Cleared the review artifacts.");
-        yield* storeDependencies.setPullRequest({
-          ...input,
-          repoPath: effectiveRepoPath,
-          pullRequest: null,
-        });
-        cleanupProgress.completedSteps.push("Cleared pull request metadata.");
-        yield* Effect.uninterruptible(
-          Effect.gen(function* () {
-            yield* storeDependencies.setDirectMerge({
-              ...input,
-              repoPath: effectiveRepoPath,
-              directMerge: null,
-            });
-            cleanupProgress.completedSteps.push("Cleared direct merge metadata.");
-            yield* completionState.discard({ ...input, repoPath: effectiveRepoPath });
-          }),
+        if (hasReviewArtifacts)
+          cleanupProgress.completedSteps.push("Cleared the review artifacts.");
+        yield* clearTaskResetDelivery(
+          storeDependencies,
+          completionState,
+          { ...input, repoPath: effectiveRepoPath },
+          current,
+          cleanupProgress,
         );
         return yield* commit;
       }).pipe(

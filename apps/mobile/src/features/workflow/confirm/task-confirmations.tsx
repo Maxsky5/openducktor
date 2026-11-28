@@ -44,6 +44,7 @@ type TaskConfirmationsProps = {
   onStarted: (request: TaskConfirmationRequest) => void;
   /** The confirmed action succeeded. `onClosed` follows for the same request. */
   onSucceeded: (request: TaskConfirmationRequest) => void;
+  onFailed: (request: TaskConfirmationRequest) => void;
 };
 
 /** The desktop icon of each confirm button. */
@@ -64,6 +65,7 @@ function RequestedCloseConfirm({
   onClosed,
   onStarted,
   onSucceeded,
+  onFailed,
 }: Omit<TaskConfirmationsProps, "request"> & {
   request: TaskConfirmationRequest;
 }): ReactElement {
@@ -76,9 +78,12 @@ function RequestedCloseConfirm({
   const run = useMemo(
     () => (taskId: string, options: CloseTaskOptions) => {
       onStarted(request);
-      return closeTask(taskId, options);
+      return closeTask(taskId, options).catch((cause: unknown) => {
+        onFailed(request);
+        throw cause;
+      });
     },
-    [closeTask, onStarted, request],
+    [closeTask, onFailed, onStarted, request],
   );
   const { dialog } = useTaskCloseConfirmDialog({
     task,
@@ -100,6 +105,7 @@ function RequestedTaskConfirm<Result>({
   onClosed,
   onStarted,
   onSucceeded,
+  onFailed,
 }: Omit<TaskConfirmationsProps, "request"> & {
   request: TaskConfirmationRequest;
   action: TaskConfirmAction;
@@ -110,9 +116,12 @@ function RequestedTaskConfirm<Result>({
   const run = useMemo(
     () => (taskId: string) => {
       onStarted(request);
-      return runAction(taskId);
+      return runAction(taskId).catch((cause: unknown) => {
+        onFailed(request);
+        throw cause;
+      });
     },
-    [onStarted, request, runAction],
+    [onFailed, onStarted, request, runAction],
   );
   const { dialog } = useTaskConfirmDialog({
     action,

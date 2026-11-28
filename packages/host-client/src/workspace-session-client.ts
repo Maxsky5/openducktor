@@ -28,7 +28,11 @@ import {
   workspaceSessionForkInputSchema,
   workspaceSessionForkResultSchema,
 } from "@openducktor/contracts";
-import { arrayResultSchema, type InvokeFn } from "./invoke-utils";
+import {
+  arrayResultSchema,
+  type BackgroundOperationInvocation,
+  type InvokeFn,
+} from "./invoke-utils";
 
 export class HostWorkspaceSessionClient {
   constructor(private readonly invoke: InvokeFn) {}
@@ -125,8 +129,16 @@ export class HostWorkspaceSessionClient {
     return this.invoke("workspace_session_rename", input, workspaceSessionSchema);
   }
 
-  workspaceSessionArchive(input: WorkspaceSessionArchiveInput): Promise<WorkspaceSession> {
-    return this.invoke("workspace_session_archive", input, workspaceSessionSchema);
+  workspaceSessionArchive(
+    input: WorkspaceSessionArchiveInput,
+    tracking?: BackgroundOperationInvocation,
+  ): Promise<WorkspaceSession> {
+    return this.invoke(
+      "workspace_session_archive",
+      { ...input, ...(tracking && { operationId: tracking.operationId }) },
+      workspaceSessionSchema,
+      tracking,
+    );
   }
 
   workspaceSessionArchivePreview(

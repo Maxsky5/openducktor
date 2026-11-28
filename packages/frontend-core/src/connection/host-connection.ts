@@ -3,6 +3,7 @@ import type {
   AgentSessionLiveEnvelope,
   HostEventPayload,
   SessionStartupProgressEvent,
+  BackgroundOperationProgressEvent,
   NotificationCursor,
   NotificationStreamFrame,
   TaskEventCursor,
@@ -80,6 +81,10 @@ export type HostConnection = {
     listener: WorkspaceProviderSetupUpdateListener,
   ) => Promise<() => void>;
   client: HostClient;
+  backgroundOperationHostEpoch?: () => string | undefined;
+  subscribeBackgroundOperationProgress: (
+    listener: (event: BackgroundOperationProgressEvent | ConnectionControlEvent) => void,
+  ) => Promise<() => void>;
   subscribeStartupProgress: (listener: StartupProgressListener) => Promise<() => void>;
   subscribeWorkspaceSessionUpdates: (
     listener: WorkspaceSessionUpdateListener,

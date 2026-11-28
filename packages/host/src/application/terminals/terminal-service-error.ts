@@ -26,6 +26,7 @@ export class TerminalServiceError extends Data.TaggedError("TerminalServiceError
   readonly workingDir?: string;
   readonly cause?: unknown;
   readonly details?: TerminalFailureDetails;
+  readonly closedTerminalIds?: readonly string[];
 }> {}
 
 export const terminalServiceErrorToFailure = (error: TerminalServiceError): TerminalFailure => {

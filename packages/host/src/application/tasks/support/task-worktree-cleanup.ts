@@ -1,3 +1,4 @@
+import { backgroundStep } from "../../operation-progress/background-operation-progress";
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import type { TaskWorkflowRole } from "@openducktor/workflows";
 import { Effect } from "effect";
@@ -115,11 +116,15 @@ export const releaseMergedTaskSessions = (
         details: { repoPath, taskId },
       });
     }
-    yield* dependencies.taskActivityGuard.cleanupTaskSessions({
-      workspaceId,
-      repoPath: yield* dependencies.gitPort.canonicalizePath(repoPath),
-      taskSessions: [{ taskId, sessions: workflowSessions }],
-    });
+    yield* backgroundStep(
+      { id: "sessions", label: "Stop task sessions" },
+      dependencies.taskActivityGuard.cleanupTaskSessions({
+        workspaceId,
+        repoPath: yield* dependencies.gitPort.canonicalizePath(repoPath),
+        taskSessions: [{ taskId, sessions: workflowSessions }],
+      }),
+      ({ stoppedSessionCount }) => stoppedSessionCount > 0 && {},
+    );
   });
 /**
  * Stops task terminals and releases saved sessions when a merge close runs without Git cleanup.

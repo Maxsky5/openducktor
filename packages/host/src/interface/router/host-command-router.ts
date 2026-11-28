@@ -1,3 +1,4 @@
+import { backgroundOperationIdSchema } from "@openducktor/contracts";
 import { Effect, Exit } from "effect";
 import type { RuntimeQueryError } from "../../ports/runtime-query-error";
 import type { FilesystemListDirectoryError } from "../../application/filesystem/filesystem-service";
@@ -10,6 +11,7 @@ import {
   causeToHostBoundaryError,
   HostOperationError,
   HostResourceError,
+  HostValidationError,
   isHostError,
 } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
@@ -75,12 +77,28 @@ export type CreateHostCommandRouterInput = {
   dispose?: () => Effect.Effect<void, HostCommandHandlerError>;
   initialize?: () => Effect.Effect<void, HostCommandHandlerError>;
   handlers: HostCommandHandlers;
+  trackBackgroundOperation?: <A, E>(
+    command: HostCommandName,
+    args: HostCommandArgs,
+    operationId: string,
+    work: Effect.Effect<A, E>,
+  ) => Effect.Effect<A, E | HostError>;
   trackCommand?: <A, E>(
     command: string,
     args: HostCommandArgs,
     work: Effect.Effect<A, E>,
   ) => Effect.Effect<A, E | HostError>;
 };
+const backgroundCommands = new Set<HostCommandName>([
+  "task_delete",
+  "task_reset",
+  "task_apply_event",
+  "task_close",
+  "task_worktree_remove",
+  "task_pull_request_link_merged",
+  "workspace_session_archive",
+]);
+
 const toHostCommandHandlerError = (
   cause: unknown,
   command: HostCommandName,
@@ -122,6 +140,7 @@ export const createEffectHostCommandRouter = ({
   initialize,
   handlers,
   trackCommand,
+  trackBackgroundOperation,
 }: CreateHostCommandRouterInput): EffectHostCommandRouter => {
   function invoke<Command extends HostCommandName>(
     command: Command,
@@ -160,13 +179,37 @@ export const createEffectHostCommandRouter = ({
           }),
         );
       }
-      const handlerEffect = yield* Effect.try({
-        try: () => handler(args),
+      let input = args;
+      let operationId: string | undefined;
+      if (args && Object.hasOwn(args, "operationId")) {
+        const parsed = backgroundOperationIdSchema.safeParse(args.operationId);
+        if (!parsed.success || !trackBackgroundOperation || !backgroundCommands.has(hostCommand))
+          return yield* new HostValidationError({
+            field: "operationId",
+            message: `Invalid background operation metadata for ${hostCommand}.`,
+          });
+        const { operationId: _operationId, ...commandInput } = args;
+        input = commandInput;
+        operationId = parsed.data;
+      }
+      const parseHandler = Effect.try({
+        try: () => handler(input),
         catch: (cause) => toHostCommandHandlerError(cause, hostCommand),
       });
-      return yield* (
-        trackCommand ? trackCommand(hostCommand, args, handlerEffect) : handlerEffect
-      ).pipe(Effect.withSpan("host.command", { attributes: { command: hostCommand } }));
+      const runCommand = (work: Effect.Effect<HostCommandResult, HostCommandHandlerError>) =>
+        trackCommand ? trackCommand(hostCommand, input, work) : work;
+      const tracked =
+        operationId && trackBackgroundOperation
+          ? trackBackgroundOperation(
+              hostCommand,
+              input,
+              operationId,
+              parseHandler.pipe(Effect.flatten),
+            )
+          : parseHandler.pipe(Effect.flatMap(runCommand));
+      return yield* tracked.pipe(
+        Effect.withSpan("host.command", { attributes: { command: hostCommand } }),
+      );
     });
   }
 

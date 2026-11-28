@@ -8,6 +8,7 @@ import type {
   AgentSessionControlSummary,
 } from "@openducktor/contracts";
 import { Context, Effect } from "effect";
+import { createProgressSnapshot } from "../operation-progress/progress-snapshot";
 import { errorMessage, type HostError } from "../../effect/host-errors";
 
 export type StartupStepUpdate = Pick<StartupStep, "id" | "label" | "state"> & Partial<StartupStep>;
@@ -94,27 +95,28 @@ export const createStartupProgressRecorder = (
   confirmStopped: (ref: AgentSessionLiveRef) => Effect.Effect<void, HostError>,
 ): StartupProgressRecorder => {
   let expectedRuntimeId: string | undefined;
-  let snapshot: StartupOperationSnapshot = {
-    ...initial,
-    revision: 0,
-    steps: [],
-    ownership: { state: "not_saved" },
-    phase: "running",
-  };
-  const commit = (fields: Partial<StartupOperationSnapshot>) => {
-    snapshot = { ...snapshot, ...fields, revision: snapshot.revision + 1 };
-    publish(structuredClone(snapshot));
-  };
+  const progress = createProgressSnapshot<StartupOperationSnapshot>(
+    {
+      ...initial,
+      revision: 0,
+      steps: [],
+      ownership: { state: "not_saved" },
+      phase: "running",
+    },
+    publish,
+  );
+  const commit = (fields: Partial<StartupOperationSnapshot>) =>
+    progress.commit({ ...progress.current(), ...fields });
   return {
-    snapshot: () => structuredClone(snapshot),
-    step: (step) => commit({ steps: mergeStep(snapshot.steps, step) }),
+    snapshot: progress.read,
+    step: (step) => commit({ steps: mergeStep(progress.current().steps, step) }),
     plan: (steps) => {
-      const nextSteps = steps.reduce(mergePlanStep, snapshot.steps);
-      if (JSON.stringify(nextSteps) === JSON.stringify(snapshot.steps)) return;
+      const nextSteps = steps.reduce(mergePlanStep, progress.current().steps);
+      if (JSON.stringify(nextSteps) === JSON.stringify(progress.current().steps)) return;
       commit({ steps: nextSteps });
     },
     ownership: (ownership) => {
-      if (snapshot.ownership.state === "saved" && ownership.state !== "saved") return;
+      if (progress.current().ownership.state === "saved" && ownership.state !== "saved") return;
       commit({ ownership });
     },
     instruction: (instruction) => commit({ instruction }),
@@ -131,7 +133,7 @@ export const createStartupProgressRecorder = (
     settle: (phase, message) => {
       commit({
         phase,
-        steps: snapshot.steps.map((step) => {
+        steps: progress.current().steps.map((step) => {
           if (
             phase === "completed" &&
             (step.state === "running" || step.state === "waiting") &&

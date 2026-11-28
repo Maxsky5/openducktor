@@ -260,6 +260,14 @@ export const refreshGitWorkingDirectory = async (
   await queryClient.invalidateQueries({ ...filter, refetchType: "active" });
 };
 
+/** Drop checkout data after the directory is removed, including any reads still in flight. */
+export const resetGitWorkingDirectoryQueries = (
+  queryClient: QueryClient,
+  repoPath: string,
+  workingDir: string,
+): Promise<void> =>
+  queryClient.resetQueries(gitWorkingDirectoryFilter(repoPath, workingDir, { branch: true }));
+
 /** Branch changes: the comparison of the working content with the target. */
 export const worktreeStatusQueryOptions = (
   repoPath: string,

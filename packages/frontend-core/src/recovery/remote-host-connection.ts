@@ -227,6 +227,16 @@ export const createRemoteHostConnection = ({
       if (controlListener) controls.delete(controlListener);
     };
   };
+  const subscribeConnected = async (...args: Parameters<typeof subscribe>) => {
+    const stop = await subscribe(...args);
+    try {
+      await remote.connect();
+      return stop;
+    } catch (cause) {
+      stop();
+      throw cause;
+    }
+  };
   // Admission starts before mounting. View owners add their synchronization work as they mount.
   // A disconnect by the owner, as when the user cancels Add Host, ends the attempt and leaves the
   // connection idle. That is no failure, so only a real failure goes to the log.
@@ -276,19 +286,17 @@ export const createRemoteHostConnection = ({
         if (event.channel === "openducktor://run-event")
           logListenerFailure(listener(event.payload));
       }, listener),
-    subscribeStartupProgress: async (listener) => {
-      const stop = await subscribe((event) => {
+    subscribeStartupProgress: (listener) =>
+      subscribeConnected((event) => {
         if (event.channel === "openducktor://session-startup-progress")
           logListenerFailure(listener(event));
-      }, listener);
-      try {
-        await remote.connect();
-        return stop;
-      } catch (cause) {
-        stop();
-        throw cause;
-      }
-    },
+      }, listener),
+    backgroundOperationHostEpoch: () => remote.readState().host?.hostInstanceId,
+    subscribeBackgroundOperationProgress: (listener) =>
+      subscribeConnected((event) => {
+        if (event.channel === "openducktor://background-operation-progress")
+          logListenerFailure(listener(event));
+      }, listener),
     subscribeWorkspaceSessionUpdates: (listener) =>
       subscribe((event) => {
         if (event.channel === "openducktor://workspace-session-updated")

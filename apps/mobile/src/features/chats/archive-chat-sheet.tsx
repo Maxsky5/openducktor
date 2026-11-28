@@ -1,11 +1,5 @@
 import type { WorkspaceRecord, WorkspaceSession } from "@openducktor/contracts";
-import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
-import {
-  isOutcomeUnknown,
-  RESULT_UNKNOWN_TITLE,
-} from "@openducktor/frontend-core/lib/command-outcome";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { useMountedRef } from "@openducktor/frontend-core/lib/use-mounted-ref";
 import { workspaceSessionArchivePreviewQueryOptions } from "@openducktor/frontend-core/queries/workspace-session-archive";
 import { workspaceSessionTitle } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import {
@@ -141,20 +135,17 @@ function WorktreeChoice({
   );
 }
 
-/** A failed worktree check, the worktree warnings, and a failed archive. */
+/** Worktree check failures and warnings. */
 function ArchiveProblems({
   checkError,
   onCheckAgain,
   warnings,
-  archiveError,
 }: {
   checkError: unknown;
   onCheckAgain: () => void;
   warnings: ArchiveChatFormModel["warnings"];
-  archiveError: unknown;
 }): ReactElement {
   const theme = useAppTheme();
-  const unknown = archiveError !== null && isOutcomeUnknown(archiveError);
   return (
     <>
       {checkError ? (
@@ -184,13 +175,6 @@ function ArchiveProblems({
           </Text>
         </View>
       ))}
-      {archiveError ? (
-        <Callout
-          tone={unknown ? "warning" : "destructive"}
-          title={unknown ? RESULT_UNKNOWN_TITLE : "The session was not archived"}
-          message={errorMessage(archiveError)}
-        />
-      ) : null}
     </>
   );
 }
@@ -253,7 +237,6 @@ function ArchiveChatForm({
             void preview.refetch();
           }}
           warnings={form.warnings}
-          archiveError={archive.error}
         />
         <View style={[styles.actions, enlarged && styles.stackedActions]}>
           <Button
@@ -285,32 +268,22 @@ function ArchiveChatForm({
 
 function ArchiveChatRead({ params }: { params: ChatSheetParams }): ReactElement {
   const navigation = useNavigation();
-  const { feedback } = useClientConnection();
-  const mounted = useMountedRef();
   const read = useChatRecord(params.workspaceId, params.sessionId);
-  const [confirmed, setConfirmed] = useState<ArchiveTarget | null>(null);
-  // The sheet owns the command, so its result still closes the sheet after the form changes.
-  const archive = useArchiveWorkspaceSession(() => {
-    feedback.show("success", "Session archived.");
-    if (mounted.current) closeScreen(navigation);
-  });
-  // An archived chat leaves the active list while the sheet closes; show nothing in that time.
-  if (archive.isSuccess) return <SheetFrame title={TITLE} closable={false} />;
-  const renderForm = (target: ArchiveTarget) => (
+  const archive = useArchiveWorkspaceSession(params.workspaceId, params.sessionId);
+  if (read.status !== "ready") return <ChatSheetStateScreen title={TITLE} read={read} />;
+  return (
     <ArchiveChatForm
-      target={target}
+      target={read}
       archive={archive}
       onConfirm={(input) => {
-        setConfirmed(target);
-        archive.mutate(input);
+        archive.submit(input, {
+          workspaceLabel: read.workspace.workspaceName,
+          targetLabel: workspaceSessionTitle(read.record),
+        });
+        closeScreen(navigation);
       }}
     />
   );
-  if (read.status === "ready") return renderForm(read);
-  // The host event of the archive can remove the chat from the active list before the command
-  // reply. Keep the confirmed chat on screen until the reply comes.
-  if (archive.isPending && confirmed) return renderForm(confirmed);
-  return <ChatSheetStateScreen title={TITLE} read={read} />;
 }
 
 /**

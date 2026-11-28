@@ -148,11 +148,14 @@ export const createBrowserService = (input: CreateBrowserServiceInput): BrowserS
    * Closes the first listed tab until no tab is listed. Closing an opener also closes its popup
    * windows, and a tab whose page ends during the loop leaves the list by itself.
    */
-  const closeEach = (listed: () => readonly { tabId: string }[]) =>
+  const closeEach = (listed: () => readonly { tabId: string }[], onClosed?: () => void) =>
     Effect.gen(function* () {
+      let closed = false;
       for (let next = listed()[0]; next !== undefined; next = listed()[0]) {
-        yield* tabs.closeTab(next.tabId);
+        yield* tabs.closeTab(next.tabId, onClosed);
+        closed = true;
       }
+      return closed;
     });
 
   const withTab = <A>(
@@ -273,7 +276,8 @@ export const createBrowserService = (input: CreateBrowserServiceInput): BrowserS
       ),
     runAgentTool: (owner, name, toolInput) =>
       afterLoad(Effect.suspend(() => agentTools.run(owner, name, toolInput))),
-    closeOwnerTabs: (owner) => afterLoad(closeEach(() => registry.ownerTabs(owner))),
+    closeOwnerTabs: (owner, onClosed) =>
+      afterLoad(closeEach(() => registry.ownerTabs(owner), onClosed)),
     removeWorkspace: (workspaceId) =>
       Effect.gen(function* () {
         yield* savedTabsLoaded;

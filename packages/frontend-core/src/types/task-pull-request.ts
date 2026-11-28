@@ -19,4 +19,5 @@ export type PendingMergedPullRequest = {
   /** The task value that the cleanup choice starts from. Null follows the global setting. */
   taskRemoveWorktreeOnClose: TaskCard["removeWorktreeOnClose"];
   pullRequest: PullRequest;
+  errorMessage?: string;
 };

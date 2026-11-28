@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import { isOutcomeUnknown } from "../../lib/command-outcome";
-import { errorMessage } from "../../lib/errors";
+import { useActiveWorkspaceContext } from "../../app-state/app-state-contexts";
+import { useClientConnection } from "../../connection/client-connection-react";
 import type { TaskConfirmDialogState } from "./task-confirm-dialog-types";
 
 type AsyncConfirmDialogState = {
   isOpen: boolean;
   isPending: boolean;
   error: string | null;
-  errorOutcomeUnknown: boolean;
 };
 
 type AsyncConfirmDialogAction =
@@ -17,14 +16,13 @@ type AsyncConfirmDialogAction =
   | { type: "openChanged"; open: boolean }
   | { type: "started" }
   | { type: "succeeded" }
-  | { type: "failed"; error: string; outcomeUnknown: boolean }
+  | { type: "refused"; error: string }
   | { type: "finished" };
 
 const CLOSED_STATE: AsyncConfirmDialogState = {
   isOpen: false,
   isPending: false,
   error: null,
-  errorOutcomeUnknown: false,
 };
 
 const asyncConfirmDialogReducer = (
@@ -39,17 +37,17 @@ const asyncConfirmDialogReducer = (
         ? { ...CLOSED_STATE, isPending: state.isPending }
         : state;
     case "opened":
-      return { ...state, isOpen: true, error: null, errorOutcomeUnknown: false };
+      return { ...state, isOpen: true, error: null };
     case "openChanged":
       return action.open
         ? { ...state, isOpen: true }
         : { ...CLOSED_STATE, isPending: state.isPending };
     case "started":
-      return { ...state, isPending: true, error: null, errorOutcomeUnknown: false };
+      return { ...state, isPending: true, error: null };
     case "succeeded":
       return { ...state, isOpen: false };
-    case "failed":
-      return { ...state, error: action.error, errorOutcomeUnknown: action.outcomeUnknown };
+    case "refused":
+      return { ...state, error: action.error };
     case "finished":
       return { ...state, isPending: false };
   }
@@ -73,7 +71,7 @@ export type TaskAsyncConfirmDialog<Result> = {
   dialog: Omit<TaskConfirmDialogState, "impact">;
 };
 
-/** A confirmation that runs an async action and keeps the dialog open with its error on failure. */
+/** Keeps the confirmation and its committed continuation tied to the request scope. */
 export function useTaskAsyncConfirmDialog<Result>({
   enabled,
   initiallyOpen = false,
@@ -82,25 +80,29 @@ export function useTaskAsyncConfirmDialog<Result>({
   onSucceeded,
   onCommitted,
 }: UseTaskAsyncConfirmDialogOptions<Result>): TaskAsyncConfirmDialog<Result> {
+  const { backgroundOperations } = useClientConnection();
+  const { activeWorkspace } = useActiveWorkspaceContext();
+  const requestScope =
+    activeWorkspace && scopeKey ? JSON.stringify([activeWorkspace.workspaceId, scopeKey]) : null;
   const [state, dispatch] = useReducer(asyncConfirmDialogReducer, {
     ...CLOSED_STATE,
     isOpen: initiallyOpen,
   });
   const continuationRef = useRef(onCommitted);
   const requestInFlightRef = useRef(false);
-  const previousScopeKeyRef = useRef(scopeKey);
+  const previousScopeKeyRef = useRef(requestScope);
   const requestTokenRef = useRef(0);
 
   useEffect(() => {
-    if (previousScopeKeyRef.current === scopeKey) {
+    if (previousScopeKeyRef.current === requestScope) {
       return;
     }
 
-    previousScopeKeyRef.current = scopeKey;
+    previousScopeKeyRef.current = requestScope;
     requestTokenRef.current += 1;
     requestInFlightRef.current = false;
     dispatch({ type: "reset" });
-  }, [scopeKey]);
+  }, [requestScope]);
 
   useEffect(() => {
     if (!enabled) {
@@ -132,31 +134,33 @@ export function useTaskAsyncConfirmDialog<Result>({
     if (!run || requestInFlightRef.current) {
       return;
     }
+    const refusal =
+      activeWorkspace && scopeKey
+        ? backgroundOperations.admissionError(activeWorkspace, { kind: "task", taskId: scopeKey })
+        : "Select the task's workspace before confirming.";
+    if (refusal) {
+      dispatch({ type: "refused", error: refusal });
+      return;
+    }
 
     const requestToken = requestTokenRef.current;
     const continuation = continuationRef.current;
     requestInFlightRef.current = true;
     dispatch({ type: "started" });
 
-    void run()
+    const result = run();
+    dispatch({ type: "openChanged", open: false });
+    void result
       .then(async (result) => {
         if (requestToken !== requestTokenRef.current) {
           return;
         }
         await continuation?.(result);
+        if (requestToken !== requestTokenRef.current) return;
         dispatch({ type: "succeeded" });
         onSucceeded();
       })
-      .catch((cause: unknown) => {
-        if (requestToken !== requestTokenRef.current) {
-          return;
-        }
-        dispatch({
-          type: "failed",
-          error: errorMessage(cause),
-          outcomeUnknown: isOutcomeUnknown(cause),
-        });
-      })
+      .catch(() => {})
       .finally(() => {
         if (requestToken !== requestTokenRef.current) {
           return;
@@ -164,7 +168,7 @@ export function useTaskAsyncConfirmDialog<Result>({
         requestInFlightRef.current = false;
         dispatch({ type: "finished" });
       });
-  }, [onSucceeded, run]);
+  }, [activeWorkspace, backgroundOperations, onSucceeded, run, scopeKey]);
 
   return {
     openDialog,
@@ -176,7 +180,7 @@ export function useTaskAsyncConfirmDialog<Result>({
       operation: {
         isPending: state.isPending || requestInFlightRef.current,
         error: state.error,
-        errorOutcomeUnknown: state.errorOutcomeUnknown,
+        errorOutcomeUnknown: false,
       },
     },
   };

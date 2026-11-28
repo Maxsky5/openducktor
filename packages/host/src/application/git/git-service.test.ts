@@ -393,7 +393,7 @@ const createFakeGitPort = ({
       });
     },
     restoreWorktreeToReference() {
-      return Effect.succeed(undefined);
+      return Effect.succeed(true);
     },
     commitsAheadBehind(workingDir, targetBranch) {
       return Effect.tryPromise({

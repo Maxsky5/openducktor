@@ -1,6 +1,12 @@
+import { useBackgroundAttempts } from "@openducktor/frontend-core/operations/use-background-attempts";
+import {
+  BackgroundOperationCard,
+  BackgroundOperationResults,
+} from "./background-operation-feedback";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useStartupAttempts } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 import {
+  type PropsWithChildren,
   type ReactElement,
   useEffect,
   useLayoutEffect,
@@ -52,19 +58,27 @@ const CARD_RESIZE = {
 export function StartupProgressHost(): ReactElement | null {
   const feedback = useFeedbackStore();
   const attempts = useStartupAttempts();
-  const startupVisible = attempts.some((attempt) => attempt.presentation === "notification");
+  const operations = useBackgroundAttempts();
+  const startupVisible =
+    operations.some((attempt) => !attempt.toastDismissed) ||
+    attempts.some((attempt) => attempt.presentation === "notification");
   useEffect(() => {
     feedback.setStartupVisible(startupVisible);
     return () => feedback.setStartupVisible(false);
   }, [feedback, startupVisible]);
   const inRoot = useStore(feedback.store, (state) => toastWindowOf(state) === null);
-  if (Platform.OS === "ios")
-    return (
-      <FullWindowOverlay unstable_accessibilityContainerViewIsModal={false}>
+  return (
+    <>
+      {Platform.OS === "ios" ? (
+        <FullWindowOverlay unstable_accessibilityContainerViewIsModal={false}>
+          <StartupStack />
+        </FullWindowOverlay>
+      ) : inRoot ? (
         <StartupStack />
-      </FullWindowOverlay>
-    );
-  return inRoot ? <StartupStack /> : null;
+      ) : null}
+      <BackgroundOperationResults />
+    </>
+  );
 }
 
 function StartupStack(): ReactElement | null {
@@ -89,7 +103,8 @@ function StartupStack(): ReactElement | null {
     if (!hidden) startupAttempts.expireSuccess();
   }, [hidden, startupAttempts]);
   const visible = attempts.filter((attempt) => attempt.presentation === "notification");
-  const empty = visible.length === 0;
+  const operations = useBackgroundAttempts().filter((attempt) => !attempt.toastDismissed);
+  const empty = visible.length === 0 && operations.length === 0;
   useLayoutEffect(() => {
     setHeldSize(empty ? { ...measured.current } : null);
   }, [empty]);
@@ -128,11 +143,18 @@ function StartupStack(): ReactElement | null {
           {/* Keep native output pages attached while the user's manual starts update card heights. */}
           {/* react-doctor-disable-next-line react-doctor/rn-no-scrollview-mapped-list */}
           {visible.map((attempt) => (
-            <StartupCard
-              key={attempt.id}
-              attemptId={attempt.id}
-              detailsMaxHeight={maxHeight * 0.45}
-            />
+            <ProgressCard key={attempt.id} attemptId={attempt.id}>
+              <StartupTrace
+                attemptId={attempt.id}
+                presentation="notification"
+                detailsMaxHeight={maxHeight * 0.45}
+              />
+            </ProgressCard>
+          ))}
+          {operations.map((attempt) => (
+            <ProgressCard key={attempt.id} attemptId={attempt.id}>
+              <BackgroundOperationCard attempt={attempt} />
+            </ProgressCard>
           ))}
         </ScrollView>
       </View>
@@ -140,13 +162,10 @@ function StartupStack(): ReactElement | null {
   );
 }
 
-function StartupCard({
+function ProgressCard({
   attemptId,
-  detailsMaxHeight,
-}: {
-  attemptId: string;
-  detailsMaxHeight: number;
-}): ReactElement {
+  children,
+}: PropsWithChildren<{ attemptId: string }>): ReactElement {
   const { notificationPresented } = useStartupPresentationActions();
   const reducedMotion = useReducedMotion();
   const [firstPresentation] = useState(() => !notificationPresented.has(attemptId));
@@ -177,11 +196,7 @@ function StartupCard({
             hasHeight.current = true;
           }}
         >
-          <StartupTrace
-            attemptId={attemptId}
-            presentation="notification"
-            detailsMaxHeight={detailsMaxHeight}
-          />
+          {children}
         </View>
       </Animated.View>
     </Animated.View>

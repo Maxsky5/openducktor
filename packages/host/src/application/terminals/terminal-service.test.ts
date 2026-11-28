@@ -1748,6 +1748,38 @@ describe("TerminalService", () => {
     expect(pty.operations).toContain("terminate");
   });
 
+  test("preserves the terminals that closed when task terminal cleanup partly fails", async () => {
+    let id = 0;
+    const { service, pty } = await makeService(makePty(), () => `terminal-${++id}`);
+    const scope = { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" };
+    for (const _ of [1, 2]) {
+      await Effect.runPromise(service.create({ workingDir: "/repo", context: scope }));
+    }
+    pty.failNextTerminate();
+    const result = await Effect.runPromise(
+      Effect.result(
+        Effect.scoped(
+          service.acquireTaskCleanup({
+            workspaceId: scope.workspaceId,
+            repoPath: scope.repoPath,
+            taskIds: [scope.taskId],
+          }),
+        ),
+      ),
+    );
+    const remaining = (await Effect.runPromise(service.list({ kind: "task", ...scope }))).terminals;
+    expect(remaining).toHaveLength(1);
+    expect(result).toMatchObject({
+      _tag: "Failure",
+      failure: {
+        code: "close_failed",
+        closedTerminalIds: ["terminal-1", "terminal-2"].filter(
+          (id) => id !== remaining[0]?.terminalId,
+        ),
+      },
+    });
+  });
+
   test("keeps tracking titles while a failed close remains retryable", async () => {
     const { service, pty, settleTitles } = await makeService();
     await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));

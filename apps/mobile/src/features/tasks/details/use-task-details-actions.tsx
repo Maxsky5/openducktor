@@ -11,7 +11,7 @@ import type { TaskReadState } from "@openducktor/frontend-core/tasks/details/use
 import { useTaskRemoveWorktreeConfirmDialog } from "@openducktor/frontend-core/tasks/details/use-task-remove-worktree-confirm-dialog";
 import { type ResolvedTaskCard as TaskCard, type TaskWorkflowAction } from "@openducktor/workflows";
 import { useNavigation } from "expo-router";
-import { type ReactElement, useCallback, useMemo } from "react";
+import { type ReactElement, useCallback, useEffect, useMemo, useRef } from "react";
 import { TaskRemoveWorktreeConfirm } from "@/features/workflow/close/task-remove-worktree-confirm";
 import { useTaskActions } from "@/features/workflow/use-task-actions";
 import { TaskActionsMenu } from "./task-actions-panel";
@@ -46,11 +46,12 @@ export function useTaskDetailsActions({
   summaries,
   records,
   scopeReady,
+  confirmClose,
   showUnlink,
   unlinking,
   embedded,
   onDeleteStarted,
-  onDeleteFailed,
+  onDeleteSettled,
 }: {
   workspace: WorkspaceRecord;
   task: TaskCard;
@@ -59,11 +60,12 @@ export function useTaskDetailsActions({
   records: readonly AgentSessionRecord[];
   /** The selected workspace is the workspace of the task. */
   scopeReady: boolean;
+  confirmClose: boolean;
   showUnlink: boolean;
   unlinking: boolean;
   embedded: boolean;
   onDeleteStarted: () => void;
-  onDeleteFailed: () => void;
+  onDeleteSettled: () => void;
 }): TaskDetailsActionsView {
   const navigation = useNavigation();
   const { unlinkPullRequest, removeTaskWorktree } = useRequiredContext(
@@ -84,13 +86,21 @@ export function useTaskDetailsActions({
         if (request.action === "delete") onDeleteStarted();
       },
       onSucceeded: (request) => {
-        if (request.action === "delete" && !embedded) closeScreen(navigation);
+        if (request.action !== "delete") return;
+        onDeleteSettled();
+        if (!embedded && navigation.isFocused()) closeScreen(navigation);
       },
       onFailed: (request) => {
-        if (request.action === "delete") onDeleteFailed();
+        if (request.action === "delete") onDeleteSettled();
       },
     },
   });
+  const requestedClose = useRef(false);
+  useEffect(() => {
+    if (!scopeReady || !confirmClose || requestedClose.current || task.status === "closed") return;
+    requestedClose.current = true;
+    confirm(task, "close");
+  }, [confirm, confirmClose, scopeReady, task]);
   const taskSessionsByTaskId = useMemo(
     () => buildTaskSessionsByTaskId(summaries.filter((session) => session.taskId === task.id)),
     [summaries, task.id],

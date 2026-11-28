@@ -1,3 +1,4 @@
+import { backgroundStep } from "../../operation-progress/background-operation-progress";
 import { Effect, type Scope } from "effect";
 import {
   HostDependencyError,
@@ -78,8 +79,9 @@ export const completeTaskClosure = <CleanupError, DecideError>({
         yield* taskActivityGuard.ensureNoUnresolvedHandoff({ workspaceId, taskId });
       }
       yield* cleanup;
-      return yield* Effect.suspend(() =>
-        taskStore.transitionTask({ repoPath, taskId, workspaceId, decide }),
+      return yield* backgroundStep(
+        { id: "task-close", label: "Close task" },
+        Effect.suspend(() => taskStore.transitionTask({ repoPath, taskId, workspaceId, decide })),
       );
     }),
   );

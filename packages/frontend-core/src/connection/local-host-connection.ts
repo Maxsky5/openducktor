@@ -10,6 +10,7 @@ import {
   createHostClient,
   liveSessionStreamEventName,
   STARTUP_EVENT_STREAM_NAME,
+  BACKGROUND_OPERATION_EVENT_STREAM_NAME,
   USAGE_EVENT_STREAM_NAME,
   type HostClient,
 } from "@openducktor/host-client";
@@ -50,6 +51,7 @@ export type LocalHostConnection = Pick<
   | "subscribeWorkspaceProviderSetupUpdates"
   | "subscribeWorkspaceSessionUpdates"
   | "subscribeStartupProgress"
+  | "subscribeBackgroundOperationProgress"
   | "subscribeRuntimeChanges"
   | "subscribeTaskMergeStatusUpdates"
   | "subscribeUsageProgress"
@@ -193,6 +195,18 @@ export const createLocalHostConnection = ({
             return listener(event);
         },
         STARTUP_EVENT_STREAM_NAME,
+      ),
+    subscribeBackgroundOperationProgress: (listener) =>
+      subscribeReady(
+        "openducktor://background-operation-progress",
+        (event) => {
+          if (
+            isConnectionControlEvent(event) ||
+            event.channel === "openducktor://background-operation-progress"
+          )
+            return listener(event);
+        },
+        BACKGROUND_OPERATION_EVENT_STREAM_NAME,
       ),
     subscribeRuntimeChanges: (listener) =>
       subscribeReady(RUNTIME_CHANGED_EVENT_CHANNEL, (event) => {

@@ -6,9 +6,7 @@ import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import { taskQueryKeys } from "../../queries/tasks";
 import { issueItemsQueryKeys } from "../../queries/issue-items";
 import { agentSessionQueryKeys } from "../../queries/agent-sessions";
-import { taskWorktreeQueryKeys } from "../../queries/build-runtime";
 import { taskStopImpactQueryKeys } from "../../queries/task-stop-impact";
-import { taskWorktreeCleanupImpactQueryKeys } from "../../queries/task-worktree-cleanup-impact";
 import type { TaskChatDraftCleanup } from "./task-chat-draft-cleanup";
 import type { TaskMutationRunner } from "./task-mutation-runner";
 import {
@@ -18,6 +16,7 @@ import {
 import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const SCOPE = { ...workspaceRefFixture("/repo"), workspaceName: "Workspace" };
+const tracking = { operationId: "operation-1" };
 
 const createQueryClient = (): QueryClient => createTestClientConnection().queryClient;
 
@@ -35,7 +34,7 @@ const createRunTaskMutation =
   ): TaskMutationRunner["runTaskMutation"] =>
   async (options) => {
     received.push(options);
-    return options.run("/repo");
+    return options.background ? options.run(tracking) : options.run("/repo");
   };
 
 describe("createTaskMutationCommands", () => {
@@ -56,7 +55,7 @@ describe("createTaskMutationCommands", () => {
       activeWorkspaceId: "workspace-1",
       queryClient: client,
       hostPort: { ...createHostPort(), taskUpdate: () => response },
-      runTaskMutation: (options) => options.run("/repo"),
+      runTaskMutation: createRunTaskMutation([]),
       taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
     });
     try {
@@ -111,7 +110,10 @@ describe("createTaskMutationCommands", () => {
     );
     expect(received).toHaveLength(1);
     // The board shows the active workspace, so the message names the other workspace.
-    expect(received[0]?.successTitle).toBe("Task created in Other workspace");
+    const [mutation] = received;
+    expect(mutation && !mutation.background && mutation.successTitle).toBe(
+      "Task created in Other workspace",
+    );
   });
 
   test("does nothing for a blank title", async () => {
@@ -143,6 +145,7 @@ describe("createTaskMutationCommands", () => {
       throw new Error("Create failed");
     });
     const runTaskMutation: TaskMutationRunner["runTaskMutation"] = async (options) => {
+      if (options.background) throw new Error("Unexpected background task creation");
       received.push(options);
       try {
         const result = await options.run("/repo");
@@ -235,10 +238,8 @@ describe("createTaskMutationCommands", () => {
     const scope = { workspaceId: "workspace-1", repoPath: "/repo" };
     const sessionsKey = agentSessionQueryKeys.list(scope, "task-1");
     const stopImpactKey = taskStopImpactQueryKeys.repo(scope);
-    const worktreeKey = taskWorktreeQueryKeys.taskWorktree({ ...scope, taskId: "task-1" });
     queryClient.setQueryData(sessionsKey, []);
     queryClient.setQueryData(stopImpactKey, {});
-    queryClient.setQueryData(worktreeKey, {});
     const cleanupTaskIds: string[][] = [];
     const taskChatDraftCleanup: Pick<TaskChatDraftCleanup, "runMutation"> = {
       runMutation: async (input) => {
@@ -260,11 +261,11 @@ describe("createTaskMutationCommands", () => {
     expect(taskDelete).toHaveBeenCalledWith(
       { workspaceId: "workspace-1", repoPath: "/repo" },
       "task-1",
+      tracking,
     );
     expect(cleanupTaskIds).toEqual([["task-1"]]);
     expect(queryClient.getQueryState(sessionsKey)).toBeUndefined();
     expect(queryClient.getQueryState(stopImpactKey)?.isInvalidated).toBe(true);
-    expect(queryClient.getQueryState(worktreeKey)?.isInvalidated).toBe(true);
   });
 
   test("invalidates cached issue links for the deleted task's repository", async () => {
@@ -301,7 +302,6 @@ describe("createTaskMutationCommands", () => {
   });
 
   test("routes close through cleanup after its host mutation", async () => {
-    const received: Parameters<TaskMutationRunner["runTaskMutation"]>[0][] = [];
     const calls: string[] = [];
     const hostPort: TaskMutationCommandHostPort = {
       ...createHostPort(),
@@ -321,7 +321,7 @@ describe("createTaskMutationCommands", () => {
     const commands = createTaskMutationCommands({
       activeRepoPath: "/repo",
       activeWorkspaceId: "workspace-1",
-      runTaskMutation: createRunTaskMutation(received),
+      runTaskMutation: createRunTaskMutation([]),
       hostPort,
       queryClient: createQueryClient(),
       taskChatDraftCleanup,
@@ -330,37 +330,6 @@ describe("createTaskMutationCommands", () => {
     await commands.closeTask("task-1", { removeWorktree: false });
 
     expect(calls).toEqual(["cleanup:task-1:before", "close:false", "cleanup:task-1:after"]);
-    expect(received[0]?.successDescription).toBe(
-      "task-1. Its worktree and local branch were kept.",
-    );
-  });
-
-  test("removes the worktree of a closed task and reads its cleanup impact again", async () => {
-    const calls: string[] = [];
-    const queryClient = createQueryClient();
-    const impactKey = taskWorktreeCleanupImpactQueryKeys.get(
-      { workspaceId: "workspace-1", repoPath: "/repo" },
-      "task-1",
-    );
-    queryClient.setQueryData(impactKey, {});
-    const commands = createTaskMutationCommands({
-      activeRepoPath: "/repo",
-      activeWorkspaceId: "workspace-1",
-      runTaskMutation: createRunTaskMutation([]),
-      hostPort: {
-        ...createHostPort(),
-        taskWorktreeRemove: async (repoPath, taskId) => {
-          calls.push(`remove:${repoPath.repoPath}:${taskId}`);
-        },
-      },
-      queryClient,
-      taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
-    });
-
-    await commands.removeTaskWorktree("task-1");
-
-    expect(calls).toEqual(["remove:/repo:task-1"]);
-    expect(queryClient.getQueryState(impactKey)?.isInvalidated).toBe(true);
   });
 
   test("invalidates stop impact after a failed close attempt", async () => {

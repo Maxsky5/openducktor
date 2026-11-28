@@ -92,7 +92,7 @@ export function useTaskApprovalFlow({
   showGitProviderContextLoadFailure,
 }: UseTaskApprovalFlowArgs): UseTaskApprovalFlowResult {
   const host = useHostClient();
-  const { feedback } = useClientConnection();
+  const { backgroundOperations, feedback } = useClientConnection();
   const queryClient = useQueryClient();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
@@ -336,27 +336,27 @@ export function useTaskApprovalFlow({
       submissionRoute.kind === "close_task"
     ) {
       if (removeWorktree === null) return;
-      void submitFlight.start(async () => {
-        dispatch({ type: "clear_error" });
-        dispatch({ type: "start_submitting" });
-        try {
-          // The close shows its own success and failure toasts.
-          const committed = await closeTask(submissionRoute.approval.taskId, { removeWorktree });
-          if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
-            return;
-          }
-          await completeApproval(committed);
-        } catch (error) {
-          if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
-            return;
-          }
-          dispatch({
-            type: "return_to_editable",
-            errorMessage: errorMessage(error),
-            errorOutcomeUnknown: isOutcomeUnknown(error),
-          });
-        }
+      const { taskId } = submissionRoute.approval;
+      const refusal = backgroundOperations.admissionError(submissionWorkspace, {
+        kind: "task",
+        taskId,
       });
+      if (refusal) {
+        dispatch({ type: "set_error", errorMessage: refusal });
+        return;
+      }
+      const continuation = continuationRef.current;
+      const result = closeTask(taskId, { removeWorktree });
+      reset();
+      void result
+        .then(async (committed) => {
+          if (hasSameWorkspaceIdentity(workspaceIdentityRef.current, submissionWorkspace)) {
+            await continuation?.(committed);
+          }
+        })
+        .catch(() => {
+          // The background operation reports the command outcome.
+        });
       return;
     }
 
@@ -438,6 +438,7 @@ export function useTaskApprovalFlow({
       }
     });
   }, [
+    backgroundOperations,
     feedback,
     host,
     closeTask,
@@ -489,7 +490,7 @@ export function useTaskApprovalFlow({
     const submissionWorkspace = approvalState.workspaceIdentity;
     const submissionVersion = approvalRequestVersionRef.current;
     void submitFlight.start(async () => {
-      dispatch({ type: "clear_error" });
+      dispatch({ type: "set_error", errorMessage: null });
       dispatch({ type: "start_submitting" });
       try {
         const result = await completeDirectMergeApproval({
@@ -551,7 +552,7 @@ export function useTaskApprovalFlow({
     worktreeResetLabel: openTask ? (availableWorktreeResetAction(openTask)?.label ?? null) : null,
     removeWorktree,
     onRemoveWorktreeChange: (nextRemoveWorktree: boolean) => {
-      dispatch({ type: "clear_error" });
+      dispatch({ type: "set_error", errorMessage: null });
       closeChoice.onRemoveWorktreeChange(nextRemoveWorktree);
     },
     gitProviderContext,

@@ -1,3 +1,8 @@
+import { getProductionTaskViewSync } from "../queries/task-view-sync";
+import {
+  createBackgroundOperationStore,
+  type BackgroundOperationStore,
+} from "../operations/background-operation-store";
 import type { HostClient } from "@openducktor/host-client";
 import type { SettingsSnapshot } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
@@ -89,6 +94,7 @@ export type ClientConnection = {
   readonly feedback: ClientFeedback;
   readonly stageAttachment: AttachmentStager;
   readonly drafts: ClientDrafts;
+  readonly backgroundOperations: BackgroundOperationStore;
   readonly startupAttempts: StartupAttemptStore;
   /**
    * Writes every unsaved chat and inline comment draft now. It rejects with an actionable message
@@ -200,6 +206,19 @@ export const createClientConnection = ({
     stageAttachment,
     drafts,
     startupAttempts,
+    backgroundOperations: createBackgroundOperationStore(host, (attempt) => {
+      if (
+        attempt.progress?.steps.some((step) => step.id === "publish" && step.state === "failed")
+      ) {
+        void getProductionTaskViewSync(queryClient)
+          .refreshManually(attempt.workspace)
+          .catch((cause) =>
+            feedback.show("error", "Could not refresh workspace tasks", {
+              description: `${attempt.workspace.workspaceId}. ${errorMessage(cause)}`,
+            }),
+          );
+      }
+    }),
     saveDrafts,
     dispose: () => {
       disposal ??= (async () => {
@@ -213,6 +232,7 @@ export const createClientConnection = ({
         };
         // Page hide runs this. The draft writes start before the first await, so they end before unload.
         const draftsSaved = saveDraftsOnDispose ? attempt(saveDrafts) : Promise.resolve();
+        connection.backgroundOperations.dispose();
         startupAttempts.dispose();
         releaseStartupTerminalOutput(connection);
         releaseStartupPreparations(queryClient);

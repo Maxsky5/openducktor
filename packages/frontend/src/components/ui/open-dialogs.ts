@@ -21,6 +21,12 @@ export const hasOpenModalDialog = (): boolean => {
   return false;
 };
 
+/** Closing dialog content keeps its focus scope until it unmounts. */
+export const hasMountedModalDialog = (): boolean =>
+  document.querySelector(
+    '[data-slot="dialog-content"][aria-modal="true"], [data-slot="dialog-positioner"]',
+  ) !== null;
+
 export const subscribeDialogFocusReleased = (listener: () => void): (() => void) => {
   focusReleasedListeners.add(listener);
   return () => {

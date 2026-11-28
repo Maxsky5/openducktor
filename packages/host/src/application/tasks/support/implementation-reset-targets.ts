@@ -11,7 +11,7 @@ import type { TaskActivityGuardPort } from "../../../ports/task-activity-guard-p
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import {
   appendTaskCleanupProgress,
-  recordStoppedAgentSessionCount,
+  stopTaskSessionsWithProgress,
   type TaskCleanupProgressState,
 } from "./task-cleanup-progress";
 import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
@@ -116,12 +116,14 @@ export const cleanupImplementationResetActivity = (
     if (!activityGuard) {
       return;
     }
-    const { stoppedSessionCount } = yield* activityGuard.cleanupTaskSessions({
-      workspaceId: activity.workspaceId,
-      repoPath: activity.repoPath,
-      taskSessions: [{ taskId: activity.taskId, sessions: activity.sessions }],
-    });
-    recordStoppedAgentSessionCount(progress, stoppedSessionCount);
+    yield* stopTaskSessionsWithProgress(
+      progress,
+      activityGuard.cleanupTaskSessions({
+        workspaceId: activity.workspaceId,
+        repoPath: activity.repoPath,
+        taskSessions: [{ taskId: activity.taskId, sessions: activity.sessions }],
+      }),
+    );
   });
 
 const resolveCanonicalImplementationResetTarget = (

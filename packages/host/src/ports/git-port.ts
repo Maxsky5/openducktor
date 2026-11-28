@@ -359,7 +359,7 @@ export type GitPort = {
   restoreWorktreeToReference(
     workingDirectory: string,
     reference: string,
-  ): Effect.Effect<void, GitPortError>;
+  ): Effect.Effect<boolean, GitPortError>;
   commitsAheadBehind(
     workingDir: string,
     targetBranch: string,

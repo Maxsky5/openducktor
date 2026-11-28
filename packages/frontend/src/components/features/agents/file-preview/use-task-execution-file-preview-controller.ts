@@ -23,6 +23,7 @@ import {
 
 export type UseTaskExecutionFilePreviewControllerResult = {
   model: TaskExecutionSelectedFilePreviewModel;
+  hasUnsavedChanges: boolean;
   onSelectFile(file: TaskExecutionSelectedFile): TaskExecutionFileSelectionResult;
   requestContextTransition(
     applyTransition: () => void | Promise<void | boolean>,
@@ -210,7 +211,12 @@ export const useTaskExecutionFilePreviewController = (
   );
 
   return useMemo(
-    () => ({ model, onSelectFile, requestContextTransition }),
-    [model, onSelectFile, requestContextTransition],
+    () => ({
+      model,
+      hasUnsavedChanges: state.leavePolicy === "confirm",
+      onSelectFile,
+      requestContextTransition,
+    }),
+    [model, onSelectFile, requestContextTransition, state.leavePolicy],
   );
 };

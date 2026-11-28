@@ -174,6 +174,7 @@ export function useTaskActions({
           onClosed={onClosed}
           onStarted={confirmed.started}
           onSucceeded={confirmed.succeeded}
+          onFailed={confirmed.failed}
         />
         {resetImplementationModal ? (
           <ResetImplementationConfirmation model={resetImplementationModal} />

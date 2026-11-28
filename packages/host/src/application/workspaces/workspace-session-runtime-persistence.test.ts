@@ -851,7 +851,7 @@ describe("Workspace Session persistence through the shared command module", () =
       claudeSessionMetadata: createClaudeSessionMetadataTestDouble(),
       runtimeAdmission: { admit: (_kind, work) => work },
       runForkSourceOperation: h.live.runForkSourceOperation,
-      browserTabs: { closeOwnerTabs: () => Effect.void },
+      browserTabs: { closeOwnerTabs: () => Effect.succeed(false) },
       terminalService: {
         acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
       },

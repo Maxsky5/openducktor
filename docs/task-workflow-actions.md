@@ -106,6 +106,16 @@ Pull Request offers Write manually and a generated draft. The generated draft st
 
 Uncommitted changes block Direct Merge and Pull Request. When merge detection reports the task branch as merged, the modal selects Close Task. When the task worktree is missing, the modal offers Close Task and the available workflow action that resets the worktree, with the label of that action. A workflow without such an action gets only Close Task. When the approval context read fails, it offers only Close Task.
 
+## Background task actions
+
+Delete Task, Reset Task, Reset Implementation, Close Task, Remove Worktree, and Link Merged Pull Request close their confirmation after final consent. The progress toast identifies the original workspace and task. Other tasks stay available.
+
+The toast omits cleanup steps that made no changes. For example, Reset Task shows a pull request link removal only if the task had a link.
+
+If an action is already running for the task, another confirmation stays open and tells you to wait.
+
+A confirmed failure opens a result dialog after the current confirmation closes. The dialog lists the completed steps, the failure, and steps that did not run when the host knows them. If the result is unconfirmed, check the original task and give fresh consent before submitting again.
+
 ## Reset implementation
 
 `reset_implementation` discards the current build and QA attempt. It can run from `in_progress`, `blocked`, `ai_review`, or `human_review`.
@@ -208,11 +218,11 @@ Detect PR keeps its progress and results for the repository and task that starte
 
 Each task shows its own Detect PR or Unlink PR progress when several operations run in one workspace. Finishing one operation does not clear progress from another task.
 
-A detected merged pull request waits for confirmation in its own workspace. If that workspace is inactive when detection finishes, a toast identifies the task and repository and tells the user to return. The confirmation shows when the user returns. Each task keeps its own confirmation. Cancel stays disabled while the merged link runs, including after the user switches away and back.
+A detected merged pull request waits for confirmation in its own workspace. If that workspace is inactive when detection finishes, a toast identifies the task and repository and tells the user to return. The confirmation shows when the user returns. Each task keeps its own confirmation. Submitting a merged link closes that confirmation and prevents another link for the same task while the host works.
 
 The confirmation names the task it will close. It always shows the task ID and shows the title captured from the initiating workspace when available. A workspace switch or another selected task does not change that identity.
 
-Closing or removing a workspace clears its pending Detect PR requests and confirmations. Late detection results and errors do not restore them. Reopening requires a fresh Detect PR. A link or unlink already in progress keeps its busy guards and finishes in its original repository. A failed link does not restore a confirmation cleared by closure.
+Closing or removing a workspace clears its pending Detect PR requests and confirmations. Late detection results and errors do not restore them. Reopening requires a fresh Detect PR. A link or unlink already in progress keeps its busy guards and finishes in its original repository. If the link saves and task closure fails, choose Finish closing task in the result dialog. It opens a new Close Task confirmation with current worktree information.
 
 The host syncs pull requests for all open workspaces when it starts. It waits five minutes after each iteration before it syncs again. Closed workspaces and incomplete removals do not sync.
 

@@ -493,7 +493,7 @@ export const createPersistenceHarness = async (
     claudeSessionMetadata: createClaudeSessionMetadataTestDouble(),
     runtimeAdmission: { admit: (_kind, work) => work },
     runForkSourceOperation: commands.runForkSourceOperation,
-    browserTabs: { closeOwnerTabs: () => Effect.void },
+    browserTabs: { closeOwnerTabs: () => Effect.succeed(false) },
     terminalService: {
       acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
     },
