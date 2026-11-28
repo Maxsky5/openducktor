@@ -1,7 +1,7 @@
 import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { ODT_HTML_PREVIEW_MAX_STORED_BYTES } from "@openducktor/contracts";
+import { imagePreviewMime, ODT_HTML_PREVIEW_MAX_STORED_BYTES } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type {
@@ -18,6 +18,13 @@ const HTML_MARKUP_START =
 const isNetworkPath = (candidate: string): boolean =>
   candidate.startsWith("\\\\") || candidate.startsWith("//");
 
+// Escape delimiters that would end an HTML attribute, srcset candidate, or CSS URL.
+const escapeImageFragment = (fragment: string): string =>
+  fragment.replace(
+    /[\s"'\x60<>=&\\(),]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+
 const resolveLocalImage = (
   reference: string,
   relative: boolean,
@@ -25,7 +32,20 @@ const resolveLocalImage = (
 ): LocalPreviewImageReference | null => {
   if (!relative && !/^file:\/\//i.test(reference)) {
     const filePath = /^[a-z]:/i.test(reference) ? reference.replaceAll("\\\\", "\\") : reference;
-    return { filePath, extension: path.extname(filePath).toLowerCase(), fragment: "" };
+    const extension = path.extname(filePath).toLowerCase();
+    const hash = filePath.indexOf("#");
+    // Keep native filenames that contain a literal hash and end in a supported image extension.
+    if (hash !== -1 && extension !== ".avif" && !imagePreviewMime(extension)) {
+      const svgPath = filePath.slice(0, hash);
+      if (path.extname(svgPath).toLowerCase() === ".svg") {
+        return {
+          filePath: svgPath,
+          extension: ".svg",
+          fragment: escapeImageFragment(filePath.slice(hash)),
+        };
+      }
+    }
+    return { filePath, extension, fragment: "" };
   }
 
   try {
@@ -37,12 +57,11 @@ const resolveLocalImage = (
     // Classify a relative URL without a base directory without assigning it a host path.
     const filePath = relative && baseDir === undefined ? undefined : fileURLToPath(url);
     const pathname = filePath ?? decodeURIComponent(url.pathname);
-    // Escape delimiters that would end an HTML attribute, srcset candidate, or CSS URL.
-    const fragment = url.hash.replace(
-      /[\s"'\x60<>=&\\(),]/g,
-      (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
-    );
-    return { filePath, extension: path.extname(pathname).toLowerCase(), fragment };
+    return {
+      filePath,
+      extension: path.extname(pathname).toLowerCase(),
+      fragment: escapeImageFragment(url.hash),
+    };
   } catch {
     return null;
   }

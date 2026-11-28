@@ -438,7 +438,10 @@ describe("createSessionHtmlPreviewService", () => {
     await writeFile(path.join(tempRoot, "chart.png"), ONE_PIXEL_PNG);
     const svg =
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><view id="detail" viewBox="0 0 5 5"/></svg>';
-    await writeFile(path.join(tempRoot, "icon.svg"), svg);
+    const svgPath = path.join(tempRoot, "icon.svg");
+    await writeFile(svgPath, svg);
+    const hashInFilename = path.join(tempRoot, "icon.svg#literal.svg");
+    await writeFile(hashInFilename, svg);
     const png = `data:image/png;base64,${ONE_PIXEL_PNG.toString("base64")}`;
     const svgUri = `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
     const inline = (html: string) =>
@@ -461,6 +464,8 @@ describe("createSessionHtmlPreviewService", () => {
       ),
     ).toBe(`<img src="${png}" srcset="${png}" style="background:url(${png})">`);
     expect(await inline('<img src="icon.svg#detail">')).toBe(`<img src="${svgUri}#detail">`);
+    expect(await inline(`<img src="${svgPath}#detail">`)).toBe(`<img src="${svgUri}#detail">`);
+    expect(await inline(`<img src="${hashInFilename}">`)).toBe(`<img src="${svgUri}">`);
   });
 
   test("charges the bytes of the original image reference at the stored size limit", async () => {

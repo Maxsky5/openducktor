@@ -4,7 +4,7 @@ const NON_MARKUP_BLOCK =
   /<!--[\s\S]*?(?:-->|$)|<(script|textarea|title|xmp|iframe|noembed|noframes|noscript)\b[\s\S]*?(?:<\/\1\s*>|$)|<plaintext\b[\s\S]*$/gi;
 export const HTML_STYLE_ELEMENT = /<style\b[^>]*(?:>|$)([\s\S]*?)(?:<\/style\s*>|$)/dgi;
 export const HTML_START_TAG = /<[a-z][a-z0-9:-]*(?:\s+(?:[^"'>]|"[^"]*"|'[^']*')*)?>/dgi;
-export const CSS_COMMENT = /\/\*[\s\S]*?(?:\*\/|$)/g;
+const CSS_COMMENT = /\/\*[\s\S]*?(?:\*\/|$)/g;
 // The lookbehind skips base64 runs, such as an inlined image that happens to contain "1vh".
 const VIEWPORT_HEIGHT_UNIT = /(?<![\w.+/])(?:\d+(?:\.\d+)?|\.\d+)[sld]?vh(?![\w-])/i;
 // Matches Tailwind viewport-height utilities like min-h-screen, h-dvh, md:h-[80vh], !min-h-svh.
