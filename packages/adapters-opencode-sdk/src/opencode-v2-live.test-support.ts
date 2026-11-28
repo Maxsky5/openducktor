@@ -15,6 +15,7 @@ import {
   model,
   nativeClient,
   eventChannel,
+  sessionLogResponse,
   type NativeRequest,
   testWorkflowRolePolicy,
 } from "./opencode-v2.test-support";
@@ -64,6 +65,9 @@ export const prepareFixture = (
     if (url.pathname === "/api/session/active") return response({});
     if (url.pathname === "/api/session") return cursorPage([]);
     if (url.pathname.endsWith("/message")) return cursorPage([]);
+    const log = /^\/api\/experimental\/session\/([^/]+)\/log$/.exec(url.pathname);
+    if (log?.[1] && url.searchParams.get("follow") === "false")
+      return sessionLogResponse(decodeURIComponent(log[1]));
     if (url.pathname.endsWith("/instructions/entries")) return response([]);
     if (/\/(permission|form|inbox)$/.test(url.pathname)) return response([]);
     if (method === "PATCH") return noContent();

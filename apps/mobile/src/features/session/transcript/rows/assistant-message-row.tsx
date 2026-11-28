@@ -99,7 +99,13 @@ function FinalAssistantFooter({
     sourceRuntime === runtimeKind ? modelCatalog : null,
   );
   const forkPoint = isStreaming ? undefined : message.meta.forkPoint;
-  if (!copyable && forkPoint === undefined && footer.infoParts.length === 0) {
+  const generationRateLabel = isStreaming ? undefined : footer.generationRateLabel;
+  if (
+    !copyable &&
+    forkPoint === undefined &&
+    footer.infoParts.length === 0 &&
+    !generationRateLabel
+  ) {
     return null;
   }
   const accent = runtimeAccentColor(theme, sourceRuntime);
@@ -109,10 +115,16 @@ function FinalAssistantFooter({
       {footer.infoParts.length > 0 ? (
         <View style={styles.info}>
           <View style={[styles.dot, { backgroundColor: accent }]} />
-          <Text numberOfLines={1} style={styles.infoText}>
+          <Text numberOfLines={1} style={[styles.infoText, styles.modelText]}>
             {footer.infoParts.join(" · ")}
           </Text>
         </View>
+      ) : null}
+      {generationRateLabel ? (
+        <Text numberOfLines={1} style={styles.infoText}>
+          {footer.infoParts.length > 0 ? "· " : ""}
+          {generationRateLabel}
+        </Text>
       ) : null}
       {copyable ? (
         <CopyControl
@@ -207,12 +219,11 @@ const styles = StyleSheet.create((theme) => ({
   dot: { width: 6, height: 6, borderRadius: 3 },
   infoText: {
     ...sansWeight("regular"),
-    flexShrink: 1,
-    minWidth: 0,
     fontSize: 12.5,
     lineHeight: 17,
     color: theme.desktop.mutedForeground,
   },
+  modelText: { flexShrink: 1, minWidth: 0 },
   action: { marginVertical: -4, paddingHorizontal: 4 },
   blocked: { opacity: 0.45 },
 }));

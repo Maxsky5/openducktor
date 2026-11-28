@@ -144,6 +144,7 @@ export const agentSessionHistoryMessageSchema = z.discriminatedUnion("role", [
       error: z.string().optional(),
       durationMs: z.number().optional(),
       totalTokens: z.number().optional(),
+      generationTokensPerSecond: z.number().positive().optional(),
       contextWindow: z.number().optional(),
       model: agentModelSelectionSchema.optional(),
       questionRequest: agentSessionPendingQuestionRequestSchema.optional(),

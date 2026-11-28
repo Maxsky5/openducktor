@@ -28,6 +28,11 @@ import {
   type AgentToolResultContent,
   type AgentUserMessageOrigin,
 } from "@openducktor/contracts";
+import {
+  isStoppedOpenCodeReply,
+  openCodeTurnGenerationRates,
+  type OpenCodeTurnRateOptions,
+} from "./opencode-turn-generation-rate";
 import { readOpenCodeGoalKickoffObjective } from "./opencode-goals";
 import { jobContext, updateJobTool, type JobContext } from "./opencode-job-projection";
 import { resultEndedAt } from "./opencode-kept-result";
@@ -304,7 +309,7 @@ const nativeTurnDurations = (messages: Iterable<SessionMessageInfo>): Map<string
     if (message.type === "idle") startedAt = undefined;
     if (message.type !== "assistant") continue;
     startedAt ??= message.time.created;
-    if (message.finish === "stop" && !message.error && message.time.completed !== undefined) {
+    if (isStoppedOpenCodeReply(message)) {
       durations.set(message.id, Math.max(0, message.time.completed - startedAt));
       startedAt = undefined;
     }
@@ -316,6 +321,7 @@ export type OpenCodeMessageProjectionContext = {
   readonly completions: ReadonlyMap<string, SubagentCompletion>;
   readonly durations: ReadonlyMap<string, number>;
   readonly completedReplies: ReadonlySet<string>;
+  readonly generationRates: ReadonlyMap<string, number>;
   readonly shells: ShellContext;
   readonly jobs: JobContext;
   /** The idle records of failed turns whose reply already shows the error. */
@@ -329,10 +335,7 @@ export const completedOpenCodeReplies = (messages: Iterable<SessionMessageInfo>)
   let finalReply: string | undefined;
   for (const message of messages) {
     if (message.type === "assistant")
-      finalReply =
-        message.finish === "stop" && !message.error && message.time.completed !== undefined
-          ? message.id
-          : undefined;
+      finalReply = isStoppedOpenCodeReply(message) ? message.id : undefined;
     if (message.type !== "idle") continue;
     if (message.outcome === "succeeded" && finalReply) completed.add(finalReply);
     finalReply = undefined;
@@ -400,13 +403,22 @@ const waitingNotices = (inbox: Iterable<SessionInboxInfo>): SessionMessageSynthe
 export const messageProjectionContext = (
   messages: Iterable<SessionMessageInfo>,
   inbox: Iterable<SessionInboxInfo> = [],
+  rateOptions: OpenCodeTurnRateOptions & { messages?: readonly SessionMessageInfo[] } = {},
 ): OpenCodeMessageProjectionContext => {
   const retained = [...messages];
   const results = [...retained, ...waitingNotices(inbox)];
+  const completedReplies = completedOpenCodeReplies(retained);
+  const rateMessages = rateOptions.messages ?? retained;
+  const generationRates = openCodeTurnGenerationRates(
+    rateMessages,
+    rateOptions.messages ? completedOpenCodeReplies(rateMessages) : completedReplies,
+    rateOptions,
+  );
   return {
     completions: subagentCompletions(results),
     durations: nativeTurnDurations(retained),
-    completedReplies: completedOpenCodeReplies(retained),
+    completedReplies,
+    generationRates,
     shells: shellContext(results),
     jobs: jobContext(results),
     shownFailures: shownFailures(retained),
@@ -683,10 +695,12 @@ export const projectMessage = (
         reason: message.finish,
       });
       const durationMs = context?.durations.get(message.id);
-      if (message.finish === "stop" && !message.error && durationMs !== undefined)
+      if (isStoppedOpenCodeReply(message) && durationMs !== undefined)
         history.durationMs = durationMs;
     }
     if (message.tokens) history.totalTokens = tokenTotal(message.tokens);
+    const generationRate = context?.generationRates.get(message.id);
+    if (generationRate !== undefined) history.generationTokensPerSecond = generationRate;
     if (context?.completedReplies.has(message.id)) history.forkPoint = { messageId: message.id };
     return agentSessionHistoryMessageSchema.parse(history);
   }
@@ -900,12 +914,7 @@ export const messageEvents = (
     type: "assistant_part",
     part,
   }));
-  if (
-    message.type === "assistant" &&
-    message.time.completed !== undefined &&
-    message.finish === "stop" &&
-    !message.error
-  ) {
+  if (isStoppedOpenCodeReply(message)) {
     const completed: Extract<AgentEvent, { type: "assistant_message" }> = {
       ...base,
       type: "assistant_message",
@@ -915,6 +924,8 @@ export const messageEvents = (
     };
     if (projected.durationMs !== undefined) completed.durationMs = projected.durationMs;
     if (projected.totalTokens !== undefined) completed.totalTokens = projected.totalTokens;
+    if (projected.generationTokensPerSecond !== undefined)
+      completed.generationTokensPerSecond = projected.generationTokensPerSecond;
     if (projected.forkPoint !== undefined) completed.forkPoint = projected.forkPoint;
     events.push(completed);
   }

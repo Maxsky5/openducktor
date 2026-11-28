@@ -67,6 +67,14 @@ describe("OpenCode subagent ownership", () => {
               }),
               { headers: { "Content-Type": "text/event-stream" } },
             );
+          if (
+            path === `/api/experimental/session/${ref.externalSessionId}/log` &&
+            url.searchParams.get("follow") === "false"
+          )
+            return new Response(
+              `data: ${JSON.stringify({ type: "log.synced", aggregateID: ref.externalSessionId })}\n\n`,
+              { headers: { "Content-Type": "text/event-stream" } },
+            );
           if (path === "/api/info")
             return Response.json({ version: "2.0.24", pid: 42, urls: [], paths: { tmp: "/tmp" } });
           if (path.endsWith("/migration/v1")) return Response.json({ status: "completed" });

@@ -110,13 +110,18 @@ const mergeQueuedSessionEvent = <Event extends QueuedSessionEvent>(
     };
   }
 
-  if (
-    previous.type === "assistant_message" &&
-    event.type === "assistant_message" &&
-    previous.forkPoint &&
-    !event.forkPoint
-  ) {
-    return { ...event, forkPoint: previous.forkPoint };
+  if (previous.type === "assistant_message" && event.type === "assistant_message") {
+    const updates: Pick<
+      Extract<SessionEvent, { type: "assistant_message" }>,
+      "forkPoint" | "generationTokensPerSecond"
+    > = {};
+    if (!event.forkPoint && previous.forkPoint) updates.forkPoint = previous.forkPoint;
+    if (
+      event.generationTokensPerSecond === undefined &&
+      previous.generationTokensPerSecond !== undefined
+    )
+      updates.generationTokensPerSecond = previous.generationTokensPerSecond;
+    return { ...event, ...updates };
   }
 
   if (

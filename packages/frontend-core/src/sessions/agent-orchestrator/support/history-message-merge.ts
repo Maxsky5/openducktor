@@ -100,16 +100,16 @@ export const mergeHistoryMessages = (
         }
         // Whole-message text can span several parts. Keep it out of each part's merge.
         absorbedCurrentMessageIds.add(wholeMessage.id);
-        if (
-          isFinalAssistantChatMessage(message) &&
-          wholeMessage.meta?.kind === "assistant" &&
-          wholeMessage.meta.forkPoint &&
-          !message.meta.forkPoint
-        ) {
-          message = {
-            ...message,
-            meta: { ...message.meta, forkPoint: wholeMessage.meta.forkPoint },
-          };
+        if (isFinalAssistantChatMessage(message) && isFinalAssistantChatMessage(wholeMessage)) {
+          const meta = { ...message.meta };
+          if (!meta.forkPoint && wholeMessage.meta.forkPoint)
+            meta.forkPoint = wholeMessage.meta.forkPoint;
+          if (
+            meta.generationTokensPerSecond === undefined &&
+            wholeMessage.meta.generationTokensPerSecond !== undefined
+          )
+            meta.generationTokensPerSecond = wholeMessage.meta.generationTokensPerSecond;
+          message = { ...message, meta };
         }
       }
       const sameIdCurrentMessage = currentIndex.firstById.get(message.id);

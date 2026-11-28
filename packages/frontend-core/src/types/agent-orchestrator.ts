@@ -82,6 +82,7 @@ export type AgentChatMessageMeta =
       isFinal?: boolean;
       forkPoint?: AgentSessionForkPoint;
       durationMs?: number;
+      generationTokensPerSecond?: number;
       totalTokens?: number;
       contextWindow?: number;
       outputLimit?: number;

@@ -282,6 +282,7 @@ export const runtimeOptionalSurfaceCapabilitiesSchema = z
     supportsFileStatus: z.boolean(),
     supportsMcpStatus: z.boolean(),
     supportsImageGeneration: z.boolean(),
+    supportsTurnGenerationRate: z.boolean(),
     /**
      * The runtime sends the output of a shell command while the command runs. Codex sends it. The
      * Claude Agent SDK sends only the run time of a running tool, and OpenCode writes the running
@@ -624,6 +625,7 @@ export const runtimeCapabilityKeyValues = [
   "optionalSurfaces.supportsFileStatus",
   "optionalSurfaces.supportsMcpStatus",
   "optionalSurfaces.supportsImageGeneration",
+  "optionalSurfaces.supportsTurnGenerationRate",
   "optionalSurfaces.supportsSubagents",
   "optionalSurfaces.supportedSubagentExecutionModes",
 ] as const;
@@ -659,6 +661,7 @@ export const optionalRuntimeCapabilityKeys = [
   "optionalSurfaces.supportsFileStatus",
   "optionalSurfaces.supportsMcpStatus",
   "optionalSurfaces.supportsImageGeneration",
+  "optionalSurfaces.supportsTurnGenerationRate",
   "optionalSurfaces.supportsSubagents",
   "optionalSurfaces.supportedSubagentExecutionModes",
 ] as const satisfies readonly RuntimeCapabilityKey[];
@@ -699,6 +702,7 @@ export const runtimeCapabilityClasses = {
   "optionalSurfaces.supportsFileStatus": "optional_enhancement",
   "optionalSurfaces.supportsMcpStatus": "optional_enhancement",
   "optionalSurfaces.supportsImageGeneration": "optional_enhancement",
+  "optionalSurfaces.supportsTurnGenerationRate": "optional_enhancement",
   "optionalSurfaces.supportsSubagents": "optional_enhancement",
   "optionalSurfaces.supportedSubagentExecutionModes": "optional_enhancement",
 } as const satisfies Record<RuntimeCapabilityKey, RuntimeCapabilityClass>;

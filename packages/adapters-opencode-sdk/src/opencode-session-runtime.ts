@@ -63,6 +63,7 @@ import {
   projectContextUsage,
 } from "./opencode-message-projection";
 import { OpenCodeLiveMessageProjector } from "./opencode-live-message-projector";
+import { readOpenCodeLegacyExecutionEnds } from "./opencode-turn-generation-rate";
 import { readOpenCodeTranscript } from "./opencode-session-transcript";
 import type {
   OpencodeRuntimeSnapshotRead,
@@ -285,15 +286,16 @@ export const createPrepareOpencodeSessionRuntime =
       ensureMcp: mcpBridge.ensure,
       restoreMcp: mcpBridge.restore,
       awaitGenerationModel: generationModels.awaitModel,
-      projectHistory: (sessionID, messages, inbox) =>
+      projectHistory: (sessionID, messages, inbox, rateEvidence) =>
         (projectors.get(sessionID) ?? new OpenCodeLiveMessageProjector()).projectHistory(
           messages,
           inbox,
+          rateEvidence,
         ),
       admitted: (binding) => {
         // The events of a faulted conversation apply again only after a read of it.
         if (!faulted.has(binding.detail.id) && !projectors.has(binding.detail.id))
-          projectors.set(binding.detail.id, new OpenCodeLiveMessageProjector());
+          projectors.set(binding.detail.id, new OpenCodeLiveMessageProjector(legacyTurnBoundaries));
       },
     });
     const background = createOpenCodeBackgroundSession({
@@ -344,6 +346,8 @@ export const createPrepareOpencodeSessionRuntime =
     // Goals come from a built-in plugin of newer servers. An older server gets no goal call.
     const goals = resolveRuntimeGoalAvailability(OPENCODE_RUNTIME_DESCRIPTOR, info.version);
 
+    const legacyTurnBoundaries = /^2\.0\.[0-2](?:$|[-+])/.test(info.version);
+
     const source = (
       binding: OpenCodeSessionBinding,
       parentExternalSessionId?: string,
@@ -352,7 +356,8 @@ export const createPrepareOpencodeSessionRuntime =
       // A read observes a faulted conversation again from a new projector, as its first read does.
       // The events during the read apply to that projector, and a failed read faults it again.
       const refault = faulted.delete(sessionID);
-      if (refault) projectors.set(sessionID, new OpenCodeLiveMessageProjector());
+      if (refault)
+        projectors.set(sessionID, new OpenCodeLiveMessageProjector(legacyTurnBoundaries));
       const read = readSource(binding, parentExternalSessionId);
       return refault
         ? read.catch((cause: unknown) => {
@@ -386,9 +391,12 @@ export const createPrepareOpencodeSessionRuntime =
             "identity_mismatch",
             "The native location does not match the linked directory.",
           );
+        const unmarkedExecutionEnds = legacyTurnBoundaries
+          ? undefined
+          : await readOpenCodeLegacyExecutionEnds(client, binding.detail.id, messages);
         const projector = projectors.get(binding.detail.id)!;
         // Delivery events contain only IDs, so retained payloads must survive snapshot reads.
-        const retractedIds = new Set(projector.seed(messages));
+        const retractedIds = new Set(projector.seed(messages, unmarkedExecutionEnds));
         // A prompt raised before this read has no live ask event.
         for (const request of approvals)
           if (request.source?.type === "tool")

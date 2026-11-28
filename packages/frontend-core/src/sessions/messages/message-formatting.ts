@@ -1,5 +1,5 @@
 import { type WorkflowRoleId as AgentRole } from "@openducktor/workflows";
-import type { RuntimeKind } from "@openducktor/contracts";
+import { RUNTIME_DESCRIPTORS_BY_KIND, type RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { agentModelInfoParts } from "../../lib/agent-model-presentation";
 import { isFinalAssistantChatMessage } from "../agent-orchestrator/support/messages";
@@ -77,12 +77,21 @@ export const getAssistantFooterData = (
     return { infoParts: [] } satisfies { infoParts: string[] };
   }
 
-  // Native history can omit a turn's model. The session's current model does not prove which one answered.
-  if (!message.meta.modelId?.trim() && runtimeKind) {
-    return {
-      infoParts: agentModelInfoParts({ ...message.meta, providerId: runtimeKind }, modelCatalog),
-    };
+  const sourceRuntime = message.sourceRuntimeKind ?? runtimeKind;
+  // Native history can omit a turn's model. Use the originating runtime label in that case.
+  const model =
+    !message.meta.modelId?.trim() && sourceRuntime
+      ? { ...message.meta, providerId: sourceRuntime }
+      : message.meta;
+  const infoParts = agentModelInfoParts(model, modelCatalog);
+  const rate = message.meta.generationTokensPerSecond;
+  if (
+    rate !== undefined &&
+    sourceRuntime &&
+    RUNTIME_DESCRIPTORS_BY_KIND[sourceRuntime].capabilities.optionalSurfaces
+      .supportsTurnGenerationRate
+  ) {
+    return { infoParts, generationRateLabel: `${rate.toFixed(1)} tok/s` };
   }
-
-  return { infoParts: agentModelInfoParts(message.meta, modelCatalog) };
+  return { infoParts };
 };

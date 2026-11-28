@@ -151,12 +151,15 @@ export const handleAssistantMessage = (
     let assistantMessage = nextSnapshot.assistantMessage;
     const previousAssistantMessage =
       sourceTextMessage ?? findSessionMessageById(settledOwner, event.messageId);
-    if (
-      !event.forkPoint &&
-      previousAssistantMessage?.meta?.kind === "assistant" &&
-      previousAssistantMessage.meta.forkPoint
-    ) {
-      assistantMessage.meta.forkPoint = previousAssistantMessage.meta.forkPoint;
+    const previousMeta = previousAssistantMessage?.meta;
+    if (!event.forkPoint && previousMeta?.kind === "assistant" && previousMeta.forkPoint) {
+      assistantMessage.meta.forkPoint = previousMeta.forkPoint;
+    }
+    const generationRate =
+      event.generationTokensPerSecond ??
+      (previousMeta?.kind === "assistant" ? previousMeta.generationTokensPerSecond : undefined);
+    if (generationRate !== undefined) {
+      assistantMessage.meta.generationTokensPerSecond = generationRate;
     }
     if (sourceTextMessage?.meta?.kind === "assistant") {
       const assistantMeta: Extract<AgentChatMessageMeta, { kind: "assistant" }> = {

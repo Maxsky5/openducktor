@@ -595,7 +595,7 @@ describe("agent-orchestrator/support/history-message-merge", () => {
           partId: "tool-1",
         },
       };
-      const lastPart: AgentChatMessage = {
+      const lastPart = {
         ...firstPart,
         id: "text:response-1:last",
         content: "    Last block\n",
@@ -605,18 +605,19 @@ describe("agent-orchestrator/support/history-message-merge", () => {
           sourceMessageId: "response-1",
           partId: "last",
         },
-      };
+      } satisfies AgentChatMessage;
       const wholeMessage: AgentChatMessage = {
         id: "response-1",
         role: "assistant",
         content: "First block\nLast block",
         timestamp: "2026-03-01T09:00:01.000Z",
-        meta: { kind: "assistant", isFinal: true },
+        meta: { kind: "assistant", isFinal: true, generationTokensPerSecond: 42.14 },
       };
       const livePart: AgentChatMessage = { ...firstPart, content: "    Newer first block\n" };
-      const otherMessage = {
+      const otherMessage: AgentChatMessage = {
         ...wholeMessage,
         id: "response-2",
+        meta: { kind: "assistant", isFinal: true },
         timestamp: "2026-03-01T09:00:02.000Z",
       };
 
@@ -625,7 +626,12 @@ describe("agent-orchestrator/support/history-message-merge", () => {
           [firstPart, tool, lastPart],
           [...(hasLivePart ? [livePart] : []), wholeMessage, otherMessage],
         ),
-      ).toEqual([hasLivePart ? livePart : firstPart, tool, lastPart, otherMessage]);
+      ).toEqual([
+        hasLivePart ? livePart : firstPart,
+        tool,
+        { ...lastPart, meta: { ...lastPart.meta, generationTokensPerSecond: 42.14 } },
+        otherMessage,
+      ]);
     },
   );
 

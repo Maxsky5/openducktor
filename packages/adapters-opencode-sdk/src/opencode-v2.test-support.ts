@@ -86,6 +86,14 @@ export const location = {
 export const cursorPage = (data: SessionMessageInfo[], next: string | null = null) =>
   Response.json({ data, cursor: { next, prev: null } });
 
+export const sessionLogResponse = (sessionID: string, events: readonly V2Event[] = []) =>
+  new Response(
+    [...events, { type: "log.synced", aggregateID: sessionID }]
+      .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+      .join(""),
+    { headers: { "content-type": "text/event-stream" } },
+  );
+
 type NativeControllerFixture = {
   controller: OpencodeSdkAdapter;
   client: OpenCodeClient;

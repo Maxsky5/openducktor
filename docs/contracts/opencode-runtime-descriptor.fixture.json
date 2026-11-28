@@ -150,6 +150,7 @@
       "supportsSubagentReferences": true
     },
     "optionalSurfaces": {
+      "supportsTurnGenerationRate": true,
       "supportsProfiles": true,
       "supportsVariants": true,
       "supportsTodos": false,
