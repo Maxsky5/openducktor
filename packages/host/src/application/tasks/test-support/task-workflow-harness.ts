@@ -788,6 +788,7 @@ const createDirectMergeGitPort = ({
     restoreWorktreeToReference(workingDirectory, reference) {
       return Effect.sync(() => {
         calls.push({ type: "restoreWorktree", workingDirectory, reference });
+        return true;
       });
     },
     commitsAheadBehind(workingDir, targetBranch) {

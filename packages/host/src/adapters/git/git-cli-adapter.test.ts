@@ -592,37 +592,46 @@ describe("createGitCliAdapter", () => {
       "branch -D --end-of-options feature/task",
     ]);
   });
-  test("restores a whole worktree without deleting ignored files", async () => {
-    const calls: Array<{ workingDirectory: string; args: string[] }> = [];
-    const git = createGitCliAdapter({
-      runner: (workingDirectory, args) => {
-        calls.push({ workingDirectory, args });
-        return Effect.succeed({
-          ok: true,
-          stdout: args[0] === "rev-parse" ? "abc123\n" : "",
-          stderr: "",
-        });
-      },
-    });
+  test.each([
+    { before: "", changed: false },
+    { before: " M app.ts\0", changed: true },
+    { before: "?? note.txt\0", after: "", changed: true },
+    { before: "?? nested/\0", after: "?? nested/\0", changed: false },
+  ])(
+    "restores a whole worktree and reports actual changes: %j",
+    async ({ before, after, changed }) => {
+      const calls: string[][] = [];
+      const git = createGitCliAdapter({
+        runner: (_workingDirectory, args) => {
+          calls.push(args);
+          const cleaned = calls.some(([name]) => name === "clean");
+          return Effect.succeed({
+            ok: true,
+            stdout:
+              {
+                "rev-parse": "abc123\n",
+                status: cleaned ? (after ?? "") : before,
+              }[args[0] ?? ""] ?? "",
+            stderr: "",
+          });
+        },
+      });
 
-    await expect(
-      Effect.runPromise(git.restoreWorktreeToReference("/worktree", "origin/main")),
-    ).resolves.toBeUndefined();
-    expect(calls).toEqual([
-      {
-        workingDirectory: "/worktree",
-        args: ["rev-parse", "--verify", "--end-of-options", "origin/main^{commit}"],
-      },
-      { workingDirectory: "/worktree", args: ["reset", "--hard", "abc123"] },
-      { workingDirectory: "/worktree", args: ["clean", "-d", "-f"] },
-    ]);
-  });
+      await expect(
+        Effect.runPromise(git.restoreWorktreeToReference("/worktree", "origin/main")),
+      ).resolves.toBe(changed);
+      expect(calls.filter(([name]) => name === "reset" || name === "clean")).toEqual([
+        ["reset", "--hard", "abc123"],
+        ["clean", "-d", "-f"],
+      ]);
+    },
+  );
   test("reports partial progress when whole-worktree cleanup fails", async () => {
     const git = createGitCliAdapter({
       runner: (_workingDirectory, args) =>
         Effect.succeed({
           ok: args[0] !== "clean",
-          stdout: args[0] === "rev-parse" ? "abc123\n" : "",
+          stdout: args.at(-1) === "HEAD" ? "previous\n" : args[0] === "rev-parse" ? "abc123\n" : "",
           stderr: args[0] === "clean" ? "permission denied" : "",
         }),
     });
@@ -630,7 +639,7 @@ describe("createGitCliAdapter", () => {
     await expect(
       Effect.runPromise(git.restoreWorktreeToReference("/worktree", "main")),
     ).rejects.toThrow(
-      "Tracked content was restored to main, but ordinary untracked-file cleanup did not complete",
+      "Restored tracked content to main. Could not finish removing untracked files",
     );
   });
   test("checks registered worktree paths using canonical comparison semantics", async () => {

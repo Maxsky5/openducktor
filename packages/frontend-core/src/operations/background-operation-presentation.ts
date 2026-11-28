@@ -1,4 +1,7 @@
-import type { BackgroundOperationStep } from "@openducktor/contracts";
+import {
+  BACKGROUND_OPERATION_PR_ALREADY_LINKED,
+  type BackgroundOperationStep,
+} from "@openducktor/contracts";
 import type { BackgroundAttempt } from "./background-operation-store";
 
 export const backgroundOperationStatus = {
@@ -18,11 +21,12 @@ export const backgroundStepStatus = {
 } satisfies Record<BackgroundOperationStep["state"], string>;
 
 export const canFinishClosingTask = ({ target, progress }: BackgroundAttempt): boolean => {
-  if (target.kind !== "task" || !progress) return false;
+  if (target.kind !== "task" || progress?.phase !== "failed") return false;
 
   const { steps } = progress;
   return (
-    steps.some((step) => step.id === "pr-link" && step.state === "completed") &&
+    (progress.failure.code === BACKGROUND_OPERATION_PR_ALREADY_LINKED ||
+      steps.some((step) => step.id === "pr-link" && step.state === "completed")) &&
     !steps.some((step) => step.id === "task-close" && step.state === "completed")
   );
 };

@@ -36,6 +36,7 @@ export const createBackgroundOperationProgress = (
     { ...identity, revision: 0, steps: [], phase: "running" },
     publish,
   );
+  let failureCode: string | undefined;
   const update = (step: Step & Partial<BackgroundOperationStep>) => {
     const snapshot = progress.current();
     const previous = snapshot.steps.find((item) => item.id === step.id);
@@ -62,6 +63,13 @@ export const createBackgroundOperationProgress = (
   };
   return {
     update,
+    setFailureCode(code: string) {
+      failureCode = code;
+    },
+    addDetail(id: string, detail: string) {
+      const step = progress.current().steps.find((item) => item.id === id);
+      if (step) update({ ...step, details: [...step.details, detail] });
+    },
     omit(id: string) {
       const snapshot = progress.current();
       progress.commit({ ...snapshot, steps: snapshot.steps.filter((step) => step.id !== id) });
@@ -93,6 +101,7 @@ export const createBackgroundOperationProgress = (
       progress.commit({ ...snapshot, steps: ordered });
     },
     settle(failure?: WorkflowFailure) {
+      if (failure && failureCode) failure = { ...failure, code: failureCode };
       const snapshot = progress.current();
       const applicable = failure
         ? snapshot.steps
@@ -121,6 +130,9 @@ export const updateBackgroundOperation = (update: (progress: Progress) => void) 
 
 export const planBackgroundSteps = (...steps: Step[]) =>
   updateBackgroundOperation((progress) => progress.plan(steps));
+
+export const addBackgroundStepDetail = (id: string, detail: string) =>
+  updateBackgroundOperation((progress) => progress.addDetail(id, detail));
 
 /** Return false from the evidence callback if the successful effect changed nothing. */
 export const backgroundStep = <A, E, R>(

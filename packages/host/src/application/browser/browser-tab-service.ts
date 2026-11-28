@@ -329,16 +329,22 @@ export const createBrowserTabService = ({
     });
 
   /** A popup window lives only as long as its opener tab. */
-  const closePopupWindowsOf = (tabId: string): Effect.Effect<void, BrowserServiceError> =>
+  const closePopupWindowsOf = (
+    tabId: string,
+    onClosed?: () => void,
+  ): Effect.Effect<void, BrowserServiceError> =>
     Effect.forEach(
       registry
         .list()
         .filter((summary) => summary.openerTabId === tabId && summary.surface === "popup_window"),
-      (popup) => closeTab(popup.tabId),
+      (popup) => closeTab(popup.tabId, onClosed),
       { discard: true },
     );
 
-  const closeTab = (tabId: string): Effect.Effect<void, BrowserServiceError> =>
+  const closeTab = (
+    tabId: string,
+    onClosed?: () => void,
+  ): Effect.Effect<void, BrowserServiceError> =>
     Effect.gen(function* () {
       yield* gate.run(
         tabId,
@@ -362,9 +368,10 @@ export const createBrowserTabService = ({
             ),
           );
           yield* removeTab(tabId);
+          onClosed?.();
         }),
       );
-      yield* closePopupWindowsOf(tabId);
+      yield* closePopupWindowsOf(tabId, onClosed);
     });
 
   /**

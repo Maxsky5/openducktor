@@ -4,6 +4,7 @@ import type {
   WorkspaceRef,
   WorkspaceTextFileReadResult,
 } from "@openducktor/contracts";
+import { BACKGROUND_OPERATION_EVENT_STREAM_NAME } from "@openducktor/contracts";
 import { type BackgroundOperationInvocation, HostInvokeError } from "@openducktor/host-client";
 import { HostChannelRequestError, isHostInvocationRefused } from "@openducktor/host-client/channel";
 import type { HostConnection } from "../connection/host-connection";
@@ -93,6 +94,12 @@ export const createBackgroundOperationStore = (
   const draftKey = (workspaceId: string, sessionId: string, fileId: string) =>
     JSON.stringify([workspaceId, sessionId, fileId]);
   const running = new Map<string, string>();
+  const admissionError = (workspace: WorkspaceIdentity, target: BackgroundOperationTarget) => {
+    if (disposed) return "The connection has closed.";
+    return running.has(targetKey({ workspace, target }))
+      ? "An operation is running for this target. Wait for it to finish."
+      : null;
+  };
   const listeners = new Set<() => void>();
   const expiry = new Map<string, ReturnType<typeof setTimeout>>();
   let snapshot: readonly BackgroundAttempt[] = [];
@@ -104,19 +111,27 @@ export const createBackgroundOperationStore = (
     for (const listener of listeners) listener();
   };
   const remove = (id: string) => {
+    clearTimeout(expiry.get(id));
     entries.delete(id);
     expiry.delete(id);
     publish();
   };
+  const finishSuccessToast = (id: string) => {
+    const entry = entries.get(id);
+    if (entry?.onProgress && entry.attempt.progress?.phase !== "succeeded") {
+      clearTimeout(expiry.get(id));
+      expiry.delete(id);
+      entry.attempt = { ...entry.attempt, toastDismissed: true };
+      publish();
+    } else {
+      remove(id);
+    }
+  };
   const expireSuccess = ({ id, phase, archiveDraftFileIds, toastDismissed }: BackgroundAttempt) => {
-    if (
-      phase === "succeeded" &&
-      (toastDismissed || !archiveDraftFileIds?.length) &&
-      !expiry.has(id)
-    )
+    if (phase === "succeeded" && !toastDismissed && !archiveDraftFileIds?.length && !expiry.has(id))
       expiry.set(
         id,
-        setTimeout(() => remove(id), SUCCESS_DURATION),
+        setTimeout(() => finishSuccessToast(id), SUCCESS_DURATION),
       );
   };
   const settle = (entry: Entry, phase: Exclude<Phase, "running">, message?: string) => {
@@ -170,6 +185,13 @@ export const createBackgroundOperationStore = (
       return;
     entry.hostInstanceId = progress.hostInstanceId;
     entry.attempt = { ...entry.attempt, progress };
+    const notifyProgress = entry.onProgress;
+    if (progress.phase !== "running") delete entry.onProgress;
+    if (phase === "succeeded" && entry.attempt.toastDismissed) {
+      remove(progress.operationId);
+      notifyProgress?.(progress);
+      return;
+    }
     if (confirmed || progress.phase === "running") publish();
     else
       settle(
@@ -177,12 +199,24 @@ export const createBackgroundOperationStore = (
         progress.phase,
         progress.phase === "failed" ? progress.failure.message : undefined,
       );
-    entry.onProgress?.(progress);
+    notifyProgress?.(progress);
   };
   const subscribeBeforeDispatch = () => {
     subscription ??= host
       .subscribeBackgroundOperationProgress((event) => {
-        if ("channel" in event) accept(event.payload);
+        if ("channel" in event) {
+          accept(event.payload);
+        } else if (
+          event.kind === "reconnected" &&
+          (event.hostChanged ||
+            event.missedEventNames.includes(BACKGROUND_OPERATION_EVENT_STREAM_NAME))
+        ) {
+          for (const [id, entry] of entries) {
+            if (entry.attempt.phase !== "succeeded") continue;
+            delete entry.onProgress;
+            if (entry.attempt.toastDismissed) remove(id);
+          }
+        }
       })
       .then((unsubscribe) => {
         if (disposed) unsubscribe();
@@ -196,6 +230,7 @@ export const createBackgroundOperationStore = (
     return subscription;
   };
   return {
+    admissionError,
     getArchiveDraft: (workspaceId: string, sessionId: string, fileId: string) =>
       archiveDrafts.get(draftKey(workspaceId, sessionId, fileId)),
     /** An unfinished archive can retain a file even when it started with a clean editor. */
@@ -257,9 +292,9 @@ export const createBackgroundOperationStore = (
       invoke: (tracking: BackgroundOperationInvocation) => Promise<T>,
       handlers?: OperationHandlers,
     ): Promise<T> {
-      if (disposed) throw new Error("The connection has closed.");
+      const refusal = admissionError(origin.workspace, origin.target);
+      if (refusal) throw new Error(refusal);
       const key = targetKey(origin);
-      if (running.has(key)) throw new Error("An operation is running for this target.");
       const id = crypto.randomUUID();
       const expectedHostEpoch = host.backgroundOperationHostEpoch?.();
       const { archiveDraft: consented, ...displayOrigin } = origin;
@@ -309,17 +344,12 @@ export const createBackgroundOperationStore = (
     dismissToast(id: string) {
       const entry = entries.get(id);
       if (!entry || entry.attempt.phase === "running") return;
-      const awaitsFinalProgress =
-        entry.onProgress !== undefined && entry.attempt.progress?.phase !== "succeeded";
-      if (
-        (entry.attempt.phase === "succeeded" && !awaitsFinalProgress) ||
-        (entry.attempt.phase === "failed" && entry.attempt.failureDismissed)
-      ) {
-        clearTimeout(expiry.get(id));
+      if (entry.attempt.phase === "succeeded") {
+        finishSuccessToast(id);
+      } else if (entry.attempt.phase === "failed" && entry.attempt.failureDismissed) {
         remove(id);
       } else {
         entry.attempt = { ...entry.attempt, toastDismissed: true };
-        expireSuccess(entry.attempt);
         publish();
       }
     },

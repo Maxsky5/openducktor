@@ -46,7 +46,6 @@ export function useTaskConfirmDialog<Result>({
   const taskId = task?.id ?? null;
   const impactTaskIds = useMemo(() => collectSingleTaskCleanupImpactTaskIds(task), [task]);
   const { openDialog, dialog } = useTaskAsyncConfirmDialog({
-    closeOnSubmit: true,
     enabled,
     initiallyOpen,
     scopeKey: taskId,

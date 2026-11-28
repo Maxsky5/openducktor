@@ -289,6 +289,9 @@ export const createTerminalSessionLifecycle = ({
       const errors = results.flatMap(({ terminalId, result }) =>
         result._tag === "Failure" ? [{ terminalId, message: result.failure.message }] : [],
       );
+      const closedTerminalIds = results.flatMap(({ terminalId, result }) =>
+        result._tag === "Success" ? [terminalId] : [],
+      );
       if (errors.length > 0) {
         const context = operation === "dispose" ? " during shutdown" : "";
         const message =
@@ -301,10 +304,11 @@ export const createTerminalSessionLifecycle = ({
             operation,
             message,
             details: { errors },
+            closedTerminalIds,
           }),
         );
       }
-      return results.map(({ terminalId }) => terminalId);
+      return closedTerminalIds;
     });
 
   return {

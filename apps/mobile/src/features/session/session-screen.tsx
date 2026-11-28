@@ -1,4 +1,3 @@
-import { useBackgroundAttempts } from "@openducktor/frontend-core/operations/use-background-attempts";
 import type {
   AgentSessionAssociation,
   WorkspaceRecord,
@@ -208,27 +207,19 @@ function useArchiveSessionExit(
   const chatId = chat?.id ?? null;
   const archivedAt = chat?.archivedAt ?? null;
   const lastActiveChat = useRef<{ workspaceId: string; chatId: string } | null>(null);
-  const archived = useBackgroundAttempts().some(
-    (attempt) =>
-      attempt.phase === "succeeded" &&
-      attempt.workspace.workspaceId === workspaceId &&
-      attempt.target.kind === "chat" &&
-      attempt.target.sessionId === chatId,
-  );
   useFocusEffect(
     useCallback(() => {
       if (!chatId || readOnly) return;
       if (archivedAt === null) {
         lastActiveChat.current = { workspaceId, chatId };
       } else if (
-        archived &&
         lastActiveChat.current?.workspaceId === workspaceId &&
         lastActiveChat.current.chatId === chatId
       ) {
         lastActiveChat.current = null;
         router.replace(routes.sessions());
       }
-    }, [archivedAt, archived, chatId, readOnly, router, workspaceId]),
+    }, [archivedAt, chatId, readOnly, router, workspaceId]),
   );
 }
 

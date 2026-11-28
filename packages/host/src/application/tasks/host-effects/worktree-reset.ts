@@ -141,16 +141,18 @@ export const createWorktreeResetEffect = ({
           worktreePaths: removedWorktreePaths,
         });
         if (canonicalTarget) {
-          yield* backgroundStep(
+          const restored = yield* backgroundStep(
             { id: "restore", label: "Restore main task worktree" },
             dependencies.gitPort.restoreWorktreeToReference(
               canonicalTarget.worktreePath,
               canonicalTarget.restoreReference,
             ),
+            (changed) => changed && {},
           );
-          cleanupProgress.completedSteps.push(
-            `Restored canonical worktree ${canonicalWorktree} to ${canonicalTarget.restoreReference}.`,
-          );
+          if (restored)
+            cleanupProgress.completedSteps.push(
+              `Restored canonical worktree ${canonicalWorktree} to ${canonicalTarget.restoreReference}.`,
+            );
         }
         yield* backgroundStep(
           { id: "session-records", label: "Unlink affected sessions" },

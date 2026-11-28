@@ -1,6 +1,10 @@
 import "../../test-support/dom-environment";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { RemoteConnectionError } from "@openducktor/host-client/remote";
+import {
+  createActiveWorkspaceWrapper,
+  TEST_ACTIVE_WORKSPACE,
+} from "../../test-support/active-workspace-wrapper";
+import { createTestClientConnection } from "../../test-support/test-client-connection";
 import { act } from "react";
 import { installReactActEnvironment } from "../../test-support/react-act-environment";
 import { createHookHarness } from "../../test-support/react-hook-harness";
@@ -27,8 +31,10 @@ let harness: ReturnType<
   typeof createHookHarness<Props, ReturnType<typeof useTaskAsyncConfirmDialog>>
 > | null = null;
 
-const mount = async (props: Props) => {
-  harness = createHookHarness(useTaskAsyncConfirmDialog, props);
+const mount = async (props: Props, connection = createTestClientConnection()) => {
+  harness = createHookHarness(useTaskAsyncConfirmDialog, props, {
+    wrapper: createActiveWorkspaceWrapper(connection),
+  });
   await harness.mount();
   return harness;
 };
@@ -70,7 +76,7 @@ describe("useTaskAsyncConfirmDialog", () => {
     });
   });
 
-  test("keeps the owner mounted until its committed continuation opens the next form", async () => {
+  test("runs the committed continuation after closing the confirmation", async () => {
     const continuation = deferredRun();
     const onSucceeded = mock(() => {});
     const run = mock(async () => {});
@@ -79,57 +85,51 @@ describe("useTaskAsyncConfirmDialog", () => {
     await startConfirm();
     expect(continuation.run).toHaveBeenCalledTimes(1);
     expect(onSucceeded).not.toHaveBeenCalled();
-    expect(hook.getLatest().dialog.open).toBe(true);
+    expect(hook.getLatest().dialog.open).toBe(false);
     await hook.run(() => continuation.resolve());
     expect(onSucceeded).toHaveBeenCalledTimes(1);
     expect(hook.getLatest().dialog.open).toBe(false);
     expect(run).toHaveBeenCalledTimes(1);
   });
 
-  test("keeps the dialog open with the error when the run fails", async () => {
+  test("leaves the confirmation open when another action owns the task", async () => {
+    const connection = createTestClientConnection();
+    const pending = Promise.withResolvers<void>();
+    const running = connection.backgroundOperations.run(
+      {
+        workspace: TEST_ACTIVE_WORKSPACE,
+        target: { kind: "task", taskId: "ODT-2" },
+        action: "Close task",
+      },
+      () => pending.promise,
+    );
+    const run = mock(async () => {});
     const onSucceeded = mock(() => {});
-    const continuation = mock(async () => {});
-    const run = mock(async () => {
-      throw new Error("delete failed");
-    });
-    const hook = await mount({ enabled: true, scopeKey: "ODT-2", run, onSucceeded });
-
-    await hook.run((state) => state.openDialog(continuation));
-    await hook.run((state) => state.dialog.onConfirm());
-
-    expect(onSucceeded).not.toHaveBeenCalled();
-    expect(continuation).not.toHaveBeenCalled();
-    expect(hook.getLatest().dialog).toMatchObject({
-      open: true,
-      operation: { isPending: false, error: "delete failed", errorOutcomeUnknown: false },
-    });
-  });
-
-  test("marks a lost command result so the dialog can show Result unknown", async () => {
-    const run = mock(async (): Promise<void> => {
-      throw new RemoteConnectionError({
-        code: "outcome_unknown",
-        message: "The result of task_delete was lost.",
-        nextAction: "Read current host state to check the outcome.",
+    try {
+      const hook = await mount({ enabled: true, scopeKey: "ODT-2", run, onSucceeded }, connection);
+      await hook.run((state) => state.openDialog());
+      await hook.run((state) => state.dialog.onConfirm());
+      expect(run).not.toHaveBeenCalled();
+      expect(hook.getLatest().dialog).toMatchObject({
+        open: true,
+        operation: {
+          isPending: false,
+          error: "An operation is running for this target. Wait for it to finish.",
+        },
       });
-    });
-    const hook = await mount({ enabled: true, scopeKey: "ODT-9", run, onSucceeded: () => {} });
-
-    await hook.run((state) => state.openDialog());
-    await hook.run((state) => state.dialog.onConfirm());
-    expect(hook.getLatest().dialog.operation).toEqual({
-      isPending: false,
-      error: "The result of task_delete was lost. Read current host state to check the outcome.",
-      errorOutcomeUnknown: true,
-    });
-
-    // A new run clears the mark.
-    run.mockImplementation(async () => {});
-    await hook.run((state) => state.dialog.onConfirm());
-    expect(hook.getLatest().dialog.operation.errorOutcomeUnknown).toBe(false);
+      pending.resolve();
+      await running;
+      await hook.run((state) => state.dialog.onConfirm());
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(hook.getLatest().dialog.open).toBe(false);
+    } finally {
+      pending.resolve();
+      await running;
+      await connection.dispose();
+    }
   });
 
-  test("ignores close attempts while the run is in flight", async () => {
+  test("closes while the run is in flight and keeps its continuation", async () => {
     const pending = deferredRun();
     const onSucceeded = mock(() => {});
     const hook = await mount({ enabled: true, scopeKey: "ODT-3", run: pending.run, onSucceeded });
@@ -140,7 +140,7 @@ describe("useTaskAsyncConfirmDialog", () => {
 
     await hook.run((state) => state.dialog.onCancel());
     await hook.run((state) => state.dialog.onOpenChange(false));
-    expect(hook.getLatest().dialog.open).toBe(true);
+    expect(hook.getLatest().dialog.open).toBe(false);
 
     await hook.run(() => pending.resolve());
     expect(hook.getLatest().dialog.operation.isPending).toBe(false);
@@ -169,28 +169,6 @@ describe("useTaskAsyncConfirmDialog", () => {
 
     await hook.run(() => pending.resolve());
     expect(hook.getLatest().dialog.operation.isPending).toBe(false);
-  });
-
-  test("closes the dialog and clears its error when it is disabled", async () => {
-    const props: Props = {
-      enabled: true,
-      scopeKey: "ODT-5",
-      run: mock(async () => {
-        throw new Error("boom");
-      }),
-      onSucceeded: () => {},
-    };
-    const hook = await mount(props);
-
-    await hook.run((state) => state.openDialog());
-    await hook.run((state) => state.dialog.onConfirm());
-    expect(hook.getLatest().dialog.operation.error).toBe("boom");
-
-    await hook.update({ ...props, enabled: false });
-    expect(hook.getLatest().dialog).toMatchObject({
-      open: false,
-      operation: { isPending: false, error: null, errorOutcomeUnknown: false },
-    });
   });
 
   test("does nothing on confirm without a run", async () => {

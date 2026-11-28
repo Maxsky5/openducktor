@@ -1,4 +1,4 @@
-import { expect, mock, test } from "bun:test";
+import { expect, jest, mock, test } from "bun:test";
 import type { BackgroundOperationSnapshot } from "@openducktor/contracts";
 import {
   createTestClientConnection,
@@ -209,3 +209,50 @@ test("shows final steps after a success reply without repeating settlement", asy
     store.dispose();
   }
 });
+
+test.each(["expiry", "dismissal"])(
+  "delivers late terminal evidence after toast %s",
+  async (end) => {
+    type Listener = Parameters<
+      ReturnType<typeof createTestHostConnection>["subscribeBackgroundOperationProgress"]
+    >[0];
+    let receive: Listener | undefined;
+    const store = createBackgroundOperationStore(
+      createTestHostConnection({
+        subscribeBackgroundOperationProgress: async (listener) => {
+          receive = listener;
+          return () => {};
+        },
+      }),
+    );
+    const workspace = { workspaceId: "workspace", repoPath: "/repo" };
+    const target = { kind: "chat", sessionId: "chat" } as const;
+    const onProgress = mock(() => {});
+    jest.useFakeTimers();
+    try {
+      const operationId = await store.run(
+        { workspace, target, action: "Archive session" },
+        async (tracking) => tracking.operationId,
+        { onProgress },
+      );
+      if (end === "expiry") jest.advanceTimersByTime(10_000);
+      else store.dismissToast(operationId);
+      expect(store.getSnapshot().filter((attempt) => !attempt.toastDismissed)).toEqual([]);
+      const terminal = {
+        operationId,
+        workspace,
+        target,
+        hostInstanceId: "host",
+        revision: 1,
+        phase: "succeeded",
+        steps: [],
+      } satisfies BackgroundOperationSnapshot;
+      receive?.({ channel: "openducktor://background-operation-progress", payload: terminal });
+      expect(onProgress).toHaveBeenCalledWith(terminal);
+      expect(store.getSnapshot()).toEqual([]);
+    } finally {
+      store.dispose();
+      jest.useRealTimers();
+    }
+  },
+);

@@ -1,4 +1,3 @@
-import { updateBackgroundOperation } from "../operation-progress/background-operation-progress";
 import { Effect } from "effect";
 import { canonicalPathsEqual } from "../../domain/path-comparison";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
@@ -13,6 +12,7 @@ export type RemoveWorktreeAndFilesystemPathInput = {
   missingOutsideManagedRootPathPolicy: "fail" | "skip";
   repoPath: string;
   worktreePath: string;
+  onGitRemoved?: () => void;
 };
 export type RemoveWorktreeAndFilesystemPathDependencies = {
   gitPort: Pick<GitPort, "isRegisteredWorktree" | "removeWorktree">;
@@ -127,15 +127,7 @@ export const removeWorktreeAndFilesystemPath = (
     if (removalResult._tag === "Failure" && !force) {
       return yield* Effect.fail(removalResult.failure);
     }
-    if (removalResult._tag === "Success") {
-      yield* updateBackgroundOperation((operation) =>
-        operation.addResource("worktrees", {
-          kind: "worktree",
-          value: worktreePath,
-          state: "removed",
-        }),
-      );
-    }
+    if (removalResult._tag === "Success") input.onGitRemoved?.();
     const currentCleanup = yield* inspectFilesystemCleanup(
       dependencies,
       input,

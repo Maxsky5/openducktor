@@ -3,6 +3,8 @@ import { startupStepSchema } from "./session-startup-schemas";
 import { workflowFailureSchema } from "./workflow-failure-schemas";
 import { workspaceRefSchema } from "./workspace-id-schemas";
 
+export const BACKGROUND_OPERATION_PR_ALREADY_LINKED = "background_operation_pr_already_linked";
+
 export const backgroundOperationIdSchema = z.uuid();
 
 export const backgroundOperationTargetSchema = z.discriminatedUnion("kind", [

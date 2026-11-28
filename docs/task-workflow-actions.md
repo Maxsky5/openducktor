@@ -112,6 +112,8 @@ Delete Task, Reset Task, Reset Implementation, Close Task, Remove Worktree, and 
 
 The toast omits cleanup steps that made no changes. For example, Reset Task shows a pull request link removal only if the task had a link.
 
+If an action is already running for the task, another confirmation stays open and tells you to wait.
+
 A confirmed failure opens a result dialog after the current confirmation closes. The dialog lists the completed steps, the failure, and steps that did not run when the host knows them. If the result is unconfirmed, check the original task and give fresh consent before submitting again.
 
 ## Reset implementation

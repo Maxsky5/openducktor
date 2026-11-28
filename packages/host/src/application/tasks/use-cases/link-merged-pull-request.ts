@@ -4,7 +4,7 @@ import {
   CurrentBackgroundOperation,
   updateBackgroundOperation,
 } from "../../operation-progress/background-operation-progress";
-import { TASK_CLOSED_STATE } from "@openducktor/contracts";
+import { BACKGROUND_OPERATION_PR_ALREADY_LINKED, TASK_CLOSED_STATE } from "@openducktor/contracts";
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { Effect } from "effect";
 import { HostValidationError } from "../../../effect/host-errors";
@@ -119,14 +119,10 @@ export const createTaskLinkMergedPullRequestUseCase = ({
       }
 
       if (sameExistingPullRequest) {
-        yield* updateBackgroundOperation((progress) =>
-          progress.update({
-            id: "pr-link",
-            label: "Link merged pull request",
-            state: "completed",
-            details: [`Pull request #${pullRequest.number} was already linked.`],
-          }),
-        );
+        yield* updateBackgroundOperation((progress) => {
+          progress.omit("pr-link");
+          progress.setFailureCode(BACKGROUND_OPERATION_PR_ALREADY_LINKED);
+        });
       }
       let removeCheckedWorktree = false;
       if (!sameExistingPullRequest || removeWorktree) {
@@ -149,15 +145,15 @@ export const createTaskLinkMergedPullRequestUseCase = ({
       if (removeCheckedWorktree) {
         yield* requireWorktreeFiles(dependencies.worktreeFiles);
       }
-      yield* backgroundStep(
-        { id: "pr-link", label: "Link merged pull request" },
-        taskStore.setPullRequest({
-          workspaceId: input.workspaceId,
-          repoPath,
-          taskId,
-          pullRequest,
-        }),
-      );
+      const save = taskStore.setPullRequest({
+        workspaceId: input.workspaceId,
+        repoPath,
+        taskId,
+        pullRequest,
+      });
+      yield* sameExistingPullRequest
+        ? save
+        : backgroundStep({ id: "pr-link", label: "Link merged pull request" }, save);
       const postLink = yield* Effect.result(
         completeTaskClosure({
           workspaceId: input.workspaceId,
@@ -189,8 +185,6 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           createTaskMutationProgressFailure("link-merged-pull-request", taskId, postLink.failure),
         );
       }
-      if (sameExistingPullRequest)
-        yield* updateBackgroundOperation((progress) => progress.omit("pr-link"));
       return enrichTask(workflow, postLink.success);
     });
   },

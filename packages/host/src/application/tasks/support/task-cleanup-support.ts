@@ -1,7 +1,9 @@
 import {
+  addBackgroundStepDetail,
   backgroundStep,
   updateBackgroundOperation,
 } from "../../operation-progress/background-operation-progress";
+import { reportPartialTerminalCleanup } from "../../terminals/terminal-cleanup-progress";
 import type { TaskWorkflow } from "@openducktor/workflows";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -264,11 +266,13 @@ export const runTaskRuntimeCleanup = ({
   Effect.gen(function* () {
     const terminalResult = yield* backgroundStep(
       { id: "terminals", label: "Stop task terminals" },
-      terminalService.acquireTaskCleanup({
-        workspaceId,
-        repoPath,
-        taskIds,
-      }),
+      terminalService
+        .acquireTaskCleanup({
+          workspaceId,
+          repoPath,
+          taskIds,
+        })
+        .pipe(Effect.tapError(reportPartialTerminalCleanup)),
       ({ closedTerminalIds }) => closedTerminalIds.length > 0 && { details: closedTerminalIds },
     );
     if (terminalResult.closedTerminalIds.length > 0)
@@ -422,6 +426,7 @@ export const runTaskLocalCleanup = ({
         { id: "worktrees", label: "Remove worktrees" },
         Effect.gen(function* () {
           for (const worktreePath of worktreePaths) {
+            let removedByGit = false;
             const removed = yield* removeTaskWorktree(
               {
                 beforeWorktreeRemoval,
@@ -435,7 +440,19 @@ export const runTaskLocalCleanup = ({
                 force: forceWorktreeRemoval,
                 managedWorktreeBasePath,
                 missingOutsideManagedRootPathPolicy: "skip",
+                onGitRemoved: () => {
+                  removedByGit = true;
+                },
               },
+            ).pipe(
+              Effect.tapError(() =>
+                removedByGit
+                  ? addBackgroundStepDetail(
+                      "worktrees",
+                      `Git removed the worktree at ${worktreePath}. Filesystem cleanup did not finish.`,
+                    )
+                  : Effect.void,
+              ),
             );
             if (!removed) continue;
             progress.removedWorktrees.push(worktreePath);

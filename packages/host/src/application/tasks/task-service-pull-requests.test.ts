@@ -4,6 +4,12 @@ import { builtinTaskWorkflows, reviewTaskWorkflows } from "../../test-support/ta
 import { noWorktreeOwners } from "../../test-support/service-test-doubles";
 import { Effect } from "effect";
 import { z } from "zod";
+import { BACKGROUND_OPERATION_PR_ALREADY_LINKED } from "@openducktor/contracts";
+import {
+  createBackgroundOperationProgress,
+  CurrentBackgroundOperation,
+  operationFailure,
+} from "../operation-progress/background-operation-progress";
 import { GithubProviderAdapter } from "../../adapters/git-providers/github/provider-adapter";
 import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
 import { TaskPolicyError } from "../../domain/task";
@@ -3433,12 +3439,13 @@ describe("createTaskService pull requests", () => {
     expect(result.failure).toBe(failure);
   });
   test.each([
-    ["retry with missing checkout", null, true, true],
-    ["retry that requests removal", "/worktrees/repo/task-1", true, true],
-    ["new link that keeps the checkout", "/worktrees/repo/task-1", false, false],
+    ["retry with missing checkout", null, true, true, false],
+    ["retry that requests removal", "/worktrees/repo/task-1", true, true, false],
+    ["tracked retry that requests removal", "/worktrees/repo/task-1", true, true, true],
+    ["new link that keeps the checkout", "/worktrees/repo/task-1", false, false, false],
   ] as const)(
     "preserves branch inspection outcomes for %s",
-    async (_scenario, worktreePath, alreadyLinked, removeWorktree) => {
+    async (_scenario, worktreePath, alreadyLinked, removeWorktree, tracked) => {
       const saved = pullRequest();
       const failure = new HostOperationError({
         operation: "git.currentBranch",
@@ -3474,17 +3481,38 @@ describe("createTaskService pull requests", () => {
           hooks: { beforeWorktreeRemoval: [] },
         }),
       });
+      const workspace = { workspaceId: "repo", repoPath: "/repo" };
+      const progress = createBackgroundOperationProgress(
+        {
+          workspace,
+          target: { kind: "task", taskId: "task-1" },
+          operationId: crypto.randomUUID(),
+          hostInstanceId: "host",
+        },
+        () => {},
+      );
+      const work = service.linkMergedPullRequest({
+        ...workspace,
+        taskId: "task-1",
+        removeWorktree,
+        pullRequest: saved,
+      });
       const result = await Effect.runPromise(
         Effect.result(
-          service.linkMergedPullRequest({
-            workspaceId: "repo",
-            repoPath: "/repo",
-            taskId: "task-1",
-            removeWorktree,
-            pullRequest: saved,
-          }),
+          tracked ? work.pipe(Effect.provideService(CurrentBackgroundOperation, progress)) : work,
         ),
       );
+
+      if (tracked && result._tag === "Failure") {
+        const outcome = progress.settle(
+          operationFailure("task_pull_request_link_merged", result.failure),
+        );
+        expect(outcome).toMatchObject({
+          phase: "failed",
+          failure: { code: BACKGROUND_OPERATION_PR_ALREADY_LINKED },
+        });
+        expect(outcome.steps.map(({ id }) => id)).not.toContain("pr-link");
+      }
 
       if (worktreePath) {
         expect(result).toMatchObject({ _tag: "Failure", failure });
