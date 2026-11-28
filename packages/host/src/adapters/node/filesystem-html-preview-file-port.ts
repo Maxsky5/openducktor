@@ -16,20 +16,14 @@ const isNetworkPath = (candidate: string): boolean =>
   candidate.startsWith("\\\\") || candidate.startsWith("//");
 
 const normalizeReferencePath = (reference: string, baseDir?: string): string | null => {
-  if (baseDir !== undefined) {
-    try {
+  try {
+    if (baseDir !== undefined) {
       const directory = baseDir.endsWith(path.sep) ? baseDir : baseDir + path.sep;
       return fileURLToPath(new URL(reference, pathToFileURL(directory)));
-    } catch {
-      return null;
     }
-  }
-  if (/^file:\/\//i.test(reference)) {
-    try {
-      return fileURLToPath(reference);
-    } catch {
-      return null;
-    }
+    if (/^file:\/\//i.test(reference)) return fileURLToPath(reference);
+  } catch {
+    return null;
   }
   return /^[a-z]:/i.test(reference) ? reference.replaceAll("\\\\", "\\") : reference;
 };

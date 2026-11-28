@@ -138,6 +138,7 @@ const isImageBytes = (bytes: Uint8Array, ext: string): boolean => {
 };
 
 type LocalImageRef = { start: number; end: number; path: string; relative: boolean };
+type LocalImageUses = { count: number; relative: boolean };
 
 const collectImageReference = (
   refs: LocalImageRef[],
@@ -184,14 +185,14 @@ const collectSrcsetUrls = (
   const urls = /[^,\s]\S*/g;
   for (let match = urls.exec(segment); match; match = urls.exec(segment)) {
     const token = match[0];
+    // A URL can contain commas, including the separator inside a data URL.
     const url = token.replace(/,+$/, "");
     const start = baseOffset + match.index;
     collectImageReference(refs, start, start + url.length, decodeHtmlEntities(url));
-    if (url.length === token.length) {
-      const comma = segment.indexOf(",", urls.lastIndex);
-      if (comma === -1) break;
-      urls.lastIndex = comma + 1;
-    }
+    if (url.length !== token.length) continue;
+    const comma = segment.indexOf(",", urls.lastIndex);
+    if (comma === -1) break;
+    urls.lastIndex = comma + 1;
   }
 };
 
@@ -199,7 +200,7 @@ const collectSrcsetUrls = (
  * Scans only real image-bearing HTML attributes (`src`, `poster`, `srcset`, `style`) and `<style>`
  * CSS `url(...)` values outside comments, scripts, textareas, and templates.
  */
-const scanImageReferences = (html: string) => {
+const scanImageReferences = (html: string): LocalImageRef[] => {
   const masked = maskHtmlNonMarkup(html);
   const refs: LocalImageRef[] = [];
   let hasHttpsBase: boolean | undefined;
@@ -265,20 +266,23 @@ export const inlineLocalHtmlPreviewImages = (
 ): Effect.Effect<string, HostValidationError> =>
   Effect.gen(function* () {
     const refs = scanImageReferences(html);
-    if (baseDir === undefined) {
-      const relativePaths = new Set(refs.filter((ref) => ref.relative).map((ref) => ref.path));
-      if (relativePaths.size > 0) {
-        return yield* new HostValidationError({
-          field: "html",
-          message: `Relative image paths: ${[...relativePaths].join(", ")}. Set baseDir to their directory, or use absolute paths, data URIs, or HTTPS URLs.`,
-        });
-      }
-    }
     if (refs.length === 0) return html;
 
-    const occurrenceCounts = new Map<string, number>();
-    for (const ref of refs) {
-      occurrenceCounts.set(ref.path, (occurrenceCounts.get(ref.path) ?? 0) + 1);
+    const images = new Map<string, LocalImageUses>();
+    for (const { path, relative } of refs) {
+      const image = images.get(path);
+      if (image) image.count += 1;
+      else images.set(path, { count: 1, relative });
+    }
+
+    if (baseDir === undefined) {
+      const relativePaths = [...images].filter(([, image]) => image.relative).map(([path]) => path);
+      if (relativePaths.length > 0) {
+        return yield* new HostValidationError({
+          field: "html",
+          message: `Relative image paths: ${relativePaths.join(", ")}. Set baseDir to their directory, or use absolute paths, data URIs, or HTTPS URLs.`,
+        });
+      }
     }
 
     let projectedBytes = odtHtmlPreviewByteSize(html);
@@ -288,13 +292,15 @@ export const inlineLocalHtmlPreviewImages = (
         message: `Inlining local images would exceed the ${formatMib(ODT_HTML_PREVIEW_MAX_STORED_BYTES)} preview size limit. Resize or compress the images and retry.`,
       });
 
-    const prepareOne = (refPath: string): Effect.Effect<PreparedLocalImage, HostValidationError> =>
+    const prepareOne = ([refPath, { count, relative }]: [string, LocalImageUses]): Effect.Effect<
+      PreparedLocalImage,
+      HostValidationError
+    > =>
       Effect.gen(function* () {
         if (projectedBytes > ODT_HTML_PREVIEW_MAX_STORED_BYTES) {
           return yield* sizeLimitExceeded();
         }
 
-        const relative = !SCHEME_ROOT_OR_FRAGMENT.test(refPath);
         if (relative && !RELATIVE_IMAGE_CANDIDATE.test(refPath)) {
           return { kind: "invalid", refPath };
         }
@@ -304,15 +310,9 @@ export const inlineLocalHtmlPreviewImages = (
           ODT_HTML_PREVIEW_MAX_IMAGE_BYTES,
           relative ? baseDir : undefined,
         );
-        if (opened.kind === "blocked") {
-          return { kind: "invalid", refPath };
-        }
-        if (opened.kind === "outside_allowed") {
-          // Leave root-relative web URLs (such as `/favicon.ico` or `/logo.png`) untouched; only
-          // fail explicit local `file://` or Windows drive paths that escape the allowed roots.
-          return relative || isExplicitLocalPath(refPath)
-            ? { kind: "invalid", refPath }
-            : { kind: "skip" };
+        // An absolute slash path outside the allowed roots can be a root-relative HTTPS URL.
+        if (opened.kind === "outside_allowed" && !relative && !isExplicitLocalPath(refPath)) {
+          return { kind: "skip" };
         }
         if (opened.kind === "too_large") {
           return yield* new HostValidationError({
@@ -332,9 +332,8 @@ export const inlineLocalHtmlPreviewImages = (
         }
 
         const mimeType = htmlPreviewImageMime(opened.extension) ?? "application/octet-stream";
-        const occurrences = occurrenceCounts.get(refPath) ?? 0;
         const deltaBytes =
-          occurrences *
+          count *
           (encodedDataUriByteLength(mimeType, opened.size) - odtHtmlPreviewByteSize(refPath));
         projectedBytes += deltaBytes;
         if (projectedBytes > ODT_HTML_PREVIEW_MAX_STORED_BYTES) {
@@ -348,7 +347,7 @@ export const inlineLocalHtmlPreviewImages = (
         };
       });
 
-    const prepared = yield* Effect.forEach([...occurrenceCounts.keys()], prepareOne, {
+    const prepared = yield* Effect.forEach(images, prepareOne, {
       concurrency: 8,
     });
 
