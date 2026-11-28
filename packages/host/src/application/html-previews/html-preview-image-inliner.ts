@@ -24,6 +24,7 @@ const IMAGE_URL_CANDIDATE = new RegExp(
 );
 const CSS_URL = /url\(\s*(?:"([^"\r\n]*)"|'([^'\r\n]*)'|([^)\s"']+))\s*\)/dgi;
 const IMAGE_TARGET_ATTRS = new Set(["src", "poster", "srcset", "style"]);
+const SCHEME_ROOT_OR_FRAGMENT = /^(?:[a-z][a-z\d+.-]*:|[/#])/i;
 const utf8Decoder = new TextDecoder("utf-8");
 
 const isExplicitLocalPath = (reference: string): boolean =>
@@ -180,9 +181,11 @@ const collectSrcsetUrls = (
  * Scans only real image-bearing HTML attributes (`src`, `poster`, `srcset`, `style`) and `<style>`
  * CSS `url(...)` values outside comments, scripts, textareas, and templates.
  */
-const findLocalImageRefsInMarkup = (html: string): LocalImageRef[] => {
+const scanImageReferences = (html: string) => {
   const masked = maskHtmlNonMarkup(html);
   const refs: LocalImageRef[] = [];
+  const relativeSources = new Set<string>();
+  let hasHttpsBase: boolean | undefined;
 
   for (const styleMatch of masked.matchAll(HTML_STYLE_ELEMENT)) {
     const bodySpan = styleMatch.indices?.[1];
@@ -195,7 +198,18 @@ const findLocalImageRefsInMarkup = (html: string): LocalImageRef[] => {
   for (const tagMatch of tagsOnly.matchAll(HTML_START_TAG)) {
     const tagSpan = tagMatch.indices?.[0];
     if (!tagSpan) continue;
-    for (const attribute of scanStartTagAttributes(tagMatch[0], tagSpan[0])) {
+    const tag = tagMatch[0];
+    const attributes = scanStartTagAttributes(tag, tagSpan[0]);
+    if (hasHttpsBase === undefined && /^<base[\s>]/i.test(tag)) {
+      const href = attributes.find(({ name }) => name === "href");
+      if (href) hasHttpsBase = URL.parse(decodeHtmlEntities(href.value))?.protocol === "https:";
+    }
+    if (/^<img[\s>]/i.test(tag)) {
+      const src = attributes.find(({ name }) => name === "src");
+      const url = src ? decodeHtmlEntities(src.value).trim() : "";
+      if (url && !SCHEME_ROOT_OR_FRAGMENT.test(url)) relativeSources.add(url);
+    }
+    for (const attribute of attributes) {
       if (!IMAGE_TARGET_ATTRS.has(attribute.name)) continue;
       const rawValue = html.slice(attribute.valueStart, attribute.valueEnd);
       if (attribute.name === "style") {
@@ -212,7 +226,7 @@ const findLocalImageRefsInMarkup = (html: string): LocalImageRef[] => {
   }
 
   refs.sort((left, right) => left.start - right.start);
-  return refs;
+  return { refs, relativeSources, hasHttpsBase };
 };
 
 type PreparedLocalImage =
@@ -233,7 +247,13 @@ export const inlineLocalHtmlPreviewImages = (
   filePort: HtmlPreviewFilePort,
 ): Effect.Effect<string, HostValidationError> =>
   Effect.gen(function* () {
-    const refs = findLocalImageRefsInMarkup(html);
+    const { refs, relativeSources, hasHttpsBase } = scanImageReferences(html);
+    if (!hasHttpsBase && relativeSources.size > 0) {
+      return yield* new HostValidationError({
+        field: "html",
+        message: `Relative image paths: ${[...relativeSources].join(", ")}. Use absolute paths in the workspace, worktree, or temporary directory, or use data: URIs or HTTPS URLs.`,
+      });
+    }
     if (refs.length === 0) return html;
 
     const occurrenceCounts = new Map<string, number>();

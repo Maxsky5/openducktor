@@ -167,6 +167,63 @@ describe("createSessionHtmlPreviewService", () => {
     expect(loaded.html).toContain(`const untouched = "${pngPath}";`);
   });
 
+  test.each(["html", "path"] as const)(
+    "rejects relative image paths in a %s preview",
+    async (kind) => {
+      const { service, tempRoot } = await createHarness({
+        kind: "workspace",
+        runtimeKind: "opencode",
+        externalSessionId: "chat-1",
+        sessionId: "chat-1",
+        archived: false,
+      });
+      const html =
+        '<!doctype html><!-- <base href="https://example.com/"> --><img src="before.png"><img src="./after.png">';
+      const htmlPath = path.join(tempRoot, "compare.html");
+      await writeFile(htmlPath, html);
+      await writeFile(path.join(tempRoot, "before.png"), ONE_PIXEL_PNG);
+      await writeFile(path.join(tempRoot, "after.png"), ONE_PIXEL_PNG);
+
+      const error = await Effect.runPromise(
+        Effect.flip(
+          service.publish({
+            workspaceId: "ws-1",
+            caller: { runtime: "opencode", runtimeSessionId: "chat-1" },
+            title: "Comparison",
+            source: kind === "path" ? { kind, path: htmlPath } : { kind, html },
+          }),
+        ),
+      );
+      expect(error._tag).toBe("HostValidationError");
+      expect(error.message).toContain("before.png, ./after.png");
+      expect(error.message).toContain("absolute paths");
+    },
+  );
+
+  test("keeps static image URLs that resolve against an HTTPS base", async () => {
+    const { service, repoDir } = await createHarness({
+      kind: "workspace",
+      runtimeKind: "opencode",
+      externalSessionId: "chat-1",
+      sessionId: "chat-1",
+      archived: false,
+    });
+    const html =
+      '<!doctype html><html><head><base href="https://example.com/"></head><body><img src="chart.png"></body></html>';
+    const { htmlPreview } = await Effect.runPromise(
+      service.publish({
+        workspaceId: "ws-1",
+        caller: { runtime: "opencode", runtimeSessionId: "chat-1" },
+        title: "Remote chart",
+        source: { kind: "html", html },
+      }),
+    );
+    const loaded = await Effect.runPromise(
+      service.read({ workspaceId: "ws-1", repoPath: repoDir, previewId: htmlPreview.previewId }),
+    );
+    expect(loaded.html).toBe(html);
+  });
+
   test("rejects spoofed images, blocked configDir paths, out-of-workspace files, symlinks, hardlinks, non-HTML files, and viewport heights", async () => {
     const { service, configDir, repoDir, outsideDir } = await createHarness({
       kind: "workspace",
