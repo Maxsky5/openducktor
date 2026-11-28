@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentInfo } from "@opencode/client";
-import { createController, ref, response } from "./opencode-v2.test-support";
+import { readPreparedCatalogFixture } from "./opencode-v2-live.test-support";
+import { ref, response } from "./opencode-v2.test-support";
 
 const agents: AgentInfo[] = [
   {
@@ -23,7 +24,7 @@ const agents: AgentInfo[] = [
 
 describe("OpenCode V2 catalogs", () => {
   test("keeps other catalogs available when model metadata cannot be read", async () => {
-    const { controller } = createController(({ url }) => {
+    const { catalog } = await readPreparedCatalogFixture(ref, ({ url }) => {
       if (url.pathname === "/api/model") return response([]);
       if (url.pathname === "/api/provider")
         return Response.json({ message: "Provider read failed" }, { status: 503 });
@@ -32,8 +33,6 @@ describe("OpenCode V2 catalogs", () => {
       if (["/api/command", "/api/skill"].includes(url.pathname)) return response([]);
       throw new Error(`Unexpected catalog request ${url.pathname}`);
     });
-
-    const catalog = await controller.loadRuntimeCatalog(ref);
 
     expect(catalog.models?.status).toBe("failed");
     if (catalog.models?.status === "failed") expect(catalog.models.cause).toBeInstanceOf(Error);

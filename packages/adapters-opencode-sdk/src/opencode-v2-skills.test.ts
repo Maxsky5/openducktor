@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionInboxUser, SkillInfo } from "@opencode/client";
 import type { AgentSessionScope } from "@openducktor/contracts";
+import { readPreparedCatalogFixture } from "./opencode-v2-live.test-support";
 import {
   createController,
   cursorPage,
@@ -43,17 +44,16 @@ describe("OpenCode V2 skill references", () => {
   ])(
     "keeps $label skill results separate from the other catalogs",
     async ({ result, status, label }) => {
-      const { controller, requests } = createController(({ url, method }) => {
-        if (url.pathname === "/api/skill") return result;
-        if (url.pathname === "/api/model/default") return response(null);
-        if (["/api/model", "/api/provider", "/api/agent", "/api/command"].includes(url.pathname))
-          return response([]);
-        throw new Error(`Unexpected catalog request ${method} ${url.pathname}`);
-      });
-      const catalog = await controller.loadRuntimeCatalog({
-        ...ref,
-        workingDirectory: "/repo/worktree",
-      });
+      const { catalog, requests } = await readPreparedCatalogFixture(
+        { ...ref, workingDirectory: "/repo/worktree" },
+        ({ url, method }) => {
+          if (url.pathname === "/api/skill") return result;
+          if (url.pathname === "/api/model/default") return response(null);
+          if (["/api/model", "/api/provider", "/api/agent", "/api/command"].includes(url.pathname))
+            return response([]);
+          throw new Error(`Unexpected catalog request ${method} ${url.pathname}`);
+        },
+      );
       expect(catalog.skills?.status).toBe(status);
       expect(catalog.models?.status).toBe("available");
       expect(catalog.slashCommands?.status).toBe("available");

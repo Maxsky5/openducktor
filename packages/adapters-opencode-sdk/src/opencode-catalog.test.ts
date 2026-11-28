@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentInfo, ModelInfo, ProviderInfo, SkillInfo } from "@opencode/client";
 import { readModelCatalog } from "./opencode-catalog";
-import { prepareFixture } from "./opencode-v2-live.test-support";
-import { createController, nativeClient, ref, response } from "./opencode-v2.test-support";
+import { prepareFixture, readPreparedCatalogFixture } from "./opencode-v2-live.test-support";
+import { nativeClient, ref, response } from "./opencode-v2.test-support";
 
 const nativeCatalog = (variants: ModelInfo["variants"] = []) =>
   new Map(
@@ -63,19 +63,17 @@ describe("OpenCode catalog", () => {
     const lists = ["/api/model", "/api/command", "/api/agent", "/api/skill"];
     const listed = new Set<string>();
     const allListed = Promise.withResolvers<void>();
-    const { controller, requests } = createController(async ({ url }) => {
-      const path = url.pathname;
-      listed.add(path);
-      if (lists.every((list) => listed.has(list))) allListed.resolve();
-      if (path === "/api/model") await allListed.promise;
-      if (!data.has(path)) throw new Error(`Unexpected catalog request ${path}`);
-      return response(data.get(path));
-    });
-
-    const catalog = await controller.loadRuntimeCatalog({
-      ...ref,
-      workingDirectory: "/repo/worktree",
-    });
+    const { catalog, requests } = await readPreparedCatalogFixture(
+      { ...ref, workingDirectory: "/repo/worktree" },
+      async ({ url }) => {
+        const path = url.pathname;
+        listed.add(path);
+        if (lists.every((list) => listed.has(list))) allListed.resolve();
+        if (path === "/api/model") await allListed.promise;
+        if (!data.has(path)) throw new Error(`Unexpected catalog request ${path}`);
+        return response(data.get(path));
+      },
+    );
 
     expect(catalog.models).toMatchObject({
       status: "available",
@@ -114,9 +112,14 @@ describe("OpenCode catalog", () => {
         ],
       },
     });
-    expect(requests.filter(({ url }) => url.pathname === "/api/model")).toHaveLength(1);
+    const catalogRequests = requests.filter(({ url }) => url.pathname !== "/api/info");
+    expect(catalogRequests[0]?.url.pathname).toBe("/api/plugin");
+    expect(catalogRequests.filter(({ url }) => url.pathname === "/api/plugin")).toHaveLength(1);
+    expect(catalogRequests.filter(({ url }) => url.pathname === "/api/model")).toHaveLength(1);
     expect(
-      requests.every(({ url }) => url.searchParams.get("location[directory]") === "/repo/worktree"),
+      catalogRequests.every(
+        ({ url }) => url.searchParams.get("location[directory]") === "/repo/worktree",
+      ),
     ).toBe(true);
   });
 
@@ -212,13 +215,11 @@ describe("OpenCode catalog", () => {
 
   test("keeps other catalogs available when the model list fails", async () => {
     const data = nativeCatalog();
-    const { controller } = createController(({ url }) => {
+    const { catalog } = await readPreparedCatalogFixture(ref, ({ url }) => {
       if (url.pathname === "/api/model")
         return Response.json({ message: "Model list failed" }, { status: 503 });
       return response(data.get(url.pathname));
     });
-
-    const catalog = await controller.loadRuntimeCatalog(ref);
 
     expect(catalog.models?.status).toBe("failed");
     expect(catalog.slashCommands?.status).toBe("available");
@@ -228,13 +229,11 @@ describe("OpenCode catalog", () => {
 
   test("keeps other catalogs available when provider metadata fails", async () => {
     const data = nativeCatalog();
-    const { controller } = createController(({ url }) => {
+    const { catalog } = await readPreparedCatalogFixture(ref, ({ url }) => {
       if (url.pathname === "/api/provider")
         return Response.json({ message: "Provider metadata failed" }, { status: 503 });
       return response(data.get(url.pathname));
     });
-
-    const catalog = await controller.loadRuntimeCatalog(ref);
 
     expect(catalog.models?.status).toBe("failed");
     expect(catalog.slashCommands?.status).toBe("available");

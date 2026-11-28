@@ -1,5 +1,5 @@
 import type { SessionInfo, SessionMessageInfo } from "@opencode/client";
-import type { ManagedMcpServerResolver } from "@openducktor/core";
+import type { LoadAgentRuntimeCatalogInput, ManagedMcpServerResolver } from "@openducktor/core";
 import {
   createPrepareOpencodeSessionRuntime,
   type PreparedOpencodeSessionRuntime,
@@ -92,6 +92,27 @@ export const prepareFixture = (
         connection,
       }),
   };
+};
+
+export const readPreparedCatalogFixture = async (
+  input: LoadAgentRuntimeCatalogInput,
+  read: (request: NativeRequest) => Response | Promise<Response>,
+) => {
+  const fixture = prepareFixture((request) => {
+    if (request.url.pathname === "/api/info") return undefined;
+    if (request.url.pathname === "/api/plugin")
+      return Response.json({
+        location: { directory: request.url.searchParams.get("location[directory]") },
+        data: [{ id: "opencode.agent", state: { status: "active" } }],
+      });
+    return read(request);
+  });
+  const runtime = await fixture.prepare();
+  try {
+    return { catalog: await runtime.queries.loadRuntimeCatalog(input), requests: fixture.requests };
+  } finally {
+    await runtime.release();
+  }
 };
 
 export const durable = { aggregateID: ref.externalSessionId, seq: 1, version: 1 as const };
