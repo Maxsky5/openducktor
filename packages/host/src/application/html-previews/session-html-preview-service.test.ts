@@ -167,6 +167,99 @@ describe("createSessionHtmlPreviewService", () => {
     expect(loaded.html).toContain(`const untouched = "${pngPath}";`);
   });
 
+  test.each(["file document", "file fragment", "inline fragment"] as const)(
+    "embeds relative images from %s input",
+    async (input) => {
+      const { service, repoDir, tempRoot } = await createHarness({
+        kind: "workspace",
+        runtimeKind: "opencode",
+        externalSessionId: "chat-1",
+        sessionId: "chat-1",
+        archived: false,
+      });
+      const fragment =
+        '<!-- <base href="https://example.com/"> --><style>.picture{background:url(before.png)}</style><img class="picture" src="before.png" srcset="data:image/svg+xml,%3Csvg%3Edecoy.png 1x, ./after%20sample.png 2x"><img src="./after%20sample.png">';
+      const html = input === "file document" ? `<!doctype html>${fragment}` : fragment;
+      const htmlPath = path.join(tempRoot, "compare.html");
+      await writeFile(htmlPath, html);
+      await writeFile(path.join(tempRoot, "before.png"), ONE_PIXEL_PNG);
+      await writeFile(path.join(tempRoot, "after sample.png"), ONE_PIXEL_PNG);
+
+      const { htmlPreview } = await Effect.runPromise(
+        service.publish({
+          workspaceId: "ws-1",
+          caller: { runtime: "opencode", runtimeSessionId: "chat-1" },
+          title: "Comparison",
+          source:
+            input === "inline fragment"
+              ? { kind: "html", html, baseDir: tempRoot }
+              : { kind: "path", path: htmlPath },
+        }),
+      );
+      const loaded = await Effect.runPromise(
+        service.read({ workspaceId: "ws-1", repoPath: repoDir, previewId: htmlPreview.previewId }),
+      );
+      const png = `data:image/png;base64,${ONE_PIXEL_PNG.toString("base64")}`;
+      expect(loaded.html).toContain(`background:url(${png})`);
+      expect(loaded.html).toContain(`srcset="data:image/svg+xml,%3Csvg%3Edecoy.png 1x, ${png} 2x"`);
+      expect(loaded.html.split(`src="${png}"`)).toHaveLength(3);
+    },
+  );
+
+  test("reports missing base directories and rejects relative image paths outside allowed roots", async () => {
+    const { service, tempRoot, outsideDir } = await createHarness({
+      kind: "workspace",
+      runtimeKind: "opencode",
+      externalSessionId: "chat-1",
+      sessionId: "chat-1",
+      archived: false,
+    });
+    const publish = (html: string, baseDir?: string) =>
+      Effect.runPromise(
+        Effect.flip(
+          service.publish({
+            workspaceId: "ws-1",
+            caller: { runtime: "opencode", runtimeSessionId: "chat-1" },
+            title: "Comparison",
+            source: { kind: "html", html, baseDir },
+          }),
+        ),
+      );
+    await writeFile(path.join(outsideDir, "outside.png"), ONE_PIXEL_PNG);
+    const withoutBase = await publish('<img src="before.png">');
+    expect(withoutBase.message).toContain("before.png");
+    expect(withoutBase.message).toContain("baseDir");
+    const escaped = await publish('<img src="../outside/outside.png">', tempRoot);
+    expect(escaped.message).toContain("../outside/outside.png");
+    expect(escaped.message).toContain("Could not inline");
+    const outsideBase = await publish('<img src="outside.png">', outsideDir);
+    expect(outsideBase).toMatchObject({ _tag: "HostValidationError", field: "baseDir" });
+  });
+
+  test("keeps static image URLs that resolve against an HTTPS base", async () => {
+    const { service, repoDir } = await createHarness({
+      kind: "workspace",
+      runtimeKind: "opencode",
+      externalSessionId: "chat-1",
+      sessionId: "chat-1",
+      archived: false,
+    });
+    const html =
+      '<!doctype html><html><head><base href="https://example.com/"></head><body><img src="chart.png"></body></html>';
+    const { htmlPreview } = await Effect.runPromise(
+      service.publish({
+        workspaceId: "ws-1",
+        caller: { runtime: "opencode", runtimeSessionId: "chat-1" },
+        title: "Remote chart",
+        source: { kind: "html", html },
+      }),
+    );
+    const loaded = await Effect.runPromise(
+      service.read({ workspaceId: "ws-1", repoPath: repoDir, previewId: htmlPreview.previewId }),
+    );
+    expect(loaded.html).toBe(html);
+  });
+
   test("rejects spoofed images, blocked configDir paths, out-of-workspace files, symlinks, hardlinks, non-HTML files, and viewport heights", async () => {
     const { service, configDir, repoDir, outsideDir } = await createHarness({
       kind: "workspace",
@@ -333,6 +426,89 @@ describe("createSessionHtmlPreviewService", () => {
     expect(missingImageErr.message).toContain(missingPng);
   });
 
+  test("rewrites local image URLs according to HTML, CSS, and file URL syntax", async () => {
+    const { tempRoot } = await createHarness({
+      kind: "workspace",
+      runtimeKind: "opencode",
+      externalSessionId: "chat-1",
+      sessionId: "chat-1",
+      archived: false,
+    });
+    const port = createNodeHtmlPreviewFilePort({ blockedRoots: [] });
+    await writeFile(path.join(tempRoot, "chart.png"), ONE_PIXEL_PNG);
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><view id="detail" viewBox="0 0 5 5"/></svg>';
+    const svgPath = path.join(tempRoot, "icon.svg");
+    await writeFile(svgPath, svg);
+    const hashInFilename = path.join(tempRoot, "icon.svg#literal.svg");
+    await writeFile(hashInFilename, svg);
+    const png = `data:image/png;base64,${ONE_PIXEL_PNG.toString("base64")}`;
+    const svgUri = `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+    const inline = (html: string) =>
+      Effect.runPromise(inlineLocalHtmlPreviewImages(html, [tempRoot], port, tempRoot));
+    const cssText = '.example::after{content:"url(missing.png) url(chart.png)"}';
+    expect(await inline(`<style>${cssText}.pic{background:url(chart.png)}</style>`)).toBe(
+      `<style>${cssText}.pic{background:url(${png})}</style>`,
+    );
+    expect(await inline('<img style="background:url(&quot;chart.png&quot;)">')).toBe(
+      `<img style="background:url(&quot;${png}&quot;)">`,
+    );
+    expect(await inline('<img srcset="chart.png&#44; ./chart.png">')).toBe(
+      `<img srcset="${png}&#44; ${png}">`,
+    );
+    const https = '<img src="https&colon;//example.com/chart.png">';
+    expect(await inline(https)).toBe(https);
+    expect(
+      await inline(
+        '<img src="chart%2Epng" srcset="chart%2Epng" style="background:url(chart%2Epng)">',
+      ),
+    ).toBe(`<img src="${png}" srcset="${png}" style="background:url(${png})">`);
+    expect(await inline('<img src="icon.svg#detail">')).toBe(`<img src="${svgUri}#detail">`);
+    expect(await inline(`<img src="${svgPath}#detail">`)).toBe(`<img src="${svgUri}#detail">`);
+    expect(await inline(`<img src="${hashInFilename}">`)).toBe(`<img src="${svgUri}">`);
+  });
+
+  test("charges the bytes of the original image reference at the stored size limit", async () => {
+    const { tempRoot } = await createHarness({
+      kind: "workspace",
+      runtimeKind: "opencode",
+      externalSessionId: "chat-1",
+      sessionId: "chat-1",
+      archived: false,
+    });
+    const port: HtmlPreviewFilePort = {
+      ...createNodeHtmlPreviewFilePort({ blockedRoots: [] }),
+      readLocalImage: (filePath) =>
+        Effect.succeed(
+          filePath === "/assets/logo.png"
+            ? { kind: "outside_allowed" }
+            : { kind: "ok", bytes: ONE_PIXEL_PNG, size: ONE_PIXEL_PNG.byteLength },
+        ),
+    };
+    const encoded = `<img src="data:image/png;base64,${ONE_PIXEL_PNG.toString("base64")}">`;
+    const padding = " ".repeat(ODT_HTML_PREVIEW_MAX_STORED_BYTES - Buffer.byteLength(encoded));
+    const inline = (html: string) => inlineLocalHtmlPreviewImages(html, [tempRoot], port, tempRoot);
+    for (const source of ["chart.png", " chart.png "]) {
+      const result = await Effect.runPromise(inline(`<img src="${source}">${padding}`));
+      expect(Buffer.byteLength(result)).toBe(ODT_HTML_PREVIEW_MAX_STORED_BYTES);
+      expect(result.startsWith(encoded)).toBe(true);
+    }
+    const comparison = `<img src="chart.png"><img src="${" ".repeat(1024)}comparison.png">`;
+    const comparisonPadding = " ".repeat(
+      ODT_HTML_PREVIEW_MAX_STORED_BYTES - comparison.length - 50,
+    );
+    const fitted = await Effect.runPromise(inline(comparison + comparisonPadding));
+    expect(Buffer.byteLength(fitted)).toBe(2 * encoded.length + comparisonPadding.length);
+    expect(fitted.startsWith(encoded + encoded)).toBe(true);
+    const rootRelative = '<img src="/assets/logo.png">';
+    const oversized = await Effect.runPromise(
+      Effect.flip(
+        inline(`<img src=" chart.png ">${padding.slice(rootRelative.length - 1)}${rootRelative}`),
+      ),
+    );
+    expect(oversized.message).toContain("exceed");
+  });
+
   test("short-circuits before reading remaining images once the 25 MiB stored size budget is exceeded", async () => {
     const readPaths: string[] = [];
     const chunkSize = 8 * 1024 * 1024;
@@ -340,10 +516,10 @@ describe("createSessionHtmlPreviewService", () => {
     ONE_PIXEL_PNG.copy(pngChunk, 0);
 
     const stubPort: HtmlPreviewFilePort = {
-      readHtmlFile: () => Effect.succeed(""),
+      ...createNodeHtmlPreviewFilePort({ blockedRoots: [] }),
       readLocalImage: (filePath) => {
         readPaths.push(filePath);
-        return Effect.succeed({ kind: "ok", bytes: pngChunk, size: chunkSize, extension: ".png" });
+        return Effect.succeed({ kind: "ok", bytes: pngChunk, size: chunkSize });
       },
     };
 

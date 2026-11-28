@@ -380,7 +380,7 @@ const ODT_TOOL_DEFINITIONS = [
   }),
   defineOdtTool("odt_publish_html", {
     description:
-      "Render an HTML page inline in this session. Local image paths are inlined. No outer card, border, banner title, or side padding. Content sets height; no vh or min-h-screen. Background matches chat; use var(--foreground), var(--muted-foreground), var(--card), var(--border), var(--primary), var(--radius). Prefer inline CSS/SVG over heavy CDNs; HTTPS assets work. No navigation, popups, or alert().",
+      "Show HTML in this session. Pass html or path. Local images embed automatically. HTTPS and data URLs work. Omit outer card, border, title, and side padding. Let content set height (no vh or min-h-screen). Use theme variables like --foreground, --muted-foreground, and --card. No navigation, popups, or dialogs.",
     execute: (store, input, meta) => store.publishHtml(input, meta),
   }),
   ...ODT_BROWSER_TOOL_NAMES.map(defineBrowserTool),

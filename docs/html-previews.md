@@ -12,12 +12,17 @@ The tool input accepts `title` and either inline `html` or an absolute local fil
 |---|---|
 | `title` | 1 to 200 characters after trim. |
 | `html` | Optional. At least one non-whitespace character, and at most 512 KiB of UTF-8. Mutually exclusive with `path`. |
-| `path` | Optional. Absolute path to a regular `.html` or `.htm` file that starts with `<!doctype html>` or `<html>`. Mutually exclusive with `html`. |
+| `path` | Optional. Absolute path to a regular `.html` or `.htm` file that starts with HTML markup. The file can contain a document or a fragment. Mutually exclusive with `html`. |
+| `baseDir` | Optional. Absolute directory for relative image paths in inline `html`. |
 | Result | `{ "htmlPreview": { "previewId": string, "title": string, "byteSize": number } }` |
 
-When `path` is set, the host limits reads to the repository, its managed worktree directory, and the system temporary directory. It resolves symlinks on the target or nearest existing ancestor directory, opens the file with `O_NOFOLLOW` and `O_NONBLOCK`, and rejects symlinks, hard-linked files, network paths, and other paths inside the OpenDucktor config directory. It also checks that the file starts with `<!doctype html>` or `<html>`.
+The host limits local reads to the repository, its managed worktree directory, and the system temporary directory. It resolves symlinks on the target or nearest existing ancestor directory, opens files with `O_NOFOLLOW` and `O_NONBLOCK`, and rejects symlinked files, hard-linked files, network paths, and other paths inside the OpenDucktor config directory.
+
+The host resolves relative local image paths from the directory of the file passed to `path`, or from `baseDir` for inline `html`. Use absolute local image paths in inline HTML when you omit `baseDir`. An authored HTTPS base URL makes relative image URLs resolve over HTTPS.
 
 The host masks comments, `<script>`, `<textarea>`, and `<template>` blocks before scanning HTML start-tag attributes (`src`, `poster`, `srcset`, `style`) and CSS `url(...)` values. It checks magic bytes against supported image formats (PNG, JPEG, GIF, WEBP, AVIF, BMP, ICO, and SVG with an `<svg` root). It rejects symlinks, hardlinks, spoofed images, missing local files under allowed roots, and blocked paths. It leaves root-relative web URLs untouched and inlines each valid local image up to 10 MiB as a `data:` URI. The host tracks the projected UTF-8 byte budget while inlining and rejects documents over 25 MiB before reading or encoding additional files.
+
+The host decodes HTML character references before it parses image URLs. It preserves CSS text and keeps URL fragment selectors on embedded SVG images.
 
 The host rejects pages that use viewport height CSS units (`vh`, `dvh`, `svh`, `lvh`) in `<style>` or `style` attributes, or Tailwind viewport-height classes such as `min-h-screen` or `h-dvh`. The scan masks comments, `<script>`, `<template>`, and raw-text elements and steps over quoted attribute values so prose and code examples do not trigger false failures. The error names the offending unit or class and tells the agent to let content set the height or use fixed pixel heights.
 

@@ -16,7 +16,7 @@ import {
 useMcpServerTestLifecycle();
 
 const publish = async (
-  args: { title: string; html?: string; path?: string },
+  args: { title: string; html?: string; path?: string; baseDir?: string },
   meta: RequestMeta = { threadId: "thread-1" },
 ) => {
   const bridge = await startMockBridge();
@@ -39,7 +39,7 @@ const publish = async (
 describe("odt_publish_html", () => {
   test("forwards inline html and calling session identity to the host bridge", async () => {
     const html = "<title>Report</title><p>Ready</p>";
-    const { bridge, result } = await publish({ title: "Weekly report", html });
+    const { bridge, result } = await publish({ title: "Weekly report", html, baseDir: "/tmp" });
 
     expect(result.isError).not.toBe(true);
     const text = result.content.find((block) => block.type === "text");
@@ -62,6 +62,7 @@ describe("odt_publish_html", () => {
           workspaceId: "repo",
           title: "Weekly report",
           html,
+          baseDir: "/tmp",
           caller: { runtime: "codex", runtimeSessionId: "thread-1" },
         },
       },
@@ -92,6 +93,7 @@ describe("odt_publish_html", () => {
       { title: "Weekly report", html: "  " },
       { title: "Weekly report" },
       { title: "Weekly report", html: "<p>Ready</p>", path: "/tmp/report.html" },
+      { title: "Weekly report", path: "/tmp/report.html", baseDir: "/tmp" },
       { title: "Weekly report", html: "a".repeat(ODT_HTML_PREVIEW_MAX_BYTES + 1) },
       {
         title: "t".repeat(ODT_HTML_PREVIEW_TITLE_MAX_CHARS + 1),

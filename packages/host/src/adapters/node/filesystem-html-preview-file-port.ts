@@ -1,28 +1,70 @@
-import { realpath } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { ODT_HTML_PREVIEW_MAX_STORED_BYTES } from "@openducktor/contracts";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { imagePreviewMime, ODT_HTML_PREVIEW_MAX_STORED_BYTES } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
-import type { HtmlPreviewFilePort } from "../../ports/html-preview-file-port";
+import type {
+  HtmlPreviewFilePort,
+  LocalPreviewImageReference,
+} from "../../ports/html-preview-file-port";
 import { isPathWithinRoot, readRegularFileNoFollow } from "./html-preview-fs";
 
 const HTML_FILE_EXTENSION = /\.html?$/i;
-// Judge bytes, not filenames alone: a renamed secret or .env does not start like an HTML document.
-const HTML_DOCUMENT_START = /^\s*<(?:!doctype\s+html|html)[\s>]/i;
+const HTML_LEADING_COMMENTS = /^\s*(?:<!--[\s\S]*?-->\s*)*/;
+const HTML_MARKUP_START =
+  /^<(?:!doctype\s+html(?:\s[^>]*)?>|[a-z][a-z\d:-]*(?=[\s/>])(?:[^"'<>]|"[^"]*"|'[^']*')*>)/i;
 
 const isNetworkPath = (candidate: string): boolean =>
   candidate.startsWith("\\\\") || candidate.startsWith("//");
 
-const normalizeReferencePath = (reference: string): string | null => {
-  if (/^file:\/\//i.test(reference)) {
-    try {
-      return fileURLToPath(reference);
-    } catch {
-      return null;
+// Escape delimiters that would end an HTML attribute, srcset candidate, or CSS URL.
+const escapeImageFragment = (fragment: string): string =>
+  fragment.replace(
+    /[\s"'\x60<>=&\\(),]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+
+const resolveLocalImage = (
+  reference: string,
+  relative: boolean,
+  baseDir?: string,
+): LocalPreviewImageReference | null => {
+  if (!relative && !/^file:\/\//i.test(reference)) {
+    const filePath = /^[a-z]:/i.test(reference) ? reference.replaceAll("\\\\", "\\") : reference;
+    const extension = path.extname(filePath).toLowerCase();
+    const hash = filePath.indexOf("#");
+    // Keep native filenames that contain a literal hash and end in a supported image extension.
+    if (hash !== -1 && extension !== ".avif" && !imagePreviewMime(extension)) {
+      const svgPath = filePath.slice(0, hash);
+      if (path.extname(svgPath).toLowerCase() === ".svg") {
+        return {
+          filePath: svgPath,
+          extension: ".svg",
+          fragment: escapeImageFragment(filePath.slice(hash)),
+        };
+      }
     }
+    return { filePath, extension, fragment: "" };
   }
-  return /^[a-z]:/i.test(reference) ? reference.replaceAll("\\\\", "\\") : reference;
+
+  try {
+    const directory =
+      baseDir === undefined
+        ? "file:///"
+        : pathToFileURL(baseDir.endsWith(path.sep) ? baseDir : baseDir + path.sep);
+    const url = new URL(reference, directory);
+    // Classify a relative URL without a base directory without assigning it a host path.
+    const filePath = relative && baseDir === undefined ? undefined : fileURLToPath(url);
+    const pathname = filePath ?? decodeURIComponent(url.pathname);
+    return {
+      filePath,
+      extension: path.extname(pathname).toLowerCase(),
+      fragment: escapeImageFragment(url.hash),
+    };
+  } catch {
+    return null;
+  }
 };
 
 const formatMib = (bytes: number): string => `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
@@ -120,7 +162,7 @@ export const createNodeHtmlPreviewFilePort = ({
       ) {
         return yield* new HostValidationError({
           field: "path",
-          message: `'${filePath}' is not a readable HTML document. Pass an absolute path to a regular .html file that starts with <!doctype html> or <html>, or pass html instead.`,
+          message: `'${filePath}' is not a readable HTML file. Pass an absolute path to a regular .html or .htm file, or use inline html.`,
         });
       }
 
@@ -169,19 +211,37 @@ export const createNodeHtmlPreviewFilePort = ({
       }
 
       const html = opened.bytes.toString("utf8");
-      if (!HTML_DOCUMENT_START.test(html)) {
+      const markup = html.replace(HTML_LEADING_COMMENTS, "");
+      if (!HTML_MARKUP_START.test(markup)) {
         return yield* new HostValidationError({
           field: "path",
-          message: `'${filePath}' is not an HTML document. Start the file with <!doctype html> or <html>, or pass html instead.`,
+          message: `'${filePath}' is not an HTML document or fragment. Start the file with HTML markup, or use inline html.`,
         });
       }
-      return html;
+      return { html, baseDir: path.dirname(filePath) };
     }),
 
-  readLocalImage: (reference, allowedRoots, maxBytes) =>
+  validateImageBaseDir: (baseDir, allowedRoots) =>
     Effect.gen(function* () {
-      const filePath = normalizeReferencePath(reference);
-      if (!filePath) return { kind: "invalid" as const };
+      const invalidDirectory = new HostValidationError({
+        field: "baseDir",
+        message:
+          "baseDir must be an absolute path to a directory in the workspace, worktree, or temporary directory.",
+      });
+      const policy = yield* resolvePathRootPolicy(allowedRoots, blockedRoots);
+      const access = yield* checkPathRootAccess(baseDir, policy);
+      if (access !== "ok") return yield* invalidDirectory;
+      const entry = yield* Effect.tryPromise({
+        try: () => stat(baseDir),
+        catch: () => invalidDirectory,
+      });
+      if (!entry.isDirectory()) return yield* invalidDirectory;
+    }),
+
+  resolveLocalImage,
+
+  readLocalImage: (filePath, allowedRoots, maxBytes) =>
+    Effect.gen(function* () {
       const policy = yield* resolvePathRootPolicy(allowedRoots, blockedRoots);
       const rootCheck = yield* checkPathRootAccess(filePath, policy);
       if (rootCheck === "blocked") return { kind: "blocked" as const };
@@ -198,7 +258,6 @@ export const createNodeHtmlPreviewFilePort = ({
         kind: "ok" as const,
         bytes: opened.bytes,
         size: opened.size,
-        extension: path.extname(filePath).toLowerCase(),
       };
     }),
 });
