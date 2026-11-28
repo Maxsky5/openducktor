@@ -117,6 +117,9 @@ export function useTaskPullRequestOperations({
             taskTitle: pendingMergedOperation.taskTitle,
             taskRemoveWorktreeOnClose: pendingMergedOperation.taskRemoveWorktreeOnClose,
             pullRequest: pendingMergedOperation.pullRequest,
+            ...(pendingMergedOperation.errorMessage && {
+              errorMessage: pendingMergedOperation.errorMessage,
+            }),
           }
         : null,
     [pendingMergedOperation],
@@ -257,14 +260,20 @@ export function useTaskPullRequestOperations({
         return;
       }
       const { repoPath, taskId, workspaceId, pullRequest } = current;
+      const workspace = { workspaceId, repoPath };
+      const target = { kind: "task", taskId } as const;
+      const refusal = backgroundOperations.admissionError(workspace, target);
+      if (refusal) {
+        updateOperation(current, { ...current, errorMessage: refusal });
+        return;
+      }
       const linking: MergedOperation = { ...current, phase: "linking" };
       updateOperation(linking, linking);
-      const workspace = { workspaceId, repoPath };
       try {
         await backgroundOperations.run(
           {
             workspace,
-            target: { kind: "task", taskId },
+            target,
             action: "Link merged pull request",
             ...(current.taskTitle && { targetLabel: current.taskTitle }),
           },

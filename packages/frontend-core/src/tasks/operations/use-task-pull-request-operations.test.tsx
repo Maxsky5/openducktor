@@ -700,6 +700,46 @@ describe("useTaskPullRequestOperations", () => {
     }
   });
 
+  test("keeps the merged pull request confirmation when another action runs for its task", async () => {
+    const link = mock(async () => createTaskCardFixture({ id: "task-1", pullRequest }));
+    const state = createOperationsHarness({
+      pullRequestHostPort: createPullRequestHostPort({
+        taskPullRequestDetect: async () => ({ outcome: "merged", pullRequest }),
+        taskPullRequestLinkMerged: link,
+      }),
+    });
+    const pendingReset = Promise.withResolvers<void>();
+    await state.harness.mount();
+
+    try {
+      await state.harness.run((model) => model.syncPullRequests("task-1"));
+      const reset = state.backgroundOperations.run(
+        {
+          workspace: { workspaceId: "workspace-1", repoPath: "/repo" },
+          target: { kind: "task", taskId: "task-1" },
+          action: "Reset task",
+        },
+        () => pendingReset.promise,
+      );
+
+      await state.harness.run((model) => model.linkMergedPullRequest({ removeWorktree: false }));
+      expect(state.getLatest().pendingMergedPullRequest).toMatchObject({
+        taskId: "task-1",
+        errorMessage: expect.stringContaining("Wait for it to finish."),
+      });
+      expect(link).not.toHaveBeenCalled();
+
+      pendingReset.resolve();
+      await reset;
+      await state.harness.run((model) => model.linkMergedPullRequest({ removeWorktree: false }));
+      expect(link).toHaveBeenCalledTimes(1);
+      expect(state.getLatest().pendingMergedPullRequest).toBeNull();
+    } finally {
+      pendingReset.resolve();
+      await state.harness.unmount();
+    }
+  });
+
   test("reports link failures and clears the linking state", async () => {
     const testHarness = createOperationsHarness({
       pullRequestHostPort: createPullRequestHostPort({

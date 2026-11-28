@@ -11,6 +11,7 @@ import {
 } from "@openducktor/frontend-core/tasks/details/use-task-close-impact";
 import { GitConfirmationDialog } from "@/components/features/agents/agent-studio-git-panel/git-confirmation-dialog";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   formatMergedAt,
   MERGED_PULL_REQUEST_CONFIRM_COPY as COPY,
@@ -23,6 +24,7 @@ type MergedPullRequestConfirmDialogProps = {
   taskRemoveWorktreeOnClose: TaskCard["removeWorktreeOnClose"];
   pullRequest: PullRequest | null;
   isLinking: boolean;
+  errorMessage?: string;
   onCancel: () => void;
   onConfirm: (options: CloseTaskOptions) => void;
 };
@@ -33,6 +35,7 @@ export const MergedPullRequestConfirmDialog = memo(function MergedPullRequestCon
   taskRemoveWorktreeOnClose,
   pullRequest,
   isLinking,
+  errorMessage,
   onCancel,
   onConfirm,
 }: MergedPullRequestConfirmDialogProps): ReactElement {
@@ -123,6 +126,12 @@ export const MergedPullRequestConfirmDialog = memo(function MergedPullRequestCon
           onRemoveWorktreeChange={onRemoveWorktreeChange}
           disabled={isLinking}
         />
+        {errorMessage ? (
+          <Alert variant="destructive">
+            <CircleAlert aria-hidden="true" />
+            <AlertDescription>{errorMessage}</AlertDescription>
+          </Alert>
+        ) : null}
       </div>
     </GitConfirmationDialog>
   );

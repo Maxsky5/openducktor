@@ -14,6 +14,7 @@ import type { CloseTaskOptions } from "@openducktor/frontend-core/types/task-clo
 import type { ReactElement } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
+import { toFlowFailure } from "@/host-session/command-outcome";
 import { Callout } from "@/ui/callout";
 import { Text } from "@/ui/text";
 import { TaskCleanupChoice } from "../close/task-close-content";
@@ -36,12 +37,14 @@ export function MergedPullRequestConfirm({
   visible,
   link,
   linking,
+  errorMessage,
   onCancel,
   onConfirm,
 }: {
   visible: boolean;
   link: MergedPullRequestLink;
   linking: boolean;
+  errorMessage?: string | undefined;
   onCancel: () => void;
   onConfirm: (options: CloseTaskOptions) => void;
 }): ReactElement {
@@ -84,8 +87,9 @@ export function MergedPullRequestConfirm({
           <PullRequestLinkButton pullRequest={pullRequest} />
         </View>
       }
-      // The link operation reports its failure in a toast, and the confirmation stays.
-      failure={null}
+      failure={
+        errorMessage ? toFlowFailure(errorMessage, false, "Could not link pull request") : null
+      }
       icon="circle-check-big"
       onCancel={onCancel}
       onConfirm={() => {
