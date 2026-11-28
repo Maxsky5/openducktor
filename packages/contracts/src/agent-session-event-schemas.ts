@@ -461,6 +461,7 @@ const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
   }),
   transcriptEventSchema({
     type: z.literal("assistant_message"),
+    generationTokensPerSecond: z.number().positive().optional(),
     messageId: z.string(),
     forkPoint: agentSessionForkPointSchema.optional(),
     message: z.string(),

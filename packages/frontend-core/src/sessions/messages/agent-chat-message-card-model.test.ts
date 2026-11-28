@@ -1169,6 +1169,20 @@ describe("agent-chat-message-card-model", () => {
       expect(footer.infoParts).toEqual(["builder", "openai"]);
     });
 
+    test("gates a generation rate on the reply's runtime in a mixed transcript", () => {
+      const message = createMessage({
+        meta: { kind: "assistant", isFinal: true, generationTokensPerSecond: 42.14 },
+      });
+
+      expect(
+        getAssistantFooterData({ ...message, sourceRuntimeKind: "opencode" }, "codex"),
+      ).toEqual({ infoParts: ["opencode"], generationRateLabel: "42.1 tok/s" });
+      expect(
+        getAssistantFooterData({ ...message, sourceRuntimeKind: "codex" }, "opencode")
+          .generationRateLabel,
+      ).toBeUndefined();
+    });
+
     test("does not show footer for assistant messages without final metadata", () => {
       const footer = getAssistantFooterData(createMessage(), null);
       expect(footer.infoParts).toEqual([]);

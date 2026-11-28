@@ -273,6 +273,8 @@ A prompt cannot mix a slash command and attachments because a slash command uses
 
 ### Optional features
 
+`optionalSurfaces.supportsTurnGenerationRate` lets a runtime report measured tokens per second on a completed assistant reply. The footer uses the runtime that produced the reply. The metric comes from live events and native history and is separate from the session speed setting.
+
 | Field | Meaning |
 |---|---|
 | `optionalSurfaces.supportsProfiles` | Runtime lists model or agent profiles |

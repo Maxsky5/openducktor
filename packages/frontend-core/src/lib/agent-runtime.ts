@@ -183,6 +183,8 @@ export const runtimeSupportsCapability = (
       return runtimeDescriptor.capabilities.optionalSurfaces.supportsFileStatus;
     case "optionalSurfaces.supportsImageGeneration":
       return runtimeDescriptor.capabilities.optionalSurfaces.supportsImageGeneration;
+    case "optionalSurfaces.supportsTurnGenerationRate":
+      return runtimeDescriptor.capabilities.optionalSurfaces.supportsTurnGenerationRate;
     case "optionalSurfaces.supportsMcpStatus":
       return runtimeDescriptor.capabilities.optionalSurfaces.supportsMcpStatus;
     case "optionalSurfaces.supportsSubagents":

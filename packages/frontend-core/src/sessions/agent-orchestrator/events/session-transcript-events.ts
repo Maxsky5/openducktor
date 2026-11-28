@@ -59,7 +59,7 @@ type TranscriptEventDependencies = {
 
 type QueuedTranscriptEvent = QueuedSessionEventBatchItem<
   Extract<AgentSessionTranscriptEvent, QueuedSessionEvent>
->;
+> & { provenance: SessionTranscriptEventProvenance | undefined };
 
 const transcriptEventContext = (
   dependencies: TranscriptEventDependencies,
@@ -137,7 +137,7 @@ const dispatchTranscriptEvent = (
       handleAssistantPart(context, event, firstTimestamp);
       return;
     case "assistant_message":
-      handleAssistantMessage(context, event);
+      handleAssistantMessage(context, event, provenance);
       return;
     case "transcript_retracted":
       handleTranscriptRetracted(context, event);
@@ -211,7 +211,7 @@ export const createAgentSessionTranscriptEventConsumer = (
     const queued = queuedEventsBySession.get(sessionKey) ?? [];
     queuedEventsBySession.delete(sessionKey);
     for (const item of prepareForcedQueuedSessionEvents(queued)) {
-      dispatchTranscriptEvent(dependencies, item.event, item.firstTimestamp);
+      dispatchTranscriptEvent(dependencies, item.event, item.firstTimestamp, item.provenance);
     }
   };
   const flushReady = (): void => {
@@ -220,7 +220,7 @@ export const createAgentSessionTranscriptEventConsumer = (
     for (const [sessionKey, queued] of queuedEventsBySession) {
       const prepared = batcher.prepareQueuedSessionEvents(queued);
       for (const item of prepared.readyEvents) {
-        dispatchTranscriptEvent(dependencies, item.event, item.firstTimestamp);
+        dispatchTranscriptEvent(dependencies, item.event, item.firstTimestamp, item.provenance);
       }
       if (prepared.deferredEvents.length === 0) {
         queuedEventsBySession.delete(sessionKey);
@@ -257,7 +257,7 @@ export const createAgentSessionTranscriptEventConsumer = (
         return;
       }
       const queued = queuedEventsBySession.get(sessionKey) ?? [];
-      queued.push({ routeKey: sessionKey, event });
+      queued.push({ routeKey: sessionKey, event, provenance });
       queuedEventsBySession.set(sessionKey, queued);
       if (shouldFlushQueuedSessionEventImmediately(event)) {
         forceFlushSession(sessionKey);

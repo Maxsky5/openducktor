@@ -12,6 +12,7 @@ type AssistantMessageMetaInput = {
   isFinal: boolean;
   forkPoint?: AgentSessionForkPoint | undefined;
   durationMs?: number | undefined;
+  generationTokensPerSecond?: number | undefined;
   totalTokens?: number | undefined;
   contextWindow?: number | undefined;
   outputLimit?: number | undefined;
@@ -49,6 +50,7 @@ export const createAssistantMessageMeta = ({
   isFinal,
   forkPoint,
   durationMs,
+  generationTokensPerSecond,
   totalTokens,
   contextWindow,
   outputLimit,
@@ -63,6 +65,9 @@ export const createAssistantMessageMeta = ({
   };
   if (isFinal && forkPoint) {
     meta.forkPoint = forkPoint;
+  }
+  if (isFinal && generationTokensPerSecond !== undefined) {
+    meta.generationTokensPerSecond = generationTokensPerSecond;
   }
   if (role) {
     meta.agentRole = role;

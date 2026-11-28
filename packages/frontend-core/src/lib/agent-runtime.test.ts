@@ -77,6 +77,7 @@ describe("agent-runtime capability policies", () => {
         supportsProfiles: true,
         supportsMcpStatus: false,
         supportsImageGeneration: false,
+        supportsTurnGenerationRate: false,
       },
       promptInput: {
         ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.promptInput,

@@ -10,7 +10,7 @@ import {
   goalCommandStartsWork,
   resolveRuntimeGoalAvailability,
 } from "@openducktor/core";
-import type { SessionInfo, V2Event, OpenCodeClient } from "@opencode/client";
+import type { SessionInfo, SessionMessageInfo, V2Event, OpenCodeClient } from "@opencode/client";
 import {
   isManualSessionCompactionSlashCommand,
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -63,6 +63,11 @@ import {
   projectContextUsage,
 } from "./opencode-message-projection";
 import { OpenCodeLiveMessageProjector } from "./opencode-live-message-projector";
+import {
+  openCodeCopiedPrefix,
+  openCodeTurnRateCandidates,
+  readOpenCodeRateEvidence,
+} from "./opencode-turn-generation-rate";
 import { readOpenCodeTranscript } from "./opencode-session-transcript";
 import type {
   OpencodeRuntimeSnapshotRead,
@@ -187,6 +192,11 @@ export const createPrepareOpencodeSessionRuntime =
     let processing = Promise.resolve();
     const pending: OpencodeSessionRuntimeSignal[] = [];
     const projectors = new Map<string, OpenCodeLiveMessageProjector>();
+    const rateReads = new Map<string, AbortController>();
+    const cancelRateRead = (sessionID: string) => {
+      rateReads.get(sessionID)?.abort();
+      rateReads.delete(sessionID);
+    };
     const nativeRunning = new Set<string>();
     type AwaitingTurn = {
       ref: SessionRef;
@@ -285,15 +295,16 @@ export const createPrepareOpencodeSessionRuntime =
       ensureMcp: mcpBridge.ensure,
       restoreMcp: mcpBridge.restore,
       awaitGenerationModel: generationModels.awaitModel,
-      projectHistory: (sessionID, messages, inbox) =>
+      projectHistory: (sessionID, messages, inbox, rateEvidence) =>
         (projectors.get(sessionID) ?? new OpenCodeLiveMessageProjector()).projectHistory(
           messages,
           inbox,
+          rateEvidence,
         ),
       admitted: (binding) => {
         // The events of a faulted conversation apply again only after a read of it.
         if (!faulted.has(binding.detail.id) && !projectors.has(binding.detail.id))
-          projectors.set(binding.detail.id, new OpenCodeLiveMessageProjector());
+          projectors.set(binding.detail.id, new OpenCodeLiveMessageProjector(legacyTurnBoundaries));
       },
     });
     const background = createOpenCodeBackgroundSession({
@@ -310,6 +321,7 @@ export const createPrepareOpencodeSessionRuntime =
     const faultSession = (sessionID: string, cause: unknown) => {
       const lost = cause instanceof Error ? cause : new Error(String(cause));
       faulted.add(sessionID);
+      cancelRateRead(sessionID);
       projectors.delete(sessionID);
       nativeRunning.delete(sessionID);
       background.lose(sessionID, lost);
@@ -344,6 +356,52 @@ export const createPrepareOpencodeSessionRuntime =
     // Goals come from a built-in plugin of newer servers. An older server gets no goal call.
     const goals = resolveRuntimeGoalAvailability(OPENCODE_RUNTIME_DESCRIPTOR, info.version);
 
+    const legacyTurnBoundaries = /^2\.0\.[0-2](?:$|[-+])/.test(info.version);
+
+    const readRateEvidence = (
+      binding: OpenCodeSessionBinding,
+      projector: OpenCodeLiveMessageProjector,
+      messages: SessionMessageInfo[],
+      candidates: ReturnType<typeof openCodeTurnRateCandidates>,
+    ): void => {
+      const { id } = binding.detail;
+      const read = new AbortController();
+      const signal = AbortSignal.any([read.signal, abort.signal]);
+      rateReads.set(id, read);
+      const settle = (apply: () => void) => {
+        if (signal.aborted) return;
+        processing = processing.then(() => {
+          if (rateReads.get(id) !== read) return;
+          rateReads.delete(id);
+          if (signal.aborted || projectors.get(id) !== projector) return;
+          try {
+            apply();
+          } catch (cause) {
+            faultSession(id, cause);
+          }
+        });
+      };
+
+      // Only the evidence update joins the observation queue. The native log can take longer.
+      void nativeRequest(binding.ref, "read turn generation rate evidence", () =>
+        readOpenCodeRateEvidence(
+          client,
+          binding.detail,
+          messages,
+          () => readMessages(client, id, signal),
+          candidates,
+          signal,
+        ),
+      ).then(
+        ({ rates }) =>
+          settle(() => {
+            for (const event of projector.applyRateEvidence(id, rates))
+              emit({ type: "session_event", externalSessionId: id, event, provenance: "baseline" });
+          }),
+        (cause: unknown) => settle(() => faultSession(id, cause)),
+      );
+    };
+
     const source = (
       binding: OpenCodeSessionBinding,
       parentExternalSessionId?: string,
@@ -352,7 +410,8 @@ export const createPrepareOpencodeSessionRuntime =
       // A read observes a faulted conversation again from a new projector, as its first read does.
       // The events during the read apply to that projector, and a failed read faults it again.
       const refault = faulted.delete(sessionID);
-      if (refault) projectors.set(sessionID, new OpenCodeLiveMessageProjector());
+      if (refault)
+        projectors.set(sessionID, new OpenCodeLiveMessageProjector(legacyTurnBoundaries));
       const read = readSource(binding, parentExternalSessionId);
       return refault
         ? read.catch((cause: unknown) => {
@@ -386,9 +445,17 @@ export const createPrepareOpencodeSessionRuntime =
             "identity_mismatch",
             "The native location does not match the linked directory.",
           );
-        const projector = projectors.get(binding.detail.id)!;
+        const { detail } = binding;
+        const projector = projectors.get(detail.id)!;
+        const copiedPrefix = openCodeCopiedPrefix(detail, messages);
+        const rateCandidates = legacyTurnBoundaries
+          ? undefined
+          : openCodeTurnRateCandidates(messages, copiedPrefix, true);
+        cancelRateRead(detail.id);
         // Delivery events contain only IDs, so retained payloads must survive snapshot reads.
-        const retractedIds = new Set(projector.seed(messages));
+        const retractedIds = new Set(
+          projector.seed(messages, rateCandidates?.keys(), copiedPrefix),
+        );
         // A prompt raised before this read has no live ask event.
         for (const request of approvals)
           if (request.source?.type === "tool")
@@ -446,6 +513,7 @@ export const createPrepareOpencodeSessionRuntime =
         if (active[binding.detail.id]) nativeRunning.add(binding.detail.id);
         else nativeRunning.delete(binding.detail.id);
         if (parentExternalSessionId) snapshot.parentExternalSessionId = parentExternalSessionId;
+        if (rateCandidates?.size) readRateEvidence(binding, projector, messages, rateCandidates);
         return snapshot;
       });
     const authorizedByRepo = new Map<string, AgentSessionAuthorizedRoot[]>();
@@ -765,6 +833,7 @@ export const createPrepareOpencodeSessionRuntime =
         // the session covers only work of that removed tree, so the ancestors drop it too.
         const reportRemoval = background.removeSession(externalSessionId, base.timestamp);
         controller.bindings.delete(externalSessionId);
+        cancelRateRead(externalSessionId);
         projectors.delete(externalSessionId);
         faulted.delete(externalSessionId);
         awaitingTurns.delete(externalSessionId);
@@ -1296,6 +1365,7 @@ export const createPrepareOpencodeSessionRuntime =
         );
         for (const releasedRef of releasedRefs) {
           cancelPendingSends(releasedRef);
+          cancelRateRead(releasedRef.externalSessionId);
           projectors.delete(releasedRef.externalSessionId);
           awaitingTurns.delete(releasedRef.externalSessionId);
           nativeRunning.delete(releasedRef.externalSessionId);
@@ -1449,6 +1519,7 @@ export const createPrepareOpencodeSessionRuntime =
         background.close(new Error("The OpenCode runtime was released."));
         controller.close();
         abort.abort();
+        rateReads.clear();
         input.signal?.removeEventListener("abort", abortFromHost);
         await stream;
         // A fault listener can release this runtime. Waiting for that delivery would wait on itself.

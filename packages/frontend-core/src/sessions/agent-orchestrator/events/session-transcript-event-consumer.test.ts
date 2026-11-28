@@ -820,6 +820,37 @@ describe("agent session transcript event consumer", () => {
     consumer.close();
   });
 
+  test("a late baseline rate updates the older reply without changing the live turn's context", () => {
+    const liveRef = { ...sessionRef, runtimeKind: "opencode" } as const;
+    const liveModel = { providerId: "provider", modelId: "current-model" };
+    const contextUsage = { totalTokens: 900, ...liveModel };
+    const { consumer, sessionsRef, sessionTurnState } = createConsumerHarness(
+      0,
+      buildSession({ runtimeKind: liveRef.runtimeKind, status: "running", contextUsage }),
+    );
+    sessionTurnState.metadata.recordModel(agentSessionIdentityKey(liveRef), liveModel);
+    const reply = {
+      type: "assistant_message",
+      externalSessionId: sessionRef.externalSessionId,
+      sessionRef: liveRef,
+      messageId: "earlier-reply",
+      message: "Earlier reply",
+      timestamp: "2026-07-17T08:00:00.000Z",
+    } as const;
+    try {
+      consumer.handle({ ...reply, totalTokens: 100, generationTokensPerSecond: 42 }, "baseline");
+      expect(getSession(sessionsRef).contextUsage).toEqual(contextUsage);
+      expect(getSessionMessages(sessionsRef)[0]?.meta).toMatchObject({
+        generationTokensPerSecond: 42,
+      });
+
+      consumer.handle({ ...reply, messageId: "live-reply", timestamp: "2026-07-17T08:00:01.000Z" });
+      expect(getSessionMessages(sessionsRef).at(-1)?.meta).toMatchObject(liveModel);
+    } finally {
+      consumer.close();
+    }
+  });
+
   test("applies lifecycle status and error details from the production live stream", () => {
     const { consumer, sessionsRef } = createConsumerHarness();
 

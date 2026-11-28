@@ -109,6 +109,7 @@ export const OPENCODE_RUNTIME_CAPABILITIES = {
     supportsSubagentReferences: true,
   },
   optionalSurfaces: {
+    supportsTurnGenerationRate: true,
     supportsProfiles: true,
     supportsVariants: true,
     supportsTodos: false,
@@ -198,6 +199,7 @@ export const CODEX_RUNTIME_CAPABILITIES = {
     supportsSubagentReferences: false,
   },
   optionalSurfaces: {
+    supportsTurnGenerationRate: false,
     supportsProfiles: false,
     supportsVariants: true,
     supportsTodos: true,
@@ -304,6 +306,7 @@ export const CLAUDE_RUNTIME_CAPABILITIES = {
     supportsSubagentReferences: false,
   },
   optionalSurfaces: {
+    supportsTurnGenerationRate: false,
     supportsProfiles: false,
     supportsVariants: true,
     supportsTodos: true,
@@ -386,6 +389,7 @@ export const ANTIGRAVITY_RUNTIME_CAPABILITIES = {
     supportsSubagentReferences: false,
   },
   optionalSurfaces: {
+    supportsTurnGenerationRate: false,
     supportsProfiles: false,
     supportsVariants: true,
     supportsTodos: false,

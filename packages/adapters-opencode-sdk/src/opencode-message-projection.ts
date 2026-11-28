@@ -28,6 +28,11 @@ import {
   type AgentToolResultContent,
   type AgentUserMessageOrigin,
 } from "@openducktor/contracts";
+import {
+  completedOpenCodeReplies,
+  isStoppedOpenCodeReply,
+  openCodeTurnGenerationRates,
+} from "./opencode-turn-generation-rate";
 import { readOpenCodeGoalKickoffObjective } from "./opencode-goals";
 import { jobContext, updateJobTool, type JobContext } from "./opencode-job-projection";
 import { resultEndedAt } from "./opencode-kept-result";
@@ -304,7 +309,7 @@ const nativeTurnDurations = (messages: Iterable<SessionMessageInfo>): Map<string
     if (message.type === "idle") startedAt = undefined;
     if (message.type !== "assistant") continue;
     startedAt ??= message.time.created;
-    if (message.finish === "stop" && !message.error && message.time.completed !== undefined) {
+    if (isStoppedOpenCodeReply(message)) {
       durations.set(message.id, Math.max(0, message.time.completed - startedAt));
       startedAt = undefined;
     }
@@ -316,28 +321,13 @@ export type OpenCodeMessageProjectionContext = {
   readonly completions: ReadonlyMap<string, SubagentCompletion>;
   readonly durations: ReadonlyMap<string, number>;
   readonly completedReplies: ReadonlySet<string>;
+  readonly generationRates: ReadonlyMap<string, number>;
   readonly shells: ShellContext;
   readonly jobs: JobContext;
   /** The idle records of failed turns whose reply already shows the error. */
   readonly shownFailures: ReadonlySet<string>;
   /** The automatic denials of the calls that failed while the projector observed them live. */
   readonly denials?: ReadonlyMap<string, AgentToolDenial>;
-};
-
-export const completedOpenCodeReplies = (messages: Iterable<SessionMessageInfo>): Set<string> => {
-  const completed = new Set<string>();
-  let finalReply: string | undefined;
-  for (const message of messages) {
-    if (message.type === "assistant")
-      finalReply =
-        message.finish === "stop" && !message.error && message.time.completed !== undefined
-          ? message.id
-          : undefined;
-    if (message.type !== "idle") continue;
-    if (message.outcome === "succeeded" && finalReply) completed.add(finalReply);
-    finalReply = undefined;
-  }
-  return completed;
 };
 
 /** The idle records of failed turns whose reply already shows the error. */
@@ -400,6 +390,7 @@ const waitingNotices = (inbox: Iterable<SessionInboxInfo>): SessionMessageSynthe
 export const messageProjectionContext = (
   messages: Iterable<SessionMessageInfo>,
   inbox: Iterable<SessionInboxInfo> = [],
+  rates?: ReadonlyMap<string, number>,
 ): OpenCodeMessageProjectionContext => {
   const retained = [...messages];
   const results = [...retained, ...waitingNotices(inbox)];
@@ -407,6 +398,7 @@ export const messageProjectionContext = (
     completions: subagentCompletions(results),
     durations: nativeTurnDurations(retained),
     completedReplies: completedOpenCodeReplies(retained),
+    generationRates: rates ?? openCodeTurnGenerationRates(retained, {}),
     shells: shellContext(results),
     jobs: jobContext(results),
     shownFailures: shownFailures(retained),
@@ -683,10 +675,12 @@ export const projectMessage = (
         reason: message.finish,
       });
       const durationMs = context?.durations.get(message.id);
-      if (message.finish === "stop" && !message.error && durationMs !== undefined)
+      if (isStoppedOpenCodeReply(message) && durationMs !== undefined)
         history.durationMs = durationMs;
     }
     if (message.tokens) history.totalTokens = tokenTotal(message.tokens);
+    const generationRate = context?.generationRates.get(message.id);
+    if (generationRate !== undefined) history.generationTokensPerSecond = generationRate;
     if (context?.completedReplies.has(message.id)) history.forkPoint = { messageId: message.id };
     return agentSessionHistoryMessageSchema.parse(history);
   }
@@ -900,12 +894,7 @@ export const messageEvents = (
     type: "assistant_part",
     part,
   }));
-  if (
-    message.type === "assistant" &&
-    message.time.completed !== undefined &&
-    message.finish === "stop" &&
-    !message.error
-  ) {
+  if (isStoppedOpenCodeReply(message)) {
     const completed: Extract<AgentEvent, { type: "assistant_message" }> = {
       ...base,
       type: "assistant_message",
@@ -915,6 +904,8 @@ export const messageEvents = (
     };
     if (projected.durationMs !== undefined) completed.durationMs = projected.durationMs;
     if (projected.totalTokens !== undefined) completed.totalTokens = projected.totalTokens;
+    if (projected.generationTokensPerSecond !== undefined)
+      completed.generationTokensPerSecond = projected.generationTokensPerSecond;
     if (projected.forkPoint !== undefined) completed.forkPoint = projected.forkPoint;
     events.push(completed);
   }
@@ -931,16 +922,16 @@ export const messageEvents = (
 export const readMessages = async (
   client: OpenCodeClient,
   sessionID: string,
+  signal?: AbortSignal,
 ): Promise<SessionMessageInfo[]> => {
   const messages: SessionMessageInfo[] = [];
   const seen = new Set<string>();
   let cursor: string | undefined;
   do {
-    const page = await client.message.list({
-      sessionID,
-      limit: 100,
-      ...(cursor ? { cursor } : { order: "asc" }),
-    });
+    const page = await client.message.list(
+      { sessionID, limit: 100, ...(cursor ? { cursor } : { order: "asc" }) },
+      signal ? { signal } : undefined,
+    );
     messages.push(...page.data);
     cursor = page.cursor.next ?? undefined;
     if (cursor && seen.has(cursor))

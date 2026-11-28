@@ -1,6 +1,6 @@
 import { ShortcutScope } from "@/features/shortcuts/shortcut-controls";
 import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
-import type { RuntimeKind } from "@openducktor/contracts";
+import type { AgentSessionForkPoint, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { type MouseEvent, type ReactElement, useCallback, useRef } from "react";
 import { CopyIconButton } from "@/components/ui/copy-icon-button";
@@ -11,6 +11,7 @@ import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-or
 import { AgentChatForkButton } from "./agent-chat-fork-actions";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 import { getAssistantFooterData } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model";
+import { isFinalAssistantChatMessage } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import { canCopyAssistantMessage } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-kind";
 
 type AssistantMessageProps = {
@@ -29,7 +30,7 @@ export const AgentChatAssistantMessage = ({
   isStreamingAssistantMessage: streaming,
 }: AssistantMessageProps): ReactElement => {
   const copyable = canCopyAssistantMessage(message, streaming);
-  const finalReply = message.meta?.kind === "assistant" && message.meta.isFinal === true;
+  const finalReply = isFinalAssistantChatMessage(message);
   return (
     <div
       data-message-owner
@@ -59,40 +60,80 @@ function AssistantMessageFooter({
   assistantAccentColor,
   isStreamingAssistantMessage: streaming,
 }: AssistantMessageProps): ReactElement | null {
-  const { infoParts } = getAssistantFooterData(message, sessionRuntimeKind, modelCatalog);
-  const meta = message.meta?.kind === "assistant" ? message.meta : null;
-  const finalReply = meta?.isFinal === true;
-  const forkPoint = meta?.forkPoint;
-  if (!finalReply && infoParts.length === 0) return null;
+  if (!isFinalAssistantChatMessage(message)) return null;
+  const { infoParts, generationRateLabel } = getAssistantFooterData(
+    message,
+    sessionRuntimeKind,
+    modelCatalog,
+  );
+  const hasModelInfo = infoParts.length > 0;
   return (
-    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
-      {infoParts.length > 0 ? (
+    <div
+      className={cn(
+        "flex items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground",
+        (streaming || !generationRateLabel) && "flex-wrap",
+      )}
+    >
+      {hasModelInfo ? (
         <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
           <span
             className="size-1.5 shrink-0 rounded-sm bg-warning-accent"
-            style={assistantAccentColor ? { backgroundColor: assistantAccentColor } : undefined}
+            style={{ backgroundColor: assistantAccentColor }}
           />
           <span className="min-w-0 truncate">{infoParts.join(" · ")}</span>
         </span>
       ) : null}
-      {finalReply && !streaming ? (
-        <span className="inline-flex shrink-0 items-center gap-0.5">
-          {canCopyAssistantMessage(message, streaming) ? (
-            <AssistantMessageCopyButton markdown={message.content} footer />
-          ) : null}
-          {forkPoint ? <AgentChatForkButton point={forkPoint} /> : null}
-        </span>
+      {!streaming ? (
+        <AssistantFooterActions
+          message={message}
+          hasModelInfo={hasModelInfo}
+          generationRateLabel={generationRateLabel}
+          forkPoint={message.meta.forkPoint}
+        />
       ) : null}
     </div>
+  );
+}
+
+function AssistantFooterActions({
+  message,
+  hasModelInfo,
+  generationRateLabel,
+  forkPoint,
+}: {
+  message: AgentChatMessage;
+  hasModelInfo: boolean;
+  generationRateLabel: string | undefined;
+  forkPoint: AgentSessionForkPoint | undefined;
+}): ReactElement {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-0.5">
+      {generationRateLabel ? (
+        <span className="mr-1 whitespace-nowrap">
+          {hasModelInfo ? <span aria-hidden="true">· </span> : null}
+          {generationRateLabel}
+        </span>
+      ) : null}
+      {canCopyAssistantMessage(message, false) ? (
+        <AssistantMessageCopyButton
+          markdown={message.content}
+          footer
+          tooltipSide={generationRateLabel ? "bottom" : "left"}
+        />
+      ) : null}
+      {forkPoint ? <AgentChatForkButton point={forkPoint} /> : null}
+    </span>
   );
 }
 
 function AssistantMessageCopyButton({
   markdown,
   footer = false,
+  tooltipSide = "left",
 }: {
   markdown: string;
   footer?: boolean;
+  tooltipSide?: "left" | "bottom";
 }): ReactElement {
   const { copied, copyToClipboard } = useCopyToClipboard({
     getSuccessDescription: buildCopyPreview,
@@ -125,6 +166,7 @@ function AssistantMessageCopyButton({
     <ShortcutScope owners={[shortcutOwner]}>
       <CopyIconButton
         shortcutId="message-copy"
+        tooltipSide={tooltipSide}
         ref={root}
         copied={copied}
         ariaLabel="Copy assistant message content"

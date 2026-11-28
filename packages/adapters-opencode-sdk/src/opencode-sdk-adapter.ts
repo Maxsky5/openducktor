@@ -77,6 +77,10 @@ import {
   requireIdleFork,
   checkReplyForkBoundary,
 } from "./opencode-reply-fork";
+import {
+  readOpenCodeRateEvidence,
+  type OpenCodeTurnRateEvidence,
+} from "./opencode-turn-generation-rate";
 import { readOpenCodeTranscript } from "./opencode-session-transcript";
 import { readCatalog } from "./opencode-catalog";
 import { createOpenCodeMessageId } from "./opencode-message-id";
@@ -118,6 +122,7 @@ export type OpenCodeControlHooks = {
     sessionID: string,
     messages: SessionMessageInfo[],
     inbox: SessionInboxInfo[],
+    rateEvidence: OpenCodeTurnRateEvidence,
   ) => AgentSessionHistoryMessage[];
 };
 
@@ -944,7 +949,15 @@ export class OpencodeSdkAdapter {
         readOpenCodeTranscript(this.client, detail),
         this.client.session.inbox.list({ sessionID: detail.id }),
       ]);
-      const history = this.hooks.projectHistory(detail.id, messages, inbox);
+      const evidence = await readOpenCodeRateEvidence(this.client, detail, messages, () =>
+        readOpenCodeTranscript(this.client, detail),
+      );
+      const history = this.hooks.projectHistory(
+        detail.id,
+        evidence.messages,
+        inbox,
+        evidence.rates,
+      );
       if (detail.fork)
         history.unshift({
           role: "system",

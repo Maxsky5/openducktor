@@ -67,12 +67,17 @@ export const nativeClient = (
                 )
                 .parse(JSON.parse(z.string().parse(init.body)))
             : {};
-        return handle({
+        const requestSignal =
+          signal && init?.signal
+            ? AbortSignal.any([signal, init.signal])
+            : (init?.signal ?? signal);
+        const request: NativeRequest = {
           url,
           method: init?.method ?? "GET",
           body,
-          ...(signal ? { signal } : init?.signal ? { signal: init.signal } : {}),
-        });
+        };
+        if (requestSignal) request.signal = requestSignal;
+        return handle(request);
       },
       { preconnect: () => {} },
     ),
@@ -85,6 +90,14 @@ export const location = {
 };
 export const cursorPage = (data: SessionMessageInfo[], next: string | null = null) =>
   Response.json({ data, cursor: { next, prev: null } });
+
+export const sessionLogResponse = (sessionID: string, events: readonly V2Event[] = []) =>
+  new Response(
+    [...events, { type: "log.synced", aggregateID: sessionID }]
+      .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+      .join(""),
+    { headers: { "content-type": "text/event-stream" } },
+  );
 
 type NativeControllerFixture = {
   controller: OpencodeSdkAdapter;
